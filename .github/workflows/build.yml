@@ -1,0 +1,74 @@
+name: Build Bingwa APK
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      upload_to_release:
+        description: "Upload APK to a GitHub Release"
+        required: true
+        default: false
+        type: boolean
+      release_tag:
+        description: "Release tag to create/update (example: v1.0.0)"
+        required: false
+        default: "nightly"
+        type: string
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      SHOULD_PUBLISH_RELEASE: ${{ startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.upload_to_release) }}
+      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag || 'nightly' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.2"
+      - name: Prepare release keystore
+        if: env.SHOULD_PUBLISH_RELEASE == 'true'
+        env:
+          BINGWA_UPLOAD_KEYSTORE_BASE64: ${{ secrets.BINGWA_UPLOAD_KEYSTORE_BASE64 }}
+          BINGWA_UPLOAD_STORE_PASSWORD: ${{ secrets.BINGWA_UPLOAD_STORE_PASSWORD }}
+          BINGWA_UPLOAD_KEY_ALIAS: ${{ secrets.BINGWA_UPLOAD_KEY_ALIAS }}
+          BINGWA_UPLOAD_KEY_PASSWORD: ${{ secrets.BINGWA_UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -n "$BINGWA_UPLOAD_KEYSTORE_BASE64" ] && [ -n "$BINGWA_UPLOAD_STORE_PASSWORD" ] && [ -n "$BINGWA_UPLOAD_KEY_ALIAS" ] && [ -n "$BINGWA_UPLOAD_KEY_PASSWORD" ]; then
+            echo "$BINGWA_UPLOAD_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/bingwa-upload.jks"
+            {
+              echo "BINGWA_UPLOAD_STORE_FILE=$RUNNER_TEMP/bingwa-upload.jks"
+              echo "BINGWA_UPLOAD_STORE_PASSWORD=$BINGWA_UPLOAD_STORE_PASSWORD"
+              echo "BINGWA_UPLOAD_KEY_ALIAS=$BINGWA_UPLOAD_KEY_ALIAS"
+              echo "BINGWA_UPLOAD_KEY_PASSWORD=$BINGWA_UPLOAD_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+          else
+            echo "Release signing secrets not configured; Gradle will use the debug signing fallback."
+          fi
+      - name: Build release APK
+        env:
+          BINGWA_UPLOAD_STORE_FILE: ${{ env.BINGWA_UPLOAD_STORE_FILE }}
+          BINGWA_UPLOAD_STORE_PASSWORD: ${{ env.BINGWA_UPLOAD_STORE_PASSWORD }}
+          BINGWA_UPLOAD_KEY_ALIAS: ${{ env.BINGWA_UPLOAD_KEY_ALIAS }}
+          BINGWA_UPLOAD_KEY_PASSWORD: ${{ env.BINGWA_UPLOAD_KEY_PASSWORD }}
+        run: gradle :app:assembleRelease
+      - name: Publish APK to Release
+        if: env.SHOULD_PUBLISH_RELEASE == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: ${{ startsWith(github.ref, 'refs/tags/') }}
+          prerelease: ${{ github.ref == 'refs/heads/main' }}
+          overwrite_files: true
+          files: app/build/outputs/apk/release/app-release.apk

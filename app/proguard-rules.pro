@@ -1,0 +1,2 @@
+-keep class com.bingwa.mobile.** { *; }
+-dontwarn com.bingwa.mobile.**

@@ -1,0 +1,211 @@
+package com.bingwa.mobile
+
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+
+internal object TransactionStore {
+    private const val PREFS_NAME = "transactions"
+    private const val KEY_LIST = "list"
+    private const val MAX_RECENT_TRANSACTIONS = 100
+    private val AMOUNT_REGEX = Regex("""\d+(?:\.\d+)?""")
+
+    @Volatile
+    private var cachedRawJson: String? = null
+
+    @Volatile
+    private var cachedTransactions: List<Transaction>? = null
+
+    fun load(context: Context): MutableList<Transaction> {
+        val rawJson = rawJson(context)
+        val cached = cachedTransactions
+        if (rawJson == cachedRawJson && cached != null) {
+            return cached.map { it.copy() }.toMutableList()
+        }
+        val parsed = parse(rawJson)
+        updateCache(rawJson, parsed)
+        return parsed.toMutableList()
+    }
+
+    fun save(context: Context, list: List<Transaction>) {
+        val normalized = list.map { it.normalized() }
+        val json = JSONArray().apply {
+            normalized.forEach { put(it.toJson()) }
+        }.toString()
+        updateCache(json, normalized)
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_LIST, json)
+            .apply()
+    }
+
+    fun findById(context: Context, txId: Int): Transaction? {
+        if (txId < 0) return null
+        return load(context).firstOrNull { it.id == txId }
+    }
+
+    fun createPendingTransaction(
+        context: Context,
+        description: String,
+        amount: String,
+        phone: String,
+        ussd: String,
+        clientName: String = "",
+        status: String = TransactionStatus.PENDING.value,
+        source: String = TX_SOURCE_SYSTEM,
+        showInRecent: Boolean = false
+    ): Int {
+        val current = load(context)
+        val usedIds = current.asSequence().map { it.id }.toHashSet()
+        var newId = ((System.currentTimeMillis() and Int.MAX_VALUE.toLong()).toInt()).coerceAtLeast(1)
+        while (!usedIds.add(newId)) {
+            newId = if (newId == Int.MAX_VALUE) 1 else newId + 1
+        }
+
+        val date = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
+            .format(java.util.Date())
+        val created = Transaction(
+            id = newId,
+            description = description,
+            amount = amount,
+            amountValue = extractAmountValue(amount),
+            date = date,
+            status = status,
+            statusEnum = TransactionStatus.fromString(status),
+            ussdCode = ussd,
+            phoneNumber = phone,
+            clientName = formatClientName(clientName),
+            ussdResponse = "",
+            ussdTranscript = "",
+            timestamp = System.currentTimeMillis(),
+            source = source,
+            showInRecent = showInRecent
+        )
+
+        val updated = ArrayList<Transaction>(minOf(current.size + 1, MAX_RECENT_TRANSACTIONS))
+        updated += created
+        current.take(MAX_RECENT_TRANSACTIONS - 1).forEach(updated::add)
+        save(context, updated)
+        broadcastTransactionCreated(context, newId)
+        return newId
+    }
+
+    fun saveOutcome(
+        context: Context,
+        txId: Int,
+        status: String,
+        response: String,
+        transcript: String? = null
+    ): Boolean {
+        if (txId < 0) return false
+        val current = load(context)
+        val index = current.indexOfFirst { it.id == txId }
+        if (index < 0) return false
+        val existing = current[index]
+        current[index] = existing.copy(
+            status = status,
+            statusEnum = TransactionStatus.fromString(status),
+            ussdResponse = response,
+            ussdTranscript = transcript ?: existing.ussdTranscript
+        )
+        save(context, current)
+        return true
+    }
+
+    private fun rawJson(context: Context): String =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .safeGetString(KEY_LIST, "[]")
+            ?: "[]"
+
+    private fun parse(rawJson: String?): List<Transaction> {
+        if (rawJson.isNullOrBlank()) return emptyList()
+        return try {
+            val arr = JSONArray(rawJson)
+            List(arr.length()) { index -> fromJson(arr.getJSONObject(index), index) }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun updateCache(rawJson: String?, transactions: List<Transaction>) {
+        cachedRawJson = rawJson
+        cachedTransactions = transactions.map { it.copy() }
+    }
+
+    private fun fromJson(obj: JSONObject, fallbackId: Int): Transaction {
+        val description = obj.optString("description", "")
+        val amount = obj.optString("amount", "")
+        val clientName = obj.optString("clientName", "")
+        val ussdCode = obj.optString("ussdCode", "")
+        val status = obj.optString("status", TransactionStatus.PENDING.value)
+        val source = obj.optString("source").ifBlank {
+            inferSource(description, amount, clientName, ussdCode)
+        }
+        val showInRecent = if (obj.has("showInRecent")) {
+            obj.optBoolean("showInRecent", false)
+        } else {
+            inferRecentVisibility(description, amount, clientName, ussdCode)
+        }
+        return Transaction(
+            id = obj.optInt("id", fallbackId),
+            description = description,
+            amount = amount,
+            amountValue = extractAmountValue(amount),
+            date = obj.optString("date", ""),
+            status = status,
+            statusEnum = TransactionStatus.fromString(status),
+            ussdCode = ussdCode,
+            phoneNumber = obj.optString("phoneNumber", ""),
+            response = obj.optString("response", ""),
+            timestamp = obj.optLong("timestamp", 0L),
+            clientName = clientName,
+            ussdResponse = obj.optString("ussdResponse", ""),
+            ussdTranscript = obj.optString("ussdTranscript", ""),
+            source = source,
+            showInRecent = showInRecent
+        )
+    }
+
+    private fun Transaction.toJson(): JSONObject =
+        JSONObject().apply {
+            put("id", id)
+            put("description", description)
+            put("amount", amount)
+            put("date", date)
+            put("status", status)
+            put("ussdCode", ussdCode)
+            put("phoneNumber", phoneNumber)
+            put("clientName", clientName)
+            put("ussdResponse", ussdResponse)
+            put("ussdTranscript", ussdTranscript)
+            put("timestamp", timestamp)
+            put("source", source)
+            put("showInRecent", showInRecent)
+        }
+
+    private fun Transaction.normalized(): Transaction {
+        val normalizedStatus = status.ifBlank { statusEnum.value }
+        val normalizedAmountValue = amountValue.takeIf { it > 0.0 } ?: extractAmountValue(amount)
+        val normalizedClientName = if (clientName.isBlank()) "" else formatClientName(clientName)
+        return copy(
+            amountValue = normalizedAmountValue,
+            status = normalizedStatus,
+            statusEnum = TransactionStatus.fromString(normalizedStatus),
+            clientName = normalizedClientName
+        )
+    }
+
+    private fun extractAmountValue(amount: String): Double =
+        AMOUNT_REGEX.find(amount)?.value?.toDoubleOrNull() ?: 0.0
+
+    private fun inferSource(description: String, amount: String, clientName: String, ussdCode: String): String {
+        if (amount.trim().startsWith("-") || description.contains("airtime", ignoreCase = true)) {
+            return TX_SOURCE_AIRTIME
+        }
+        if (ussdCode.isNotBlank() && clientName.isNotBlank()) return TX_SOURCE_AUTOMATED
+        return TX_SOURCE_SYSTEM
+    }
+
+    private fun inferRecentVisibility(description: String, amount: String, clientName: String, ussdCode: String): Boolean =
+        inferSource(description, amount, clientName, ussdCode) == TX_SOURCE_AUTOMATED
+}

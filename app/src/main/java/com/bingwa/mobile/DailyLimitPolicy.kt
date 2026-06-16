@@ -1,0 +1,294 @@
+package com.bingwa.mobile
+
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import org.json.JSONArray
+import java.util.Calendar
+
+data class DailyLimitPolicyConfig(
+    val mode: String = DailyLimitPolicy.MODE_QUEUE_TOMORROW,
+    val fallbackEnabled: Boolean = false,
+    val fallbackOfferId: Int = -1,
+    val fallbackMinPrice: Int = 0,
+    val repeatNoticeEnabled: Boolean = false
+)
+
+data class DailyLimitReplyState(
+    val txId: Int,
+    val stage: String
+)
+
+object DailyLimitPolicy {
+    const val MODE_QUEUE_TOMORROW = "QUEUE_TOMORROW"
+    const val MODE_NOTICE_ONLY = "NOTICE_ONLY"
+    private const val REPLY_PREFS = "daily_limit_reply_state"
+    private const val STAGE_MENU = "MENU"
+    private const val STAGE_ALT_NUMBER = "ALT_NUMBER"
+
+    fun load(context: Context): DailyLimitPolicyConfig {
+        val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+        return DailyLimitPolicyConfig(
+            mode = prefs.getString("daily_limit_mode", MODE_QUEUE_TOMORROW) ?: MODE_QUEUE_TOMORROW,
+            fallbackEnabled = prefs.getBoolean("daily_limit_fallback_enabled", false),
+            fallbackOfferId = prefs.getInt("daily_limit_fallback_offer_id", -1),
+            fallbackMinPrice = prefs.getInt("daily_limit_fallback_min_price", 0).coerceAtLeast(0),
+            repeatNoticeEnabled = prefs.getBoolean("daily_limit_repeat_notice_enabled", false)
+        )
+    }
+
+    fun resolveFallbackOffer(context: Context, originalOfferId: Int, originalPrice: Int): OfferItem? {
+        val config = load(context)
+        if (!config.fallbackEnabled) return null
+        if (config.fallbackOfferId < 0) return null
+        if (originalPrice < config.fallbackMinPrice) return null
+        val fallback = OfferRepository.findById(context, config.fallbackOfferId) ?: return null
+        if (!fallback.enabled) return null
+        if (fallback.id == originalOfferId) return null
+        return fallback
+    }
+
+    fun findOpenDailyLimitTransaction(
+        context: Context,
+        phoneNumber: String,
+        offerName: String,
+        amountValue: Int
+    ): Transaction? {
+        val normalizedPhone = SmsCommandHandler.normalizePhone(phoneNumber)
+        if (normalizedPhone.isBlank()) return null
+        val prefs = context.getSharedPreferences("transactions", Context.MODE_PRIVATE)
+        val arr = try { JSONArray(prefs.getString("list", "[]")) } catch (_: Exception) { JSONArray() }
+        val today = Calendar.getInstance()
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val status = obj.optString("status", "")
+            val response = obj.optString("ussdResponse", "")
+            if (!isDailyLimitHold(status, response)) continue
+            val txPhone = SmsCommandHandler.normalizePhone(obj.optString("phoneNumber", ""))
+            if (txPhone != normalizedPhone) continue
+            val timestamp = obj.optLong("timestamp", 0L)
+            if (!isSameDay(timestamp, today)) continue
+            val sameOffer = offerName.isNotBlank() && obj.optString("description", "").equals(offerName, ignoreCase = true)
+            val sameAmount = amountValue > 0 && extractAmountValue(obj.optString("amount", "")) == amountValue.toDouble()
+            if (!sameOffer && !sameAmount) continue
+            return Transaction(
+                id = obj.optInt("id", -1),
+                description = obj.optString("description", ""),
+                amount = obj.optString("amount", ""),
+                amountValue = extractAmountValue(obj.optString("amount", "")),
+                date = obj.optString("date", ""),
+                status = status,
+                ussdCode = obj.optString("ussdCode", ""),
+                phoneNumber = obj.optString("phoneNumber", ""),
+                clientName = obj.optString("clientName", ""),
+                ussdResponse = response,
+                ussdTranscript = obj.optString("ussdTranscript", ""),
+                timestamp = timestamp
+            )
+        }
+        return null
+    }
+
+    fun beginReplyMenu(context: Context, customerPhone: String, txId: Int) {
+        saveReplyState(context, customerPhone, txId, STAGE_MENU)
+    }
+
+    fun awaitAlternativeNumber(context: Context, customerPhone: String, txId: Int) {
+        saveReplyState(context, customerPhone, txId, STAGE_ALT_NUMBER)
+    }
+
+    fun loadReplyState(context: Context, customerPhone: String): DailyLimitReplyState? {
+        val normalizedPhone = SmsCommandHandler.normalizePhone(customerPhone)
+        if (normalizedPhone.isBlank()) return null
+        val prefs = context.getSharedPreferences(REPLY_PREFS, Context.MODE_PRIVATE)
+        val txId = prefs.getInt("${normalizedPhone}_tx_id", -1)
+        val stage = prefs.getString("${normalizedPhone}_stage", "") ?: ""
+        if (txId < 0 || stage.isBlank()) return null
+        return DailyLimitReplyState(txId = txId, stage = stage)
+    }
+
+    fun clearReplyState(context: Context, customerPhone: String) {
+        val normalizedPhone = SmsCommandHandler.normalizePhone(customerPhone)
+        if (normalizedPhone.isBlank()) return
+        context.getSharedPreferences(REPLY_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .remove("${normalizedPhone}_tx_id")
+            .remove("${normalizedPhone}_stage")
+            .apply()
+    }
+
+    fun isReplyMenuStage(stage: String): Boolean = stage.equals(STAGE_MENU, ignoreCase = true)
+
+    fun isAwaitingAlternativeNumber(stage: String): Boolean = stage.equals(STAGE_ALT_NUMBER, ignoreCase = true)
+
+    fun isReplyEligible(tx: Transaction?): Boolean {
+        val record = tx ?: return false
+        return isDailyLimitHold(record.status, record.ussdResponse)
+    }
+
+    private fun saveReplyState(context: Context, customerPhone: String, txId: Int, stage: String) {
+        val normalizedPhone = SmsCommandHandler.normalizePhone(customerPhone)
+        if (normalizedPhone.isBlank() || txId < 0) return
+        context.getSharedPreferences(REPLY_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt("${normalizedPhone}_tx_id", txId)
+            .putString("${normalizedPhone}_stage", stage)
+            .apply()
+    }
+}
+
+fun loadTransactionById(context: Context, txId: Int): Transaction? {
+    return TransactionStore.findById(context, txId)
+}
+
+fun saveTransactionOutcome(
+    context: Context,
+    txId: Int,
+    status: String,
+    response: String,
+    transcript: String? = null
+): Boolean {
+    return TransactionStore.saveOutcome(context, txId, status, response, transcript)
+}
+
+fun cancelScheduledRetry(context: Context, txId: Int) {
+    if (txId < 0) return
+    runCatching {
+        val intent = Intent(context, AutomationService::class.java).apply {
+            action = AutomationService.ACTION_RETRY_PENDING
+        }
+        val pi = PendingIntent.getService(
+            context,
+            txId,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val am = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+        am?.cancel(pi)
+        pi.cancel()
+    }
+}
+
+fun scheduleRetryTomorrowForTransaction(context: Context, tx: Transaction, offer: OfferItem? = null) {
+    if (tx.id < 0 || tx.ussdCode.isBlank()) return
+    runCatching {
+        val intent = Intent(context, AutomationService::class.java).apply {
+            action = AutomationService.ACTION_RETRY_PENDING
+            putExtra("mode", offer?.executionMode ?: "ADVANCED")
+            putExtra("code", tx.ussdCode)
+            putExtra("phoneNumber", tx.phoneNumber)
+            putExtra("txId", tx.id)
+            putExtra("offerId", offer?.id ?: -1)
+            putExtra("offerName", offer?.name ?: tx.description)
+            putExtra("signatureEnabled", offer?.signatureDetectionEnabled ?: false)
+            putExtra("signatureMode", offer?.signatureAction ?: "STOP")
+            putExtra("signatureLearning", false)
+        }
+        val tomorrow = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, 1)
+            set(Calendar.HOUR_OF_DAY, 7)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val pi = PendingIntent.getService(
+            context,
+            tx.id,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        AlarmCompat.scheduleRtcWakeup(
+            context = context,
+            triggerAtMillis = tomorrow.timeInMillis,
+            pendingIntent = pi,
+            preferExact = true,
+            allowWhileIdle = true
+        )
+    }
+}
+
+fun sendCustomerOutcomeSms(context: Context, outcome: String, tx: Transaction?) {
+    val record = tx ?: return
+    val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+    val enabled = when (outcome.lowercase()) {
+        "success" -> prefs.getBoolean("notify_success", true)
+        "pending" -> prefs.getBoolean("notify_pending", true)
+        "limit_notice" -> prefs.getBoolean("notify_limit_notice", true)
+        else -> prefs.getBoolean("notify_failed", true)
+    }
+    if (!enabled) return
+
+    val phone = record.phoneNumber.trim()
+    if (!phone.matches(Regex("^0\\d{9}$"))) return
+
+    val amount = extractAmountToken(record.amount)
+    val message = buildSmsMessage(
+        context,
+        outcome,
+        record.clientName,
+        record.description,
+        amount,
+        phone
+    )
+    val subId = prefs.getInt("notify_sim_id", -1).takeIf { it != -1 }
+    SmsCommandHandler.sendSms(context, phone, message, subId)
+}
+
+private fun extractAmountToken(amount: String): String =
+    Regex("""\d+(?:\.\d+)?""").find(amount)?.value ?: amount
+
+private fun extractAmountValue(amount: String): Double =
+    Regex("""\d+(?:\.\d+)?""").find(amount)?.value?.toDoubleOrNull() ?: 0.0
+
+private fun transactionFromJson(obj: org.json.JSONObject): Transaction {
+    val amount = obj.optString("amount", "")
+    val description = obj.optString("description", "")
+    val clientName = obj.optString("clientName", "")
+    val ussdCode = obj.optString("ussdCode", "")
+    val status = obj.optString("status", "Pending")
+    return Transaction(
+        id = obj.optInt("id", -1),
+        description = description,
+        amount = amount,
+        amountValue = extractAmountValue(amount),
+        date = obj.optString("date", ""),
+        status = status,
+        statusEnum = TransactionStatus.fromString(status),
+        ussdCode = ussdCode,
+        phoneNumber = obj.optString("phoneNumber", ""),
+        clientName = clientName,
+        ussdResponse = obj.optString("ussdResponse", ""),
+        ussdTranscript = obj.optString("ussdTranscript", ""),
+        timestamp = obj.optLong("timestamp", 0L),
+        source = obj.optString("source").ifBlank {
+            if (amount.trim().startsWith("-") || description.contains("airtime", ignoreCase = true)) TX_SOURCE_AIRTIME
+            else if (ussdCode.isNotBlank() && clientName.isNotBlank()) TX_SOURCE_AUTOMATED
+            else TX_SOURCE_SYSTEM
+        },
+        showInRecent = if (obj.has("showInRecent")) {
+            obj.optBoolean("showInRecent", false)
+        } else {
+            ussdCode.isNotBlank() && clientName.isNotBlank() && !amount.trim().startsWith("-")
+        }
+    )
+}
+
+private fun isDailyLimitHold(status: String, response: String): Boolean {
+    if (!status.equals("Pending", ignoreCase = true)) return false
+    val lower = response.lowercase()
+    return UssdResponsePatternManager.DEFAULT_ALREADY_RECOMMENDED_PATTERNS.any { pattern ->
+        lower.contains(pattern.lowercase())
+    } ||
+        lower.contains("once per day") ||
+        lower.contains("alternative number") ||
+        lower.contains("tomorrow morning") ||
+        lower.contains("following day")
+}
+
+private fun isSameDay(timestamp: Long, today: Calendar): Boolean {
+    if (timestamp <= 0L) return false
+    val other = Calendar.getInstance().apply { timeInMillis = timestamp }
+    return today.get(Calendar.YEAR) == other.get(Calendar.YEAR) &&
+        today.get(Calendar.DAY_OF_YEAR) == other.get(Calendar.DAY_OF_YEAR)
+}
