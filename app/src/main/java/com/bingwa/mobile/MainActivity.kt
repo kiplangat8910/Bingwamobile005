@@ -1931,8 +1931,17 @@ fun VolcanicBalanceCard(
                         Text("AIRTIME BALANCE", color = C.t2, fontSize = 9.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(airBal.ifBlank { "—" }, fontSize = 28.sp, fontWeight = FontWeight.Black, lineHeight = 30.sp, color = C.t1, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            airBal.ifBlank { "—" },
+                            modifier = Modifier.weight(1f),
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Black,
+                            lineHeight = 28.sp,
+                            color = C.t1,
+                            maxLines = 2,
+                            overflow = TextOverflow.Clip
+                        )
                         Spacer(Modifier.width(8.dp))
                         Icon(Icons.Outlined.Refresh, null, tint = if (isRefreshing) C.blue else C.t3,
                             modifier = Modifier.size(16.dp).then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier).clickable { onRefresh() })

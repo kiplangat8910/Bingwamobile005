@@ -31,6 +31,11 @@ class BalanceChecker : Service() {
         private val timeoutHandler = Handler(Looper.getMainLooper())
         private var timeoutRunnable: Runnable? = null
 
+        private data class BalanceCandidate(
+            val amount: Double,
+            val score: Int
+        )
+
         fun requestBalanceCheck(context: Context) {
             if (checking) { Log.d(TAG, "check already in flight — skipping"); return }
             checking = true
@@ -91,55 +96,79 @@ class BalanceChecker : Service() {
 
         fun parseBalanceDisplay(raw: String): String {
             Log.d(TAG, "parseBalanceDisplay input='$raw'")
-
-            // Pattern 1: "Airtime Bal: 726.10KSH" or "Balance: 150KSH"
-            val p1 = Regex("""(?:Airtime\s*Bal|Balance|Salio|Umbea)[:\s]*([\d,]+(?:\.\d{1,2})?)\s*KSH""", RegexOption.IGNORE_CASE)
-            p1.find(raw)?.groupValues?.get(1)?.let { return formatAmount(it) }
-
-            // Pattern 2: Number followed by KSH anywhere: "726.10KSH"
-            val p2 = Regex("""([\d,]+(?:\.\d{1,2})?)\s*KSH""", RegexOption.IGNORE_CASE)
-            p2.find(raw)?.groupValues?.get(1)?.let { return formatAmount(it) }
-
-            // Pattern 3: KSh/KES with space before amount
-            val p3 = Regex("""(?:KSh[s]?|Ksh[s]?|KES)\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE)
-            p3.find(raw)?.groupValues?.get(1)?.let { return formatAmount(it) }
-
-            // Pattern 4: Amount before KSh/KES
-            val p4 = Regex("""([\d,]+(?:\.\d{1,2})?)\s*(?:KSh[s]?|Ksh[s]?|KES)""", RegexOption.IGNORE_CASE)
-            p4.find(raw)?.groupValues?.get(1)?.let { return formatAmount(it) }
-
-            // Pattern 5: Number with /=
-            val p5 = Regex("""([\d,]+(?:\.\d{1,2})?)\s*/=""")
-            p5.find(raw)?.groupValues?.get(1)?.let { return formatAmount(it) }
-
-            // Pattern 6: Any decimal number near balance keywords
-            if (Regex("""balance|airtime|salio|umbea|tariff|mpesa""", RegexOption.IGNORE_CASE).containsMatchIn(raw)) {
-                val numbers = Regex("""([\d,]+(?:\.\d{1,2})?)""").findAll(raw).toList()
-                for (m in numbers) {
-                    val amount = m.groupValues[1].replace(",", "").toDoubleOrNull()
-                    if (amount != null && amount > 0 && amount < 1000000) {
-                        return formatAmount(m.groupValues[1])
-                    }
-                }
-            }
-
+            extractBalanceCandidate(raw)?.let { return formatAmount(it.amount) }
             Log.w(TAG, "No balance pattern matched for '$raw'")
             return ""
         }
 
         fun parseBalanceInt(raw: String): Int {
-            val p1 = Regex("""([\d,]+)(?:\.\d+)?\s*KSH""", RegexOption.IGNORE_CASE)
-            p1.find(raw)?.groupValues?.get(1)?.replace(",", "")?.toIntOrNull()?.let { return it }
-            val p2 = Regex("""(?:KSh[s]?|Ksh[s]?|KES)\s*([\d,]+)""", RegexOption.IGNORE_CASE)
-            p2.find(raw)?.groupValues?.get(1)?.replace(",", "")?.toIntOrNull()?.let { return it }
-            val p3 = Regex("""([\d,]+)\s*/=""")
-            p3.find(raw)?.groupValues?.get(1)?.replace(",", "")?.toIntOrNull()?.let { return it }
+            extractBalanceCandidate(raw)?.amount?.toInt()?.let { return it }
             return -1
         }
 
-        private fun formatAmount(rawAmount: String): String {
-            val cleaned = rawAmount.replace(",", "")
-            val amount = cleaned.toDoubleOrNull() ?: return ""
+        private fun extractBalanceCandidate(raw: String): BalanceCandidate? {
+            val normalized = normalizeBalanceText(raw)
+            val candidates = mutableListOf<BalanceCandidate>()
+
+            fun addMatches(pattern: Regex, score: Int) {
+                pattern.findAll(normalized).forEach { match ->
+                    val amount = match.groupValues.getOrNull(1)
+                        ?.replace(",", "")
+                        ?.toDoubleOrNull()
+                        ?: return@forEach
+                    if (amount > 0 && amount < 1_000_000) {
+                        candidates += BalanceCandidate(amount = amount, score = score)
+                    }
+                }
+            }
+
+            addMatches(
+                Regex(
+                    """(?:airtime\s*bal(?:ance)?|balance|your\s+balance\s+is|salio|umbea|account\s+balance)[:\s-]*(?:is\s*)?(?:ksh[s]?|kes)?\s*([\d,]+(?:\.\d{1,2})?)""",
+                    RegexOption.IGNORE_CASE
+                ),
+                score = 500
+            )
+            addMatches(
+                Regex("""(?:ksh[s]?|kes)\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
+                score = 420
+            )
+            addMatches(
+                Regex("""([\d,]+(?:\.\d{1,2})?)\s*(?:ksh[s]?|kes)""", RegexOption.IGNORE_CASE),
+                score = 420
+            )
+            addMatches(
+                Regex("""([\d,]+(?:\.\d{1,2})?)\s*/="""),
+                score = 320
+            )
+
+            if (candidates.isEmpty() &&
+                Regex("""balance|airtime|salio|umbea|tariff|mpesa""", RegexOption.IGNORE_CASE)
+                    .containsMatchIn(normalized)
+            ) {
+                Regex("""([\d,]+(?:\.\d{1,2})?)""")
+                    .findAll(normalized)
+                    .forEach { match ->
+                        val amount = match.groupValues[1].replace(",", "").toDoubleOrNull() ?: return@forEach
+                        if (amount > 0 && amount < 1_000_000) {
+                            candidates += BalanceCandidate(amount = amount, score = 120)
+                        }
+                    }
+            }
+
+            return candidates.maxWithOrNull(
+                compareBy<BalanceCandidate> { it.score }
+                    .thenBy { it.amount }
+            )
+        }
+
+        private fun normalizeBalanceText(raw: String): String =
+            raw.replace(Regex("""[_=~`|•]+"""), " ")
+                .replace(Regex("""[^\S\r\n]+"""), " ")
+                .replace(Regex("""\s+"""), " ")
+                .trim()
+
+        private fun formatAmount(amount: Double): String {
             return if (amount == kotlin.math.floor(amount)) {
                 "KSh ${amount.toInt()}"
             } else {

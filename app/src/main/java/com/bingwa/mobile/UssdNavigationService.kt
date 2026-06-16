@@ -241,7 +241,10 @@ class UssdNavigationService : AccessibilityService() {
         if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null) return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-            event.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
+            event.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED &&
+            event.eventType != AccessibilityEvent.TYPE_VIEW_FOCUSED &&
+            event.eventType != AccessibilityEvent.TYPE_VIEW_CLICKED &&
+            event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED
         ) return
         val pkg = event.packageName?.toString() ?: ""
         if (pkg in BLOCKED_PACKAGES) return
@@ -253,7 +256,17 @@ class UssdNavigationService : AccessibilityService() {
             lastWindowPkg = windowPkg
 
             val eventDialogText = extractDialogTextFromEvent(event)
-            val snapshot = if (eventDialogText.isBlank() || signatureLearningMode) captureTreeSnapshot(root) else null
+            val snapshot = if (
+                eventDialogText.isBlank() ||
+                signatureLearningMode ||
+                advancedActive ||
+                balanceCallback != null ||
+                tokenPurchaseCallback != null
+            ) {
+                captureTreeSnapshot(root)
+            } else {
+                null
+            }
             val dialogText = snapshot?.dialogText ?: normalizeCollapsedText(eventDialogText)
             if (dialogText.isBlank()) return
             val lower = dialogText.lowercase()
@@ -431,6 +444,13 @@ class UssdNavigationService : AccessibilityService() {
                 }
                 isProcessing = false
                 dismissErrorAndRestart()
+                return
+            }
+
+            if (menuSignature != null || hasSeenAdvancedPopup) {
+                isProcessing = false
+                pendingProcessToken = SystemClock.elapsedRealtime()
+                scheduleProcessStep(dialogChanged = false)
                 return
             }
 
