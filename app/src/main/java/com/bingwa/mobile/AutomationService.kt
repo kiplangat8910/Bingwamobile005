@@ -415,7 +415,8 @@ class AutomationService : Service() {
                 originalTx?.clientName.orEmpty(),
                 status = if (originalTx?.showInRecent == true) TransactionStatus.PROCESSING.value else TransactionStatus.PENDING.value,
                 source = originalTx?.source ?: TX_SOURCE_AUTOMATED,
-                showInRecent = originalTx?.showInRecent ?: true
+                showInRecent = originalTx?.showInRecent ?: true,
+                offerId = fallbackOffer.id
             )
             if (fallbackTxId < 0) return false
             startOfferAutomation(

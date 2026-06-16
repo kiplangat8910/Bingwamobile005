@@ -29,5 +29,8 @@ data class Transaction(
     val clientName: String = "", val ussdResponse: String = "",
     val ussdTranscript: String = "",
     val source: String = TX_SOURCE_SYSTEM,
-    val showInRecent: Boolean = false
+    val showInRecent: Boolean = false,
+    val offerId: Int = -1,
+    val completedAt: Long = 0L,
+    val executionDurationMs: Long = 0L
 )

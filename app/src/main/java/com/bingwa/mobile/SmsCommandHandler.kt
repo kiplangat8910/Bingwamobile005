@@ -439,7 +439,8 @@ object SmsCommandHandler {
             finalCode,
             clientName = resolveClientNameByPhone(context, phone),
             source = TX_SOURCE_SMS_COMMAND,
-            showInRecent = false
+            showInRecent = false,
+            offerId = offer.id
         )
         context.startOfferAutomation(offer, phone, txId, finalCode, offer.executionMode)
         sendSms(context, replyTo, "Dispatch started: ${offer.name} → $phone (transaction #$txId).", replySubId)

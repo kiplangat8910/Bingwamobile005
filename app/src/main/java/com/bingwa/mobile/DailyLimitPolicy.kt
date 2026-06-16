@@ -84,7 +84,10 @@ object DailyLimitPolicy {
                 clientName = obj.optString("clientName", ""),
                 ussdResponse = response,
                 ussdTranscript = obj.optString("ussdTranscript", ""),
-                timestamp = timestamp
+                timestamp = timestamp,
+                offerId = obj.optInt("offerId", -1),
+                completedAt = obj.optLong("completedAt", 0L),
+                executionDurationMs = obj.optLong("executionDurationMs", 0L)
             )
         }
         return null
@@ -270,7 +273,10 @@ private fun transactionFromJson(obj: org.json.JSONObject): Transaction {
             obj.optBoolean("showInRecent", false)
         } else {
             ussdCode.isNotBlank() && clientName.isNotBlank() && !amount.trim().startsWith("-")
-        }
+        },
+        offerId = obj.optInt("offerId", -1),
+        completedAt = obj.optLong("completedAt", 0L),
+        executionDurationMs = obj.optLong("executionDurationMs", 0L)
     )
 }
 

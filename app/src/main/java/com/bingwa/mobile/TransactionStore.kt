@@ -53,7 +53,8 @@ internal object TransactionStore {
         clientName: String = "",
         status: String = TransactionStatus.PENDING.value,
         source: String = TX_SOURCE_SYSTEM,
-        showInRecent: Boolean = false
+        showInRecent: Boolean = false,
+        offerId: Int = -1
     ): Int {
         val current = load(context)
         val usedIds = current.asSequence().map { it.id }.toHashSet()
@@ -79,7 +80,8 @@ internal object TransactionStore {
             ussdTranscript = "",
             timestamp = System.currentTimeMillis(),
             source = source,
-            showInRecent = showInRecent
+            showInRecent = showInRecent,
+            offerId = offerId
         )
 
         val updated = ArrayList<Transaction>(minOf(current.size + 1, MAX_RECENT_TRANSACTIONS))
@@ -102,11 +104,24 @@ internal object TransactionStore {
         val index = current.indexOfFirst { it.id == txId }
         if (index < 0) return false
         val existing = current[index]
+        val normalizedStatus = TransactionStatus.fromString(status)
+        val completedAt = when (normalizedStatus) {
+            TransactionStatus.SUCCESS,
+            TransactionStatus.FAILED,
+            TransactionStatus.CANCELLED -> System.currentTimeMillis()
+            else -> existing.completedAt
+        }
+        val executionDurationMs = when {
+            completedAt > 0L && existing.timestamp > 0L -> (completedAt - existing.timestamp).coerceAtLeast(0L)
+            else -> existing.executionDurationMs
+        }
         current[index] = existing.copy(
             status = status,
-            statusEnum = TransactionStatus.fromString(status),
+            statusEnum = normalizedStatus,
             ussdResponse = response,
-            ussdTranscript = transcript ?: existing.ussdTranscript
+            ussdTranscript = transcript ?: existing.ussdTranscript,
+            completedAt = completedAt,
+            executionDurationMs = executionDurationMs
         )
         save(context, current)
         return true
@@ -162,7 +177,10 @@ internal object TransactionStore {
             ussdResponse = obj.optString("ussdResponse", ""),
             ussdTranscript = obj.optString("ussdTranscript", ""),
             source = source,
-            showInRecent = showInRecent
+            showInRecent = showInRecent,
+            offerId = obj.optInt("offerId", -1),
+            completedAt = obj.optLong("completedAt", 0L),
+            executionDurationMs = obj.optLong("executionDurationMs", 0L)
         )
     }
 
@@ -181,6 +199,9 @@ internal object TransactionStore {
             put("timestamp", timestamp)
             put("source", source)
             put("showInRecent", showInRecent)
+            put("offerId", offerId)
+            put("completedAt", completedAt)
+            put("executionDurationMs", executionDurationMs)
         }
 
     private fun Transaction.normalized(): Transaction {

@@ -336,7 +336,10 @@ private fun transactionFromStorage(obj: JSONObject, fallbackId: Int = -1): Trans
         ussdResponse = obj.optString("ussdResponse", ""),
         ussdTranscript = obj.optString("ussdTranscript", ""),
         source = source,
-        showInRecent = showInRecent
+        showInRecent = showInRecent,
+        offerId = obj.optInt("offerId", -1),
+        completedAt = obj.optLong("completedAt", 0L),
+        executionDurationMs = obj.optLong("executionDurationMs", 0L)
     )
 }
 
@@ -355,6 +358,9 @@ private fun transactionToJson(tx: Transaction): JSONObject =
         put("timestamp", tx.timestamp)
         put("source", tx.source)
         put("showInRecent", tx.showInRecent)
+        put("offerId", tx.offerId)
+        put("completedAt", tx.completedAt)
+        put("executionDurationMs", tx.executionDurationMs)
     }
 
 fun loadTransactionByIdFromPrefs(context: Context, txId: Int): Transaction? {
@@ -544,7 +550,8 @@ fun createPendingTransaction(
     clientName: String = "",
     status: String = TransactionStatus.PENDING.value,
     source: String = TX_SOURCE_SYSTEM,
-    showInRecent: Boolean = false
+    showInRecent: Boolean = false,
+    offerId: Int = -1
 ): Int {
     return try {
         TransactionStore.createPendingTransaction(
@@ -556,7 +563,8 @@ fun createPendingTransaction(
             clientName = clientName,
             status = status,
             source = source,
-            showInRecent = showInRecent
+            showInRecent = showInRecent,
+            offerId = offerId
         )
     } catch (e: Exception) {
         Log.e("Transactions", "createPendingTransaction error", e)
@@ -1492,6 +1500,8 @@ fun HomeScreenVolcanic(
 ) {
     val ctx = LocalContext.current
     val automatedTxns = txns.filter { it.showInRecent }.sortedByDescending { it.timestamp }
+    var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
+    val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
     val sent = automatedTxns.count { it.status == TransactionStatus.SUCCESS.value }
     val pending = automatedTxns.count {
         it.status == TransactionStatus.PENDING.value || it.status == TransactionStatus.PROCESSING.value
@@ -1650,12 +1660,35 @@ fun HomeScreenVolcanic(
                 item { AnimatedEmptyState() }
             } else {
                 items(automatedTxns.take(10), key = { it.id }) { tx ->
-                    GithubActivityCard(tx = tx) {
+                    GithubActivityCard(
+                        tx = tx,
+                        onClick = { selectedTxId = tx.id }
+                    ) {
                         txns.remove(tx)
                         saveTransactions(ctx, txns.toList())
+                        if (selectedTxId == tx.id) selectedTxId = -1
                     }
                 }
             }
+        }
+
+        if (selectedTx != null) {
+            RecentTransactionDetailsDialog(
+                tx = selectedTx,
+                onDismiss = { selectedTxId = -1 },
+                onDelete = {
+                    txns.removeAll { it.id == selectedTx.id }
+                    saveTransactions(ctx, txns.toList())
+                    selectedTxId = -1
+                },
+                onRetry = { tx ->
+                    val result = retryRecentTransaction(ctx, tx)
+                    Toast.makeText(ctx, result.message, if (result.success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG).show()
+                    if (result.success) {
+                        selectedTxId = if (result.newTxId >= 0) result.newTxId else -1
+                    }
+                }
+            )
         }
     }
 }
@@ -1837,13 +1870,135 @@ private fun GithubEmptyActivityCard() {
     }
 }
 
-@Composable
-private fun GithubActivityCard(tx: Transaction, onDelete: () -> Unit) {
-    val statusColor = when (tx.statusEnum) {
-        TransactionStatus.SUCCESS -> C.green
-        TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
-        TransactionStatus.PROCESSING, TransactionStatus.PENDING, TransactionStatus.RETRYING -> C.amber
+private data class TransactionRetryResult(
+    val success: Boolean,
+    val message: String,
+    val newTxId: Int = -1
+)
+
+private fun transactionStatusColor(tx: Transaction): Color = when (tx.statusEnum) {
+    TransactionStatus.SUCCESS -> C.green
+    TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
+    TransactionStatus.PROCESSING, TransactionStatus.PENDING, TransactionStatus.RETRYING -> C.amber
+}
+
+private fun transactionTypeLabel(tx: Transaction): String = when (tx.source) {
+    TX_SOURCE_AUTOMATED -> "Automated"
+    TX_SOURCE_CONSOLE -> "Console"
+    TX_SOURCE_SMS_COMMAND -> "SMS Command"
+    TX_SOURCE_AIRTIME -> "Airtime"
+    else -> "Activity"
+}
+
+private fun transactionTypeColor(tx: Transaction): Color = when (tx.source) {
+    TX_SOURCE_AUTOMATED -> C.green
+    TX_SOURCE_CONSOLE -> C.purple
+    TX_SOURCE_SMS_COMMAND -> C.blue
+    TX_SOURCE_AIRTIME -> C.orange
+    else -> C.cyan
+}
+
+private fun transactionSummaryTime(tx: Transaction): String =
+    if (tx.timestamp > 0L) SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()).format(Date(tx.timestamp))
+    else tx.date.ifBlank { "Recent" }
+
+private fun transactionExecutionTime(tx: Transaction): String =
+    if (tx.timestamp > 0L) SimpleDateFormat("dd MMM yyyy, HH:mm:ss", Locale.getDefault()).format(Date(tx.timestamp))
+    else tx.date.ifBlank { "Not recorded" }
+
+private fun transactionCompletionTime(tx: Transaction): String =
+    if (tx.completedAt > 0L) SimpleDateFormat("dd MMM yyyy, HH:mm:ss", Locale.getDefault()).format(Date(tx.completedAt))
+    else when (tx.statusEnum) {
+        TransactionStatus.SUCCESS,
+        TransactionStatus.FAILED,
+        TransactionStatus.CANCELLED -> "Completed time not recorded"
+        else -> "In progress"
     }
+
+private fun transactionExecutionDuration(tx: Transaction): String {
+    val durationMs = when {
+        tx.executionDurationMs > 0L -> tx.executionDurationMs
+        tx.completedAt > 0L && tx.timestamp > 0L -> (tx.completedAt - tx.timestamp).coerceAtLeast(0L)
+        else -> 0L
+    }
+    if (durationMs <= 0L) {
+        return when (tx.statusEnum) {
+            TransactionStatus.SUCCESS,
+            TransactionStatus.FAILED,
+            TransactionStatus.CANCELLED -> "Not recorded"
+            else -> "Still running"
+        }
+    }
+    val totalSeconds = durationMs / 1_000L
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return if (minutes > 0L) "${minutes}m ${seconds}s" else "${seconds}s"
+}
+
+private fun resolveOfferForRetry(context: Context, tx: Transaction): OfferItem? {
+    if (tx.offerId >= 0) {
+        OfferRepository.findById(context, tx.offerId)?.let { return it }
+    }
+    OfferRepository.findByName(context, tx.description)?.let { return it }
+    if (tx.amountValue > 0.0) {
+        OfferRepository.findByPrice(context, tx.amountValue.toInt())?.let { return it }
+    }
+    val normalizedCode = UssdHelper.normalizeUssdCode(tx.ussdCode, tx.phoneNumber)
+    return OfferRepository.load(context).firstOrNull { offer ->
+        offer.enabled && UssdHelper.normalizeUssdCode(offer.ussdCode, tx.phoneNumber) == normalizedCode
+    }
+}
+
+private fun retryRecentTransaction(context: Context, tx: Transaction): TransactionRetryResult {
+    val phone = SmsCommandHandler.normalizePhone(tx.phoneNumber).ifBlank { tx.phoneNumber.trim() }
+    if (phone.isBlank()) {
+        return TransactionRetryResult(false, "Phone number is missing for this transaction.")
+    }
+
+    val matchedOffer = resolveOfferForRetry(context, tx)
+    val finalCode = when {
+        matchedOffer != null -> UssdHelper.normalizeUssdCode(matchedOffer.ussdCode, phone)
+        tx.ussdCode.isNotBlank() -> UssdHelper.normalizeUssdCode(tx.ussdCode, phone)
+        else -> ""
+    }
+    if (finalCode.isBlank()) {
+        return TransactionRetryResult(false, "USSD code is missing, so this transaction cannot be retried.")
+    }
+
+    val newTxId = createPendingTransaction(
+        context,
+        description = matchedOffer?.name ?: tx.description,
+        amount = tx.amount,
+        phone = phone,
+        ussd = finalCode,
+        clientName = tx.clientName,
+        status = TransactionStatus.PROCESSING.value,
+        source = tx.source,
+        showInRecent = true,
+        offerId = matchedOffer?.id ?: tx.offerId
+    )
+    if (newTxId < 0) {
+        return TransactionRetryResult(false, "Retry could not be queued. Please try again.")
+    }
+
+    context.startOfferAutomation(
+        offer = matchedOffer,
+        phoneNumber = phone,
+        txId = newTxId,
+        finalCode = finalCode,
+        mode = matchedOffer?.executionMode ?: "ADVANCED"
+    )
+    return TransactionRetryResult(
+        success = true,
+        message = "Retry started for ${matchedOffer?.name ?: tx.description.ifBlank { "this transaction" }}.",
+        newTxId = newTxId
+    )
+}
+
+@Composable
+private fun GithubActivityCard(tx: Transaction, onClick: () -> Unit, onDelete: () -> Unit) {
+    val statusColor = transactionStatusColor(tx)
+    val typeColor = transactionTypeColor(tx)
     val initials = remember(tx.clientName, tx.phoneNumber) {
         tx.clientName
             .ifBlank { tx.phoneNumber }
@@ -1853,14 +2008,30 @@ private fun GithubActivityCard(tx: Transaction, onDelete: () -> Unit) {
             .joinToString("")
             .ifBlank { "TX" }
     }
+    val responsePreview = tx.ussdResponse
+        .ifBlank { tx.ussdTranscript.lineSequence().firstOrNull().orEmpty() }
+        .ifBlank { if (tx.statusEnum == TransactionStatus.FAILED) "Tap to view full failure details." else "" }
+
     Surface(
         color = C.card,
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f)),
-        modifier = Modifier.fillMaxWidth()
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.22f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            statusColor.copy(alpha = 0.08f),
+                            C.card,
+                            C.surface.copy(alpha = 0.82f)
+                        )
+                    )
+                )
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
@@ -1869,26 +2040,29 @@ private fun GithubActivityCard(tx: Transaction, onDelete: () -> Unit) {
             ) {
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(C.surface)
-                        .border(1.dp, C.border.copy(alpha = 0.75f), RoundedCornerShape(12.dp)),
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(statusColor.copy(alpha = 0.12f))
+                        .border(1.dp, statusColor.copy(alpha = 0.24f), RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(initials, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(initials, color = statusColor, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
                 }
                 Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text(
                         tx.clientName.ifBlank { "Unknown customer" },
                         color = C.t1,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        tx.description.ifBlank { "Transaction" },
+                        "Bought ${tx.description.ifBlank { "Offer not captured" }}",
                         color = C.t2,
                         fontSize = 12.sp,
                         maxLines = 1,
@@ -1896,8 +2070,8 @@ private fun GithubActivityCard(tx: Transaction, onDelete: () -> Unit) {
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(tx.amount.ifBlank { "-" }, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(tx.amount.ifBlank { "-" }, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
                     Surface(
                         shape = RoundedCornerShape(999.dp),
                         color = statusColor.copy(alpha = 0.10f),
@@ -1905,7 +2079,7 @@ private fun GithubActivityCard(tx: Transaction, onDelete: () -> Unit) {
                     ) {
                         Text(
                             tx.status,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                             color = statusColor,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold
@@ -1915,19 +2089,49 @@ private fun GithubActivityCard(tx: Transaction, onDelete: () -> Unit) {
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    tx.phoneNumber.ifBlank { "Phone not available" },
-                    color = C.t3,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                RecentSummaryChip(
+                    text = tx.phoneNumber.ifBlank { "Phone unavailable" },
+                    color = C.cyan,
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(Modifier.width(12.dp))
-                Text(tx.date.ifBlank { "Recent" }, color = C.t3, fontSize = 11.sp)
+                RecentSummaryChip(
+                    text = transactionSummaryTime(tx),
+                    color = typeColor,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RecentSummaryChip(text = transactionTypeLabel(tx), color = typeColor)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Tap for full execution details",
+                    color = C.t3,
+                    fontSize = 11.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(Icons.Outlined.KeyboardArrowRight, null, tint = C.t3, modifier = Modifier.size(18.dp))
+            }
+            if (responsePreview.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = C.surface.copy(alpha = 0.80f),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.75f))
+                ) {
+                    Text(
+                        responsePreview,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        color = C.t2,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1939,6 +2143,205 @@ private fun GithubActivityCard(tx: Transaction, onDelete: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun RecentSummaryChip(text: String, color: Color, modifier: Modifier = Modifier) {
+    Surface(
+        color = color.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.18f)),
+        modifier = modifier
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            color = color,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun RecentTransactionDetailsDialog(
+    tx: Transaction,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit,
+    onRetry: (Transaction) -> Unit
+) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val statusColor = transactionStatusColor(tx)
+    val sourceColor = transactionTypeColor(tx)
+    val transcriptText = tx.ussdTranscript.ifBlank {
+        tx.ussdResponse.ifBlank { "No USSD transcript captured for this transaction." }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = C.card,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    tx.clientName.ifBlank { "Transaction details" },
+                    color = C.t1,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    tx.description.ifBlank { "Offer details" },
+                    color = C.t2,
+                    fontSize = 13.sp
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    RecentSummaryChip(text = tx.status, color = statusColor)
+                    RecentSummaryChip(text = transactionTypeLabel(tx), color = sourceColor)
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            clipboard.setText(AnnotatedString(tx.phoneNumber))
+                            Toast.makeText(context, "Phone number copied", Toast.LENGTH_SHORT).show()
+                        },
+                        enabled = tx.phoneNumber.isNotBlank(),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, C.border)
+                    ) {
+                        Icon(Icons.Outlined.ContentCopy, null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Copy Phone")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            clipboard.setText(AnnotatedString(tx.ussdCode))
+                            Toast.makeText(context, "USSD code copied", Toast.LENGTH_SHORT).show()
+                        },
+                        enabled = tx.ussdCode.isNotBlank(),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, C.border)
+                    ) {
+                        Icon(Icons.Outlined.Dialpad, null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Copy USSD")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            clipboard.setText(AnnotatedString(transcriptText))
+                            Toast.makeText(context, "USSD transcript copied", Toast.LENGTH_SHORT).show()
+                        },
+                        enabled = tx.ussdTranscript.isNotBlank() || tx.ussdResponse.isNotBlank(),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, C.border)
+                    ) {
+                        Icon(Icons.Outlined.Article, null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Copy Transcript")
+                    }
+                }
+                if (tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED) {
+                    Button(
+                        onClick = { onRetry(tx) },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = statusColor)
+                    ) {
+                        Icon(Icons.Outlined.Refresh, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Retry Failed Execution")
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = C.surface.copy(alpha = 0.84f),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.8f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text("EXECUTION OVERVIEW", color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
+                        TxDetailRow("Transaction ID", "#${tx.id}")
+                        TxDetailRow("Customer name", tx.clientName.ifBlank { "Not captured" })
+                        TxDetailRow("Phone number", tx.phoneNumber.ifBlank { "Not captured" })
+                        TxDetailRow("Offer bought", tx.description.ifBlank { "Not captured" })
+                        TxDetailRow("Amount", tx.amount.ifBlank { "Not captured" })
+                        TxDetailRow("Time of execution", transactionExecutionTime(tx))
+                        TxDetailRow("Execution completed", transactionCompletionTime(tx))
+                        TxDetailRow("Time taken to execute", transactionExecutionDuration(tx))
+                        TxDetailRow("Source", transactionTypeLabel(tx))
+                        TxDetailRow("USSD code", tx.ussdCode.ifBlank { "Not captured" })
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = C.w04,
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.8f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("LAST RESPONSE", color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
+                        SelectionContainer {
+                            Text(
+                                tx.ussdResponse.ifBlank { "No final response captured yet." },
+                                color = C.t2,
+                                fontSize = 12.sp,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = C.w04,
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.8f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("USSD SESSION", color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
+                        SelectionContainer {
+                            Text(
+                                transcriptText,
+                                color = C.t2,
+                                fontSize = 12.sp,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close", color = C.t1)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDelete) {
+                Text("Delete", color = C.red)
+            }
+        }
+    )
 }
 
 @Composable
@@ -2694,7 +3097,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                     finalCode,
                                     clientName = resolvedClientName,
                                     source = TX_SOURCE_CONSOLE,
-                                    showInRecent = false
+                                    showInRecent = false,
+                                    offerId = selectedOffer.id
                                 )
                                 pendingTxId = txId
                                 ctx.startOfferAutomation(selectedOffer, phone, txId, finalCode, mode)

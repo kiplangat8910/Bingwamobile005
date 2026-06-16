@@ -339,7 +339,8 @@ object RelayManager {
             finalCode,
             clientName = resolveClientNameByPhone(context, phone),
             source = TX_SOURCE_SMS_COMMAND,
-            showInRecent = false
+            showInRecent = false,
+            offerId = offer.id
         )
         context.startOfferAutomation(offer, phone, txId, finalCode, offer.executionMode)
         if (resultDestPhone != null) RelayResultTracker.trackAndReply(context, txId, resultDestPhone)
