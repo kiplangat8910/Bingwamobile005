@@ -506,6 +506,18 @@ private fun rankConsoleSearchEntries(query: String, entries: List<ConsoleSearchE
         .toList()
 }
 
+private fun autoMatchConsoleEntries(phone: String, entries: List<ConsoleSearchEntry>): List<ConsoleSearchEntry> {
+    val normalized = SmsCommandHandler.normalizePhone(phone)
+    if (normalized.length < 3) return emptyList()
+
+    return rankConsoleSearchEntries(phone, entries).sortedWith(
+        compareByDescending<ConsoleSearchEntry> { SmsCommandHandler.normalizePhone(it.phone) == normalized }
+            .thenByDescending { it.source == "Saved" }
+            .thenByDescending { it.lastSeen }
+            .thenBy { it.name.ifBlank { it.phone }.lowercase(Locale.getDefault()) }
+    )
+}
+
 fun loadTransactions(ctx: Context, into: MutableList<Transaction>) {
     try {
         into.clear()
@@ -752,6 +764,46 @@ fun FieldLabel(text: String) = Text(
     text, color = C.t2, fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
     letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 6.dp)
 )
+
+@Composable
+private fun ConsoleSectionCard(
+    title: String,
+    subtitle: String,
+    accent: Color,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = C.card,
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(accent)
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(title, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(subtitle, color = C.t3, fontSize = 11.sp, lineHeight = 15.sp)
+                    }
+                }
+                content()
+            }
+        )
+    }
+}
 
 @Composable
 fun FeedbackBanner(msg: String, color: Color) {
@@ -1459,7 +1511,7 @@ fun HomeScreenVolcanic(
         infiniteRepeatable(tween(1500, easing = EaseInOutSine), RepeatMode.Reverse),
         label = "pulse"
     )
-    val primaryStatusColor = if (running) C.blue else C.t3
+    val primaryStatusColor = if (running) C.green else C.t3
 
     Box(Modifier.fillMaxSize().background(C.bg)) {
         Box(
@@ -1502,13 +1554,33 @@ fun HomeScreenVolcanic(
                         letterSpacing = 1.2.sp,
                         fontWeight = FontWeight.Medium
                     )
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = C.surface.copy(alpha = 0.92f),
-                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    if (running) {
+                                        listOf(
+                                            C.green.copy(alpha = 0.26f),
+                                            C.cyan.copy(alpha = 0.18f),
+                                            C.surface.copy(alpha = 0.95f)
+                                        )
+                                    } else {
+                                        listOf(
+                                            C.surface.copy(alpha = 0.96f),
+                                            C.card.copy(alpha = 0.92f)
+                                        )
+                                    }
+                                )
+                            )
+                            .border(
+                                1.dp,
+                                if (running) C.green.copy(alpha = 0.45f) else C.border.copy(alpha = 0.85f),
+                                RoundedCornerShape(999.dp)
+                            )
+                            .padding(horizontal = 18.dp, vertical = 9.dp)
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
@@ -1519,14 +1591,14 @@ fun HomeScreenVolcanic(
                                             .fillMaxSize()
                                             .scale(pulse * 1.9f)
                                             .clip(CircleShape)
-                                            .background(primaryStatusColor.copy(alpha = 0.22f))
+                                            .background(C.green.copy(alpha = 0.24f))
                                     )
                                 }
-                                Box(Modifier.size(7.dp).clip(CircleShape).background(primaryStatusColor))
+                                Box(Modifier.size(7.dp).clip(CircleShape).background(if (running) C.green else primaryStatusColor))
                             }
                             Text(
                                 if (running) "AUTOMATION LIVE" else "AUTOMATION IDLE",
-                                color = primaryStatusColor,
+                                color = if (running) C.green else primaryStatusColor,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = 0.8.sp
@@ -2314,7 +2386,6 @@ fun AnimatedEmptyState() {
 fun ConsoleScreen(allTxns: MutableList<Transaction>) {
     val ctx = LocalContext.current
     var offers by remember { mutableStateOf(OfferRepository.load(ctx).toList()) }
-    var quickSearch by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var phoneErr by remember { mutableStateOf<String?>(null) }
     var selOffer by remember { mutableStateOf(offers.firstOrNull { it.enabled }) }
@@ -2325,7 +2396,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
     var pendingTxId by remember { mutableIntStateOf(-1) }
     var smsSearchContacts by remember { mutableStateOf<List<SavedContact>>(emptyList()) }
     var smsSearchLoading by remember { mutableStateOf(false) }
-    val resolvedClientName = remember(phone, allTxns.size) { resolveClientNameByPhone(ctx, phone) }
+    val fallbackResolvedClientName = remember(phone, allTxns.size) { resolveClientNameByPhone(ctx, phone) }
     val enabledOffers by remember {
         derivedStateOf {
             offers.asSequence()
@@ -2340,8 +2411,16 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
     val consoleDirectory by remember(ctx, smsSearchContacts) {
         derivedStateOf { buildConsoleSearchEntries(ctx, allTxns.toList(), smsSearchContacts) }
     }
-    val quickMatches by remember {
-        derivedStateOf { rankConsoleSearchEntries(quickSearch, consoleDirectory) }
+    val normalizedPhone = remember(phone) { SmsCommandHandler.normalizePhone(phone) }
+    val phoneMatches by remember(phone, consoleDirectory) {
+        derivedStateOf { autoMatchConsoleEntries(phone, consoleDirectory) }
+    }
+    val exactPhoneMatch = remember(normalizedPhone, phoneMatches) {
+        phoneMatches.firstOrNull { SmsCommandHandler.normalizePhone(it.phone) == normalizedPhone }
+    }
+    val resolvedClientName = exactPhoneMatch?.name?.takeIf { it.isNotBlank() } ?: fallbackResolvedClientName
+    val suggestedMatches = remember(phoneMatches, exactPhoneMatch) {
+        phoneMatches.filterNot { it.phone == exactPhoneMatch?.phone }.take(3)
     }
 
     DisposableEffect(Unit) {
@@ -2419,166 +2498,177 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                     "pending" -> FeedbackBanner("…  Dispatching — awaiting USSD response…", C.amber)
                     "relayed" -> FeedbackBanner("→  Forwarded to Relay phone for execution", C.blue)
                 }
-                FieldLabel("Quick Search")
-                OutlinedTextField(
-                    value = quickSearch,
-                    onValueChange = { quickSearch = it; bannerState = null },
-                    placeholder = { Text("Search saved contact, M-PESA SMS or number", color = C.t3) },
-                    leadingIcon = { Icon(Icons.Outlined.Search, null, tint = C.t2) },
-                    trailingIcon = when {
-                        smsSearchLoading -> ({
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = C.cyan,
-                                strokeWidth = 2.dp
-                            )
-                        })
-                        quickSearch.isNotBlank() -> ({
-                            IconButton(onClick = { quickSearch = "" }) {
+                ConsoleSectionCard(
+                    title = "Customer Details",
+                    subtitle = "Enter the customer number and the app matches the saved name automatically.",
+                    accent = if (resolvedClientName.isNotBlank()) C.green else C.cyan
+                ) {
+                    FieldLabel("Customer Phone")
+                    OutlinedTextField(
+                        value = phone,
+                        onValueChange = {
+                            val digitsOnly = it.filter(Char::isDigit).take(10)
+                            phone = digitsOnly
+                            bannerState = null
+                            phoneErr = when {
+                                digitsOnly.isBlank() -> null
+                                digitsOnly.length < 10 -> "Enter all 10 digits"
+                                else -> null
+                            }
+                        },
+                        placeholder = { Text("0712345678", color = C.t3) },
+                        leadingIcon = { Icon(Icons.Filled.Phone, null, tint = if (phone.isNotEmpty()) C.cyan else C.t2) },
+                        trailingIcon = if (phone.isNotBlank()) ({
+                            IconButton(onClick = { phone = ""; phoneErr = null }) {
                                 Icon(Icons.Filled.Clear, null, tint = C.t2, modifier = Modifier.size(16.dp))
                             }
-                        })
-                        else -> null
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = fieldColors(),
-                    singleLine = true
-                )
-                Text(
-                    "Searches app contacts, recent transaction history, and up to 180 days of M-PESA SMS.",
-                    color = C.t3,
-                    fontSize = 11.sp
-                )
-                if (quickMatches.isNotEmpty()) {
-                    Surface(
+                        }) else null,
+                        isError = phoneErr != null,
+                        supportingText = {
+                            when {
+                                phoneErr != null -> Text(phoneErr ?: "", color = C.red)
+                                exactPhoneMatch != null -> Text("Matched from ${exactPhoneMatch?.source}", color = C.green)
+                                smsSearchLoading -> Text("Checking saved contacts and M-PESA history…", color = C.t2)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
-                        color = C.card,
-                        border = BorderStroke(1.dp, C.border)
-                    ) {
-                        Column(Modifier.fillMaxWidth()) {
-                            quickMatches.forEachIndexed { index, entry ->
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            phone = entry.phone
-                                            quickSearch = entry.name.ifBlank { entry.phone }
-                                            phoneErr = null
-                                            bannerState = null
-                                        }
-                                        .padding(horizontal = 14.dp, vertical = 12.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            entry.name.ifBlank { "Unnamed customer" },
-                                            color = C.t1,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 13.sp
-                                        )
-                                        Text(
-                                            entry.source,
-                                            color = C.cyan,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                    Spacer(Modifier.height(2.dp))
-                                    Text(entry.phone, color = C.t2, fontSize = 12.sp)
-                                }
-                                if (index < quickMatches.lastIndex) {
-                                    Box(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .height(1.dp)
-                                            .background(C.border.copy(alpha = 0.7f))
-                                    )
+                        colors = fieldColors(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                    )
+                    if (resolvedClientName.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = C.greenDim,
+                            border = BorderStroke(1.dp, C.green.copy(alpha = 0.24f))
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Outlined.Badge, null, tint = C.green, modifier = Modifier.size(16.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("Matched Customer", color = C.green, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
+                                    Text(resolvedClientName, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
                     }
-                } else if (quickSearch.isNotBlank() && !smsSearchLoading) {
+                    if (resolvedClientName.isBlank() && suggestedMatches.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Suggested Matches", color = C.t2, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                suggestedMatches.forEach { entry ->
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = C.surface,
+                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
+                                        modifier = Modifier.clickable {
+                                            phone = entry.phone
+                                            phoneErr = null
+                                            bannerState = null
+                                        }
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            Text(entry.name.ifBlank { "Unnamed customer" }, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                            Text("${entry.phone} • ${entry.source}", color = C.t3, fontSize = 10.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                ConsoleSectionCard(
+                    title = "Bundle Selection",
+                    subtitle = "Choose the bundle and confirm the execution mode before dispatch.",
+                    accent = C.cyan
+                ) {
+                    FieldLabel("Data Bundle")
+                    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).border(1.dp, C.border, RoundedCornerShape(14.dp)).clickable { offerExp = true }.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(C.cyanDim), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Filled.Wifi, null, tint = C.cyan, modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(selOffer?.name ?: "Choose a bundle", color = if (selOffer != null) C.t1 else C.t2, fontWeight = FontWeight.SemiBold)
+                                selOffer?.let { selected ->
+                                    Text("KES ${selected.price}  ·  ${selected.executionMode}", color = C.cyan, fontSize = 12.sp)
+                                } ?: Text("Select an enabled offer to continue", color = C.t3, fontSize = 12.sp)
+                            }
+                            Icon(Icons.Filled.KeyboardArrowDown, null, tint = C.t2)
+                        }
+                        DropdownMenu(expanded = offerExp, onDismissRequest = { offerExp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(14.dp)).border(1.dp, C.border, RoundedCornerShape(14.dp))) {
+                            enabledOffers.forEach { o ->
+                                DropdownMenuItem(
+                                    text = { Row { Column(Modifier.weight(1f)) { Text(o.name, color = C.t1); Text("KES ${o.price}", color = C.cyan) } } },
+                                    onClick = { selOffer = o; mode = o.executionMode; offerExp = false }
+                                )
+                            }
+                        }
+                    }
+                    FieldLabel("Execution Mode")
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).border(1.dp, C.border, RoundedCornerShape(14.dp)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf("SIMPLE" to Icons.Outlined.FlashOn, "ADVANCED" to Icons.Outlined.AutoMode).forEach { (m, ic) ->
+                            val active = mode == m
+                            Box(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if (active) C.cyan else Color.Transparent).clickable { mode = m }.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(ic, null, tint = if (active) C.bg else C.t2, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(m, color = if (active) C.bg else C.t2, fontWeight = if (active) FontWeight.ExtraBold else FontWeight.Normal)
+                                }
+                            }
+                        }
+                    }
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = C.card,
-                        border = BorderStroke(1.dp, C.border)
+                        color = C.surface,
+                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.75f))
                     ) {
                         Text(
-                            "No quick match yet. Continue typing a phone number or import more M-PESA contacts.",
+                            if (mode == "SIMPLE") "Silent execution with no popup interaction required." else "Automatic popup navigation using Accessibility for stronger delivery.",
                             color = C.t2,
                             fontSize = 12.sp,
+                            lineHeight = 17.sp,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
                         )
                     }
                 }
-                FieldLabel("Customer Phone")
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it; bannerState = null; phoneErr = if (it.isNotBlank() && !it.matches(Regex("^[0-9]{10}$"))) "Enter exactly 10 digits" else null },
-                    placeholder = { Text("0712 345 678", color = C.t3) },
-                    leadingIcon = { Icon(Icons.Filled.Phone, null, tint = if (phone.isNotEmpty()) C.cyan else C.t2) },
-                    isError = phoneErr != null,
-                    supportingText = { phoneErr?.let { Text(it, color = C.red) } },
-                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = fieldColors()
-                )
-                if (resolvedClientName.isNotBlank()) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = C.greenDim,
-                        border = BorderStroke(1.dp, C.green.copy(alpha = 0.24f))
+                ConsoleSectionCard(
+                    title = "Dispatch Action",
+                    subtitle = "Review the customer number and selected bundle, then send the request.",
+                    accent = C.green
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(Icons.Outlined.Badge, null, tint = C.green, modifier = Modifier.size(16.dp))
-                            Text("Matched name: $resolvedClientName", color = C.green, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-                FieldLabel("Data Bundle")
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.card).border(1.dp, C.border, RoundedCornerShape(14.dp)).clickable { offerExp = true }.padding(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(C.cyanDim), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Filled.Wifi, null, tint = C.cyan, modifier = Modifier.size(18.dp))
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(selOffer?.name ?: "Choose a bundle", color = if (selOffer != null) C.t1 else C.t2, fontWeight = FontWeight.SemiBold)
-                            selOffer?.let { selected ->
-                                Text("KES ${selected.price}  ·  ${selected.executionMode}", color = C.cyan, fontSize = 12.sp)
-                            }
-                        }
-                        Icon(Icons.Filled.KeyboardArrowDown, null, tint = C.t2)
-                    }
-                    DropdownMenu(expanded = offerExp, onDismissRequest = { offerExp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(14.dp)).border(1.dp, C.border, RoundedCornerShape(14.dp))) {
-                        enabledOffers.forEach { o ->
-                            DropdownMenuItem(
-                                text = { Row { Column(Modifier.weight(1f)) { Text(o.name, color = C.t1); Text("KES ${o.price}", color = C.cyan) } } },
-                                onClick = { selOffer = o; mode = o.executionMode; offerExp = false }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(selOffer?.name ?: "No bundle selected", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (resolvedClientName.isNotBlank()) "$resolvedClientName • ${phone.ifBlank { "No phone entered" }}" else phone.ifBlank { "Enter customer phone to continue" },
+                                color = C.t2,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp
                             )
                         }
-                    }
-                }
-                FieldLabel("Execution Mode")
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.card).border(1.dp, C.border, RoundedCornerShape(14.dp)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("SIMPLE" to Icons.Outlined.FlashOn, "ADVANCED" to Icons.Outlined.AutoMode).forEach { (m, ic) ->
-                        val active = mode == m
-                        Box(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if (active) C.cyan else Color.Transparent).clickable { mode = m }.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(ic, null, tint = if (active) C.bg else C.t2, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(m, color = if (active) C.bg else C.t2, fontWeight = if (active) FontWeight.ExtraBold else FontWeight.Normal)
-                            }
+                        selOffer?.let {
+                            PillBadge("KES ${it.price}", C.green)
                         }
                     }
                 }
-                Text(if (mode == "SIMPLE") "Silent execution — no popup required." else "Navigates USSD popup automatically (requires Accessibility).", color = C.t2, fontSize = 12.sp)
                 Button(
                     onClick = {
                         val selectedOffer = selOffer
