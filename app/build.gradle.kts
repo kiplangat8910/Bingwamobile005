@@ -20,6 +20,7 @@ android {
         targetSdk = 34
         versionCode = 61
         versionName = "3.0.31"
+        resourceConfigurations += listOf("en")
     }
 
     signingConfigs {
@@ -51,6 +52,28 @@ android {
         }
     }
 
+    packaging {
+        resources {
+            excludes += setOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "/META-INF/LICENSE*",
+                "/META-INF/NOTICE*",
+                "/META-INF/*.version",
+                "/META-INF/proguard/**",
+                "/META-INF/INDEX.LIST"
+            )
+        }
+    }
+
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86_64")
+            isUniversalApk = false
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -62,6 +85,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = false
     }
 
     composeOptions {
