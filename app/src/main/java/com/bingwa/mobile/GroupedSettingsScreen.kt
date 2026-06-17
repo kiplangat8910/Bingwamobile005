@@ -203,7 +203,7 @@ private fun SettingsHome(
                 }
             }
             SettingsGroup("Core") {
-                LinkRow(Icons.Rounded.SimCard, "SIM Settings", "USSD, customer SMS, admin SMS SIM cards", C.cyan, onOpenSim)
+                LinkRow(Icons.Rounded.SimCard, "SIM Settings", "USSD execution, customer notification, and admin reply SIMs", C.cyan, onOpenSim)
                 GroupDivider()
                 LinkRow(Icons.Rounded.SyncAlt, "Relay (Two‑Phone Mode)", "Relay via SMS or hotspot between two phones", C.blue, onOpenRelay)
                 GroupDivider()
@@ -248,11 +248,11 @@ fun SettingsTopBar(title: String, subtitle: String, onBack: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .padding(horizontal = UiDimens.ScreenPaddingHorizontal, vertical = 12.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -281,26 +281,29 @@ private fun SimSettings(onBack: () -> Unit) {
     var adminSmsSimId by remember { mutableIntStateOf(prefs.safeGetInt("admin_sms_sim_id", -1)) }
 
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
-        SettingsTopBar("SIM Settings", "SIM selection for USSD and SMS", onBack)
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SettingsGroup("SIM") {
+        SettingsTopBar("SIM Settings", "Choose SIMs for USSD, customer notifications, and admin replies", onBack)
+        Column(
+            Modifier.padding(horizontal = UiDimens.ScreenPaddingHorizontal),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.SpacingLg)
+        ) {
+            SettingsGroup("SIM Settings") {
                 SimPickerRow("USSD Execution SIM", "SIM used for USSD calls", sims, ussdSimId) { v ->
                     ussdSimId = v
                     prefs.edit().putInt("selected_sim_id", v).apply()
                 }
                 GroupDivider()
-                SimPickerRow("Customer SMS SIM", "SIM used for customer notifications", sims, notifySimId) { v ->
+                SimPickerRow("Customer Notification SIM", "SIM used to send customer notifications", sims, notifySimId) { v ->
                     notifySimId = v
                     prefs.edit().putInt("notify_sim_id", v).apply()
                 }
                 GroupDivider()
-                SimPickerRow("Admin SMS SIM", "SIM used for admin notifications", sims, adminSmsSimId) { v ->
+                SimPickerRow("Admin Reply SIM", "SIM used to reply to admin SMS commands", sims, adminSmsSimId) { v ->
                     adminSmsSimId = v
                     prefs.edit().putInt("admin_sms_sim_id", v).apply()
                 }
             }
         }
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(UiDimens.Spacing2xl))
     }
 }
 

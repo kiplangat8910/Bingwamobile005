@@ -1289,7 +1289,7 @@ fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
             )
             .border(1.dp, C.border.copy(alpha = 0.85f), RoundedCornerShape(28.dp))
     ) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 15.dp)) {
             Text(
                 title.uppercase(),
                 color = C.t3,
@@ -1307,7 +1307,7 @@ fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
 fun GroupDivider() = Divider(
     color = C.border.copy(alpha = 0.35f),
     thickness = 0.6.dp,
-    modifier = Modifier.padding(horizontal = 20.dp)
+    modifier = Modifier.padding(horizontal = 18.dp)
 )
 
 @Composable
@@ -1315,14 +1315,14 @@ fun ToggleRow(icon: ImageVector, title: String, sub: String, checked: Boolean, o
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = 18.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         SettingsRowIcon(icon)
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(title, color = C.t1, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(3.dp))
+            Spacer(Modifier.height(4.dp))
             Text(sub, color = C.t2, fontSize = 12.sp, lineHeight = 18.sp)
         }
         ToggleSwitch(checked, onChange)
@@ -1335,7 +1335,7 @@ fun LinkRow(icon: ImageVector, title: String, sub: String, color: Color, onClick
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = 18.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -1348,10 +1348,10 @@ fun LinkRow(icon: ImageVector, title: String, sub: String, color: Color, onClick
         ) {
             Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
         }
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(title, color = C.t1, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(3.dp))
+            Spacer(Modifier.height(4.dp))
             Text(sub, color = C.t2, fontSize = 12.sp, lineHeight = 18.sp)
         }
         Icon(Icons.Filled.ChevronRight, null, tint = C.t2, modifier = Modifier.size(18.dp))
@@ -1382,17 +1382,17 @@ fun SimPickerRow(title: String, sub: String, sims: List<SubscriptionInfo>, curre
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 14.dp),
+            .padding(horizontal = 18.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         SettingsRowIcon(Icons.Rounded.SimCard)
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(3.dp))
+            Text(title, color = C.t1, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(4.dp))
             Text(
                 if (current == -1) "Default SIM" else sims.find { it.subscriptionId == current }?.displayName?.toString() ?: "SIM $current",
-                color = C.t2, fontSize = 11.sp, lineHeight = 16.sp
+                color = C.t2, fontSize = 12.sp, lineHeight = 17.sp
             )
         }
         Box {
@@ -1743,7 +1743,7 @@ fun BingwaApp() {
                     Screen.Console  -> ConsoleScreen(txns)
                     Screen.Tokens   -> TokensScreen()
                     Screen.Contacts -> ContactsScreen()
-                    Screen.Settings -> SettingsScreen()
+                    Screen.Settings -> GroupedSettingsScreen()
                 }
             }
         }
