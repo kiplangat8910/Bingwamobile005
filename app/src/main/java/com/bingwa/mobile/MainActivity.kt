@@ -1010,7 +1010,7 @@ private fun ConsoleQuickStat(label: String, value: String, accent: Color) {
 }
 
 @Composable
-private fun ConsoleTabChip(
+private fun RowScope.ConsoleTabChip(
     text: String,
     selected: Boolean,
     icon: ImageVector,
