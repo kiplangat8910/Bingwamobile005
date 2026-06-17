@@ -790,48 +790,39 @@ private fun ConsoleSectionCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val borderColor by animateColorAsState(
-        if (highlighted) accent.copy(alpha = 0.34f) else C.border.copy(alpha = 0.9f),
+        if (highlighted) accent.copy(alpha = 0.26f) else C.border.copy(alpha = 0.9f),
         label = "console_section_border"
     )
     val iconBg by animateColorAsState(
-        if (highlighted) accent.copy(alpha = 0.16f) else C.surface,
+        if (highlighted) accent.copy(alpha = 0.12f) else C.surface,
         label = "console_section_icon_bg"
     )
     val accentWidth by animateDpAsState(
-        if (highlighted) 28.dp else 10.dp,
+        if (highlighted) 24.dp else 16.dp,
         label = "console_section_accent"
     )
     Surface(
-        shape = RoundedCornerShape(22.dp),
-        color = C.card,
+        shape = RoundedCornerShape(20.dp),
+        color = C.cardHi.copy(alpha = 0.9f),
         border = BorderStroke(1.dp, borderColor),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            accent.copy(alpha = if (highlighted) 0.12f else 0.06f),
-                            C.card,
-                            C.surface.copy(alpha = 0.82f)
-                        )
-                    )
-                )
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
             content = {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Box(
                         Modifier
-                            .size(42.dp)
+                            .size(40.dp)
                             .clip(RoundedCornerShape(14.dp))
                             .background(iconBg)
-                            .border(1.dp, accent.copy(alpha = 0.24f), RoundedCornerShape(14.dp)),
+                            .border(1.dp, accent.copy(alpha = 0.18f), RoundedCornerShape(14.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(icon, null, tint = accent, modifier = Modifier.size(18.dp))
@@ -840,17 +831,19 @@ private fun ConsoleSectionCard(
                         Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        Text(title, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        Text(subtitle, color = C.t3, fontSize = 11.sp, lineHeight = 15.sp)
+                        Text(title, color = C.t1, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text(subtitle, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
                     }
                     Box(
                         Modifier
                             .width(accentWidth)
-                            .height(6.dp)
+                            .height(4.dp)
+                            .padding(top = 8.dp)
                             .clip(RoundedCornerShape(999.dp))
                             .background(accent.copy(alpha = 0.9f))
                     )
                 }
+                HorizontalDivider(color = C.w08)
                 content()
             }
         )
@@ -866,13 +859,6 @@ private fun ConsoleHeroCard(
     historyCount: Int,
     smsSearchLoading: Boolean
 ) {
-    val inf = rememberInfiniteTransition(label = "console_hero")
-    val pulse by inf.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(tween(1600, easing = EaseInOutSine), RepeatMode.Reverse),
-        label = "console_hero_pulse"
-    )
     val statusColor = when {
         bannerState == "failed" -> C.red
         bannerState == "success" -> C.green
@@ -883,9 +869,9 @@ private fun ConsoleHeroCard(
         else -> C.cyan
     }
     Surface(
-        color = C.card,
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.24f)),
+        color = C.cardHi.copy(alpha = 0.9f),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.18f)),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
@@ -893,17 +879,8 @@ private fun ConsoleHeroCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            statusColor.copy(alpha = 0.12f),
-                            C.card,
-                            C.surface.copy(alpha = 0.86f)
-                        )
-                    )
-                )
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -912,44 +889,32 @@ private fun ConsoleHeroCard(
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text("Console Dispatch", color = C.t1, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    Text("Ready to dispatch", color = C.t1, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        "Manual dispatch with auto-matching, live status feedback, and quick access to history.",
+                        "Simple manual dispatch with quick customer matching and clear status feedback.",
                         color = C.t2,
                         fontSize = 12.sp,
                         lineHeight = 18.sp
                     )
                 }
                 Box(
-                    modifier = Modifier.size(56.dp),
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(statusColor.copy(alpha = 0.12f))
+                        .border(1.dp, statusColor.copy(alpha = 0.18f), RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        Modifier
-                            .matchParentSize()
-                            .scale(pulse)
-                            .clip(CircleShape)
-                            .background(statusColor.copy(alpha = 0.10f))
-                    )
-                    Box(
-                        Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(C.surface)
-                            .border(1.dp, statusColor.copy(alpha = 0.26f), RoundedCornerShape(16.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Outlined.AutoMode, null, tint = statusColor, modifier = Modifier.size(22.dp))
-                    }
+                    Icon(Icons.Outlined.AutoMode, null, tint = statusColor, modifier = Modifier.size(20.dp))
                 }
             }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 ConsoleQuickStat("Enabled offers", enabledOfferCount.toString(), C.cyan)
                 ConsoleQuickStat("Directory", directoryCount.toString(), C.green)
@@ -967,8 +932,7 @@ private fun ConsoleHeroCard(
                 ) {
                     Box(
                         Modifier
-                            .size(10.dp)
-                            .scale(pulse)
+                            .size(9.dp)
                             .clip(CircleShape)
                             .background(statusColor)
                     )
@@ -995,15 +959,15 @@ private fun ConsoleHeroCard(
 @Composable
 private fun ConsoleQuickStat(label: String, value: String, accent: Color) {
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         color = C.surface.copy(alpha = 0.88f),
         border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            Text(value, color = accent, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(value, color = accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Text(label, color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Medium)
         }
     }
@@ -3158,21 +3122,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
     }
 
     Box(Modifier.fillMaxSize().background(C.bg)) {
-        Box(
-            Modifier
-                .size(300.dp)
-                .offset((-110).dp, (-70).dp)
-                .background(Brush.radialGradient(listOf(C.cyan.copy(alpha = 0.08f), Color.Transparent)), CircleShape)
-        )
-        Box(
-            Modifier
-                .size(260.dp)
-                .align(Alignment.TopEnd)
-                .offset(70.dp, (-20).dp)
-                .background(Brush.radialGradient(listOf(C.green.copy(alpha = 0.07f), Color.Transparent)), CircleShape)
-        )
         Column(Modifier.fillMaxSize()) {
-            PageHeader("Console", "Manual dispatch reimagined")
+            PageHeader("Console", "Simple manual dispatch")
             ConsoleHeroCard(
                 dispatchReady = dispatchReady,
                 bannerState = bannerState,
@@ -3212,8 +3163,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             "relayed" -> FeedbackBanner("→  Forwarded to Relay phone for execution", C.blue)
                         }
                         ConsoleSectionCard(
-                            title = "Customer Details",
-                            subtitle = "Enter the customer number and let the console surface the best match automatically.",
+                            title = "Step 1 · Customer",
+                            subtitle = "Enter the phone number and use smart matching to confirm the customer.",
                             accent = if (resolvedClientName.isNotBlank()) C.green else C.cyan,
                             icon = Icons.Outlined.Badge,
                             highlighted = phone.isNotBlank() || resolvedClientName.isNotBlank()
@@ -3224,7 +3175,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                     .horizontalScroll(rememberScrollState()),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                PillBadge(if (phone.isBlank()) "Waiting for input" else "Phone captured", C.cyan)
+                                PillBadge(if (phone.isBlank()) "Waiting for phone" else "Phone captured", C.cyan)
                                 if (resolvedClientName.isNotBlank()) PillBadge("Matched customer", C.green)
                                 if (smsSearchLoading) PillBadge("Refreshing matches", C.blue)
                             }
@@ -3283,7 +3234,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             }
                             if (resolvedClientName.isBlank() && suggestedMatches.isNotEmpty()) {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Suggested Matches", color = C.t2, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("Suggested matches", color = C.t2, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -3315,8 +3266,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             }
                         }
                         ConsoleSectionCard(
-                            title = "Bundle Selection",
-                            subtitle = "Pick the offer and fine-tune the execution style before dispatching.",
+                            title = "Step 2 · Bundle",
+                            subtitle = "Select the offer and choose how the request should run.",
                             accent = C.cyan,
                             icon = Icons.Filled.Wifi,
                             highlighted = selOffer != null
@@ -3331,7 +3282,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                 selOffer?.let { PillBadge("KES ${it.price}", C.green) }
                                 PillBadge(mode, if (mode == "SIMPLE") C.blue else C.cyan)
                             }
-                            FieldLabel("Data Bundle")
+                            FieldLabel("Bundle")
                             Box(
                                 Modifier
                                     .fillMaxWidth()
@@ -3374,7 +3325,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                     }
                                 }
                             }
-                            FieldLabel("Execution Mode")
+                            FieldLabel("Execution mode")
                             Row(
                                 Modifier
                                     .fillMaxWidth()
@@ -3419,8 +3370,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             }
                         }
                         ConsoleSectionCard(
-                            title = "Dispatch Action",
-                            subtitle = "Review the selected customer and bundle, then launch the request.",
+                            title = "Step 3 · Dispatch",
+                            subtitle = "Review the selection, then send the request.",
                             accent = C.green,
                             icon = Icons.Filled.Send,
                             highlighted = dispatchReady || bannerState == "pending"
@@ -3508,7 +3459,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             Icon(Icons.Filled.Send, null, tint = C.bg, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(10.dp))
                             Text(
-                                if (bannerState == "pending") "DISPATCHING…" else "EXECUTE DISPATCH",
+                                if (bannerState == "pending") "DISPATCHING…" else "SEND REQUEST",
                                 color = C.bg,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 13.sp
