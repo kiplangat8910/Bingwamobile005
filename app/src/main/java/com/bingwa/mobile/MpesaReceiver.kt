@@ -98,7 +98,7 @@ class MpesaReceiver : BroadcastReceiver() {
          */
         fun buyTokensWithAirtime(context: Context, amount: Int, callback: (Boolean, String?) -> Unit) {
             if (amount <= 0) {
-                callback(false, "Invalid amount.")
+                callback(false, "Please enter a valid amount.")
                 return
             }
 
@@ -113,7 +113,17 @@ class MpesaReceiver : BroadcastReceiver() {
                     source = TX_SOURCE_AIRTIME,
                     showInRecent = false
                 ))
-                callback(false, "You have KSh $knownBal airtime, which is not enough to buy tokens worth KSh $amount.")
+                val plan = UnlimitedManager.planForAmount(amount)
+                val targetText = if (plan != null) {
+                    "activate unlimited ${plan.label.lowercase()} access"
+                } else {
+                    val tokens = TokenManager.convertAmountToTokens(amount)
+                    "buy $tokens tokens"
+                }
+                callback(
+                    false,
+                    "You have KSh $knownBal airtime. That is not enough to $targetText. You need KSh $amount airtime."
+                )
                 return
             }
 
@@ -121,7 +131,7 @@ class MpesaReceiver : BroadcastReceiver() {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE)
                 != PackageManager.PERMISSION_GRANTED
             ) {
-                Toast.makeText(context, "Phone permission required", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Phone permission is required", Toast.LENGTH_LONG).show()
                 addTransaction(context, Transaction(
                     description = "Token purchase (airtime)",
                     amount = "-KSh $amount",
@@ -131,7 +141,7 @@ class MpesaReceiver : BroadcastReceiver() {
                     source = TX_SOURCE_AIRTIME,
                     showInRecent = false
                 ))
-                callback(false, "Phone permission is required to dial USSD.")
+                callback(false, "Phone permission is required to dial the USSD code.")
                 return
             }
 
@@ -156,10 +166,10 @@ class MpesaReceiver : BroadcastReceiver() {
                         showInRecent = false
                     ))
                     if (plan != null) {
-                        notify(context, "Unlimited Activated", "${plan.label} unlimited activated using KSh $amount airtime")
+                        notify(context, "Unlimited Activated", "Unlimited ${plan.label} access is now active. KSh $amount airtime was used.")
                     } else {
                         val tokensToAdd = TokenManager.convertAmountToTokens(amount)
-                        notify(context, "Tokens Added", "$tokensToAdd tokens added using KSh $amount airtime")
+                        notify(context, "Tokens Added", "$tokensToAdd tokens were added using KSh $amount airtime.")
                     }
                 } else {
                     addTransaction(context, Transaction(
@@ -172,7 +182,7 @@ class MpesaReceiver : BroadcastReceiver() {
                         showInRecent = false
                     ))
                 }
-                callback(success, if (success) null else "Purchase failed. Please confirm you have enough airtime and try again.")
+                callback(success, if (success) null else "Purchase failed. Please make sure you have enough airtime and try again.")
                 UssdNavigationService.tokenPurchaseCallback = null
             }
 

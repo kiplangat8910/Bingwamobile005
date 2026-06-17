@@ -3555,7 +3555,7 @@ fun TokensScreen() {
     }
 
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
-        PageHeader("Tokens", "Purchase tokens to run automation")
+        PageHeader("Tokens", "Use airtime to buy tokens or activate unlimited access")
         Surface(
             color = C.card,
             shape = RoundedCornerShape(20.dp),
@@ -3587,12 +3587,12 @@ fun TokensScreen() {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Icon(Icons.Outlined.Bolt, null, tint = C.t2, modifier = Modifier.size(14.dp))
-                        Text("1 token = 1 USSD call", color = C.t2, fontSize = 12.sp)
+                        Text("1 token is used for 1 USSD purchase", color = C.t2, fontSize = 12.sp)
                     }
                     Text("│", color = C.t3, fontSize = 12.sp)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Icon(Icons.Outlined.Shield, null, tint = C.t2, modifier = Modifier.size(14.dp))
-                        Text("Never expire", color = C.t2, fontSize = 12.sp)
+                        Text("Tokens do not expire", color = C.t2, fontSize = 12.sp)
                     }
                 }
             }
@@ -3625,8 +3625,11 @@ fun TokensScreen() {
             title = { Text("Confirm Purchase", color = C.t1) },
             text = {
                 Text(
-                    if (plan != null) "Use KSh $amount airtime to activate unlimited ${plan.label.lowercase()} access?"
-                    else "Use KSh $amount airtime to receive $units tokens?",
+                    if (plan != null) {
+                        "Use KSh $amount airtime to activate unlimited ${plan.label.lowercase()} access? While this plan is active, no tokens will be deducted for purchases."
+                    } else {
+                        "Use KSh $amount airtime to buy $units tokens? Tokens are deducted when you make USSD purchases."
+                    },
                     color = C.t2
                 )
             },
@@ -3637,10 +3640,10 @@ fun TokensScreen() {
                         MpesaReceiver.buyTokensWithAirtime(ctx, amount) { ok, info ->
                             if (ok) {
                                 remMs = um.remainingMs()
-                                if (plan != null) Toast.makeText(ctx, "Unlimited ${plan.label} activated. ${formatRemainingTimeDetailed(remMs)}.", Toast.LENGTH_SHORT).show()
-                                else Toast.makeText(ctx, "Airtime used successfully. $units tokens were added.", Toast.LENGTH_SHORT).show()
+                                if (plan != null) Toast.makeText(ctx, "Unlimited ${plan.label} access is now active. ${formatRemainingTimeDetailed(remMs)}.", Toast.LENGTH_SHORT).show()
+                                else Toast.makeText(ctx, "Purchase successful. $units tokens were added to your balance.", Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(ctx, info ?: "Token purchase failed.", Toast.LENGTH_LONG).show()
+                                Toast.makeText(ctx, info ?: "Purchase failed. Please try again.", Toast.LENGTH_LONG).show()
                             }
                         }
                     }
@@ -3680,10 +3683,12 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("${p.tokens}", color = C.t1, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("units", color = C.t2, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text("tokens", color = C.t2, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
                 Spacer(Modifier.height(6.dp))
-                Text("Ksh ${p.ksh}", color = C.t3, fontSize = 14.sp)
+                Text("KSh ${p.ksh} airtime", color = C.t3, fontSize = 14.sp)
+                Spacer(Modifier.height(4.dp))
+                Text("Use these tokens for USSD purchases.", color = C.t2, fontSize = 12.sp)
             }
 
             OutlinedButton(
@@ -3722,7 +3727,9 @@ private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                Text("Ksh ${plan.ksh}", color = C.t3, fontSize = 14.sp)
+                Text("KSh ${plan.ksh} airtime", color = C.t3, fontSize = 14.sp)
+                Spacer(Modifier.height(4.dp))
+                Text("Make unlimited USSD purchases while this plan is active.", color = C.t2, fontSize = 12.sp, lineHeight = 17.sp)
             }
 
             OutlinedButton(
