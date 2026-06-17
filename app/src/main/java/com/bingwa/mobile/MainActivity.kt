@@ -744,7 +744,9 @@ fun calculateOverview(ctx: Context): List<Pair<String, Int>> {
 fun fieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = C.cyan, unfocusedBorderColor = C.border,
     focusedTextColor = C.t1, unfocusedTextColor = C.t1,
-    cursorColor = C.cyan, focusedContainerColor = C.card, unfocusedContainerColor = C.card
+    cursorColor = C.cyan,
+    focusedContainerColor = C.cardHi.copy(alpha = 0.92f),
+    unfocusedContainerColor = C.card.copy(alpha = 0.86f)
 )
 
 @Composable
@@ -760,17 +762,32 @@ fun PageHeader(title: String, subtitle: String) {
         Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 20.dp)
+            .padding(horizontal = 16.dp, vertical = 18.dp)
     ) {
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = C.cyan.copy(alpha = 0.10f),
+            border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.18f))
+        ) {
+            Text(
+                "BINGWA MOBILE",
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                color = C.cyan,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.2.sp
+            )
+        }
+        Spacer(Modifier.height(10.dp))
         Text(
             title,
-            fontSize = 26.sp,
+            fontSize = 30.sp,
             fontWeight = FontWeight.Black,
-            letterSpacing = (-0.6).sp,
+            letterSpacing = (-0.8).sp,
             color = C.t1
         )
-        Spacer(Modifier.height(4.dp))
-        Text(subtitle, color = C.t2, fontSize = 11.sp, letterSpacing = 0.4.sp)
+        Spacer(Modifier.height(6.dp))
+        Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 18.sp)
     }
 }
 
@@ -1040,29 +1057,64 @@ fun MiniTag(text: String, color: Color) {
 @Composable
 fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        Modifier.fillMaxWidth()
-            .shadow(14.dp, RoundedCornerShape(20.dp), clip = false)
-            .clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(listOf(C.cardHi, C.card)))
-            .border(1.dp, C.border, RoundedCornerShape(20.dp))
+        Modifier
+            .fillMaxWidth()
+            .shadow(18.dp, RoundedCornerShape(24.dp), clip = false)
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        C.cardHi.copy(alpha = 0.96f),
+                        C.card.copy(alpha = 0.94f),
+                        C.surface.copy(alpha = 0.98f)
+                    )
+                )
+            )
+            .border(1.dp, C.border.copy(alpha = 0.92f), RoundedCornerShape(24.dp))
     ) {
-        Text(title.uppercase(), color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp))
-        Divider(color = C.w04)
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
+            Text(
+                title.uppercase(),
+                color = C.cyan.copy(alpha = 0.92f),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.8.sp
+            )
+            Spacer(Modifier.height(6.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth(0.18f)
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Brush.horizontalGradient(listOf(C.cyan, C.blue)))
+            )
+        }
+        Divider(color = C.w08)
         content()
     }
 }
 
 @Composable
-fun GroupDivider() = Divider(color = C.w04, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 16.dp))
+fun GroupDivider() = Divider(
+    color = C.border.copy(alpha = 0.55f),
+    thickness = 0.6.dp,
+    modifier = Modifier.padding(horizontal = 18.dp)
+)
 
 @Composable
 fun ToggleRow(icon: ImageVector, title: String, sub: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         SettingsRowIcon(icon)
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-            Text(sub, color = C.t2, fontSize = 11.sp)
+            Text(title, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(3.dp))
+            Text(sub, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
         }
         ToggleSwitch(checked, onChange)
     }
@@ -1070,27 +1122,57 @@ fun ToggleRow(icon: ImageVector, title: String, sub: String, checked: Boolean, o
 
 @Composable
 fun LinkRow(icon: ImageVector, title: String, sub: String, color: Color, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).background(color.copy(alpha = 0.10f)).border(1.dp, color.copy(alpha = 0.16f), RoundedCornerShape(9.dp)), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = color, modifier = Modifier.size(16.dp))
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(color.copy(alpha = 0.12f))
+                .border(1.dp, color.copy(alpha = 0.18f), RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-            Text(sub, color = C.t2, fontSize = 11.sp)
+            Text(title, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(3.dp))
+            Text(sub, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
         }
-        Icon(Icons.Filled.ChevronRight, null, tint = C.t3, modifier = Modifier.size(16.dp))
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = C.surface.copy(alpha = 0.82f),
+            border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+        ) {
+            Box(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.ChevronRight, null, tint = C.t2, modifier = Modifier.size(14.dp))
+            }
+        }
     }
 }
 
 @Composable
 fun LimitRow(label: String, value: Int, onValueChange: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = C.t2, fontSize = 11.sp)
-        Spacer(Modifier.width(8.dp))
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.width(12.dp))
         OutlinedTextField(
             value = value.toString(), onValueChange = { onValueChange(it.toIntOrNull() ?: value) },
-            modifier = Modifier.width(80.dp), shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.width(96.dp), shape = RoundedCornerShape(14.dp),
             colors = fieldColors(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
         )
     }
@@ -1099,19 +1181,28 @@ fun LimitRow(label: String, value: Int, onValueChange: (Int) -> Unit) {
 @Composable
 fun SimPickerRow(title: String, sub: String, sims: List<SubscriptionInfo>, current: Int, onSelect: (Int) -> Unit) {
     var exp by remember { mutableStateOf(false) }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         SettingsRowIcon(Icons.Rounded.SimCard)
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Text(title, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(3.dp))
             Text(
                 if (current == -1) "Default SIM" else sims.find { it.subscriptionId == current }?.displayName?.toString() ?: "SIM $current",
-                color = C.t2, fontSize = 11.sp
+                color = C.t2, fontSize = 11.sp, lineHeight = 16.sp
             )
         }
         Box {
-            TextButton(onClick = { exp = true }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
-                Text("Change", color = C.cyan, fontSize = 12.sp)
+            TextButton(
+                onClick = { exp = true },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text("Change", color = C.cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
             DropdownMenu(expanded = exp, onDismissRequest = { exp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
                 DropdownMenuItem(text = { Text("Default", color = C.t1) }, onClick = { onSelect(-1); exp = false })
@@ -1125,17 +1216,38 @@ fun SimPickerRow(title: String, sub: String, sims: List<SubscriptionInfo>, curre
 
 @Composable
 fun SettingsRowIcon(icon: ImageVector, tint: Color = C.t1) {
-    Box(Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).background(C.w04), contentAlignment = Alignment.Center) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(16.dp))
+    Box(
+        Modifier
+            .size(38.dp)
+            .clip(RoundedCornerShape(13.dp))
+            .background(C.surface.copy(alpha = 0.95f))
+            .border(1.dp, C.border.copy(alpha = 0.85f), RoundedCornerShape(13.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
     }
 }
 
 @Composable
 fun ToggleSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
-    val target = if (checked) 21.dp else 3.dp
+    val target = if (checked) 25.dp else 3.dp
     val offset by animateDpAsState(target, animationSpec = tween(200), label = "toggle")
-    Box(Modifier.width(44.dp).height(26.dp).clip(RoundedCornerShape(13.dp)).background(if (checked) C.cyan else C.w08).clickable { onChange(!checked) }) {
-        Box(Modifier.offset(x = offset, y = 3.dp).size(20.dp).clip(CircleShape).background(if (checked) C.bg else C.t2))
+    Box(
+        Modifier
+            .width(52.dp)
+            .height(30.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (checked) C.cyan.copy(alpha = 0.92f) else C.surface)
+            .border(1.dp, if (checked) C.cyan.copy(alpha = 0.35f) else C.border.copy(alpha = 0.9f), RoundedCornerShape(999.dp))
+            .clickable { onChange(!checked) }
+    ) {
+        Box(
+            Modifier
+                .offset(x = offset, y = 3.dp)
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(if (checked) C.bg else C.t2)
+        )
     }
 }
 
@@ -1444,46 +1556,60 @@ fun BingwaApp() {
 @Composable
 private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen) -> Unit, onToggleRunning: () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(30.dp),
+        shape = RoundedCornerShape(32.dp),
         color = C.surface.copy(alpha = 0.98f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.78f)),
-        shadowElevation = 10.dp,
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
+        shadowElevation = 14.dp,
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 12.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(94.dp)
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            C.cyan.copy(alpha = 0.06f),
+                            Color.Transparent,
+                            C.blue.copy(alpha = 0.05f)
+                        )
+                    )
+                )
         ) {
             Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                NAV_ITEMS.take(2).forEach { item ->
-                    NavBarItemButton(item, current == item) { onSelect(item) }
-                }
-            }
-            Box(
                 modifier = Modifier
-                    .width(92.dp)
-                    .fillMaxHeight(),
-                contentAlignment = Alignment.Center
-            ) {
-                StartNavButton(running = running, onClick = onToggleRunning)
-            }
-            Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                    .fillMaxWidth()
+                    .height(98.dp)
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                NAV_ITEMS.drop(2).forEach { item ->
-                    NavBarItemButton(item, current == item) { onSelect(item) }
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    NAV_ITEMS.take(2).forEach { item ->
+                        NavBarItemButton(item, current == item) { onSelect(item) }
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .width(92.dp)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    StartNavButton(running = running, onClick = onToggleRunning)
+                }
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    NAV_ITEMS.drop(2).forEach { item ->
+                        NavBarItemButton(item, current == item) { onSelect(item) }
+                    }
                 }
             }
         }
@@ -1496,19 +1622,19 @@ private fun NavBarItemButton(item: Screen, selected: Boolean, onClick: () -> Uni
     Column(
         modifier = Modifier
             .width(64.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = if (selected) C.amber.copy(alpha = 0.12f) else Color.Transparent,
-            border = if (selected) BorderStroke(1.dp, C.amber.copy(alpha = 0.32f)) else null
+            shape = RoundedCornerShape(16.dp),
+            color = if (selected) C.amber.copy(alpha = 0.14f) else C.surface.copy(alpha = 0.28f),
+            border = if (selected) BorderStroke(1.dp, C.amber.copy(alpha = 0.34f)) else BorderStroke(1.dp, Color.Transparent)
         ) {
             Box(
-                modifier = Modifier.size(width = 42.dp, height = 34.dp),
+                modifier = Modifier.size(width = 44.dp, height = 36.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -1550,10 +1676,10 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
         Surface(
             shape = CircleShape,
             color = C.cardHi,
-            border = BorderStroke(1.8.dp, color.copy(alpha = 0.85f)),
-            shadowElevation = 14.dp,
+            border = BorderStroke(2.dp, color.copy(alpha = 0.85f)),
+            shadowElevation = 18.dp,
             modifier = Modifier
-                .size(58.dp)
+                .size(62.dp)
                 .combinedClickable(
                     onClick = {
                         Toast.makeText(
@@ -1569,15 +1695,15 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
                 Box(
                     Modifier
                         .matchParentSize()
-                        .padding(7.dp)
+                        .padding(8.dp)
                         .clip(CircleShape)
-                        .background(color.copy(alpha = 0.12f))
+                        .background(color.copy(alpha = 0.14f))
                 )
                 Icon(
                     Icons.Outlined.PowerSettingsNew,
                     null,
                     tint = color,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }

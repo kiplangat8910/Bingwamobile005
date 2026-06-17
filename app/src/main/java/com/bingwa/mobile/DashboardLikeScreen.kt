@@ -55,11 +55,33 @@ fun DashboardLikeScreen(
             .verticalScroll(rememberScrollState())
             .padding(UiDimens.ScreenPadding)
     ) {
-        Text("Bingwa Mobile", color = C.t1, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-        Spacer(Modifier.height(UiDimens.SpacingSm))
-        Text("USSD Automation Platform", color = C.t2, fontSize = 14.sp)
-        Spacer(Modifier.height(UiDimens.SpacingLg))
-        StatusChip(text = if (running) "Automation Live" else "Automation Idle", healthy = running)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = C.cardHi.copy(alpha = 0.95f),
+            border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(
+                                C.cyan.copy(alpha = 0.15f),
+                                C.blue.copy(alpha = 0.08f),
+                                C.cardHi.copy(alpha = 0.96f)
+                            )
+                        )
+                    )
+                    .padding(18.dp)
+            ) {
+                Text("Bingwa Mobile", color = C.t1, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
+                Spacer(Modifier.height(UiDimens.SpacingSm))
+                Text("USSD Automation Platform", color = C.t2, fontSize = 14.sp)
+                Spacer(Modifier.height(UiDimens.SpacingLg))
+                StatusChip(text = if (running) "Automation Live" else "Automation Idle", healthy = running)
+            }
+        }
 
         Spacer(Modifier.height(UiDimens.SpacingXl))
         StatCard(
@@ -180,9 +202,9 @@ private fun StatusChip(text: String, healthy: Boolean) {
 @Composable
 private fun StatCard(title: String, value: String, subValue: String? = null, right: @Composable () -> Unit) {
     Surface(
-        color = C.card,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
+        color = C.cardHi.copy(alpha = 0.95f),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.92f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -208,9 +230,9 @@ private fun StatCard(title: String, value: String, subValue: String? = null, rig
 @Composable
 private fun MiniCountCard(label: String, value: String, modifier: Modifier = Modifier) {
     Surface(
-        color = C.surface,
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, C.w08),
+        color = C.surface.copy(alpha = 0.95f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
         modifier = modifier
     ) {
         Column(Modifier.padding(UiDimens.SpacingLg), horizontalAlignment = Alignment.Start) {
@@ -224,9 +246,9 @@ private fun MiniCountCard(label: String, value: String, modifier: Modifier = Mod
 @Composable
 private fun HighlightCard(title: String, detail: String) {
     Surface(
-        color = C.card,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
+        color = C.cardHi.copy(alpha = 0.94f),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(UiDimens.CardPadding)) {
@@ -247,9 +269,9 @@ private fun ActivityRow(tx: Transaction) {
         else -> C.orange
     }
     Surface(
-        color = C.surface,
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, C.w08),
+        color = C.surface.copy(alpha = 0.95f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(

@@ -163,7 +163,45 @@ private fun SettingsHome(
     val ctx = LocalContext.current
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
         PageHeader("Settings", "Clean, grouped access to automation, tools, and support")
-        Column(Modifier.padding(horizontal = UiDimens.ScreenPaddingHorizontal), verticalArrangement = Arrangement.spacedBy(UiDimens.SpacingLg)) {
+        Column(
+            Modifier.padding(horizontal = UiDimens.ScreenPaddingHorizontal),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.SpacingLg)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                color = C.cardHi.copy(alpha = 0.94f),
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+            ) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(
+                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                listOf(
+                                    C.cyan.copy(alpha = 0.14f),
+                                    C.blue.copy(alpha = 0.08f),
+                                    C.cardHi.copy(alpha = 0.96f)
+                                )
+                            )
+                        )
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("Control Center", color = C.t1, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Everything is grouped for faster setup, cleaner navigation, and a more premium admin experience.",
+                        color = C.t2,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MiniTag("Automation", C.cyan)
+                        MiniTag("Tools", C.green)
+                        MiniTag("Appearance", C.blue)
+                    }
+                }
+            }
             SettingsGroup("Core") {
                 LinkRow(Icons.Rounded.SimCard, "SIM Settings", "USSD, customer SMS, admin SMS SIM cards", C.cyan, onOpenSim)
                 GroupDivider()
@@ -210,15 +248,24 @@ fun SettingsTopBar(title: String, subtitle: String, onBack: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 10.dp, vertical = 10.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Rounded.ArrowBack, null, tint = C.t2)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = C.cardHi.copy(alpha = 0.94f),
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+            ) {
+                IconButton(onClick = onBack, modifier = Modifier.size(42.dp)) {
+                    Icon(Icons.Rounded.ArrowBack, null, tint = C.t1)
+                }
             }
-            Column(Modifier.padding(start = 2.dp)) {
-                Text(title, color = C.t1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                Text(subtitle, color = C.t3, fontSize = 11.sp)
+            Column(Modifier.padding(start = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, color = C.t1, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 17.sp)
             }
         }
     }
