@@ -759,36 +759,322 @@ fun dialogFieldColors() = OutlinedTextFieldDefaults.colors(
 
 @Composable
 fun PageHeader(title: String, subtitle: String) {
-    Column(
+    Box(
         Modifier
             .fillMaxWidth()
             .statusBarsPadding()
             .padding(horizontal = 16.dp, vertical = 18.dp)
     ) {
-        Surface(
-            shape = RoundedCornerShape(999.dp),
-            color = C.cyan.copy(alpha = 0.10f),
-            border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.18f))
-        ) {
-            Text(
-                "BINGWA MOBILE",
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                color = C.cyan,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            title,
-            fontSize = 30.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = (-0.8).sp,
-            color = C.t1
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 8.dp, y = (-12).dp)
+                .size(92.dp)
+                .background(
+                    Brush.radialGradient(
+                        listOf(C.cyan.copy(alpha = 0.18f), Color.Transparent)
+                    ),
+                    CircleShape
+                )
         )
-        Spacer(Modifier.height(6.dp))
-        Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 18.sp)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp),
+            color = C.cardHi.copy(alpha = 0.94f),
+            border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                C.cyan.copy(alpha = 0.10f),
+                                C.cardHi.copy(alpha = 0.98f),
+                                C.blue.copy(alpha = 0.05f)
+                            )
+                        )
+                    )
+                    .padding(horizontal = 18.dp, vertical = 18.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = C.cyan.copy(alpha = 0.10f),
+                        border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.18f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(C.cyan)
+                            )
+                            Text(
+                                "BINGWA MOBILE",
+                                color = C.cyan,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.2.sp
+                            )
+                        }
+                    }
+                    Text(
+                        title,
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = (-0.8).sp,
+                        color = C.t1
+                    )
+                    Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 18.sp)
+                }
+                Spacer(Modifier.width(14.dp))
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(C.surface.copy(alpha = 0.92f))
+                        .border(1.dp, C.cyan.copy(alpha = 0.18f), RoundedCornerShape(18.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Outlined.AutoMode, null, tint = C.cyan, modifier = Modifier.size(24.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, subtitle: String, accent: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .width(4.dp)
+                        .height(24.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Brush.verticalGradient(listOf(accent, accent.copy(alpha = 0.35f))))
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(title, color = C.t1, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
+            }
+            Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 17.sp)
+        }
+    }
+}
+
+@Composable
+private fun OverviewStatChip(
+    label: String,
+    value: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        color = C.surface.copy(alpha = 0.9f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(value, color = accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+@Composable
+private fun SettingsOverviewCard(
+    themeMode: String,
+    autoEnabled: Boolean,
+    remoteEnabled: Boolean,
+    twoPhoneEnabled: Boolean
+) {
+    val accent = when {
+        autoEnabled && twoPhoneEnabled -> C.green
+        autoEnabled -> C.cyan
+        else -> C.amber
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = C.cardHi.copy(alpha = 0.94f),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(accent.copy(alpha = 0.11f), C.cardHi.copy(alpha = 0.98f), C.surface.copy(alpha = 0.96f))
+                    )
+                )
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text("Control Center", color = C.t1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        "Manage appearance, automation, relay mode, alerts, and customer notifications from one place.",
+                        color = C.t2,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(accent.copy(alpha = 0.12f))
+                        .border(1.dp, accent.copy(alpha = 0.18f), RoundedCornerShape(16.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Outlined.Tune, null, tint = accent, modifier = Modifier.size(20.dp))
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OverviewStatChip("Theme", themeMode, C.cyan)
+                OverviewStatChip("Automation", if (autoEnabled) "ON" else "OFF", if (autoEnabled) C.green else C.amber)
+                OverviewStatChip("Remote", if (remoteEnabled) "ARMED" else "OFF", if (remoteEnabled) C.blue else C.t3)
+                OverviewStatChip("Relay", if (twoPhoneEnabled) "2-PHONE" else "SINGLE", if (twoPhoneEnabled) C.purple else C.t3)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PurchasePerkChip(icon: ImageVector, label: String, accent: Color) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = accent.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(icon, null, tint = accent, modifier = Modifier.size(13.dp))
+            Text(label, color = accent, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun TokensHeroCard(
+    balance: Int,
+    activePlan: UnlimitedManager.Plan?,
+    remainingMs: Long
+) {
+    val accent = if (activePlan != null) C.green else C.cyan
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = C.cardHi.copy(alpha = 0.94f),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            accent.copy(alpha = 0.12f),
+                            C.cardHi.copy(alpha = 0.98f),
+                            C.surface.copy(alpha = 0.96f)
+                        )
+                    )
+                )
+                .padding(horizontal = 20.dp, vertical = 22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = accent.copy(alpha = 0.10f),
+                border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+            ) {
+                Text(
+                    if (activePlan != null) "UNLIMITED ACCESS" else "TOKEN BALANCE",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    color = accent,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.0.sp
+                )
+            }
+            Text(
+                if (activePlan != null) "Unlimited" else balance.toString(),
+                fontSize = if (activePlan != null) 48.sp else 72.sp,
+                fontWeight = FontWeight.Black,
+                lineHeight = if (activePlan != null) 52.sp else 72.sp,
+                color = if (activePlan != null) C.green else C.t1
+            )
+            Text(
+                if (activePlan != null) "${activePlan.label} plan is active" else "Ready for your next USSD automation runs",
+                color = C.t2,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center
+            )
+            if (activePlan != null) {
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = C.blue.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, C.blue.copy(alpha = 0.22f))
+                ) {
+                    Text(
+                        formatRemainingTimeDetailed(remainingMs),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        color = C.blue,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PurchasePerkChip(Icons.Outlined.Bolt, "1 token = 1 USSD call", C.cyan)
+                PurchasePerkChip(Icons.Outlined.Shield, "Balance never expires", C.green)
+                PurchasePerkChip(Icons.Outlined.Refresh, "Airtime top-up flow", C.blue)
+            }
+        }
     }
 }
 
@@ -3681,67 +3967,53 @@ fun TokensScreen() {
         onDispose { TokenManager.tokenBalanceListener = null }
     }
 
-    Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
-        PageHeader("Tokens", "Purchase tokens to run automation")
-        Surface(
-            color = C.card,
-            shape = RoundedCornerShape(20.dp),
-            border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
-            modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()
-        ) {
+    Box(Modifier.fillMaxSize().background(C.bg)) {
+        Box(
+            Modifier
+                .size(300.dp)
+                .offset((-110).dp, 10.dp)
+                .background(Brush.radialGradient(listOf(C.cyan.copy(alpha = 0.10f), Color.Transparent)), CircleShape)
+        )
+        Box(
+            Modifier
+                .size(280.dp)
+                .align(Alignment.TopEnd)
+                .offset(90.dp, 90.dp)
+                .background(Brush.radialGradient(listOf(C.blue.copy(alpha = 0.08f), Color.Transparent)), CircleShape)
+        )
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            PageHeader("Tokens", "Purchase tokens and plans for faster automation")
             Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 22.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    if (activePlan != null) "Unlimited" else "$bal",
-                    fontSize = if (activePlan != null) 48.sp else 72.sp,
-                    fontWeight = FontWeight.Black,
-                    lineHeight = if (activePlan != null) 52.sp else 72.sp,
-                    color = if (activePlan != null) C.green else C.t1
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(if (activePlan != null) "ACTIVE UNLIMITED ACCESS" else "AVAILABLE TOKENS", color = C.t3, fontSize = 12.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold)
-                if (activePlan != null) {
-                    Spacer(Modifier.height(10.dp))
-                    Surface(shape = RoundedCornerShape(999.dp), color = C.blue.copy(alpha = 0.14f), border = BorderStroke(1.dp, C.blue.copy(alpha = 0.22f))) {
-                        Text("UNLIMITED ${activePlan.label.uppercase()} ACTIVE", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), color = C.blue, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.0.sp)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(formatRemainingTimeDetailed(remMs), color = C.t2, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                }
-                Spacer(Modifier.height(14.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Outlined.Bolt, null, tint = C.t2, modifier = Modifier.size(14.dp))
-                        Text("1 token = 1 USSD call", color = C.t2, fontSize = 12.sp)
-                    }
-                    Text("│", color = C.t3, fontSize = 12.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Outlined.Shield, null, tint = C.t2, modifier = Modifier.size(14.dp))
-                        Text("Never expire", color = C.t2, fontSize = 12.sp)
-                    }
-                }
-            }
-        }
+                TokensHeroCard(balance = bal, activePlan = activePlan, remainingMs = remMs)
 
-        Spacer(Modifier.height(18.dp))
-        Text("TOP UP", modifier = Modifier.padding(horizontal = 16.dp), color = C.t3, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-        Spacer(Modifier.height(10.dp))
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            packs.forEach { p ->
-                TokenTopUpCard(p) { confirm = p.ksh }
+                SectionHeader(
+                    title = "Top Up",
+                    subtitle = "Choose a token pack when you want flexible pay-as-you-go usage.",
+                    accent = C.cyan
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    packs.forEach { p ->
+                        TokenTopUpCard(p) { confirm = p.ksh }
+                    }
+                }
+
+                SectionHeader(
+                    title = "Unlimited",
+                    subtitle = "Best for high-volume usage with active time-based access.",
+                    accent = C.blue
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    UnlimitedManager.PLANS.forEach { plan ->
+                        UnlimitedPlanCard(plan) { confirm = plan.ksh }
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
             }
         }
-        Spacer(Modifier.height(20.dp))
-        Text("UNLIMITED", modifier = Modifier.padding(horizontal = 16.dp), color = C.t3, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-        Spacer(Modifier.height(10.dp))
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            UnlimitedManager.PLANS.forEach { plan ->
-                UnlimitedPlanCard(plan) { confirm = plan.ksh }
-            }
-        }
-        Spacer(Modifier.height(20.dp))
     }
 
     confirm?.let { amount ->
@@ -3786,42 +4058,60 @@ private data class TokenTopUp(val tokens: Int, val ksh: Int, val popular: Boolea
 private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
     Surface(
         color = C.card,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, if (p.popular) C.cyan.copy(alpha = 0.22f) else C.border.copy(alpha = 0.85f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        if (p.popular) {
+                            listOf(C.cyan.copy(alpha = 0.10f), C.card, C.surface.copy(alpha = 0.92f))
+                        } else {
+                            listOf(C.card, C.surface.copy(alpha = 0.92f))
+                        }
+                    )
+                )
+                .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(Modifier.weight(1f)) {
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
                 if (p.popular) {
                     Surface(
                         shape = RoundedCornerShape(999.dp),
-                        color = C.blue.copy(alpha = 0.16f),
-                        border = BorderStroke(1.dp, C.blue.copy(alpha = 0.25f))
+                        color = C.cyan.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.22f))
                     ) {
-                        Text("POPULAR", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = C.blue, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Text("POPULAR", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = C.cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                     }
-                    Spacer(Modifier.height(8.dp))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("${p.tokens}", color = C.t1, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("units", color = C.t2, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text("tokens", color = C.t2, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
-                Spacer(Modifier.height(6.dp))
-                Text("Ksh ${p.ksh}", color = C.t3, fontSize = 14.sp)
+                Text("KSh ${p.ksh}", color = if (p.popular) C.cyan else C.t3, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MiniTag("Instant top-up", C.green)
+                    MiniTag("Flexible usage", C.blue)
+                }
             }
 
-            OutlinedButton(
+            Button(
                 onClick = onBuy,
                 shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, C.borderHi),
-                colors = ButtonDefaults.outlinedButtonColors(containerColor = C.cardHi, contentColor = C.t1),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (p.popular) C.cyan else C.cardHi,
+                    contentColor = if (p.popular) C.bg else C.t1
+                ),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                 modifier = Modifier.height(42.dp)
             ) {
-                Text("+", color = C.t2, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                Icon(Icons.Outlined.Bolt, null, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Buy", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
@@ -3833,34 +4123,46 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
 private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
     Surface(
         color = C.card,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, C.blue.copy(alpha = 0.18f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(C.blue.copy(alpha = 0.10f), C.card, C.surface.copy(alpha = 0.92f))
+                    )
+                )
+                .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(Modifier.weight(1f)) {
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Unlimited", color = C.t1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                     Surface(shape = RoundedCornerShape(999.dp), color = C.blue.copy(alpha = 0.14f), border = BorderStroke(1.dp, C.blue.copy(alpha = 0.22f))) {
                         Text(plan.label.uppercase(), modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = C.blue, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
                     }
                 }
-                Spacer(Modifier.height(6.dp))
-                Text("Ksh ${plan.ksh}", color = C.t3, fontSize = 14.sp)
+                Text("KSh ${plan.ksh}", color = C.blue, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MiniTag("Heavy usage", C.green)
+                    MiniTag("Time-based access", C.blue)
+                }
             }
 
-            OutlinedButton(
+            Button(
                 onClick = onBuy,
                 shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, C.borderHi),
-                colors = ButtonDefaults.outlinedButtonColors(containerColor = C.cardHi, contentColor = C.t1),
+                colors = ButtonDefaults.buttonColors(containerColor = C.blue, contentColor = C.bg),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                 modifier = Modifier.height(42.dp)
             ) {
-                Text("+", color = C.t2, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                Icon(Icons.Outlined.Shield, null, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Buy", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
@@ -4178,7 +4480,13 @@ fun ContactCard(c: SavedContact, onDelete: () -> Unit, onCall: () -> Unit, onMes
 
 @Composable
 fun ActionButton(modifier: Modifier, label: String, icon: ImageVector, color: Color, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = modifier.height(42.dp), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, color.copy(alpha = 0.35f)), colors = ButtonDefaults.outlinedButtonColors(containerColor = color.copy(alpha = 0.07f))) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.height(44.dp),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.35f)),
+        colors = ButtonDefaults.outlinedButtonColors(containerColor = color.copy(alpha = 0.07f))
+    ) {
         Icon(icon, null, tint = color, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(6.dp))
         Text(label, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -4241,6 +4549,12 @@ fun SettingsScreen() {
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
         PageHeader("Settings", "App preferences & configuration")
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SettingsOverviewCard(
+                themeMode = themeMode,
+                autoEnabled = autoEnabled,
+                remoteEnabled = remoteEnabled,
+                twoPhoneEnabled = twoPhoneEnabled
+            )
 
             SettingsGroup("Appearance") {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
