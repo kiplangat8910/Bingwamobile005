@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.ContextWrapper
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
@@ -1545,7 +1546,7 @@ fun BingwaApp() {
                     Screen.Console  -> ConsoleScreen(txns)
                     Screen.Tokens   -> TokensScreen()
                     Screen.Contacts -> ContactsScreen()
-                    Screen.Settings -> GroupedSettingsScreen()
+                    Screen.Settings -> SettingsScreen()
                 }
             }
         }
@@ -3882,27 +3883,161 @@ fun ContactsScreen(onBack: (() -> Unit)? = null) {
 
     Column(Modifier.fillMaxSize().background(C.bg)) {
         if (onBack != null) {
-            SettingsTopBar("Contacts", "${contacts.size} customers saved", onBack)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = C.cardHi.copy(alpha = 0.96f),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Rounded.ArrowBack, null, tint = C.t1)
+                    }
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("Contacts", color = C.t1, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("${contacts.size} customers saved", color = C.t2, fontSize = 12.sp)
+                }
+                ContactHeaderAction(Icons.Filled.CloudDownload, C.cyan) { showImport = true }
+                ContactHeaderAction(Icons.Filled.PersonAdd, C.purple) {
+                    showAddDlg = true
+                    newName = ""
+                    newPhone = ""
+                }
+            }
         } else {
             PageHeader("Contacts", "${contacts.size} customers saved")
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ActionButton(Modifier.weight(1f), "Import M-PESA", Icons.Filled.CloudDownload, C.cyan) { showImport = true }
+                ActionButton(Modifier.weight(1f), "Add Manually", Icons.Filled.PersonAdd, C.purple) {
+                    showAddDlg = true
+                    newName = ""
+                    newPhone = ""
+                }
+            }
         }
-        Row(Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ActionButton(Modifier.weight(1f), "Import M-PESA", Icons.Filled.CloudDownload, C.cyan) { showImport = true }
-            ActionButton(Modifier.weight(1f), "Add Manually", Icons.Filled.PersonAdd, C.purple) { showAddDlg = true; newName = ""; newPhone = "" }
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            color = C.cardHi.copy(alpha = 0.94f),
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, C.border.copy(alpha = 0.88f))
+        ) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Directory", color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (filtered.isEmpty()) "No matches" else "${filtered.size} visible",
+                        color = C.t3,
+                        fontSize = 11.sp
+                    )
+                }
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Search name or number…", color = C.t3, fontSize = 13.sp) },
+                    leadingIcon = { Icon(Icons.Outlined.Search, null, tint = C.t2, modifier = Modifier.size(17.dp)) },
+                    trailingIcon = if (query.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(Icons.Filled.Clear, null, tint = C.t2, modifier = Modifier.size(15.dp))
+                            }
+                        }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = fieldColors(),
+                    singleLine = true
+                )
+            }
         }
-        OutlinedTextField(
-            value = query, onValueChange = { query = it },
-            placeholder = { Text("Search name or number…", color = C.t3, fontSize = 13.sp) },
-            leadingIcon = { Icon(Icons.Outlined.Search, null, tint = C.t2, modifier = Modifier.size(17.dp)) },
-            trailingIcon = if (query.isNotEmpty()) { { IconButton({ query = "" }) { Icon(Icons.Filled.Clear, null, tint = C.t2, modifier = Modifier.size(15.dp)) } } } else null,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 14.dp),
-            shape = RoundedCornerShape(13.dp), colors = fieldColors(), singleLine = true
-        )
+
+        Spacer(Modifier.height(12.dp))
+
         if (filtered.isEmpty()) {
-            AnimatedEmptyState()
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = C.card,
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(C.cyanDim),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Outlined.People, null, tint = C.cyan, modifier = Modifier.size(28.dp))
+                        }
+                        Text(
+                            if (query.isBlank()) "No contacts saved yet" else "No matching contacts",
+                            color = C.t1,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            if (query.isBlank()) "Import M-PESA contacts or add a number manually to build your customer directory." else "Try another name or phone number.",
+                            color = C.t2,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
         } else {
-            LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                items(filtered, key = { it.phone }) { c -> ContactCard(c) { contacts = contacts.filter { it.phone != c.phone }; saveContacts(prefs, contacts) } }
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(filtered, key = { it.phone }) { c ->
+                    ContactCard(
+                        c = c,
+                        onDelete = {
+                            contacts = contacts.filter { it.phone != c.phone }
+                            saveContacts(prefs, contacts)
+                        },
+                        onCall = {
+                            runCatching {
+                                ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${c.phone}")))
+                            }
+                        },
+                        onMessage = {
+                            runCatching {
+                                ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${c.phone}")))
+                            }
+                        }
+                    )
+                }
                 item { Spacer(Modifier.height(16.dp)) }
             }
         }
@@ -3936,23 +4071,106 @@ fun ContactsScreen(onBack: (() -> Unit)? = null) {
 }
 
 @Composable
-fun ContactCard(c: SavedContact, onDelete: () -> Unit) {
+private fun ContactHeaderAction(icon: ImageVector, accent: Color, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = accent.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.22f))
+    ) {
+        IconButton(onClick = onClick) {
+            Icon(icon, null, tint = accent, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+fun ContactCard(c: SavedContact, onDelete: () -> Unit, onCall: () -> Unit, onMessage: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.card).border(1.dp, C.border, RoundedCornerShape(14.dp))) {
-        Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(42.dp).clip(CircleShape).background(C.orangeDim).border(1.dp, C.orange.copy(alpha = 0.18f), CircleShape), contentAlignment = Alignment.Center) {
-                Text((c.name.ifBlank { c.phone }).take(2).uppercase(), color = C.orange, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                if (c.name.isNotBlank()) { Text(c.name, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp) }
-                Text(c.phone, color = if (c.name.isBlank()) C.t1 else C.t2, fontSize = if (c.name.isBlank()) 14.sp else 12.sp)
-            }
-            Box {
-                IconButton(onClick = { menu = true }, modifier = Modifier.size(30.dp)) { Icon(Icons.Outlined.MoreVert, null, tint = C.t3, modifier = Modifier.size(16.dp)) }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.background(C.cardHi).clip(RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
-                    DropdownMenuItem(text = { Text("Delete", color = C.red, fontSize = 13.sp) }, leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = C.red, modifier = Modifier.size(16.dp)) }, onClick = { onDelete(); menu = false })
+    val accent = remember(c.phone, c.name) {
+        listOf(C.cyan, C.green, C.blue, C.orange, C.purple)[kotlin.math.abs((c.phone + c.name).hashCode()) % 5]
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = C.card,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(accent.copy(alpha = 0.08f), Color.Transparent)
+                    )
+                )
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(accent.copy(alpha = 0.16f))
+                        .border(1.dp, accent.copy(alpha = 0.24f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        (c.name.ifBlank { c.phone }).take(2).uppercase(),
+                        color = accent,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 14.sp
+                    )
                 }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (c.name.isNotBlank()) {
+                        Text(c.name, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Outlined.Phone, null, tint = C.t3, modifier = Modifier.size(12.dp))
+                        Text(
+                            c.phone,
+                            color = if (c.name.isBlank()) C.t1 else C.t2,
+                            fontSize = if (c.name.isBlank()) 14.sp else 12.sp
+                        )
+                    }
+                }
+                Box {
+                    IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Outlined.MoreVert, null, tint = C.t3, modifier = Modifier.size(16.dp))
+                    }
+                    DropdownMenu(
+                        expanded = menu,
+                        onDismissRequest = { menu = false },
+                        modifier = Modifier
+                            .background(C.cardHi)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, C.border, RoundedCornerShape(12.dp))
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Delete", color = C.red, fontSize = 13.sp) },
+                            leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = C.red, modifier = Modifier.size(16.dp)) },
+                            onClick = { onDelete(); menu = false }
+                        )
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    label = "Call",
+                    icon = Icons.Outlined.Call,
+                    color = C.green,
+                    onClick = onCall
+                )
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    label = "SMS",
+                    icon = Icons.Outlined.Sms,
+                    color = C.blue,
+                    onClick = onMessage
+                )
             }
         }
     }
