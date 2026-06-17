@@ -4686,7 +4686,7 @@ fun SettingsScreen() {
                     }
                     Spacer(Modifier.height(12.dp))
                     Text("Bingwa Mobile", color = C.t1, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text("Version 3.0.1 · by Victor Ngetich", color = C.t2, fontSize = 11.sp)
+                    Text("Version 3.0.40 · by Victor Ngetich", color = C.t2, fontSize = 11.sp)
                 }
             }
             Spacer(Modifier.height(24.dp))
