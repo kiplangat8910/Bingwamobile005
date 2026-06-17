@@ -1235,31 +1235,60 @@ fun TemplatePreview(template: String, accentColor: Color) {
 
 @Composable
 fun DialogField(label: String, value: String, onChange: (String) -> Unit, hint: String, kb: KeyboardType = KeyboardType.Text) {
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium)
         OutlinedTextField(
-            value = value, onValueChange = onChange, label = { Text(label) },
-            modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-            colors = dialogFieldColors(), keyboardOptions = KeyboardOptions(keyboardType = kb), singleLine = true
+            value = value,
+            onValueChange = onChange,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = dialogFieldColors(),
+            keyboardOptions = KeyboardOptions(keyboardType = kb),
+            singleLine = true,
+            textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
         )
-        if (hint.isNotBlank()) Text(hint, color = C.t3, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+        if (hint.isNotBlank()) {
+            Text(hint, color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
+        }
     }
 }
 
 @Composable
 fun DialogDropdown(label: String, value: String, opts: List<String>, expanded: Boolean, onToggle: () -> Unit, onSelect: (String) -> Unit) {
-    Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.cardHi)
-            .border(1.dp, C.border, RoundedCornerShape(12.dp)).clickable(onClick = onToggle).padding(14.dp)
-    ) {
-        Column {
-            Text(label, color = C.t2, fontSize = 11.sp)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(C.cardHi)
+                .border(1.dp, if (expanded) C.cyan.copy(alpha = 0.55f) else C.border, RoundedCornerShape(16.dp))
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 14.dp, vertical = 13.dp)
+        ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(value, color = C.t1, fontWeight = FontWeight.Medium)
-                Icon(Icons.Filled.KeyboardArrowDown, null, tint = C.t2)
+                Text(value, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Box(
+                    Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(C.w04),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.KeyboardArrowDown, null, tint = if (expanded) C.cyan else C.t2)
+                }
             }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = onToggle, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
-            opts.forEach { o -> DropdownMenuItem(text = { Text(o, color = C.t1) }, onClick = { onSelect(o) }) }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = onToggle,
+                modifier = Modifier
+                    .background(C.cardHi, RoundedCornerShape(12.dp))
+                    .border(1.dp, C.border, RoundedCornerShape(12.dp))
+            ) {
+                opts.forEach { o ->
+                    DropdownMenuItem(text = { Text(o, color = C.t1) }, onClick = { onSelect(o) })
+                }
+            }
         }
     }
 }
@@ -4853,16 +4882,97 @@ private fun SignatureLearningDetailsDialog(
 private fun OfferDialogSection(title: String, subtitle: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = C.cardHi,
-        border = BorderStroke(1.dp, C.border)
+        shape = RoundedCornerShape(20.dp),
+        color = C.cardHi.copy(alpha = 0.9f),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                if (!subtitle.isNullOrBlank()) Text(subtitle, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                Box(
+                    Modifier
+                        .padding(top = 3.dp)
+                        .width(4.dp)
+                        .height(30.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(C.cyan)
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    if (!subtitle.isNullOrBlank()) {
+                        Text(subtitle, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
+                    }
+                }
             }
+            HorizontalDivider(color = C.w08)
             content()
+        }
+    }
+}
+
+@Composable
+private fun OfferStatusCard(enabled: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val accent = if (enabled) C.cyan else C.t3
+    val badgeText = if (enabled) "Live" else "Paused"
+    val description = if (enabled) {
+        "Visible in console and available for matching."
+    } else {
+        "Hidden from matching until you turn it back on."
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = if (enabled) C.cyanDim.copy(alpha = 0.18f) else C.w04,
+        border = BorderStroke(1.dp, if (enabled) C.cyan.copy(alpha = 0.35f) else C.border)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(accent.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    if (enabled) Icons.Rounded.CheckCircle else Icons.Rounded.PauseCircle,
+                    contentDescription = null,
+                    tint = accent
+                )
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Bundle status", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = accent.copy(alpha = 0.14f)
+                    ) {
+                        Text(
+                            badgeText.uppercase(Locale.getDefault()),
+                            color = accent,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+                Text(description, color = C.t2, fontSize = 11.sp, lineHeight = 15.sp)
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = C.cyan,
+                    checkedThumbColor = C.bg,
+                    uncheckedTrackColor = C.border
+                )
+            )
         }
     }
 }
@@ -4925,21 +5035,46 @@ fun OfferDialog(
     }
 
     AlertDialog(
-        containerColor = C.card, shape = RoundedCornerShape(20.dp), onDismissRequest = onDismiss,
-        title = { Text(if (existing != null) "Edit Bundle" else "New Bundle", color = C.t1, fontWeight = FontWeight.Bold) },
+        containerColor = C.surface,
+        shape = RoundedCornerShape(28.dp),
+        onDismissRequest = onDismiss,
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    if (existing != null) "BUNDLE SETTINGS" else "CREATE OFFER",
+                    color = C.cyan,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.1.sp
+                )
+                Text(
+                    if (existing != null) "Edit Bundle" else "New Bundle",
+                    color = C.t1,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 28.sp,
+                    lineHeight = 32.sp
+                )
+                Text(
+                    "Update pricing, routing, and automation behavior for this bundle.",
+                    color = C.t2,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
+            }
+        },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 540.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 OfferDialogSection(
                     title = "Bundle Status",
                     subtitle = "Control whether this bundle is active and available for automation."
                 ) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Column {
-                            Text("Active", color = C.t1, fontWeight = FontWeight.Medium)
-                            Text("Visible in console and available for matching", color = C.t2, fontSize = 11.sp)
-                        }
-                        Switch(checked = enabled, onCheckedChange = { enabled = it }, colors = SwitchDefaults.colors(checkedTrackColor = C.cyan, uncheckedTrackColor = C.border))
-                    }
+                    OfferStatusCard(enabled = enabled, onCheckedChange = { enabled = it })
                 }
 
                 OfferDialogSection(
@@ -5122,18 +5257,35 @@ fun OfferDialog(
                 if (mode == "ADVANCED" && signatureEnabled) {
                     OutlinedButton(
                         onClick = { buildOffer()?.let(onSaveAndLearn) },
-                        border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f))
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
                     ) {
                         Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold)
                     }
                 }
                 Button(
                     onClick = { buildOffer()?.let(onSave) },
-                    colors = ButtonDefaults.buttonColors(containerColor = C.cyan)
-                ) { Text("Save", color = C.bg, fontWeight = FontWeight.Bold) }
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(18.dp))
+                        Text("Save", color = C.bg, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = C.t2) } }
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(16.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+            ) {
+                Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
+            }
+        }
     )
 
     if (showSignatureDetails) {
