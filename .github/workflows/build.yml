@@ -13,9 +13,9 @@ on:
         default: false
         type: boolean
       release_tag:
-        description: "Release tag to create/update (example: v1.0.0)"
+        description: "Optional override for the release tag (defaults to the app version)"
         required: false
-        default: "nightly"
+        default: ""
         type: string
 jobs:
   build:
@@ -24,9 +24,30 @@ jobs:
       contents: write
     env:
       SHOULD_PUBLISH_RELEASE: ${{ startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.upload_to_release) }}
-      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag || 'nightly' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve release metadata
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          APP_VERSION="$(sed -n 's/.*versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -n 1)"
+          if [ -z "$APP_VERSION" ]; then
+            echo "Unable to determine app version from app/build.gradle.kts" >&2
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            RELEASE_TAG="v${APP_VERSION}"
+          elif [[ -n "${INPUT_RELEASE_TAG:-}" && "${INPUT_RELEASE_TAG}" != "nightly" ]]; then
+            RELEASE_TAG="${INPUT_RELEASE_TAG}"
+          else
+            RELEASE_TAG="v${APP_VERSION}"
+          fi
+
+          echo "APP_VERSION=${APP_VERSION}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
