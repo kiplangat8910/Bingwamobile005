@@ -756,7 +756,12 @@ fun dialogFieldColors() = OutlinedTextFieldDefaults.colors(
 
 @Composable
 fun PageHeader(title: String, subtitle: String) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 20.dp)
+    ) {
         Text(
             title,
             fontSize = 26.sp,
@@ -834,7 +839,7 @@ private fun ConsoleSectionCard(
                     Column(
                         Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
-                    )
+                    ) {
                         Text(title, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         Text(subtitle, color = C.t3, fontSize = 11.sp, lineHeight = 15.sp)
                     }
@@ -3771,18 +3776,7 @@ fun ContactsScreen(onBack: (() -> Unit)? = null) {
 
     Column(Modifier.fillMaxSize().background(C.bg)) {
         if (onBack != null) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Rounded.ArrowBack, null, tint = C.t2)
-                }
-                Column(Modifier.padding(start = 2.dp)) {
-                    Text("Contacts", color = C.t1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("${contacts.size} customers saved", color = C.t3, fontSize = 11.sp)
-                }
-            }
+            SettingsTopBar("Contacts", "${contacts.size} customers saved", onBack)
         } else {
             PageHeader("Contacts", "${contacts.size} customers saved")
         }
