@@ -746,15 +746,23 @@ fun fieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = C.cyan, unfocusedBorderColor = C.border,
     focusedTextColor = C.t1, unfocusedTextColor = C.t1,
     cursorColor = C.cyan,
-    focusedContainerColor = C.cardHi.copy(alpha = 0.92f),
-    unfocusedContainerColor = C.card.copy(alpha = 0.86f)
+    focusedContainerColor = C.cardHi.copy(alpha = 0.96f),
+    unfocusedContainerColor = C.card.copy(alpha = 0.92f),
+    focusedLabelColor = C.cyan,
+    unfocusedLabelColor = C.t3,
+    focusedPlaceholderColor = C.t3,
+    unfocusedPlaceholderColor = C.t3
 )
 
 @Composable
 fun dialogFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = C.cyan, unfocusedBorderColor = C.border,
     focusedTextColor = C.t1, unfocusedTextColor = C.t1,
-    cursorColor = C.cyan, focusedContainerColor = C.cardHi, unfocusedContainerColor = C.cardHi
+    cursorColor = C.cyan,
+    focusedContainerColor = C.cardHi.copy(alpha = 0.98f),
+    unfocusedContainerColor = C.card.copy(alpha = 0.96f),
+    focusedLabelColor = C.cyan,
+    unfocusedLabelColor = C.t3
 )
 
 @Composable
@@ -768,47 +776,61 @@ fun PageHeader(title: String, subtitle: String) {
         Box(
             Modifier
                 .align(Alignment.TopEnd)
-                .offset(x = 8.dp, y = (-12).dp)
-                .size(92.dp)
+                .offset(x = 16.dp, y = (-22).dp)
+                .size(128.dp)
                 .background(
                     Brush.radialGradient(
-                        listOf(C.cyan.copy(alpha = 0.18f), Color.Transparent)
+                        listOf(C.cyanGlow.copy(alpha = 0.55f), Color.Transparent)
+                    ),
+                    CircleShape
+                )
+        )
+        Box(
+            Modifier
+                .align(Alignment.TopStart)
+                .offset(x = (-20).dp, y = 18.dp)
+                .size(96.dp)
+                .background(
+                    Brush.radialGradient(
+                        listOf(C.blue.copy(alpha = 0.10f), Color.Transparent)
                     ),
                     CircleShape
                 )
         )
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(30.dp),
             color = C.cardHi.copy(alpha = 0.94f),
-            border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+            border = BorderStroke(1.dp, C.borderHi.copy(alpha = 0.72f)),
+            shadowElevation = 10.dp
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        Brush.horizontalGradient(
+                        Brush.linearGradient(
                             listOf(
-                                C.cyan.copy(alpha = 0.10f),
+                                C.cyan.copy(alpha = 0.12f),
                                 C.cardHi.copy(alpha = 0.98f),
-                                C.blue.copy(alpha = 0.05f)
+                                C.blue.copy(alpha = 0.08f)
                             )
                         )
                     )
-                    .padding(horizontal = 18.dp, vertical = 18.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Surface(
                         shape = RoundedCornerShape(999.dp),
-                        color = C.cyan.copy(alpha = 0.10f),
+                        color = C.surface.copy(alpha = 0.72f),
                         border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.18f))
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -829,22 +851,32 @@ fun PageHeader(title: String, subtitle: String) {
                     }
                     Text(
                         title,
-                        fontSize = 30.sp,
+                        fontSize = 31.sp,
                         fontWeight = FontWeight.Black,
-                        letterSpacing = (-0.8).sp,
+                        letterSpacing = (-0.9).sp,
                         color = C.t1
                     )
-                    Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 18.sp)
+                    Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 19.sp)
                 }
-                Spacer(Modifier.width(14.dp))
                 Box(
                     modifier = Modifier
-                        .size(54.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(C.surface.copy(alpha = 0.92f))
-                        .border(1.dp, C.cyan.copy(alpha = 0.18f), RoundedCornerShape(18.dp)),
+                        .size(58.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(C.surface.copy(alpha = 0.98f), C.card.copy(alpha = 0.92f))
+                            )
+                        )
+                        .border(1.dp, C.cyan.copy(alpha = 0.20f), RoundedCornerShape(20.dp)),
                     contentAlignment = Alignment.Center
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .padding(8.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(C.cyan.copy(alpha = 0.10f))
+                    )
                     Icon(Icons.Outlined.AutoMode, null, tint = C.cyan, modifier = Modifier.size(24.dp))
                 }
             }
@@ -1346,20 +1378,20 @@ fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .shadow(18.dp, RoundedCornerShape(24.dp), clip = false)
-            .clip(RoundedCornerShape(24.dp))
+            .shadow(14.dp, RoundedCornerShape(26.dp), clip = false)
+            .clip(RoundedCornerShape(26.dp))
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        C.cardHi.copy(alpha = 0.96f),
-                        C.card.copy(alpha = 0.94f),
+                        C.cardHi.copy(alpha = 0.98f),
+                        C.card.copy(alpha = 0.96f),
                         C.surface.copy(alpha = 0.98f)
                     )
                 )
             )
-            .border(1.dp, C.border.copy(alpha = 0.92f), RoundedCornerShape(24.dp))
+            .border(1.dp, C.borderHi.copy(alpha = 0.72f), RoundedCornerShape(26.dp))
     ) {
-        Column(Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 15.dp)) {
             Text(
                 title.uppercase(),
                 color = C.cyan.copy(alpha = 0.92f),
@@ -1370,10 +1402,10 @@ fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
             Spacer(Modifier.height(6.dp))
             Box(
                 Modifier
-                    .fillMaxWidth(0.18f)
-                    .height(3.dp)
+                    .fillMaxWidth(0.22f)
+                    .height(4.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(Brush.horizontalGradient(listOf(C.cyan, C.blue)))
+                    .background(Brush.horizontalGradient(listOf(C.cyan, C.blue, C.purple)))
             )
         }
         Divider(color = C.w08)
@@ -1418,10 +1450,10 @@ fun LinkRow(icon: ImageVector, title: String, sub: String, color: Color, onClick
     ) {
         Box(
             Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .size(42.dp)
+                .clip(RoundedCornerShape(15.dp))
                 .background(color.copy(alpha = 0.12f))
-                .border(1.dp, color.copy(alpha = 0.18f), RoundedCornerShape(14.dp)),
+                .border(1.dp, color.copy(alpha = 0.18f), RoundedCornerShape(15.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
@@ -1434,11 +1466,11 @@ fun LinkRow(icon: ImageVector, title: String, sub: String, color: Color, onClick
         }
         Surface(
             shape = RoundedCornerShape(999.dp),
-            color = C.surface.copy(alpha = 0.82f),
-            border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+            color = C.surface.copy(alpha = 0.92f),
+            border = BorderStroke(1.dp, C.borderHi.copy(alpha = 0.72f))
         ) {
             Box(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Filled.ChevronRight, null, tint = C.t2, modifier = Modifier.size(14.dp))
@@ -1519,12 +1551,20 @@ fun SettingsRowIcon(icon: ImageVector, tint: Color = C.t1) {
 fun ToggleSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
     val target = if (checked) 25.dp else 3.dp
     val offset by animateDpAsState(target, animationSpec = tween(200), label = "toggle")
+    val trackColor by animateColorAsState(
+        if (checked) C.cyan.copy(alpha = 0.96f) else C.surface,
+        label = "toggle_track"
+    )
+    val knobColor by animateColorAsState(
+        if (checked) C.bg else C.t2,
+        label = "toggle_knob"
+    )
     Box(
         Modifier
             .width(52.dp)
             .height(30.dp)
             .clip(RoundedCornerShape(999.dp))
-            .background(if (checked) C.cyan.copy(alpha = 0.92f) else C.surface)
+            .background(trackColor)
             .border(1.dp, if (checked) C.cyan.copy(alpha = 0.35f) else C.border.copy(alpha = 0.9f), RoundedCornerShape(999.dp))
             .clickable { onChange(!checked) }
     ) {
@@ -1533,7 +1573,7 @@ fun ToggleSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
                 .offset(x = offset, y = 3.dp)
                 .size(24.dp)
                 .clip(CircleShape)
-                .background(if (checked) C.bg else C.t2)
+                .background(knobColor)
         )
     }
 }
@@ -1843,10 +1883,10 @@ fun BingwaApp() {
 @Composable
 private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen) -> Unit, onToggleRunning: () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(32.dp),
+        shape = RoundedCornerShape(34.dp),
         color = C.surface.copy(alpha = 0.98f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
-        shadowElevation = 14.dp,
+        border = BorderStroke(1.dp, C.borderHi.copy(alpha = 0.70f)),
+        shadowElevation = 18.dp,
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
@@ -1856,11 +1896,11 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    Brush.horizontalGradient(
+                    Brush.linearGradient(
                         listOf(
-                            C.cyan.copy(alpha = 0.06f),
+                            C.cyan.copy(alpha = 0.08f),
                             Color.Transparent,
-                            C.blue.copy(alpha = 0.05f)
+                            C.blue.copy(alpha = 0.07f)
                         )
                     )
                 )
@@ -1905,7 +1945,7 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
 
 @Composable
 private fun NavBarItemButton(item: Screen, selected: Boolean, onClick: () -> Unit) {
-    val selectedTint = C.amber
+    val selectedTint = C.cyan
     Column(
         modifier = Modifier
             .width(64.dp)
@@ -1916,12 +1956,12 @@ private fun NavBarItemButton(item: Screen, selected: Boolean, onClick: () -> Uni
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = if (selected) C.amber.copy(alpha = 0.14f) else C.surface.copy(alpha = 0.28f),
-            border = if (selected) BorderStroke(1.dp, C.amber.copy(alpha = 0.34f)) else BorderStroke(1.dp, Color.Transparent)
+            shape = RoundedCornerShape(18.dp),
+            color = if (selected) C.cyan.copy(alpha = 0.16f) else C.surface.copy(alpha = 0.36f),
+            border = if (selected) BorderStroke(1.dp, C.cyan.copy(alpha = 0.30f)) else BorderStroke(1.dp, Color.Transparent)
         ) {
             Box(
-                modifier = Modifier.size(width = 44.dp, height = 36.dp),
+                modifier = Modifier.size(width = 46.dp, height = 38.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -1964,9 +2004,9 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
             shape = CircleShape,
             color = C.cardHi,
             border = BorderStroke(2.dp, color.copy(alpha = 0.85f)),
-            shadowElevation = 18.dp,
+            shadowElevation = 22.dp,
             modifier = Modifier
-                .size(62.dp)
+                .size(64.dp)
                 .combinedClickable(
                     onClick = {
                         Toast.makeText(
@@ -1982,9 +2022,13 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
                 Box(
                     Modifier
                         .matchParentSize()
-                        .padding(8.dp)
+                        .padding(7.dp)
                         .clip(CircleShape)
-                        .background(color.copy(alpha = 0.14f))
+                        .background(
+                            Brush.radialGradient(
+                                listOf(color.copy(alpha = 0.24f), color.copy(alpha = 0.08f))
+                            )
+                        )
                 )
                 Icon(
                     Icons.Outlined.PowerSettingsNew,
@@ -1996,8 +2040,8 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
         }
         Surface(
             shape = RoundedCornerShape(999.dp),
-            color = C.surface,
-            border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+            color = C.surface.copy(alpha = 0.96f),
+            border = BorderStroke(1.dp, C.borderHi.copy(alpha = 0.70f))
         ) {
             Text(
                 if (running) "Hold Stop" else "Hold Start",
