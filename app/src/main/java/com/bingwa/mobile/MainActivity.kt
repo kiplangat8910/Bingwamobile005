@@ -843,7 +843,7 @@ private fun ConsoleSectionCard(
                             .background(accent.copy(alpha = 0.9f))
                     )
                 }
-                HorizontalDivider(color = C.w08)
+                Divider(color = C.w08)
                 content()
             }
         )
@@ -4854,7 +4854,7 @@ private fun OfferDialogSection(title: String, subtitle: String? = null, content:
                     }
                 }
             }
-            HorizontalDivider(color = C.w08)
+            Divider(color = C.w08)
             content()
         }
     }
