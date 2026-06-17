@@ -13,12 +13,12 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 
 internal object C {
-    var bg by mutableStateOf(Color(0xFF17181C))
-    var surface by mutableStateOf(Color(0xFF1D1F24))
-    var card by mutableStateOf(Color(0xFF24262D))
-    var cardHi by mutableStateOf(Color(0xFF2B2E36))
-    var border by mutableStateOf(Color(0xFF373B45))
-    var borderHi by mutableStateOf(Color(0xFF4A505C))
+    var bg by mutableStateOf(Color(0xFF111318))
+    var surface by mutableStateOf(Color(0xFF171A20))
+    var card by mutableStateOf(Color(0xFF1C2129))
+    var cardHi by mutableStateOf(Color(0xFF242B35))
+    var border by mutableStateOf(Color(0xFF313845))
+    var borderHi by mutableStateOf(Color(0xFF465062))
     var cyan by mutableStateOf(Color(0xFFF7A600))
     var cyanDim by mutableStateOf(cyan.copy(alpha = 0.12f))
     var cyanGlow by mutableStateOf(cyan.copy(alpha = 0.20f))
@@ -77,12 +77,12 @@ private fun onColorFor(color: Color): Color =
 
 internal fun buildAppColorScheme(accent: ThemeAccent, dark: Boolean): ColorScheme {
     val palette = accentPaletteSpec(accent)
-    val background = if (dark) Color(0xFF17181C) else Color(0xFFF7F8FA)
-    val surface = if (dark) Color(0xFF1D1F24) else Color(0xFFFFFFFF)
-    val surfaceVariantBase = if (dark) Color(0xFF252830) else Color(0xFFF2F4F7)
-    val surfaceVariant = lerp(surfaceVariantBase, palette.primary, if (dark) 0.10f else 0.05f)
-    val outline = lerp(if (dark) Color(0xFF373B45) else Color(0xFFD0D5DD), palette.primary, if (dark) 0.20f else 0.12f)
-    val outlineVariant = lerp(if (dark) Color(0xFF4A505C) else Color(0xFFE4E7EC), palette.secondary, if (dark) 0.20f else 0.12f)
+    val background = if (dark) Color(0xFF111318) else Color(0xFFF6F7FB)
+    val surface = if (dark) Color(0xFF171A20) else Color(0xFFFFFFFF)
+    val surfaceVariantBase = if (dark) Color(0xFF1F252E) else Color(0xFFF1F4F8)
+    val surfaceVariant = lerp(surfaceVariantBase, palette.primary, if (dark) 0.12f else 0.06f)
+    val outline = lerp(if (dark) Color(0xFF313845) else Color(0xFFD6DBE4), palette.primary, if (dark) 0.22f else 0.10f)
+    val outlineVariant = lerp(if (dark) Color(0xFF465062) else Color(0xFFE4E7EC), palette.secondary, if (dark) 0.18f else 0.10f)
 
     return if (dark) {
         darkColorScheme(
@@ -97,8 +97,8 @@ internal fun buildAppColorScheme(accent: ThemeAccent, dark: Boolean): ColorSchem
             background = background,
             surface = surface,
             surfaceVariant = surfaceVariant,
-            onBackground = Color(0xFFFFFFFF),
-            onSurface = Color(0xFFFFFFFF),
+            onBackground = Color(0xFFF8FAFC),
+            onSurface = Color(0xFFF8FAFC),
             outline = outline,
             outlineVariant = outlineVariant,
             error = Color(0xFFF6465D)
@@ -116,8 +116,8 @@ internal fun buildAppColorScheme(accent: ThemeAccent, dark: Boolean): ColorSchem
             background = background,
             surface = surface,
             surfaceVariant = surfaceVariant,
-            onBackground = Color(0xFF111318),
-            onSurface = Color(0xFF111318),
+            onBackground = Color(0xFF10131A),
+            onSurface = Color(0xFF10131A),
             outline = outline,
             outlineVariant = outlineVariant,
             error = Color(0xFFF6465D)
@@ -142,13 +142,13 @@ internal object AppTheme {
 internal fun applyVolcanicPaletteFromScheme(s: ColorScheme, dark: Boolean) {
     C.bg = s.background
     C.surface = s.surface
-    C.card = s.surfaceVariant
-    C.cardHi = if (dark) s.surfaceVariant.copy(alpha = 0.92f) else s.surfaceVariant.copy(alpha = 0.86f)
+    C.card = if (dark) lerp(s.surface, s.surfaceVariant, 0.82f) else lerp(s.surface, s.surfaceVariant, 0.72f)
+    C.cardHi = if (dark) lerp(C.card, s.primary, 0.08f) else lerp(C.card, s.primary, 0.04f)
     C.border = s.outline
     C.borderHi = s.outlineVariant
     C.cyan = s.primary
     C.cyanDim = s.primary.copy(alpha = 0.12f)
-    C.cyanGlow = s.primary.copy(alpha = 0.20f)
+    C.cyanGlow = s.primary.copy(alpha = if (dark) 0.24f else 0.16f)
     C.purple = if (dark) Color(0xFFB6BDC9) else Color(0xFF667085)
     C.purpleDim = C.purple.copy(alpha = 0.13f)
     C.orange = s.primary
@@ -164,8 +164,8 @@ internal fun applyVolcanicPaletteFromScheme(s: ColorScheme, dark: Boolean) {
     C.blueDim = C.blue.copy(alpha = 0.10f)
     val base = if (dark) Color.White else Color.Black
     C.t1 = base
-    C.t2 = base.copy(alpha = 0.78f)
-    C.t3 = base.copy(alpha = 0.55f)
+    C.t2 = base.copy(alpha = if (dark) 0.78f else 0.70f)
+    C.t3 = base.copy(alpha = if (dark) 0.56f else 0.50f)
     C.w12 = base.copy(alpha = 0.12f)
     C.w08 = base.copy(alpha = 0.08f)
     C.w04 = base.copy(alpha = 0.04f)
@@ -175,4 +175,3 @@ internal fun surfaceGradient(): Brush = Brush.linearGradient(listOf(C.cardHi, C.
 
 internal fun accentSurfaceGradient(accent: Color): Brush =
     Brush.linearGradient(listOf(accent.copy(alpha = 0.16f), C.card))
-
