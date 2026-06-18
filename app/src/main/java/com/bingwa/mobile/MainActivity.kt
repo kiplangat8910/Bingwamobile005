@@ -200,27 +200,94 @@ private fun StartupFallbackScreen(errorLabel: String, onRetry: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF17181C))
+            .background(Color(0xFF0A0B0F))
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
+        Box(
+            modifier = Modifier
+                .size(320.dp)
+                .offset((-120).dp, (-80).dp)
+                .background(
+                    Brush.radialGradient(
+                        listOf(Color(0xFFF59E0B).copy(alpha = 0.10f), Color.Transparent)
+                    ),
+                    CircleShape
+                )
+        )
+        Box(
+            modifier = Modifier
+                .size(280.dp)
+                .align(Alignment.TopEnd)
+                .offset(80.dp, (-20).dp)
+                .background(
+                    Brush.radialGradient(
+                        listOf(Color(0xFF22D3EE).copy(alpha = 0.09f), Color.Transparent)
+                    ),
+                    CircleShape
+                )
+        )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Text("Bingwa Mobile", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = Color(0xFF1A1C22),
+                border = BorderStroke(1.dp, Color(0xFF2A2E38).copy(alpha = 0.9f)),
+                shadowElevation = 10.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0xFF21242B).copy(alpha = 0.96f),
+                                    Color(0xFF1A1C22).copy(alpha = 0.98f)
+                                )
+                            )
+                        )
+                        .padding(horizontal = 24.dp, vertical = 28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        "Bingwa Mobile",
+                        color = Color(0xFFF1F3F8),
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        "Startup compatibility mode",
+                        color = Color(0xFF9CA3AF),
+                        fontSize = 15.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        "Issue: $errorLabel",
+                        color = Color(0xFFEF4444),
+                        textAlign = TextAlign.Center,
+                        fontSize = 13.sp
+                    )
+                    Button(
+                        onClick = onRetry,
+                        shape = RoundedCornerShape(18.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF22D3EE),
+                            contentColor = Color(0xFF0A0B0F)
+                        )
+                    ) {
+                        Text("Retry Launch", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
             Text(
-                "Startup compatibility mode is active on this phone.",
-                color = Color(0xFFD0D5DD),
-                textAlign = TextAlign.Center
-            )
-            Text(
-                "Detected issue: $errorLabel",
-                color = Color(0xFF98A2B3),
+                "The app keeps your existing setup and retries the normal experience when available.",
+                color = Color(0xFF6B7280),
                 textAlign = TextAlign.Center,
-                fontSize = 13.sp
+                fontSize = 12.sp,
+                lineHeight = 18.sp
             )
-            Button(onClick = onRetry) { Text("Retry") }
         }
     }
 }
@@ -764,26 +831,51 @@ fun dialogFieldColors() = OutlinedTextFieldDefaults.colors(
 )
 
 @Composable
+fun VolcanicSurface(
+    modifier: Modifier = Modifier,
+    elevation: Dp = 8.dp,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
+        color = C.card,
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.65f)),
+        shadowElevation = elevation
+    ) {
+        Box(
+            modifier = Modifier.background(
+                Brush.verticalGradient(
+                    listOf(C.cardHi.copy(alpha = 0.96f), C.card.copy(alpha = 0.98f))
+                )
+            )
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
 fun PageHeader(title: String, subtitle: String) {
     Column(
         Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 18.dp),
+            .padding(horizontal = 20.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
             title,
-            fontSize = 32.sp,
+            fontSize = 34.sp,
             fontWeight = FontWeight.Black,
-            letterSpacing = (-1.0).sp,
+            letterSpacing = (-1.2).sp,
             color = C.t1
         )
         Text(
             subtitle,
             color = C.t2,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
+            fontSize = 15.sp,
+            lineHeight = 22.sp,
             fontWeight = FontWeight.Medium
         )
     }
@@ -1113,9 +1205,7 @@ private fun ConsoleHeroCard(
         color = C.cardHi.copy(alpha = 0.9f),
         shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, statusColor.copy(alpha = 0.18f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
@@ -1243,7 +1333,13 @@ private fun RowScope.ConsoleTabChip(
             .padding(vertical = 16.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = fg, fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold, fontSize = 15.sp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(icon, null, tint = fg, modifier = Modifier.size(16.dp))
+            Text(text, color = fg, fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold, fontSize = 15.sp)
+        }
     }
 }
 
@@ -1738,7 +1834,8 @@ fun BingwaApp() {
                                 isRefreshing = true
                                 if (!requestBalanceCheckSafely(ctx)) isRefreshing = false
                             }
-                        }
+                        },
+                        onToggleRunning = toggleRunning
                     )
                     Screen.Console  -> ConsoleScreen(txns)
                     Screen.Tokens   -> TokensScreen()
@@ -2048,7 +2145,8 @@ fun HomeScreenVolcanic(
     running: Boolean,
     unlimitedLabel: String?,
     unlimitedRemaining: String?,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onToggleRunning: () -> Unit
 ) {
     val ctx = LocalContext.current
     val automatedTxns = txns.filter { it.showInRecent }.sortedByDescending { it.timestamp }
@@ -2091,83 +2189,110 @@ fun HomeScreenVolcanic(
         )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 132.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 132.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 26.dp, bottom = 2.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        "Bingwa Mobile",
-                        color = C.t1,
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = (-1.0).sp
-                    )
-                    Text(
-                        "USSD Automation Platform",
-                        color = C.t2,
-                        fontSize = 12.sp,
-                        letterSpacing = 1.2.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Box(
-                        Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    if (running) {
-                                        listOf(
-                                            C.green.copy(alpha = 0.26f),
-                                            C.cyan.copy(alpha = 0.18f),
-                                            C.surface.copy(alpha = 0.95f)
+                PageHeader("Bingwa Mobile", "USSD Automation Platform")
+            }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    VolcanicSurface {
+                        Column(
+                            modifier = Modifier.padding(18.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(primaryStatusColor.copy(alpha = 0.12f))
+                                            .border(
+                                                1.dp,
+                                                primaryStatusColor.copy(alpha = 0.24f),
+                                                RoundedCornerShape(14.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(Modifier.size(10.dp), contentAlignment = Alignment.Center) {
+                                            if (running) {
+                                                Box(
+                                                    Modifier
+                                                        .fillMaxSize()
+                                                        .scale(pulse * 1.9f)
+                                                        .clip(CircleShape)
+                                                        .background(C.green.copy(alpha = 0.24f))
+                                                )
+                                            }
+                                            Box(
+                                                Modifier
+                                                    .size(7.dp)
+                                                    .clip(CircleShape)
+                                                    .background(primaryStatusColor)
+                                            )
+                                        }
+                                    }
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            if (running) "Automation is live" else "Automation is idle",
+                                            color = C.t1,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold
                                         )
-                                    } else {
-                                        listOf(
-                                            C.surface.copy(alpha = 0.96f),
-                                            C.card.copy(alpha = 0.92f)
+                                        Text(
+                                            if (running) "Monitoring new M-PESA activity and dispatching configured bundles." else "Use the center control or the quick action below to resume background automation.",
+                                            color = C.t2,
+                                            fontSize = 12.sp,
+                                            lineHeight = 18.sp
                                         )
                                     }
-                                )
-                            )
-                            .border(
-                                1.dp,
-                                if (running) C.green.copy(alpha = 0.45f) else C.border.copy(alpha = 0.85f),
-                                RoundedCornerShape(999.dp)
-                            )
-                            .padding(horizontal = 18.dp, vertical = 9.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(Modifier.size(10.dp), contentAlignment = Alignment.Center) {
-                                if (running) {
-                                    Box(
-                                        Modifier
-                                            .fillMaxSize()
-                                            .scale(pulse * 1.9f)
-                                            .clip(CircleShape)
-                                            .background(C.green.copy(alpha = 0.24f))
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = primaryStatusColor.copy(alpha = 0.10f),
+                                    border = BorderStroke(1.dp, primaryStatusColor.copy(alpha = 0.22f))
+                                ) {
+                                    Text(
+                                        if (running) "LIVE" else "IDLE",
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        color = primaryStatusColor,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = 0.8.sp
                                     )
                                 }
-                                Box(Modifier.size(7.dp).clip(CircleShape).background(if (running) C.green else primaryStatusColor))
                             }
-                            Text(
-                                if (running) "AUTOMATION LIVE" else "AUTOMATION IDLE",
-                                color = if (running) C.green else primaryStatusColor,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 0.8.sp
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                PillBadge(if (running) "Automation live" else "Automation paused", primaryStatusColor)
+                                PillBadge("${automatedTxns.size} recent", C.blue)
+                                if (unlimitedLabel != null) {
+                                    PillBadge(unlimitedLabel, C.green)
+                                } else {
+                                    PillBadge("$tokenBal tokens", C.cyan)
+                                }
+                            }
+                            RelayHotspotStatusChip()
                         }
                     }
-                    RelayHotspotStatusChip()
+                    AutomationControlCard(running = running, onToggle = onToggleRunning)
                 }
             }
             item {
@@ -2191,17 +2316,7 @@ fun HomeScreenVolcanic(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier
-                                .width(4.dp)
-                                .height(28.dp)
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(Brush.verticalGradient(listOf(C.amber, C.blue)))
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text("Recent Activity", color = C.t1, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp)
-                    }
+                    Text("Recent Activity", color = C.t1, fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
                     PillBadge(
                         if (automatedTxns.isEmpty()) "0 automated" else "${automatedTxns.size} automated",
                         C.t2
@@ -2211,7 +2326,7 @@ fun HomeScreenVolcanic(
             if (automatedTxns.isEmpty()) {
                 item { AnimatedEmptyState() }
             } else {
-                items(automatedTxns.take(10), key = { it.id }) { tx ->
+                items(automatedTxns.take(8), key = { it.id }) { tx ->
                     GithubActivityCard(
                         tx = tx,
                         onClick = { selectedTxId = tx.id }
@@ -3478,7 +3593,21 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             "pending" -> FeedbackBanner("…  Dispatching — awaiting USSD response…", C.amber)
                             "relayed" -> FeedbackBanner("→  Forwarded to Relay phone for execution", C.blue)
                         }
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ConsoleHeroCard(
+                            dispatchReady = dispatchReady,
+                            bannerState = bannerState,
+                            enabledOfferCount = enabledOffers.size,
+                            directoryCount = consoleDirectory.size,
+                            historyCount = history.size,
+                            smsSearchLoading = smsSearchLoading
+                        )
+                        ConsoleSectionCard(
+                            title = "Customer Target",
+                            subtitle = "Capture the customer number and use smart matching from saved contacts and M-PESA history.",
+                            accent = if (resolvedClientName.isNotBlank()) C.green else C.cyan,
+                            icon = Icons.Filled.Phone,
+                            highlighted = phone.isNotBlank() || resolvedClientName.isNotBlank()
+                        ) {
                             FieldLabel("Customer Phone")
                             Row(
                                 modifier = Modifier
@@ -3575,7 +3704,17 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                 }
                             }
                         }
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ConsoleSectionCard(
+                            title = "Bundle & Mode",
+                            subtitle = "Choose an enabled bundle and decide how the USSD flow should execute on this phone.",
+                            accent = when {
+                                selOffer == null -> C.amber
+                                mode == "SIMPLE" -> C.blue
+                                else -> C.cyan
+                            },
+                            icon = Icons.Filled.Wifi,
+                            highlighted = selOffer != null
+                        ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -3667,7 +3806,13 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ConsoleSectionCard(
+                            title = "Dispatch Summary",
+                            subtitle = "Review the active selection before sending the request to the USSD automation engine.",
+                            accent = if (dispatchReady) C.green else C.amber,
+                            icon = Icons.Filled.Send,
+                            highlighted = dispatchReady
+                        ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
