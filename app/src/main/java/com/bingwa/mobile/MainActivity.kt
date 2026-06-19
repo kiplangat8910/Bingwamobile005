@@ -2242,140 +2242,13 @@ fun HomeScreenVolcanic(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Spacer(Modifier.statusBarsPadding())
-                    VolcanicSurface(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .background(
-                                    Brush.verticalGradient(
-                                        listOf(
-                                            C.cardHi.copy(alpha = 0.98f),
-                                            C.card.copy(alpha = 0.98f),
-                                            C.surface.copy(alpha = 0.96f)
-                                        )
-                                    )
-                                )
-                                .padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    modifier = Modifier.weight(1f),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(56.dp)
-                                            .clip(RoundedCornerShape(18.dp))
-                                            .background(
-                                                Brush.verticalGradient(
-                                                    listOf(C.amber.copy(alpha = 0.28f), C.amber.copy(alpha = 0.08f))
-                                                )
-                                            )
-                                            .border(
-                                                1.dp,
-                                                C.amber.copy(alpha = 0.42f),
-                                                RoundedCornerShape(18.dp)
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(26.dp))
-                                    }
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Text(
-                                            "Bingwa Mobile",
-                                            color = C.t1,
-                                            fontSize = 22.sp,
-                                            fontWeight = FontWeight.Black
-                                        )
-                                        Text(
-                                            "USSD Automation Platform",
-                                            color = C.t2,
-                                            fontSize = 13.sp,
-                                            lineHeight = 18.sp
-                                        )
-                                    }
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(C.surface.copy(alpha = 0.92f))
-                                        .border(1.dp, C.border.copy(alpha = 0.9f), RoundedCornerShape(14.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Outlined.NotificationsNone, null, tint = C.t1, modifier = Modifier.size(20.dp))
-                                }
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(999.dp),
-                                color = primaryStatusColor.copy(alpha = 0.10f),
-                                border = BorderStroke(1.dp, primaryStatusColor.copy(alpha = 0.22f))
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Box(Modifier.size(10.dp), contentAlignment = Alignment.Center) {
-                                        if (running) {
-                                            Box(
-                                                Modifier
-                                                    .fillMaxSize()
-                                                    .scale(pulse * 1.7f)
-                                                    .clip(CircleShape)
-                                                    .background(C.green.copy(alpha = 0.22f))
-                                            )
-                                        }
-                                        Box(
-                                            Modifier
-                                                .size(7.dp)
-                                                .clip(CircleShape)
-                                                .background(primaryStatusColor)
-                                        )
-                                    }
-                                    Text(
-                                        if (running) "AUTOMATION LIVE" else "AUTOMATION PAUSED",
-                                        color = primaryStatusColor,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        letterSpacing = 0.8.sp
-                                    )
-                                }
-                            }
-                            Text(
-                                if (running) "Monitoring new M-PESA activity and dispatching configured bundles." else "Use the center control or the quick action below to resume background automation.",
-                                color = C.t2,
-                                fontSize = 12.sp,
-                                lineHeight = 18.sp
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                PillBadge(if (running) "Automation live" else "Automation paused", primaryStatusColor)
-                                PillBadge("${automatedTxns.size} recent", C.blue)
-                                if (unlimitedLabel != null) {
-                                    PillBadge(unlimitedLabel, C.green)
-                                } else {
-                                    PillBadge("$tokenBal tokens", C.cyan)
-                                }
-                            }
-                            RelayHotspotStatusChip()
-                        }
-                    }
-                    AutomationControlCard(running = running, onToggle = onToggleRunning)
+                    HomeDashboardHeader(
+                        running = running,
+                        automatedCount = automatedTxns.size,
+                        tokenBal = tokenBal,
+                        unlimitedLabel = unlimitedLabel,
+                        pulse = pulse
+                    )
                 }
             }
             item {
@@ -2452,6 +2325,135 @@ fun HomeScreenVolcanic(
                 }
             )
         }
+    }
+}
+
+@Composable
+private fun HomeDashboardHeader(
+    running: Boolean,
+    automatedCount: Int,
+    tokenBal: Int,
+    unlimitedLabel: String?,
+    pulse: Float
+) {
+    val statusColor = if (running) C.green else C.amber
+    val secondaryLabel = unlimitedLabel ?: "$tokenBal tokens"
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(58.dp)
+                        .graphicsLayer {
+                            scaleX = if (running) pulse else 1f
+                            scaleY = if (running) pulse else 1f
+                        }
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(C.amber.copy(alpha = 0.30f), C.amber.copy(alpha = 0.08f))
+                            )
+                        )
+                        .border(1.dp, C.amber.copy(alpha = 0.44f), RoundedCornerShape(20.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(28.dp))
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "Bingwa Mobile",
+                        color = C.t1,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        "USSD Automation Platform",
+                        color = C.t2,
+                        fontSize = 14.sp,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(C.surface.copy(alpha = 0.92f))
+                    .border(1.dp, C.border.copy(alpha = 0.92f), RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Outlined.NotificationsNone, null, tint = C.t1, modifier = Modifier.size(20.dp))
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 8.dp, end = 8.dp)
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(C.amber)
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = statusColor.copy(alpha = 0.10f),
+                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.24f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(Modifier.size(10.dp), contentAlignment = Alignment.Center) {
+                        if (running) {
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .scale(pulse * 1.7f)
+                                    .clip(CircleShape)
+                                    .background(C.green.copy(alpha = 0.22f))
+                            )
+                        }
+                        Box(
+                            Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(statusColor)
+                        )
+                    }
+                    Text(
+                        if (running) "AUTOMATION LIVE" else "AUTOMATION PAUSED",
+                        color = statusColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.8.sp
+                    )
+                }
+            }
+            PillBadge("${automatedCount} automated", if (automatedCount > 0) C.green else C.blue)
+            PillBadge(secondaryLabel, if (unlimitedLabel != null) C.green else C.cyan)
+        }
+
+        RelayHotspotStatusChip()
     }
 }
 
@@ -2761,6 +2763,9 @@ private fun retryRecentTransaction(context: Context, tx: Transaction): Transacti
 private fun GithubActivityCard(tx: Transaction, onClick: () -> Unit, onDelete: () -> Unit) {
     val statusColor = transactionStatusColor(tx)
     val typeColor = transactionTypeColor(tx)
+    val showLiveAnimation = tx.statusEnum == TransactionStatus.PENDING ||
+        tx.statusEnum == TransactionStatus.PROCESSING ||
+        tx.statusEnum == TransactionStatus.RETRYING
     val initials = remember(tx.clientName, tx.phoneNumber) {
         tx.clientName
             .ifBlank { tx.phoneNumber }
@@ -2773,6 +2778,22 @@ private fun GithubActivityCard(tx: Transaction, onClick: () -> Unit, onDelete: (
     val responsePreview = tx.ussdResponse
         .ifBlank { tx.ussdTranscript.lineSequence().firstOrNull().orEmpty() }
         .ifBlank { if (tx.statusEnum == TransactionStatus.FAILED) "Tap to view full failure details." else "" }
+    val cardAnim = rememberInfiniteTransition(label = "recent_activity_card")
+    val shimmer by cardAnim.animateFloat(
+        initialValue = -0.4f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing)),
+        label = "recent_activity_shimmer"
+    )
+    val avatarPulse by cardAnim.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            tween(if (showLiveAnimation) 900 else 2200, easing = EaseInOutSine),
+            RepeatMode.Reverse
+        ),
+        label = "recent_activity_pulse"
+    )
 
     Surface(
         color = C.card,
@@ -2784,6 +2805,22 @@ private fun GithubActivityCard(tx: Transaction, onClick: () -> Unit, onDelete: (
     ) {
         Column(
             modifier = Modifier
+                .drawBehind {
+                    val shimmerWidth = size.width * 0.30f
+                    val startX = (size.width * shimmer) - shimmerWidth
+                    drawRoundRect(
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                statusColor.copy(alpha = if (showLiveAnimation) 0.14f else 0.06f),
+                                Color.Transparent
+                            ),
+                            startX = startX,
+                            endX = startX + shimmerWidth
+                        ),
+                        cornerRadius = CornerRadius(30f, 30f)
+                    )
+                }
                 .background(
                     Brush.horizontalGradient(
                         listOf(
@@ -2803,6 +2840,10 @@ private fun GithubActivityCard(tx: Transaction, onClick: () -> Unit, onDelete: (
                 Box(
                     modifier = Modifier
                         .size(48.dp)
+                        .graphicsLayer {
+                            scaleX = avatarPulse
+                            scaleY = avatarPulse
+                        }
                         .clip(RoundedCornerShape(16.dp))
                         .background(statusColor.copy(alpha = 0.12f))
                         .border(1.dp, statusColor.copy(alpha = 0.24f), RoundedCornerShape(16.dp)),
@@ -2871,12 +2912,16 @@ private fun GithubActivityCard(tx: Transaction, onClick: () -> Unit, onDelete: (
                 RecentSummaryChip(text = transactionTypeLabel(tx), color = typeColor)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    "Tap for full execution details",
+                    if (showLiveAnimation) "Execution in progress" else "Tap for full execution details",
                     color = C.t3,
                     fontSize = 11.sp,
                     modifier = Modifier.weight(1f)
                 )
-                Icon(Icons.Outlined.KeyboardArrowRight, null, tint = C.t3, modifier = Modifier.size(18.dp))
+                if (showLiveAnimation) {
+                    Icon(Icons.Outlined.Sync, null, tint = statusColor, modifier = Modifier.size(18.dp))
+                } else {
+                    Icon(Icons.Outlined.KeyboardArrowRight, null, tint = C.t3, modifier = Modifier.size(18.dp))
+                }
             }
             if (responsePreview.isNotBlank()) {
                 Surface(
@@ -3504,6 +3549,7 @@ fun AnimatedEmptyState() {
     val orb by anim.animateFloat(0f, 360f, infiniteRepeatable(tween(7000, easing = LinearEasing)), label = "orb")
     val pulse by anim.animateFloat(0.88f, 1.12f, infiniteRepeatable(tween(1800, easing = EaseInOutSine), RepeatMode.Reverse), label = "pulse")
     val shimmer by anim.animateFloat(-0.2f, 1.2f, infiniteRepeatable(tween(2400, easing = LinearEasing)), label = "shimmer")
+    val drift by anim.animateFloat(0f, 1f, infiniteRepeatable(tween(11000, easing = LinearEasing)), label = "drift")
 
     Box(
         Modifier.fillMaxWidth().padding(vertical = 10.dp)
@@ -3517,40 +3563,50 @@ fun AnimatedEmptyState() {
             .padding(horizontal = 18.dp, vertical = 22.dp),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(170.dp)
+                    .height(200.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(
-                        Brush.radialGradient(
-                            listOf(C.green.copy(alpha = 0.22f), C.cyan.copy(alpha = 0.08f), Color.Transparent)
+                        Brush.verticalGradient(
+                            listOf(
+                                C.green.copy(alpha = 0.18f),
+                                C.cyan.copy(alpha = 0.08f),
+                                Color.Transparent
+                            )
                         )
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Canvas(Modifier.matchParentSize()) {
                     val center = Offset(size.width / 2f, size.height / 2f)
-                    val maxRadius = size.minDimension * 0.34f
+                    val maxRadius = size.minDimension * 0.30f
 
-                    repeat(4) { idx ->
+                    repeat(5) { idx ->
+                        val ringShift = ((orb / 360f) + (idx * 0.11f)) % 1f
                         drawCircle(
-                            color = C.green.copy(alpha = 0.18f - (idx * 0.03f)),
-                            radius = maxRadius * (0.45f + (idx * 0.18f)),
+                            color = if (idx % 2 == 0) C.green.copy(alpha = 0.18f - (idx * 0.02f)) else C.cyan.copy(alpha = 0.12f - (idx * 0.015f)),
+                            radius = maxRadius * (0.36f + (idx * 0.18f) + (ringShift * 0.04f)),
                             center = center,
                             style = Stroke(width = 2f)
                         )
                     }
 
-                    val orbitRadius = maxRadius * 1.08f
-                    repeat(12) { idx ->
-                        val angle = Math.toRadians((orb + (idx * 30f)).toDouble())
+                    repeat(22) { idx ->
+                        val layer = idx % 3
+                        val orbitRadius = maxRadius * (0.86f + (layer * 0.22f))
+                        val angle = Math.toRadians((orb * (0.55f + (layer * 0.28f)) + (idx * 26f) + (drift * 180f)).toDouble())
                         val dotX = center.x + kotlin.math.cos(angle).toFloat() * orbitRadius
                         val dotY = center.y + kotlin.math.sin(angle).toFloat() * orbitRadius
                         drawCircle(
-                            color = if (idx % 3 == 0) C.green.copy(alpha = 0.72f) else C.cyan.copy(alpha = 0.34f),
-                            radius = if (idx % 3 == 0) 5f else 3f,
+                            color = when {
+                                idx % 5 == 0 -> C.amber.copy(alpha = 0.72f)
+                                idx % 2 == 0 -> C.green.copy(alpha = 0.60f)
+                                else -> C.cyan.copy(alpha = 0.34f)
+                            },
+                            radius = if (idx % 5 == 0) 4.6f else if (idx % 2 == 0) 3.2f else 2.2f,
                             center = Offset(dotX, dotY)
                         )
                     }
@@ -3564,18 +3620,26 @@ fun AnimatedEmptyState() {
                         size = Size(120f, size.height),
                         cornerRadius = CornerRadius(28f, 28f)
                     )
+
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            listOf(C.green.copy(alpha = 0.18f), Color.Transparent)
+                        ),
+                        radius = size.minDimension * 0.42f,
+                        center = center
+                    )
                 }
                 Canvas(Modifier.matchParentSize()) {
                     drawCircle(
                         brush = Brush.radialGradient(
-                            listOf(C.green.copy(alpha = 0.30f), Color.Transparent)
+                            listOf(C.green.copy(alpha = 0.34f), C.cyan.copy(alpha = 0.10f), Color.Transparent)
                         ),
-                        radius = size.minDimension * 0.24f
+                        radius = size.minDimension * 0.26f
                     )
                 }
                 Box(
                     Modifier
-                        .size(56.dp)
+                        .size(64.dp)
                         .graphicsLayer {
                             scaleX = pulse
                             scaleY = pulse
@@ -3583,7 +3647,7 @@ fun AnimatedEmptyState() {
                         .clip(RoundedCornerShape(18.dp))
                         .background(
                             Brush.verticalGradient(
-                                listOf(C.amber.copy(alpha = 0.94f), C.amber.copy(alpha = 0.68f))
+                                listOf(C.amber.copy(alpha = 0.96f), C.amber.copy(alpha = 0.72f))
                             )
                         )
                         .border(1.dp, C.amber.copy(alpha = 0.55f), RoundedCornerShape(18.dp)),
@@ -3593,16 +3657,27 @@ fun AnimatedEmptyState() {
                 }
             }
 
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PillBadge("Awaiting automation", C.green)
+                PillBadge("Recent transactions", C.cyan)
+                PillBadge("Dispatch timeline", C.amber)
+            }
+
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "No Activity Yet",
                     color = C.t1,
-                    fontSize = 24.sp,
+                    fontSize = 26.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "Start automation to see transactions and dispatch logs.",
+                    "Start automation to unlock live dispatch logs, transaction history, and execution highlights.",
                     color = C.t2,
                     fontSize = 13.sp,
                     lineHeight = 20.sp,
