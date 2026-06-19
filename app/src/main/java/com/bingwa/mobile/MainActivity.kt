@@ -2196,6 +2196,14 @@ fun HomeScreenVolcanic(
     onToggleRunning: () -> Unit
 ) {
     val ctx = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val maxContentWidth = when {
+        screenWidth >= 960.dp -> 860.dp
+        screenWidth >= 700.dp -> 720.dp
+        else -> Dp.Unspecified
+    }
+    val horizontalPadding = if (screenWidth >= 700.dp) 24.dp else 16.dp
     val automatedTxns = txns.filter { it.showInRecent }.sortedByDescending { it.timestamp }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
@@ -2229,79 +2237,96 @@ fun HomeScreenVolcanic(
         )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 132.dp),
+            contentPadding = PaddingValues(
+                start = horizontalPadding,
+                top = 8.dp,
+                end = horizontalPadding,
+                bottom = 132.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Spacer(Modifier.statusBarsPadding())
-                    HomeDashboardHeader(running = running)
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = maxContentWidth),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Spacer(Modifier.statusBarsPadding())
+                        HomeDashboardHeader(running = running)
+                    }
                 }
             }
             item {
-                VolcanicBalanceCard(
-                    airBal = airBal,
-                    tokenBal = tokenBal,
-                    unlimitedLabel = unlimitedLabel,
-                    unlimitedRemaining = unlimitedRemaining,
-                    sent = sent,
-                    pending = pending,
-                    failed = failed,
-                    rate = rate,
-                    isRefreshing = isRefreshing,
-                    onRefresh = onRefresh,
-                    spin = spin
-                )
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    VolcanicBalanceCard(
+                        airBal = airBal,
+                        tokenBal = tokenBal,
+                        unlimitedLabel = unlimitedLabel,
+                        unlimitedRemaining = unlimitedRemaining,
+                        sent = sent,
+                        pending = pending,
+                        failed = failed,
+                        rate = rate,
+                        isRefreshing = isRefreshing,
+                        onRefresh = onRefresh,
+                        spin = spin,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = maxContentWidth)
+                    )
+                }
             }
             item {
-                Row(
+                Box(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(
-                                Modifier
-                                    .width(4.dp)
-                                    .height(22.dp)
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(Brush.verticalGradient(listOf(C.amber, C.amber.copy(alpha = 0.24f))))
-                            )
-                            Text("Recent Activity", color = C.t1, fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
-                        }
-                        Text(
-                            "Latest automated dispatch history and execution updates.",
-                            color = C.t3,
-                            fontSize = 12.sp,
-                    lineHeight = 17.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    PillBadge(
-                        if (automatedTxns.isEmpty()) "No automated logs" else "${automatedTxns.size} automated logs",
-                        if (automatedTxns.isEmpty()) C.t2 else C.green
+                    RecentActivityHeader(
+                        automatedCount = automatedTxns.size,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = maxContentWidth)
                     )
                 }
             }
             if (automatedTxns.isEmpty()) {
-                item { AnimatedEmptyState() }
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AnimatedEmptyState(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = maxContentWidth)
+                        )
+                    }
+                }
             } else {
                 items(automatedTxns.take(8), key = { it.id }) { tx ->
-                    GithubActivityCard(
-                        tx = tx,
-                        onClick = { selectedTxId = tx.id }
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
                     ) {
-                        txns.remove(tx)
-                        saveTransactions(ctx, txns.toList())
-                        if (selectedTxId == tx.id) selectedTxId = -1
+                        GithubActivityCard(
+                            tx = tx,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = maxContentWidth),
+                            onClick = { selectedTxId = tx.id }
+                        ) {
+                            txns.remove(tx)
+                            saveTransactions(ctx, txns.toList())
+                            if (selectedTxId == tx.id) selectedTxId = -1
+                        }
                     }
                 }
             }
@@ -2331,110 +2356,87 @@ fun HomeScreenVolcanic(
 @Composable
 private fun HomeDashboardHeader(running: Boolean) {
     val statusColor = if (running) C.green else C.amber
-    val badgeAnim = rememberInfiniteTransition(label = "header_badge")
-    val shimmerProgress by badgeAnim.animateFloat(
-        initialValue = -0.3f,
-        targetValue = 1.25f,
-        animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing)),
-        label = "header_badge_shimmer"
-    )
-    val breathe by badgeAnim.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(tween(2200, easing = EaseInOutSine), RepeatMode.Reverse),
-        label = "header_badge_breathe"
-    )
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 380.dp
+        val iconSize = if (compact) 54.dp else 64.dp
+        val titleSize = if (compact) 32.sp else 40.sp
+        val titleLineHeight = if (compact) 34.sp else 42.sp
+        val subtitleSize = if (compact) 15.sp else 17.sp
+        val description = if (running) {
+            "Live monitoring is active and ready to process new automation activity."
+        } else {
+            "Automation is paused. Use the center power control below when you are ready to resume."
+        }
+        val badgeAnim = rememberInfiniteTransition(label = "header_badge")
+        val shimmerProgress by badgeAnim.animateFloat(
+            initialValue = -0.3f,
+            targetValue = 1.25f,
+            animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing)),
+            label = "header_badge_shimmer"
+        )
+        val breathe by badgeAnim.animateFloat(
+            initialValue = 0.92f,
+            targetValue = 1.08f,
+            animationSpec = infiniteRepeatable(tween(2200, easing = EaseInOutSine), RepeatMode.Reverse),
+            label = "header_badge_breathe"
+        )
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 2.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .shadow(18.dp, RoundedCornerShape(15.dp), clip = false)
-                        .clip(RoundedCornerShape(15.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    C.amber.copy(alpha = 0.22f),
-                                    C.surface.copy(alpha = 0.82f)
-                                )
-                            )
-                        )
-                        .border(1.dp, C.amber.copy(alpha = 0.34f), RoundedCornerShape(15.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .background(
-                                Brush.radialGradient(
-                                    listOf(C.amber.copy(alpha = 0.16f), Color.Transparent)
-                                )
-                            )
-                    )
-                    Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(20.dp))
-                }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        "Bingwa Mobile",
-                        color = C.t1,
-                        fontSize = 23.sp,
-                        fontWeight = FontWeight.Black,
-                        lineHeight = 25.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        "USSD Automation Platform",
-                        color = C.t2,
-                        fontSize = 14.sp,
-                        lineHeight = 18.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
             Box(
                 modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(C.surface.copy(alpha = 0.92f))
-                    .border(1.dp, C.border.copy(alpha = 0.92f), RoundedCornerShape(14.dp)),
+                    .size(iconSize)
+                    .shadow(22.dp, RoundedCornerShape(20.dp), clip = false)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                C.amber.copy(alpha = 0.22f),
+                                C.surface.copy(alpha = 0.86f)
+                            )
+                        )
+                    )
+                    .border(1.dp, C.amber.copy(alpha = 0.34f), RoundedCornerShape(20.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Outlined.NotificationsNone, null, tint = C.t1, modifier = Modifier.size(20.dp))
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 8.dp, end = 8.dp)
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(C.amber)
+                        .matchParentSize()
+                        .background(Brush.radialGradient(listOf(C.amber.copy(alpha = 0.16f), Color.Transparent)))
+                )
+                Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(if (compact) 24.dp else 28.dp))
+            }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    "Bingwa Mobile",
+                    color = C.t1,
+                    fontSize = titleSize,
+                    fontWeight = FontWeight.Black,
+                    lineHeight = titleLineHeight,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2
+                )
+                Text(
+                    "USSD Automation Platform",
+                    modifier = Modifier.widthIn(max = if (maxWidth > 520.dp) 360.dp else maxWidth),
+                    color = C.t2,
+                    fontSize = subtitleSize,
+                    lineHeight = subtitleSize + 4.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
                 )
             }
-        }
 
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
-        ) {
             Surface(
                 shape = RoundedCornerShape(999.dp),
                 color = C.surface.copy(alpha = 0.62f),
@@ -2490,23 +2492,83 @@ private fun HomeDashboardHeader(running: Boolean) {
                     )
                 }
             }
+
+            Text(
+                description,
+                modifier = Modifier.widthIn(max = if (maxWidth > 560.dp) 420.dp else maxWidth),
+                textAlign = TextAlign.Center,
+                color = C.t3,
+                fontSize = 13.sp,
+                lineHeight = 19.sp
+            )
+
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                RelayHotspotStatusChip()
+            }
         }
+    }
+}
 
-        Text(
-            if (running) "Live monitoring is active across the automation pipeline." else "Automation is paused. Resume when you are ready to dispatch again.",
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp),
-            textAlign = TextAlign.Center,
-            color = C.t3,
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            RelayHotspotStatusChip()
+@Composable
+private fun RecentActivityHeader(automatedCount: Int, modifier: Modifier = Modifier) {
+    BoxWithConstraints(modifier = modifier) {
+        val badgeText = if (automatedCount == 0) "No automated logs" else "$automatedCount automated logs"
+        val badgeColor = if (automatedCount == 0) C.t2 else C.green
+        if (maxWidth < 430.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .width(4.dp)
+                            .height(22.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Brush.verticalGradient(listOf(C.amber, C.amber.copy(alpha = 0.24f))))
+                    )
+                    Text("Recent Activity", color = C.t1, fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
+                }
+                Text(
+                    "Latest automated dispatch history and execution updates.",
+                    color = C.t3,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+                PillBadge(badgeText, badgeColor)
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .width(4.dp)
+                                .height(22.dp)
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Brush.verticalGradient(listOf(C.amber, C.amber.copy(alpha = 0.24f))))
+                        )
+                        Text("Recent Activity", color = C.t1, fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
+                    }
+                    Text(
+                        "Latest automated dispatch history and execution updates.",
+                        color = C.t3,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                PillBadge(badgeText, badgeColor)
+            }
         }
     }
 }
@@ -2814,7 +2876,12 @@ private fun retryRecentTransaction(context: Context, tx: Transaction): Transacti
 }
 
 @Composable
-private fun GithubActivityCard(tx: Transaction, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun GithubActivityCard(
+    tx: Transaction,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
     val statusColor = transactionStatusColor(tx)
     val typeColor = transactionTypeColor(tx)
     val showLiveAnimation = tx.statusEnum == TransactionStatus.PENDING ||
@@ -2853,7 +2920,7 @@ private fun GithubActivityCard(tx: Transaction, onClick: () -> Unit, onDelete: (
         color = C.card,
         shape = RoundedCornerShape(22.dp),
         border = BorderStroke(1.dp, statusColor.copy(alpha = 0.22f)),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
     ) {
@@ -3268,10 +3335,11 @@ fun VolcanicBalanceCard(
     rate: Int,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
-    spin: Float
+    spin: Float,
+    modifier: Modifier = Modifier
 ) {
-    Box(
-        Modifier
+    BoxWithConstraints(
+        modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
             .background(
@@ -3286,6 +3354,9 @@ fun VolcanicBalanceCard(
             .border(1.dp, C.borderHi.copy(alpha = 0.92f), RoundedCornerShape(22.dp))
             .padding(18.dp)
     ) {
+        val compactTop = maxWidth < 470.dp
+        val compactStats = maxWidth < 560.dp
+
         Box(
             Modifier
                 .matchParentSize()
@@ -3313,110 +3384,187 @@ fun VolcanicBalanceCard(
                 }
         )
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Box(Modifier.size(6.dp).clip(CircleShape).background(C.blue))
-                        Text("AIRTIME BALANCE", color = C.t2, fontSize = 9.sp, letterSpacing = 1.8.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            airBal.ifBlank { "—" },
-                            modifier = Modifier.weight(1f),
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.Black,
-                            lineHeight = 32.sp,
-                            color = C.t1,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Start
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .shadow(18.dp, CircleShape, clip = false)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.radialGradient(
-                                        listOf(
-                                            Color.White.copy(alpha = 0.08f),
-                                            C.surface.copy(alpha = 0.92f)
-                                        )
-                                    )
-                                )
-                                .border(1.dp, C.borderHi.copy(alpha = 0.95f), CircleShape)
-                                .clickable { onRefresh() }
-                        ) {
-                            Box(
-                                Modifier
-                                    .size(46.dp)
-                                    .background(
-                                        Brush.radialGradient(
-                                            listOf(
-                                                C.amber.copy(alpha = 0.16f),
-                                                Color.Transparent
-                                            )
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Refresh,
-                                    null,
-                                    tint = if (isRefreshing) C.amber else C.t1,
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
-                                )
-                            }
+            if (compactTop) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    HomeMetricBlock(
+                        title = "AIRTIME BALANCE",
+                        value = airBal.ifBlank { "—" },
+                        detail = if (isRefreshing) "Refreshing balance and token metrics..." else "Tap refresh to sync the latest balance.",
+                        accent = C.blue,
+                        trailing = {
+                            RefreshGlassButton(
+                                isRefreshing = isRefreshing,
+                                spin = spin,
+                                onRefresh = onRefresh
+                            )
                         }
-                    }
-                    Text(
-                        if (isRefreshing) "Refreshing balance and token metrics..." else "Tap the glass control to refresh balances.",
-                        color = C.t3,
-                        fontSize = 10.sp,
-                        lineHeight = 14.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                    )
+                    Divider(color = C.w08)
+                    HomeMetricBlock(
+                        title = "TOKENS",
+                        value = unlimitedLabel ?: tokenBal.toString(),
+                        detail = unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available units",
+                        accent = if (unlimitedLabel != null) C.green else C.amber,
+                        valueColor = if (unlimitedLabel != null) C.green else C.t1
                     )
                 }
-                Box(Modifier.width(1.dp).height(64.dp).background(C.w08))
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 18.dp),
-                    horizontalAlignment = Alignment.Start,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("TOKENS", color = C.t2, fontSize = 9.sp, letterSpacing = 1.8.sp, fontWeight = FontWeight.Bold)
-                        Box(Modifier.size(5.dp).clip(CircleShape).background(if (unlimitedLabel != null) C.green else C.amber))
-                    }
-                    if (unlimitedLabel != null) {
-                        Text("Unlimited", fontSize = 27.sp, fontWeight = FontWeight.Black, color = C.green, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(unlimitedRemaining ?: "Active plan", color = C.t3, fontSize = 10.sp, maxLines = 2, lineHeight = 14.sp, overflow = TextOverflow.Ellipsis)
-                    } else {
-                        Text("$tokenBal", fontSize = 30.sp, fontWeight = FontWeight.Black, color = C.t1, maxLines = 1)
-                        Text("available units", color = C.t3, fontSize = 10.sp, lineHeight = 14.sp)
-                    }
+            } else {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    HomeMetricBlock(
+                        title = "AIRTIME BALANCE",
+                        value = airBal.ifBlank { "—" },
+                        detail = if (isRefreshing) "Refreshing balance and token metrics..." else "Tap refresh to sync the latest balance.",
+                        accent = C.blue,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 14.dp),
+                        trailing = {
+                            RefreshGlassButton(
+                                isRefreshing = isRefreshing,
+                                spin = spin,
+                                onRefresh = onRefresh
+                            )
+                        }
+                    )
+                    Box(Modifier.width(1.dp).height(72.dp).background(C.w08))
+                    HomeMetricBlock(
+                        title = "TOKENS",
+                        value = unlimitedLabel ?: tokenBal.toString(),
+                        detail = unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available units",
+                        accent = if (unlimitedLabel != null) C.green else C.amber,
+                        valueColor = if (unlimitedLabel != null) C.green else C.t1,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 18.dp)
+                    )
                 }
             }
             Divider(color = C.w08)
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                StatCell("$sent", "SENT", C.green, Modifier.weight(1f))
-                StatCell("$pending", "PENDING", C.amber, Modifier.weight(1f))
-                StatCell("$failed", "FAILED", C.red, Modifier.weight(1f))
-                RateStatCard(rate = rate, modifier = Modifier.weight(1f))
+            if (compactStats) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        StatCell("$sent", "SENT", C.green, Modifier.weight(1f))
+                        StatCell("$pending", "PENDING", C.amber, Modifier.weight(1f))
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        StatCell("$failed", "FAILED", C.red, Modifier.weight(1f))
+                        RateStatCard(rate = rate, modifier = Modifier.weight(1f))
+                    }
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    StatCell("$sent", "SENT", C.green, Modifier.weight(1f))
+                    StatCell("$pending", "PENDING", C.amber, Modifier.weight(1f))
+                    StatCell("$failed", "FAILED", C.red, Modifier.weight(1f))
+                    RateStatCard(rate = rate, modifier = Modifier.weight(1f))
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun HomeMetricBlock(
+    title: String,
+    value: String,
+    detail: String,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    valueColor: Color = C.t1,
+    trailing: @Composable (() -> Unit)? = null
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(Modifier.size(6.dp).clip(CircleShape).background(accent))
+                Text(title, color = C.t2, fontSize = 9.sp, letterSpacing = 1.8.sp, fontWeight = FontWeight.Bold)
+            }
+            trailing?.invoke()
+        }
+        Text(
+            value,
+            fontSize = 30.sp,
+            fontWeight = FontWeight.Black,
+            lineHeight = 32.sp,
+            color = valueColor,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            detail,
+            color = C.t3,
+            fontSize = 10.sp,
+            lineHeight = 14.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun RefreshGlassButton(
+    isRefreshing: Boolean,
+    spin: Float,
+    onRefresh: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .shadow(18.dp, CircleShape, clip = false)
+            .clip(CircleShape)
+            .background(
+                Brush.radialGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.08f),
+                        C.surface.copy(alpha = 0.92f)
+                    )
+                )
+            )
+            .border(1.dp, C.borderHi.copy(alpha = 0.95f), CircleShape)
+            .clickable { onRefresh() }
+    ) {
+        Box(
+            Modifier
+                .size(46.dp)
+                .background(
+                    Brush.radialGradient(
+                        listOf(
+                            C.amber.copy(alpha = 0.16f),
+                            Color.Transparent
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Outlined.Refresh,
+                null,
+                tint = if (isRefreshing) C.amber else C.t1,
+                modifier = Modifier
+                    .size(18.dp)
+                    .then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
+            )
         }
     }
 }
@@ -3677,14 +3825,15 @@ private fun TxDetailRow(label: String, value: String) {
 
 // ─── Animated Empty State ─────────────────────────────────────────────────
 @Composable
-fun AnimatedEmptyState() {
+fun AnimatedEmptyState(modifier: Modifier = Modifier) {
     val anim = rememberInfiniteTransition(label = "empty_anim")
     val flow by anim.animateFloat(0f, 1f, infiniteRepeatable(tween(6200, easing = LinearEasing)), label = "flow")
     val pulse by anim.animateFloat(0.94f, 1.06f, infiniteRepeatable(tween(2600, easing = EaseInOutSine), RepeatMode.Reverse), label = "pulse")
     val shimmer by anim.animateFloat(-0.2f, 1.2f, infiniteRepeatable(tween(4200, easing = LinearEasing)), label = "shimmer")
+    val illustrationHeight = if (LocalConfiguration.current.screenWidthDp < 400) 180.dp else 210.dp
 
     Box(
-        Modifier.fillMaxWidth().padding(vertical = 10.dp)
+        modifier.fillMaxWidth().padding(vertical = 10.dp)
             .clip(RoundedCornerShape(24.dp))
             .background(
                 Brush.verticalGradient(
@@ -3699,7 +3848,7 @@ fun AnimatedEmptyState() {
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(210.dp)
+                    .height(illustrationHeight)
                     .clip(RoundedCornerShape(20.dp))
                     .background(
                         Brush.verticalGradient(
@@ -3827,15 +3976,15 @@ fun AnimatedEmptyState() {
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    "No Activity Yet",
+                    "Scanning for activity...",
                     color = C.t1,
-                    fontSize = 26.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "Start automation to unlock a live dispatch network, transaction history, and execution flow insights.",
+                    "Transactions will appear here once new automation runs start flowing through the system.",
                     color = C.t2,
                     fontSize = 13.sp,
                     lineHeight = 20.sp,
