@@ -2279,7 +2279,9 @@ fun HomeScreenVolcanic(
                             "Latest automated dispatch history and execution updates.",
                             color = C.t3,
                             fontSize = 12.sp,
-                            lineHeight = 17.sp
+                    lineHeight = 17.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                         )
                     }
                     Spacer(Modifier.width(12.dp))
@@ -2394,13 +2396,18 @@ private fun HomeDashboardHeader(running: Boolean) {
                         "Bingwa Mobile",
                         color = C.t1,
                         fontSize = 23.sp,
-                        fontWeight = FontWeight.Black
+                        fontWeight = FontWeight.Black,
+                        lineHeight = 25.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         "USSD Automation Platform",
                         color = C.t2,
                         fontSize = 14.sp,
-                        lineHeight = 18.sp
+                        lineHeight = 18.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -2487,11 +2494,15 @@ private fun HomeDashboardHeader(running: Boolean) {
 
         Text(
             if (running) "Live monitoring is active across the automation pipeline." else "Automation is paused. Resume when you are ready to dispatch again.",
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp),
             textAlign = TextAlign.Center,
             color = C.t3,
             fontSize = 12.sp,
-            lineHeight = 18.sp
+            lineHeight = 18.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
 
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -2905,13 +2916,15 @@ private fun GithubActivityCard(tx: Transaction, onClick: () -> Unit, onDelete: (
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 18.sp
                     )
                     Text(
                         "Bought ${tx.description.ifBlank { "Offer not captured" }}",
                         color = C.t2,
                         fontSize = 12.sp,
-                        maxLines = 1,
+                        lineHeight = 16.sp,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -2921,7 +2934,15 @@ private fun GithubActivityCard(tx: Transaction, onClick: () -> Unit, onDelete: (
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    Text(tx.amount.ifBlank { "-" }, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        tx.amount.ifBlank { "-" },
+                        color = C.t1,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.End,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Surface(
                         shape = RoundedCornerShape(999.dp),
                         color = statusColor.copy(alpha = 0.10f),
@@ -3009,12 +3030,15 @@ private fun RecentSummaryChip(text: String, color: Color, modifier: Modifier = M
     ) {
         Text(
             text = text,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             color = color,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -3309,7 +3333,8 @@ fun VolcanicBalanceCard(
                             lineHeight = 32.sp,
                             color = C.t1,
                             maxLines = 2,
-                            overflow = TextOverflow.Clip
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Start
                         )
                         Spacer(Modifier.width(8.dp))
                         Box(
@@ -3354,7 +3379,10 @@ fun VolcanicBalanceCard(
                     Text(
                         if (isRefreshing) "Refreshing balance and token metrics..." else "Tap the glass control to refresh balances.",
                         color = C.t3,
-                        fontSize = 10.sp
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 Box(Modifier.width(1.dp).height(64.dp).background(C.w08))
@@ -3370,11 +3398,11 @@ fun VolcanicBalanceCard(
                         Box(Modifier.size(5.dp).clip(CircleShape).background(if (unlimitedLabel != null) C.green else C.amber))
                     }
                     if (unlimitedLabel != null) {
-                        Text("Unlimited", fontSize = 27.sp, fontWeight = FontWeight.Black, color = C.green, maxLines = 1)
-                        Text(unlimitedRemaining ?: "Active plan", color = C.t3, fontSize = 10.sp, maxLines = 2, lineHeight = 14.sp)
+                        Text("Unlimited", fontSize = 27.sp, fontWeight = FontWeight.Black, color = C.green, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(unlimitedRemaining ?: "Active plan", color = C.t3, fontSize = 10.sp, maxLines = 2, lineHeight = 14.sp, overflow = TextOverflow.Ellipsis)
                     } else {
-                        Text("$tokenBal", fontSize = 30.sp, fontWeight = FontWeight.Black, color = C.t1)
-                        Text("available units", color = C.t3, fontSize = 10.sp)
+                        Text("$tokenBal", fontSize = 30.sp, fontWeight = FontWeight.Black, color = C.t1, maxLines = 1)
+                        Text("available units", color = C.t3, fontSize = 10.sp, lineHeight = 14.sp)
                     }
                 }
             }
@@ -3406,8 +3434,8 @@ fun StatCell(value: String, label: String, color: Color, modifier: Modifier = Mo
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(value, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold, color = color)
-            Text(label, fontSize = 9.sp, color = C.t3, letterSpacing = 0.8.sp)
+            Text(value, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold, color = color, maxLines = 1)
+            Text(label, fontSize = 9.sp, color = C.t3, letterSpacing = 0.8.sp, textAlign = TextAlign.Center, lineHeight = 11.sp)
         }
     }
 }
@@ -3426,7 +3454,7 @@ private fun RateStatCard(rate: Int, modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             DonutRing(rate, C.green, 52.dp, 5.dp)
-            Text("SUCCESS RATE", color = C.t3, fontSize = 8.sp, letterSpacing = 0.8.sp, fontWeight = FontWeight.Bold)
+            Text("SUCCESS RATE", color = C.t3, fontSize = 8.sp, letterSpacing = 0.8.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 10.sp)
         }
     }
 }
@@ -3802,7 +3830,8 @@ fun AnimatedEmptyState() {
                     "No Activity Yet",
                     color = C.t1,
                     fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
@@ -3810,7 +3839,8 @@ fun AnimatedEmptyState() {
                     color = C.t2,
                     fontSize = 13.sp,
                     lineHeight = 20.sp,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 18.dp)
                 )
             }
         }
