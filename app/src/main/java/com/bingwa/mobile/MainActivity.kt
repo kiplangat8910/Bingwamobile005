@@ -2212,13 +2212,6 @@ fun HomeScreenVolcanic(
         infiniteRepeatable(tween(1200, easing = LinearEasing)),
         label = "spin"
     )
-    val pulse by inf.animateFloat(
-        1f,
-        1.24f,
-        infiniteRepeatable(tween(1500, easing = EaseInOutSine), RepeatMode.Reverse),
-        label = "pulse"
-    )
-    val primaryStatusColor = if (running) C.green else C.t3
 
     Box(Modifier.fillMaxSize().background(C.bg)) {
         Box(
@@ -2243,11 +2236,7 @@ fun HomeScreenVolcanic(
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Spacer(Modifier.statusBarsPadding())
                     HomeDashboardHeader(
-                        running = running,
-                        automatedCount = automatedTxns.size,
-                        tokenBal = tokenBal,
-                        unlimitedLabel = unlimitedLabel,
-                        pulse = pulse
+                        running = running
                     )
                 }
             }
@@ -2329,19 +2318,25 @@ fun HomeScreenVolcanic(
 }
 
 @Composable
-private fun HomeDashboardHeader(
-    running: Boolean,
-    automatedCount: Int,
-    tokenBal: Int,
-    unlimitedLabel: String?,
-    pulse: Float
-) {
+private fun HomeDashboardHeader(running: Boolean) {
     val statusColor = if (running) C.green else C.amber
-    val secondaryLabel = unlimitedLabel ?: "$tokenBal tokens"
+    val badgeAnim = rememberInfiniteTransition(label = "header_badge")
+    val shimmerProgress by badgeAnim.animateFloat(
+        initialValue = -0.3f,
+        targetValue = 1.25f,
+        animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing)),
+        label = "header_badge_shimmer"
+    )
+    val breathe by badgeAnim.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(tween(2200, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "header_badge_breathe"
+    )
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -2355,27 +2350,36 @@ private fun HomeDashboardHeader(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(58.dp)
-                        .graphicsLayer {
-                            scaleX = if (running) pulse else 1f
-                            scaleY = if (running) pulse else 1f
-                        }
-                        .clip(RoundedCornerShape(20.dp))
+                        .size(42.dp)
+                        .shadow(18.dp, RoundedCornerShape(15.dp), clip = false)
+                        .clip(RoundedCornerShape(15.dp))
                         .background(
                             Brush.verticalGradient(
-                                listOf(C.amber.copy(alpha = 0.30f), C.amber.copy(alpha = 0.08f))
+                                listOf(
+                                    C.amber.copy(alpha = 0.22f),
+                                    C.surface.copy(alpha = 0.82f)
+                                )
                             )
                         )
-                        .border(1.dp, C.amber.copy(alpha = 0.44f), RoundedCornerShape(20.dp)),
+                        .border(1.dp, C.amber.copy(alpha = 0.34f), RoundedCornerShape(15.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(28.dp))
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(C.amber.copy(alpha = 0.16f), Color.Transparent)
+                                )
+                            )
+                    )
+                    Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(20.dp))
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         "Bingwa Mobile",
                         color = C.t1,
-                        fontSize = 24.sp,
+                        fontSize = 23.sp,
                         fontWeight = FontWeight.Black
                     )
                     Text(
@@ -2406,33 +2410,49 @@ private fun HomeDashboardHeader(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
             Surface(
                 shape = RoundedCornerShape(999.dp),
-                color = statusColor.copy(alpha = 0.10f),
-                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.24f))
+                color = C.surface.copy(alpha = 0.62f),
+                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.26f)),
+                modifier = Modifier
+                    .drawBehind {
+                        val shimmerWidth = size.width * 0.34f
+                        val startX = (size.width * shimmerProgress) - shimmerWidth
+                        drawRoundRect(
+                            brush = Brush.horizontalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    Color.White.copy(alpha = 0.05f),
+                                    statusColor.copy(alpha = 0.12f),
+                                    Color.Transparent
+                                ),
+                                startX = startX,
+                                endX = startX + shimmerWidth
+                            ),
+                            cornerRadius = CornerRadius(size.height, size.height)
+                        )
+                    }
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(Modifier.size(10.dp), contentAlignment = Alignment.Center) {
-                        if (running) {
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .scale(pulse * 1.7f)
-                                    .clip(CircleShape)
-                                    .background(C.green.copy(alpha = 0.22f))
-                            )
-                        }
+                    Box(Modifier.size(12.dp), contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier
+                                .size(12.dp)
+                                .graphicsLayer {
+                                    scaleX = if (running) breathe else 1f
+                                    scaleY = if (running) breathe else 1f
+                                }
+                                .clip(CircleShape)
+                                .background(statusColor.copy(alpha = 0.18f))
+                        )
                         Box(
                             Modifier
                                 .size(7.dp)
@@ -2449,11 +2469,20 @@ private fun HomeDashboardHeader(
                     )
                 }
             }
-            PillBadge("${automatedCount} automated", if (automatedCount > 0) C.green else C.blue)
-            PillBadge(secondaryLabel, if (unlimitedLabel != null) C.green else C.cyan)
         }
 
-        RelayHotspotStatusChip()
+        Text(
+            if (running) "Live monitoring is active across the automation pipeline." else "Automation is paused. Resume when you are ready to dispatch again.",
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+            color = C.t3,
+            fontSize = 12.sp,
+            lineHeight = 18.sp
+        )
+
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            RelayHotspotStatusChip()
+        }
     }
 }
 
@@ -3205,10 +3234,14 @@ fun VolcanicBalanceCard(
             .clip(RoundedCornerShape(22.dp))
             .background(
                 Brush.verticalGradient(
-                    listOf(C.cardHi.copy(alpha = 0.98f), C.card.copy(alpha = 0.98f), C.surface.copy(alpha = 0.95f))
+                    listOf(
+                        C.cardHi.copy(alpha = 0.98f),
+                        C.card.copy(alpha = 0.96f),
+                        C.surface.copy(alpha = 0.92f)
+                    )
                 )
             )
-            .border(1.dp, C.borderHi, RoundedCornerShape(22.dp))
+            .border(1.dp, C.borderHi.copy(alpha = 0.92f), RoundedCornerShape(22.dp))
             .padding(18.dp)
     ) {
         Box(
@@ -3237,79 +3270,108 @@ fun VolcanicBalanceCard(
                     )
                 }
         )
-        Column {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(5.dp).clip(CircleShape).background(C.blue))
-                        Spacer(Modifier.width(5.dp))
-                        Text("AIRTIME BALANCE", color = C.t2, fontSize = 9.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Box(Modifier.size(6.dp).clip(CircleShape).background(C.blue))
+                        Text("AIRTIME BALANCE", color = C.t2, fontSize = 9.sp, letterSpacing = 1.8.sp, fontWeight = FontWeight.Bold)
                     }
-                    Spacer(Modifier.height(6.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                         Text(
                             airBal.ifBlank { "—" },
                             modifier = Modifier.weight(1f),
-                            fontSize = 27.sp,
+                            fontSize = 30.sp,
                             fontWeight = FontWeight.Black,
-                            lineHeight = 28.sp,
+                            lineHeight = 32.sp,
                             color = C.t1,
                             maxLines = 2,
                             overflow = TextOverflow.Clip
                         )
                         Spacer(Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = C.surface.copy(alpha = 0.86f),
-                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f)),
-                            modifier = Modifier.clickable { onRefresh() }
+                        Box(
+                            modifier = Modifier
+                                .shadow(18.dp, CircleShape, clip = false)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.radialGradient(
+                                        listOf(
+                                            Color.White.copy(alpha = 0.08f),
+                                            C.surface.copy(alpha = 0.92f)
+                                        )
+                                    )
+                                )
+                                .border(1.dp, C.borderHi.copy(alpha = 0.95f), CircleShape)
+                                .clickable { onRefresh() }
                         ) {
                             Box(
                                 Modifier
-                                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                                    .size(46.dp)
+                                    .background(
+                                        Brush.radialGradient(
+                                            listOf(
+                                                C.amber.copy(alpha = 0.16f),
+                                                Color.Transparent
+                                            )
+                                        )
+                                    ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.Outlined.Refresh,
                                     null,
-                                    tint = if (isRefreshing) C.blue else C.t3,
+                                    tint = if (isRefreshing) C.amber else C.t1,
                                     modifier = Modifier
-                                        .size(16.dp)
+                                        .size(18.dp)
                                         .then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
                                 )
                             }
                         }
                     }
-                    Text(if (isRefreshing) "refreshing…" else "tap card to refresh", color = C.t3, fontSize = 10.sp)
+                    Text(
+                        if (isRefreshing) "Refreshing balance and token metrics..." else "Tap the glass control to refresh balances.",
+                        color = C.t3,
+                        fontSize = 10.sp
+                    )
                 }
-                Box(Modifier.width(1.dp).height(56.dp).background(C.w08).padding(horizontal = 14.dp))
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("TOKENS", color = C.t2, fontSize = 9.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(5.dp))
+                Box(Modifier.width(1.dp).height(64.dp).background(C.w08))
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 18.dp),
+                    horizontalAlignment = Alignment.Start,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("TOKENS", color = C.t2, fontSize = 9.sp, letterSpacing = 1.8.sp, fontWeight = FontWeight.Bold)
                         Box(Modifier.size(5.dp).clip(CircleShape).background(if (unlimitedLabel != null) C.green else C.amber))
                     }
-                    Spacer(Modifier.height(6.dp))
                     if (unlimitedLabel != null) {
-                        Text("Unlimited", fontSize = 24.sp, fontWeight = FontWeight.Black, color = C.green, maxLines = 1)
-                        Text(unlimitedRemaining ?: "", color = C.t3, fontSize = 10.sp, maxLines = 1)
+                        Text("Unlimited", fontSize = 27.sp, fontWeight = FontWeight.Black, color = C.green, maxLines = 1)
+                        Text(unlimitedRemaining ?: "Active plan", color = C.t3, fontSize = 10.sp, maxLines = 2, lineHeight = 14.sp)
                     } else {
-                        Text("$tokenBal", fontSize = 28.sp, fontWeight = FontWeight.Black, color = C.t1)
-                        Text("units", color = C.t3, fontSize = 10.sp)
+                        Text("$tokenBal", fontSize = 30.sp, fontWeight = FontWeight.Black, color = C.t1)
+                        Text("available units", color = C.t3, fontSize = 10.sp)
                     }
                 }
             }
-            Spacer(Modifier.height(16.dp))
             Divider(color = C.w08)
-            Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                StatCell("$sent", "SENT", C.green)
-                Box(Modifier.width(1.dp).height(32.dp).background(C.w08))
-                StatCell("$pending", "PENDING", C.amber)
-                Box(Modifier.width(1.dp).height(32.dp).background(C.w08))
-                StatCell("$failed", "FAILED", C.red)
-                Box(Modifier.width(1.dp).height(32.dp).background(C.w08))
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StatCell("$sent", "SENT", C.green, Modifier.weight(1f))
+                StatCell("$pending", "PENDING", C.amber, Modifier.weight(1f))
+                StatCell("$failed", "FAILED", C.red, Modifier.weight(1f))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     DonutRing(rate, C.green, 52.dp, 5.dp)
                     Text("SUCCESS RATE", color = C.t3, fontSize = 8.sp, letterSpacing = 0.8.sp, fontWeight = FontWeight.Bold)
                 }
@@ -3319,8 +3381,8 @@ fun VolcanicBalanceCard(
 }
 
 @Composable
-fun StatCell(value: String, label: String, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+fun StatCell(value: String, label: String, color: Color, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = color)
         Text(label, fontSize = 9.sp, color = C.t3, letterSpacing = 0.8.sp)
     }
@@ -3546,10 +3608,9 @@ private fun TxDetailRow(label: String, value: String) {
 @Composable
 fun AnimatedEmptyState() {
     val anim = rememberInfiniteTransition(label = "empty_anim")
-    val orb by anim.animateFloat(0f, 360f, infiniteRepeatable(tween(7000, easing = LinearEasing)), label = "orb")
-    val pulse by anim.animateFloat(0.88f, 1.12f, infiniteRepeatable(tween(1800, easing = EaseInOutSine), RepeatMode.Reverse), label = "pulse")
-    val shimmer by anim.animateFloat(-0.2f, 1.2f, infiniteRepeatable(tween(2400, easing = LinearEasing)), label = "shimmer")
-    val drift by anim.animateFloat(0f, 1f, infiniteRepeatable(tween(11000, easing = LinearEasing)), label = "drift")
+    val flow by anim.animateFloat(0f, 1f, infiniteRepeatable(tween(6200, easing = LinearEasing)), label = "flow")
+    val pulse by anim.animateFloat(0.94f, 1.06f, infiniteRepeatable(tween(2600, easing = EaseInOutSine), RepeatMode.Reverse), label = "pulse")
+    val shimmer by anim.animateFloat(-0.2f, 1.2f, infiniteRepeatable(tween(4200, easing = LinearEasing)), label = "shimmer")
 
     Box(
         Modifier.fillMaxWidth().padding(vertical = 10.dp)
@@ -3567,75 +3628,100 @@ fun AnimatedEmptyState() {
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
+                    .height(210.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(
                         Brush.verticalGradient(
                             listOf(
-                                C.green.copy(alpha = 0.18f),
-                                C.cyan.copy(alpha = 0.08f),
-                                Color.Transparent
+                                C.green.copy(alpha = 0.12f),
+                                C.cyan.copy(alpha = 0.06f),
+                                C.surface.copy(alpha = 0.35f)
                             )
                         )
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Canvas(Modifier.matchParentSize()) {
-                    val center = Offset(size.width / 2f, size.height / 2f)
-                    val maxRadius = size.minDimension * 0.30f
+                    val nodes = listOf(
+                        Offset(size.width * 0.16f, size.height * 0.30f),
+                        Offset(size.width * 0.38f, size.height * 0.18f),
+                        Offset(size.width * 0.64f, size.height * 0.24f),
+                        Offset(size.width * 0.83f, size.height * 0.36f),
+                        Offset(size.width * 0.26f, size.height * 0.62f),
+                        Offset(size.width * 0.50f, size.height * 0.50f),
+                        Offset(size.width * 0.74f, size.height * 0.68f),
+                        Offset(size.width * 0.42f, size.height * 0.80f)
+                    )
+                    val links = listOf(
+                        0 to 1, 1 to 2, 2 to 3,
+                        0 to 4, 1 to 5, 2 to 5,
+                        4 to 5, 5 to 6, 4 to 7, 5 to 7, 6 to 7
+                    )
 
-                    repeat(5) { idx ->
-                        val ringShift = ((orb / 360f) + (idx * 0.11f)) % 1f
-                        drawCircle(
-                            color = if (idx % 2 == 0) C.green.copy(alpha = 0.18f - (idx * 0.02f)) else C.cyan.copy(alpha = 0.12f - (idx * 0.015f)),
-                            radius = maxRadius * (0.36f + (idx * 0.18f) + (ringShift * 0.04f)),
-                            center = center,
-                            style = Stroke(width = 2f)
+                    repeat(6) { idx ->
+                        val y = size.height * (0.14f + (idx * 0.14f))
+                        drawLine(
+                            color = C.w04,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = 1.dp.toPx()
                         )
                     }
 
-                    repeat(22) { idx ->
-                        val layer = idx % 3
-                        val orbitRadius = maxRadius * (0.86f + (layer * 0.22f))
-                        val angle = Math.toRadians((orb * (0.55f + (layer * 0.28f)) + (idx * 26f) + (drift * 180f)).toDouble())
-                        val dotX = center.x + kotlin.math.cos(angle).toFloat() * orbitRadius
-                        val dotY = center.y + kotlin.math.sin(angle).toFloat() * orbitRadius
+                    links.forEachIndexed { idx, (from, to) ->
+                        val start = nodes[from]
+                        val end = nodes[to]
+                        drawLine(
+                            brush = Brush.linearGradient(
+                                listOf(
+                                    C.green.copy(alpha = 0.10f),
+                                    C.cyan.copy(alpha = 0.26f),
+                                    C.amber.copy(alpha = 0.10f)
+                                ),
+                                start = start,
+                                end = end
+                            ),
+                            start = start,
+                            end = end,
+                            strokeWidth = 1.6.dp.toPx()
+                        )
+
+                        val particleProgress = (flow + (idx * 0.11f)) % 1f
+                        val particle = Offset(
+                            x = start.x + ((end.x - start.x) * particleProgress),
+                            y = start.y + ((end.y - start.y) * particleProgress)
+                        )
+                        drawCircle(C.green.copy(alpha = 0.16f), radius = 8.dp.toPx(), center = particle)
                         drawCircle(
-                            color = when {
-                                idx % 5 == 0 -> C.amber.copy(alpha = 0.72f)
-                                idx % 2 == 0 -> C.green.copy(alpha = 0.60f)
-                                else -> C.cyan.copy(alpha = 0.34f)
-                            },
-                            radius = if (idx % 5 == 0) 4.6f else if (idx % 2 == 0) 3.2f else 2.2f,
-                            center = Offset(dotX, dotY)
+                            color = if (idx % 3 == 0) C.amber.copy(alpha = 0.88f) else C.green.copy(alpha = 0.88f),
+                            radius = 2.8.dp.toPx(),
+                            center = particle
                         )
                     }
 
                     val shimmerX = size.width * shimmer
                     drawRoundRect(
                         brush = Brush.horizontalGradient(
-                            listOf(Color.Transparent, C.green.copy(alpha = 0.20f), Color.Transparent)
+                            listOf(Color.Transparent, C.green.copy(alpha = 0.16f), Color.Transparent)
                         ),
                         topLeft = Offset(shimmerX - 120f, 0f),
                         size = Size(120f, size.height),
                         cornerRadius = CornerRadius(28f, 28f)
                     )
 
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            listOf(C.green.copy(alpha = 0.18f), Color.Transparent)
-                        ),
-                        radius = size.minDimension * 0.42f,
-                        center = center
-                    )
-                }
-                Canvas(Modifier.matchParentSize()) {
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            listOf(C.green.copy(alpha = 0.34f), C.cyan.copy(alpha = 0.10f), Color.Transparent)
-                        ),
-                        radius = size.minDimension * 0.26f
-                    )
+                    nodes.forEachIndexed { idx, node ->
+                        val glow = if (idx == 5) 14.dp.toPx() else 10.dp.toPx()
+                        drawCircle(
+                            color = if (idx == 5) C.amber.copy(alpha = 0.18f) else C.green.copy(alpha = 0.12f),
+                            radius = glow,
+                            center = node
+                        )
+                        drawCircle(
+                            color = if (idx == 5) C.amber else C.green,
+                            radius = if (idx == 5) 4.2.dp.toPx() else 3.2.dp.toPx(),
+                            center = node
+                        )
+                    }
                 }
                 Box(
                     Modifier
@@ -3647,7 +3733,7 @@ fun AnimatedEmptyState() {
                         .clip(RoundedCornerShape(18.dp))
                         .background(
                             Brush.verticalGradient(
-                                listOf(C.amber.copy(alpha = 0.96f), C.amber.copy(alpha = 0.72f))
+                                listOf(C.amber.copy(alpha = 0.94f), C.amber.copy(alpha = 0.68f))
                             )
                         )
                         .border(1.dp, C.amber.copy(alpha = 0.55f), RoundedCornerShape(18.dp)),
@@ -3677,7 +3763,7 @@ fun AnimatedEmptyState() {
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "Start automation to unlock live dispatch logs, transaction history, and execution highlights.",
+                    "Start automation to unlock a live dispatch network, transaction history, and execution flow insights.",
                     color = C.t2,
                     fontSize = 13.sp,
                     lineHeight = 20.sp,
