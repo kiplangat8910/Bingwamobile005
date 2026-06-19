@@ -2235,9 +2235,7 @@ fun HomeScreenVolcanic(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Spacer(Modifier.statusBarsPadding())
-                    HomeDashboardHeader(
-                        running = running
-                    )
+                    HomeDashboardHeader(running = running)
                 }
             }
             item {
@@ -2258,22 +2256,33 @@ fun HomeScreenVolcanic(
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Box(
-                            Modifier
-                                .width(4.dp)
-                                .height(22.dp)
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(Brush.verticalGradient(listOf(C.amber, C.amber.copy(alpha = 0.24f))))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                Modifier
+                                    .width(4.dp)
+                                    .height(22.dp)
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(Brush.verticalGradient(listOf(C.amber, C.amber.copy(alpha = 0.24f))))
+                            )
+                            Text("Recent Activity", color = C.t1, fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
+                        }
+                        Text(
+                            "Latest automated dispatch history and execution updates.",
+                            color = C.t3,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp
                         )
-                        Text("Recent Activity", color = C.t1, fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
                     }
+                    Spacer(Modifier.width(12.dp))
                     PillBadge(
                         if (automatedTxns.isEmpty()) "No automated logs" else "${automatedTxns.size} automated logs",
                         if (automatedTxns.isEmpty()) C.t2 else C.green
@@ -2335,7 +2344,9 @@ private fun HomeDashboardHeader(running: Boolean) {
     )
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 2.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Row(
@@ -2375,7 +2386,10 @@ private fun HomeDashboardHeader(running: Boolean) {
                     )
                     Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(20.dp))
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text(
                         "Bingwa Mobile",
                         color = C.t1,
@@ -2902,7 +2916,11 @@ private fun GithubActivityCard(tx: Transaction, onClick: () -> Unit, onDelete: (
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Column(
+                    modifier = Modifier.width(86.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
                     Text(tx.amount.ifBlank { "-" }, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
                     Surface(
                         shape = RoundedCornerShape(999.dp),
@@ -3273,7 +3291,9 @@ fun VolcanicBalanceCard(
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -3367,14 +3387,7 @@ fun VolcanicBalanceCard(
                 StatCell("$sent", "SENT", C.green, Modifier.weight(1f))
                 StatCell("$pending", "PENDING", C.amber, Modifier.weight(1f))
                 StatCell("$failed", "FAILED", C.red, Modifier.weight(1f))
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    DonutRing(rate, C.green, 52.dp, 5.dp)
-                    Text("SUCCESS RATE", color = C.t3, fontSize = 8.sp, letterSpacing = 0.8.sp, fontWeight = FontWeight.Bold)
-                }
+                RateStatCard(rate = rate, modifier = Modifier.weight(1f))
             }
         }
     }
@@ -3382,9 +3395,39 @@ fun VolcanicBalanceCard(
 
 @Composable
 fun StatCell(value: String, label: String, color: Color, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = color)
-        Text(label, fontSize = 9.sp, color = C.t3, letterSpacing = 0.8.sp)
+    Surface(
+        modifier = modifier,
+        color = C.surface.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.78f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(value, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold, color = color)
+            Text(label, fontSize = 9.sp, color = C.t3, letterSpacing = 0.8.sp)
+        }
+    }
+}
+
+@Composable
+private fun RateStatCard(rate: Int, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        color = C.surface.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.78f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            DonutRing(rate, C.green, 52.dp, 5.dp)
+            Text("SUCCESS RATE", color = C.t3, fontSize = 8.sp, letterSpacing = 0.8.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
