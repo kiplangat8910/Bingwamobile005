@@ -1201,16 +1201,34 @@ private fun ConsoleHeroCard(
         smsSearchLoading -> C.cyan
         else -> C.cyan
     }
+    val statusLabel = when {
+        bannerState == "pending" -> "Dispatch in progress"
+        bannerState == "success" -> "Last dispatch completed successfully"
+        bannerState == "failed" -> "Last dispatch failed"
+        bannerState == "relayed" -> "Request forwarded to relay"
+        dispatchReady -> "Ready to execute dispatch"
+        smsSearchLoading -> "Refreshing smart match directory"
+        else -> "Enter customer details to prepare dispatch"
+    }
     Surface(
         color = C.cardHi.copy(alpha = 0.9f),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.18f)),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.22f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            statusColor.copy(alpha = 0.14f),
+                            C.cardHi.copy(alpha = 0.98f),
+                            C.surface.copy(alpha = 0.96f)
+                        )
+                    )
+                )
+                .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
@@ -1222,7 +1240,21 @@ private fun ConsoleHeroCard(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text("Ready to dispatch", color = C.t1, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = statusColor.copy(alpha = 0.10f),
+                        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.18f))
+                    ) {
+                        Text(
+                            "CONSOLE READY",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            color = statusColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                    Text("Ready to dispatch", color = C.t1, fontSize = 24.sp, fontWeight = FontWeight.Black)
                     Text(
                         "Simple manual dispatch with quick customer matching and clear status feedback.",
                         color = C.t2,
@@ -1232,10 +1264,14 @@ private fun ConsoleHeroCard(
                 }
                 Box(
                     modifier = Modifier
-                        .size(46.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(statusColor.copy(alpha = 0.12f))
-                        .border(1.dp, statusColor.copy(alpha = 0.18f), RoundedCornerShape(14.dp)),
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(statusColor.copy(alpha = 0.24f), statusColor.copy(alpha = 0.08f))
+                            )
+                        )
+                        .border(1.dp, statusColor.copy(alpha = 0.24f), RoundedCornerShape(18.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Outlined.AutoMode, null, tint = statusColor, modifier = Modifier.size(20.dp))
@@ -1252,12 +1288,12 @@ private fun ConsoleHeroCard(
                 ConsoleQuickStat("History", historyCount.toString(), C.blue)
             }
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(18.dp),
                 color = statusColor.copy(alpha = 0.10f),
                 border = BorderStroke(1.dp, statusColor.copy(alpha = 0.20f))
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -1267,20 +1303,10 @@ private fun ConsoleHeroCard(
                             .clip(CircleShape)
                             .background(statusColor)
                     )
-                    Text(
-                        when {
-                            bannerState == "pending" -> "Dispatch in progress"
-                            bannerState == "success" -> "Last dispatch completed successfully"
-                            bannerState == "failed" -> "Last dispatch failed"
-                            bannerState == "relayed" -> "Request forwarded to relay"
-                            dispatchReady -> "Ready to execute dispatch"
-                            smsSearchLoading -> "Refreshing smart match directory"
-                            else -> "Enter customer details to prepare dispatch"
-                        },
-                        color = statusColor,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("STATUS", color = statusColor.copy(alpha = 0.72f), fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Text(statusLabel, color = statusColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }
@@ -1290,16 +1316,22 @@ private fun ConsoleHeroCard(
 @Composable
 private fun ConsoleQuickStat(label: String, value: String, accent: Color) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         color = C.surface.copy(alpha = 0.88f),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.20f))
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
+            modifier = Modifier
+                .background(
+                    Brush.verticalGradient(
+                        listOf(accent.copy(alpha = 0.12f), Color.Transparent)
+                    )
+                )
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(value, color = accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text(label, color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+            Text(value, color = accent, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+            Text(label.uppercase(), color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
         }
     }
 }
@@ -1311,23 +1343,32 @@ private fun RowScope.ConsoleTabChip(
     icon: ImageVector,
     onClick: () -> Unit
 ) {
+    val accent = if (text == "History") C.red else C.amber
     val bg by animateColorAsState(
-        if (selected) C.cardHi else Color.Transparent,
+        if (selected) accent.copy(alpha = 0.18f) else Color.Transparent,
         label = "console_tab_bg"
     )
     val fg by animateColorAsState(
-        if (selected) C.t1 else C.t2,
+        if (selected) accent else C.t2,
         label = "console_tab_fg"
     )
     val border by animateColorAsState(
-        if (selected) C.border.copy(alpha = 0.95f) else Color.Transparent,
+        if (selected) accent.copy(alpha = 0.45f) else Color.Transparent,
         label = "console_tab_border"
     )
     Box(
         Modifier
             .weight(1f)
             .clip(RoundedCornerShape(18.dp))
-            .background(bg)
+            .background(
+                if (selected) {
+                    Brush.linearGradient(
+                        listOf(accent.copy(alpha = 0.98f), accent.copy(alpha = 0.62f))
+                    )
+                } else {
+                    Brush.linearGradient(listOf(bg, bg))
+                }
+            )
             .border(1.dp, border, RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 16.dp),
@@ -1337,8 +1378,13 @@ private fun RowScope.ConsoleTabChip(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(icon, null, tint = fg, modifier = Modifier.size(16.dp))
-            Text(text, color = fg, fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold, fontSize = 15.sp)
+            Icon(icon, null, tint = if (selected) C.bg else fg, modifier = Modifier.size(16.dp))
+            Text(
+                text,
+                color = if (selected) C.bg else fg,
+                fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                fontSize = 15.sp
+            )
         }
     }
 }
@@ -2193,13 +2239,23 @@ fun HomeScreenVolcanic(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                PageHeader("Bingwa Mobile", "USSD Automation Platform")
-            }
-            item {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    VolcanicSurface {
+                    Spacer(Modifier.statusBarsPadding())
+                    VolcanicSurface(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Column(
-                            modifier = Modifier.padding(18.dp),
+                            modifier = Modifier
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            C.cardHi.copy(alpha = 0.98f),
+                                            C.card.copy(alpha = 0.98f),
+                                            C.surface.copy(alpha = 0.96f)
+                                        )
+                                    )
+                                )
+                                .padding(18.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Row(
@@ -2214,67 +2270,93 @@ fun HomeScreenVolcanic(
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(44.dp)
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .background(primaryStatusColor.copy(alpha = 0.12f))
+                                            .size(56.dp)
+                                            .clip(RoundedCornerShape(18.dp))
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    listOf(C.amber.copy(alpha = 0.28f), C.amber.copy(alpha = 0.08f))
+                                                )
+                                            )
                                             .border(
                                                 1.dp,
-                                                primaryStatusColor.copy(alpha = 0.24f),
-                                                RoundedCornerShape(14.dp)
+                                                C.amber.copy(alpha = 0.42f),
+                                                RoundedCornerShape(18.dp)
                                             ),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Box(Modifier.size(10.dp), contentAlignment = Alignment.Center) {
-                                            if (running) {
-                                                Box(
-                                                    Modifier
-                                                        .fillMaxSize()
-                                                        .scale(pulse * 1.9f)
-                                                        .clip(CircleShape)
-                                                        .background(C.green.copy(alpha = 0.24f))
-                                                )
-                                            }
-                                            Box(
-                                                Modifier
-                                                    .size(7.dp)
-                                                    .clip(CircleShape)
-                                                    .background(primaryStatusColor)
-                                            )
-                                        }
+                                        Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(26.dp))
                                     }
                                     Column(
                                         modifier = Modifier.weight(1f),
                                         verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         Text(
-                                            if (running) "Automation is live" else "Automation is idle",
+                                            "Bingwa Mobile",
                                             color = C.t1,
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.Bold
+                                            fontSize = 22.sp,
+                                            fontWeight = FontWeight.Black
                                         )
                                         Text(
-                                            if (running) "Monitoring new M-PESA activity and dispatching configured bundles." else "Use the center control or the quick action below to resume background automation.",
+                                            "USSD Automation Platform",
                                             color = C.t2,
-                                            fontSize = 12.sp,
+                                            fontSize = 13.sp,
                                             lineHeight = 18.sp
                                         )
                                     }
                                 }
-                                Surface(
-                                    shape = RoundedCornerShape(999.dp),
-                                    color = primaryStatusColor.copy(alpha = 0.10f),
-                                    border = BorderStroke(1.dp, primaryStatusColor.copy(alpha = 0.22f))
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(C.surface.copy(alpha = 0.92f))
+                                        .border(1.dp, C.border.copy(alpha = 0.9f), RoundedCornerShape(14.dp)),
+                                    contentAlignment = Alignment.Center
                                 ) {
+                                    Icon(Icons.Outlined.NotificationsNone, null, tint = C.t1, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = primaryStatusColor.copy(alpha = 0.10f),
+                                border = BorderStroke(1.dp, primaryStatusColor.copy(alpha = 0.22f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(Modifier.size(10.dp), contentAlignment = Alignment.Center) {
+                                        if (running) {
+                                            Box(
+                                                Modifier
+                                                    .fillMaxSize()
+                                                    .scale(pulse * 1.7f)
+                                                    .clip(CircleShape)
+                                                    .background(C.green.copy(alpha = 0.22f))
+                                            )
+                                        }
+                                        Box(
+                                            Modifier
+                                                .size(7.dp)
+                                                .clip(CircleShape)
+                                                .background(primaryStatusColor)
+                                        )
+                                    }
                                     Text(
-                                        if (running) "LIVE" else "IDLE",
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        if (running) "AUTOMATION LIVE" else "AUTOMATION PAUSED",
                                         color = primaryStatusColor,
-                                        fontSize = 10.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         letterSpacing = 0.8.sp
                                     )
                                 }
                             }
+                            Text(
+                                if (running) "Monitoring new M-PESA activity and dispatching configured bundles." else "Use the center control or the quick action below to resume background automation.",
+                                color = C.t2,
+                                fontSize = 12.sp,
+                                lineHeight = 18.sp
+                            )
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -2316,10 +2398,22 @@ fun HomeScreenVolcanic(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Recent Activity", color = C.t1, fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .width(4.dp)
+                                .height(22.dp)
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Brush.verticalGradient(listOf(C.amber, C.amber.copy(alpha = 0.24f))))
+                        )
+                        Text("Recent Activity", color = C.t1, fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
+                    }
                     PillBadge(
-                        if (automatedTxns.isEmpty()) "0 automated" else "${automatedTxns.size} automated",
-                        C.t2
+                        if (automatedTxns.isEmpty()) "No automated logs" else "${automatedTxns.size} automated logs",
+                        if (automatedTxns.isEmpty()) C.t2 else C.green
                     )
                 }
             }
@@ -3351,100 +3445,112 @@ private fun TxDetailRow(label: String, value: String) {
 @Composable
 fun AnimatedEmptyState() {
     val anim = rememberInfiniteTransition(label = "empty_anim")
-    val t by anim.animateFloat(0f, 1f, infiniteRepeatable(tween(2600, easing = LinearEasing)), label = "t")
-    val t2 by anim.animateFloat(0f, 1f, infiniteRepeatable(tween(3200, easing = LinearEasing)), label = "t2")
-    val t3 by anim.animateFloat(0f, 1f, infiniteRepeatable(tween(4000, easing = LinearEasing)), label = "t3")
-    val scan by anim.animateFloat(-0.4f, 1.4f, infiniteRepeatable(tween(2000, easing = LinearEasing)), label = "scan")
-
-    val dots = remember {
-        listOf(
-            Triple(0.12f, 0.20f, 6.dp),
-            Triple(0.80f, 0.30f, 4.dp),
-            Triple(0.55f, 0.65f, 5.dp),
-            Triple(0.25f, 0.70f, 3.dp),
-            Triple(0.70f, 0.15f, 4.dp)
-        )
-    }
+    val orb by anim.animateFloat(0f, 360f, infiniteRepeatable(tween(7000, easing = LinearEasing)), label = "orb")
+    val pulse by anim.animateFloat(0.88f, 1.12f, infiniteRepeatable(tween(1800, easing = EaseInOutSine), RepeatMode.Reverse), label = "pulse")
+    val shimmer by anim.animateFloat(-0.2f, 1.2f, infiniteRepeatable(tween(2400, easing = LinearEasing)), label = "shimmer")
 
     Box(
         Modifier.fillMaxWidth().padding(vertical = 10.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(C.card)
-            .border(1.dp, C.border.copy(alpha = 0.9f), RoundedCornerShape(20.dp))
-            .padding(horizontal = 16.dp, vertical = 22.dp),
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(C.cardHi.copy(alpha = 0.98f), C.card.copy(alpha = 0.98f), C.surface.copy(alpha = 0.96f))
+                )
+            )
+            .border(1.dp, C.border.copy(alpha = 0.92f), RoundedCornerShape(24.dp))
+            .padding(horizontal = 18.dp, vertical = 22.dp),
         contentAlignment = Alignment.Center
     ) {
-        Box(Modifier.matchParentSize()) {
-            dots.forEachIndexed { idx, d ->
-                val phase = when (idx) { 0 -> t; 1 -> t2; 2 -> t3; 3 -> t2; else -> t }
-                val yOff = (kotlin.math.sin((phase * 2f * Math.PI).toFloat()) * 10f)
-                val a = 0.15f + 0.10f * kotlin.math.abs(kotlin.math.cos((phase * 2f * Math.PI).toFloat()))
-                Box(
-                    Modifier
-                        .offset(x = (d.first * 100).dp, y = (d.second * 100).dp + yOff.dp)
-                        .size(d.third)
-                        .clip(CircleShape)
-                        .background(C.green.copy(alpha = a))
-                )
-            }
-        }
-
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Box(Modifier.size(74.dp), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(170.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        Brush.radialGradient(
+                            listOf(C.green.copy(alpha = 0.22f), C.cyan.copy(alpha = 0.08f), Color.Transparent)
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
                 Canvas(Modifier.matchParentSize()) {
-                    fun ring(p: Float, delay: Float) {
-                        val x = ((p + delay) % 1f)
-                        val scale = 0.7f + 0.8f * x
-                        val alpha = (1f - x).coerceIn(0f, 1f) * 0.35f
-                        val r = (size.minDimension / 2f) * scale
+                    val center = Offset(size.width / 2f, size.height / 2f)
+                    val maxRadius = size.minDimension * 0.34f
+
+                    repeat(4) { idx ->
                         drawCircle(
-                            color = C.green.copy(alpha = alpha),
-                            radius = r,
+                            color = C.green.copy(alpha = 0.18f - (idx * 0.03f)),
+                            radius = maxRadius * (0.45f + (idx * 0.18f)),
+                            center = center,
                             style = Stroke(width = 2f)
                         )
                     }
-                    ring(t, 0f)
-                    ring(t, 0.23f)
-                    ring(t, 0.46f)
+
+                    val orbitRadius = maxRadius * 1.08f
+                    repeat(12) { idx ->
+                        val angle = Math.toRadians((orb + (idx * 30f)).toDouble())
+                        val dotX = center.x + kotlin.math.cos(angle).toFloat() * orbitRadius
+                        val dotY = center.y + kotlin.math.sin(angle).toFloat() * orbitRadius
+                        drawCircle(
+                            color = if (idx % 3 == 0) C.green.copy(alpha = 0.72f) else C.cyan.copy(alpha = 0.34f),
+                            radius = if (idx % 3 == 0) 5f else 3f,
+                            center = Offset(dotX, dotY)
+                        )
+                    }
+
+                    val shimmerX = size.width * shimmer
+                    drawRoundRect(
+                        brush = Brush.horizontalGradient(
+                            listOf(Color.Transparent, C.green.copy(alpha = 0.20f), Color.Transparent)
+                        ),
+                        topLeft = Offset(shimmerX - 120f, 0f),
+                        size = Size(120f, size.height),
+                        cornerRadius = CornerRadius(28f, 28f)
+                    )
+                }
+                Canvas(Modifier.matchParentSize()) {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            listOf(C.green.copy(alpha = 0.30f), Color.Transparent)
+                        ),
+                        radius = size.minDimension * 0.24f
+                    )
                 }
                 Box(
-                    Modifier.size(28.dp).clip(CircleShape)
-                        .background(C.greenDim)
-                        .border(1.5.dp, C.green.copy(alpha = 0.35f), CircleShape),
+                    Modifier
+                        .size(56.dp)
+                        .graphicsLayer {
+                            scaleX = pulse
+                            scaleY = pulse
+                        }
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(C.amber.copy(alpha = 0.94f), C.amber.copy(alpha = 0.68f))
+                            )
+                        )
+                        .border(1.dp, C.amber.copy(alpha = 0.55f), RoundedCornerShape(18.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    val coreAlpha = 0.55f + 0.35f * kotlin.math.abs(kotlin.math.sin((t * 2f * Math.PI).toFloat()))
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(C.green.copy(alpha = coreAlpha)))
+                    Icon(Icons.Outlined.AutoMode, null, tint = C.bg, modifier = Modifier.size(26.dp))
                 }
-            }
-
-            Box(
-                Modifier.fillMaxWidth(0.82f).height(1.dp)
-                    .background(Brush.horizontalGradient(listOf(Color.Transparent, C.green.copy(alpha = 0.35f), Color.Transparent)))
-                    .clip(RoundedCornerShape(1.dp))
-            ) {
-                Box(
-                    Modifier.fillMaxHeight().fillMaxWidth(0.25f)
-                        .offset(x = (scan * 100).dp)
-                        .background(Brush.horizontalGradient(listOf(Color.Transparent, C.green.copy(alpha = 0.85f), Color.Transparent)))
-                )
             }
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    "Scanning for activity…",
-                    color = C.t2,
-                    fontSize = 11.sp,
-                    letterSpacing = 0.6.sp,
-                    fontFamily = FontFamily.Monospace
+                    "No Activity Yet",
+                    color = C.t1,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "Transactions will appear here",
-                    color = C.t3,
-                    fontSize = 10.sp,
-                    letterSpacing = 0.2.sp,
-                    fontFamily = FontFamily.Monospace
+                    "Start automation to see transactions and dispatch logs.",
+                    color = C.t2,
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp,
+                    textAlign = TextAlign.Center
                 )
             }
         }
@@ -3566,9 +3672,9 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
             Row(
                 Modifier
                     .padding(horizontal = 20.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(C.card)
-                    .border(1.dp, C.border.copy(alpha = 0.85f), RoundedCornerShape(22.dp))
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(C.card.copy(alpha = 0.98f))
+                    .border(1.dp, C.border.copy(alpha = 0.9f), RoundedCornerShape(24.dp))
                     .padding(6.dp)
             ) {
                 ConsoleTabChip("Dispatch", tab == 0, Icons.Filled.Send) { tab = 0 }
@@ -3723,7 +3829,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             ) {
                                 PillBadge("${enabledOffers.size} enabled offers", C.cyan)
                                 selOffer?.let { PillBadge("KES ${it.price}", C.green) }
-                                PillBadge(mode, if (mode == "SIMPLE") C.blue else C.cyan)
+                                PillBadge(mode, if (mode == "SIMPLE") C.blue else C.amber)
                             }
                             FieldLabel("Data Bundle")
                             Box(
@@ -3743,7 +3849,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                     Column(Modifier.weight(1f)) {
                                         Text(selOffer?.name ?: "Choose a bundle", color = if (selOffer != null) C.t1 else C.t2, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                         selOffer?.let { selected ->
-                                            Text("KES ${selected.price}  ·  ${selected.executionMode}", color = C.cyan, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                            Text("KES ${selected.price}  ·  ${selected.executionMode}", color = C.amber, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                         } ?: Text("Select an enabled offer to continue", color = C.t3, fontSize = 12.sp)
                                     }
                                     Icon(Icons.Filled.KeyboardArrowDown, null, tint = C.t2)
@@ -3759,7 +3865,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                                 Row {
                                                     Column(Modifier.weight(1f)) {
                                                         Text(o.name, color = C.t1)
-                                                        Text("KES ${o.price}", color = C.cyan)
+                                                        Text("KES ${o.price}", color = C.amber)
                                                     }
                                                 }
                                             },
@@ -3780,7 +3886,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             ) {
                                 listOf("SIMPLE" to Icons.Filled.FlashOn, "ADVANCED" to Icons.Outlined.AutoMode).forEach { (m, ic) ->
                                     val active = mode == m
-                                    val modeBg by animateColorAsState(if (active) C.cyan else Color.Transparent, label = "console_mode_bg")
+                                    val activeAccent = if (m == "ADVANCED") C.amber else C.cyan
+                                    val modeBg by animateColorAsState(if (active) activeAccent else Color.Transparent, label = "console_mode_bg")
                                     Box(
                                         Modifier
                                             .weight(1f)
@@ -3889,8 +3996,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                     scaleX = scale
                                     scaleY = scale
                                 },
-                            shape = RoundedCornerShape(18.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = C.amber, contentColor = C.bg),
                             enabled = selOffer != null
                         ) {
                             Icon(Icons.Filled.Send, null, tint = C.bg, modifier = Modifier.size(18.dp))
