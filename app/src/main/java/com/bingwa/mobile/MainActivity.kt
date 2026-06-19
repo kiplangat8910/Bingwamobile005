@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.AnnotatedString
@@ -2357,11 +2358,15 @@ fun HomeScreenVolcanic(
 private fun HomeDashboardHeader(running: Boolean) {
     val statusColor = if (running) C.green else C.amber
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val compact = maxWidth < 380.dp
+        val headerMaxWidth = maxWidth
+        val compact = headerMaxWidth < 380.dp
         val iconSize = if (compact) 54.dp else 64.dp
         val titleSize = if (compact) 32.sp else 40.sp
         val titleLineHeight = if (compact) 34.sp else 42.sp
         val subtitleSize = if (compact) 15.sp else 17.sp
+        val subtitleLineHeight = if (compact) 19.sp else 21.sp
+        val subtitleMaxWidth = if (headerMaxWidth > 520.dp) 360.dp else headerMaxWidth
+        val descriptionMaxWidth = if (headerMaxWidth > 560.dp) 420.dp else headerMaxWidth
         val description = if (running) {
             "Live monitoring is active and ready to process new automation activity."
         } else {
@@ -2428,10 +2433,10 @@ private fun HomeDashboardHeader(running: Boolean) {
                 )
                 Text(
                     "USSD Automation Platform",
-                    modifier = Modifier.widthIn(max = if (maxWidth > 520.dp) 360.dp else maxWidth),
+                    modifier = Modifier.widthIn(max = subtitleMaxWidth),
                     color = C.t2,
                     fontSize = subtitleSize,
-                    lineHeight = subtitleSize + 4.sp,
+                    lineHeight = subtitleLineHeight,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
                 )
@@ -2495,7 +2500,7 @@ private fun HomeDashboardHeader(running: Boolean) {
 
             Text(
                 description,
-                modifier = Modifier.widthIn(max = if (maxWidth > 560.dp) 420.dp else maxWidth),
+                modifier = Modifier.widthIn(max = descriptionMaxWidth),
                 textAlign = TextAlign.Center,
                 color = C.t3,
                 fontSize = 13.sp,
