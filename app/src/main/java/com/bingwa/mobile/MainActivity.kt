@@ -1898,14 +1898,14 @@ fun BingwaApp() {
 @Composable
 private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen) -> Unit, onToggleRunning: () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(32.dp),
-        color = C.surface.copy(alpha = 0.98f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
+        shape = RoundedCornerShape(36.dp),
+        color = C.surface.copy(alpha = 0.96f),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
         shadowElevation = 14.dp,
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 12.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
     ) {
         Box(
             modifier = Modifier
@@ -1923,8 +1923,8 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(98.dp)
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                    .height(104.dp)
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
@@ -1963,20 +1963,20 @@ private fun NavBarItemButton(item: Screen, selected: Boolean, onClick: () -> Uni
     val selectedTint = C.amber
     Column(
         modifier = Modifier
-            .width(64.dp)
+            .width(68.dp)
             .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = if (selected) C.amber.copy(alpha = 0.14f) else C.surface.copy(alpha = 0.28f),
-            border = if (selected) BorderStroke(1.dp, C.amber.copy(alpha = 0.34f)) else BorderStroke(1.dp, Color.Transparent)
+            shape = RoundedCornerShape(18.dp),
+            color = if (selected) C.amber.copy(alpha = 0.14f) else Color.Transparent,
+            border = if (selected) BorderStroke(1.dp, C.amber.copy(alpha = 0.36f)) else BorderStroke(1.dp, Color.Transparent)
         ) {
             Box(
-                modifier = Modifier.size(width = 44.dp, height = 36.dp),
+                modifier = Modifier.size(width = 48.dp, height = 40.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -1989,10 +1989,11 @@ private fun NavBarItemButton(item: Screen, selected: Boolean, onClick: () -> Uni
         }
         Text(
             item.label,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             color = if (selected) selectedTint else C.t3,
-            maxLines = 1
+            maxLines = 1,
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -2013,15 +2014,15 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Surface(
             shape = CircleShape,
-            color = C.cardHi,
+            color = C.cardHi.copy(alpha = 0.96f),
             border = BorderStroke(2.dp, color.copy(alpha = 0.85f)),
             shadowElevation = 18.dp,
             modifier = Modifier
-                .size(62.dp)
+                .size(74.dp)
                 .combinedClickable(
                     onClick = {
                         Toast.makeText(
@@ -2039,13 +2040,13 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
                         .matchParentSize()
                         .padding(8.dp)
                         .clip(CircleShape)
-                        .background(color.copy(alpha = 0.14f))
+                        .background(color.copy(alpha = 0.16f))
                 )
                 Icon(
                     Icons.Outlined.PowerSettingsNew,
                     null,
                     tint = color,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(28.dp)
                 )
             }
         }
@@ -2056,8 +2057,8 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
         ) {
             Text(
                 if (running) "Hold Stop" else "Hold Start",
-                modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
-                fontSize = 8.sp,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
                 color = color,
                 maxLines = 1
@@ -2348,88 +2349,28 @@ private fun HomeDashboardHeader(running: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(top = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .shadow(18.dp, RoundedCornerShape(15.dp), clip = false)
-                        .clip(RoundedCornerShape(15.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    C.amber.copy(alpha = 0.22f),
-                                    C.surface.copy(alpha = 0.82f)
-                                )
-                            )
-                        )
-                        .border(1.dp, C.amber.copy(alpha = 0.34f), RoundedCornerShape(15.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .background(
-                                Brush.radialGradient(
-                                    listOf(C.amber.copy(alpha = 0.16f), Color.Transparent)
-                                )
-                            )
-                    )
-                    Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(20.dp))
-                }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        "Bingwa Mobile",
-                        color = C.t1,
-                        fontSize = 23.sp,
-                        fontWeight = FontWeight.Black,
-                        lineHeight = 25.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        "USSD Automation Platform",
-                        color = C.t2,
-                        fontSize = 14.sp,
-                        lineHeight = 18.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(C.surface.copy(alpha = 0.92f))
-                    .border(1.dp, C.border.copy(alpha = 0.92f), RoundedCornerShape(14.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Outlined.NotificationsNone, null, tint = C.t1, modifier = Modifier.size(20.dp))
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 8.dp, end = 8.dp)
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(C.amber)
-                )
-            }
-        }
+        Text(
+            "Bingwa Mobile",
+            color = C.t1,
+            fontSize = 34.sp,
+            fontWeight = FontWeight.Black,
+            lineHeight = 38.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
+        Text(
+            "USSD Automation Platform",
+            color = C.t2,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.3.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
 
         Box(
             modifier = Modifier.fillMaxWidth(),
@@ -2496,18 +2437,14 @@ private fun HomeDashboardHeader(running: Boolean) {
             if (running) "Live monitoring is active across the automation pipeline." else "Automation is paused. Resume when you are ready to dispatch again.",
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp),
+                .padding(horizontal = 40.dp),
             textAlign = TextAlign.Center,
             color = C.t3,
-            fontSize = 12.sp,
+            fontSize = 11.sp,
             lineHeight = 18.sp,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
-
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            RelayHotspotStatusChip()
-        }
     }
 }
 
@@ -3273,151 +3210,137 @@ fun VolcanicBalanceCard(
     Box(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(26.dp))
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        C.cardHi.copy(alpha = 0.98f),
-                        C.card.copy(alpha = 0.96f),
-                        C.surface.copy(alpha = 0.92f)
+                        Color(0xFF383332).copy(alpha = 0.96f),
+                        Color(0xFF2F2C32).copy(alpha = 0.95f),
+                        C.surface.copy(alpha = 0.88f)
                     )
                 )
             )
-            .border(1.dp, C.borderHi.copy(alpha = 0.92f), RoundedCornerShape(22.dp))
-            .padding(18.dp)
+            .border(1.dp, C.borderHi.copy(alpha = 0.78f), RoundedCornerShape(26.dp))
+            .padding(horizontal = 18.dp, vertical = 20.dp)
     ) {
-        Box(
-            Modifier
-                .matchParentSize()
-                .drawBehind {
-                    val wavePath = Path().apply {
-                        moveTo(0f, size.height * 0.55f)
-                        cubicTo(
-                            size.width * 0.16f, size.height * 0.44f,
-                            size.width * 0.28f, size.height * 0.78f,
-                            size.width * 0.44f, size.height * 0.60f
-                        )
-                        cubicTo(
-                            size.width * 0.58f, size.height * 0.48f,
-                            size.width * 0.72f, size.height * 0.70f,
-                            size.width, size.height * 0.40f
-                        )
-                    }
-                    drawPath(
-                        path = wavePath,
-                        brush = Brush.horizontalGradient(
-                            listOf(Color.Transparent, C.amber.copy(alpha = 0.14f), C.green.copy(alpha = 0.10f))
-                        ),
-                        style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
-                    )
-                }
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(end = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(end = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Box(Modifier.size(6.dp).clip(CircleShape).background(C.blue))
-                        Text("AIRTIME BALANCE", color = C.t2, fontSize = 9.sp, letterSpacing = 1.8.sp, fontWeight = FontWeight.Bold)
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFF1C36A)))
+                        Text("AIRTIME BALANCE", color = C.t2, fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
                     }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             airBal.ifBlank { "—" },
                             modifier = Modifier.weight(1f),
-                            fontSize = 30.sp,
+                            fontSize = 34.sp,
                             fontWeight = FontWeight.Black,
-                            lineHeight = 32.sp,
+                            lineHeight = 36.sp,
                             color = C.t1,
-                            maxLines = 2,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.Start
                         )
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(12.dp))
                         Box(
                             modifier = Modifier
-                                .shadow(18.dp, CircleShape, clip = false)
+                                .size(38.dp)
                                 .clip(CircleShape)
                                 .background(
                                     Brush.radialGradient(
                                         listOf(
-                                            Color.White.copy(alpha = 0.08f),
-                                            C.surface.copy(alpha = 0.92f)
+                                            Color.White.copy(alpha = 0.04f),
+                                            C.surface.copy(alpha = 0.82f)
                                         )
                                     )
                                 )
-                                .border(1.dp, C.borderHi.copy(alpha = 0.95f), CircleShape)
+                                .border(1.dp, C.w12, CircleShape)
                                 .clickable { onRefresh() }
+                            .wrapContentSize(Alignment.Center)
                         ) {
-                            Box(
-                                Modifier
-                                    .size(46.dp)
-                                    .background(
-                                        Brush.radialGradient(
-                                            listOf(
-                                                C.amber.copy(alpha = 0.16f),
-                                                Color.Transparent
-                                            )
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Refresh,
-                                    null,
-                                    tint = if (isRefreshing) C.amber else C.t1,
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
-                                )
-                            }
+                            Icon(
+                                Icons.Outlined.Refresh,
+                                null,
+                                tint = if (isRefreshing) C.amber else C.t2,
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .size(20.dp)
+                                    .then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
+                            )
                         }
                     }
                     Text(
-                        if (isRefreshing) "Refreshing balance and token metrics..." else "Tap the glass control to refresh balances.",
+                        if (isRefreshing) "refreshing..." else "tap card to refresh",
                         color = C.t3,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         lineHeight = 14.sp,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Box(Modifier.width(1.dp).height(64.dp).background(C.w08))
+                Box(Modifier.width(1.dp).height(108.dp).background(C.w08))
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = 18.dp),
+                        .padding(start = 20.dp),
                     horizontalAlignment = Alignment.Start,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("TOKENS", color = C.t2, fontSize = 9.sp, letterSpacing = 1.8.sp, fontWeight = FontWeight.Bold)
-                        Box(Modifier.size(5.dp).clip(CircleShape).background(if (unlimitedLabel != null) C.green else C.amber))
+                        Text("TOKENS", color = C.t2, fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(if (unlimitedLabel != null) C.green else C.amber))
                     }
                     if (unlimitedLabel != null) {
-                        Text("Unlimited", fontSize = 27.sp, fontWeight = FontWeight.Black, color = C.green, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(unlimitedRemaining ?: "Active plan", color = C.t3, fontSize = 10.sp, maxLines = 2, lineHeight = 14.sp, overflow = TextOverflow.Ellipsis)
+                        Text("Unlimited", fontSize = 30.sp, fontWeight = FontWeight.Black, color = C.green, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(unlimitedRemaining ?: "units", color = C.t3, fontSize = 11.sp, maxLines = 2, lineHeight = 14.sp, overflow = TextOverflow.Ellipsis)
                     } else {
-                        Text("$tokenBal", fontSize = 30.sp, fontWeight = FontWeight.Black, color = C.t1, maxLines = 1)
-                        Text("available units", color = C.t3, fontSize = 10.sp, lineHeight = 14.sp)
+                        Text("$tokenBal", fontSize = 38.sp, fontWeight = FontWeight.Black, color = C.t1, maxLines = 1)
+                        Text("units", color = C.t3, fontSize = 11.sp, lineHeight = 14.sp)
                     }
                 }
             }
-            Divider(color = C.w08)
+            Divider(color = C.w08.copy(alpha = 0.72f))
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                StatCell("$sent", "SENT", C.green, Modifier.weight(1f))
-                StatCell("$pending", "PENDING", C.amber, Modifier.weight(1f))
-                StatCell("$failed", "FAILED", C.red, Modifier.weight(1f))
-                RateStatCard(rate = rate, modifier = Modifier.weight(1f))
+                InlineStatCell("$sent", "SENT", C.green, Modifier.weight(1f))
+                Box(Modifier.width(1.dp).height(40.dp).background(C.w08))
+                InlineStatCell("$pending", "PENDING", C.amber, Modifier.weight(1f))
+                Box(Modifier.width(1.dp).height(40.dp).background(C.w08))
+                InlineStatCell("$failed", "FAILED", C.red, Modifier.weight(1f))
+                Box(Modifier.width(1.dp).height(40.dp).background(C.w08))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DonutRing(rate, C.green, 58.dp, 7.dp)
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun InlineStatCell(value: String, label: String, color: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(value, color = color, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+        Text(label, color = C.t3, fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -3470,7 +3393,7 @@ fun DonutRing(pct: Int, color: Color, size: Dp, stroke: Dp) {
             drawCircle(C.w08, radius = r, center = center, style = Stroke(width = st))
             drawArc(color = color, startAngle = -90f, sweepAngle = sweep, useCenter = false, topLeft = Offset(center.x - r, center.y - r), size = Size(r * 2f, r * 2f), style = Stroke(width = st, cap = StrokeCap.Round))
         }
-        Text("$pct%", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = color)
+        Text("$pct%", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = color)
     }
 }
 
@@ -3679,166 +3602,96 @@ private fun TxDetailRow(label: String, value: String) {
 @Composable
 fun AnimatedEmptyState() {
     val anim = rememberInfiniteTransition(label = "empty_anim")
-    val flow by anim.animateFloat(0f, 1f, infiniteRepeatable(tween(6200, easing = LinearEasing)), label = "flow")
-    val pulse by anim.animateFloat(0.94f, 1.06f, infiniteRepeatable(tween(2600, easing = EaseInOutSine), RepeatMode.Reverse), label = "pulse")
-    val shimmer by anim.animateFloat(-0.2f, 1.2f, infiniteRepeatable(tween(4200, easing = LinearEasing)), label = "shimmer")
+    val orbit by anim.animateFloat(0f, 360f, infiniteRepeatable(tween(9000, easing = LinearEasing)), label = "orbit")
+    val pulse by anim.animateFloat(0.96f, 1.04f, infiniteRepeatable(tween(2600, easing = EaseInOutSine), RepeatMode.Reverse), label = "pulse")
 
     Box(
         Modifier.fillMaxWidth().padding(vertical = 10.dp)
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(26.dp))
             .background(
                 Brush.verticalGradient(
-                    listOf(C.cardHi.copy(alpha = 0.98f), C.card.copy(alpha = 0.98f), C.surface.copy(alpha = 0.96f))
+                    listOf(
+                        Color(0xFF3B3532).copy(alpha = 0.95f),
+                        Color(0xFF312D31).copy(alpha = 0.95f),
+                        C.surface.copy(alpha = 0.90f)
+                    )
                 )
             )
-            .border(1.dp, C.border.copy(alpha = 0.92f), RoundedCornerShape(24.dp))
-            .padding(horizontal = 18.dp, vertical = 22.dp),
+            .border(1.dp, C.border.copy(alpha = 0.72f), RoundedCornerShape(26.dp))
+            .padding(horizontal = 18.dp, vertical = 20.dp),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(210.dp)
+                    .height(190.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(
                         Brush.verticalGradient(
                             listOf(
-                                C.green.copy(alpha = 0.12f),
-                                C.cyan.copy(alpha = 0.06f),
-                                C.surface.copy(alpha = 0.35f)
+                                Color.Transparent,
+                                C.green.copy(alpha = 0.03f),
+                                Color.Transparent
                             )
                         )
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Canvas(Modifier.matchParentSize()) {
-                    val nodes = listOf(
-                        Offset(size.width * 0.16f, size.height * 0.30f),
-                        Offset(size.width * 0.38f, size.height * 0.18f),
-                        Offset(size.width * 0.64f, size.height * 0.24f),
-                        Offset(size.width * 0.83f, size.height * 0.36f),
-                        Offset(size.width * 0.26f, size.height * 0.62f),
-                        Offset(size.width * 0.50f, size.height * 0.50f),
-                        Offset(size.width * 0.74f, size.height * 0.68f),
-                        Offset(size.width * 0.42f, size.height * 0.80f)
-                    )
-                    val links = listOf(
-                        0 to 1, 1 to 2, 2 to 3,
-                        0 to 4, 1 to 5, 2 to 5,
-                        4 to 5, 5 to 6, 4 to 7, 5 to 7, 6 to 7
-                    )
-
-                    repeat(6) { idx ->
-                        val y = size.height * (0.14f + (idx * 0.14f))
-                        drawLine(
-                            color = C.w04,
-                            start = Offset(0f, y),
-                            end = Offset(size.width, y),
-                            strokeWidth = 1.dp.toPx()
+                    val center = Offset(size.width / 2f, size.height * 0.44f)
+                    repeat(3) { idx ->
+                        drawCircle(
+                            color = C.green.copy(alpha = 0.20f - (idx * 0.04f)),
+                            radius = size.minDimension * (0.12f + (idx * 0.10f)),
+                            center = center,
+                            style = Stroke(width = 2.dp.toPx())
                         )
                     }
-
-                    links.forEachIndexed { idx, (from, to) ->
-                        val start = nodes[from]
-                        val end = nodes[to]
-                        drawLine(
-                            brush = Brush.linearGradient(
-                                listOf(
-                                    C.green.copy(alpha = 0.10f),
-                                    C.cyan.copy(alpha = 0.26f),
-                                    C.amber.copy(alpha = 0.10f)
-                                ),
-                                start = start,
-                                end = end
-                            ),
-                            start = start,
-                            end = end,
-                            strokeWidth = 1.6.dp.toPx()
-                        )
-
-                        val particleProgress = (flow + (idx * 0.11f)) % 1f
-                        val particle = Offset(
-                            x = start.x + ((end.x - start.x) * particleProgress),
-                            y = start.y + ((end.y - start.y) * particleProgress)
-                        )
-                        drawCircle(C.green.copy(alpha = 0.16f), radius = 8.dp.toPx(), center = particle)
-                        drawCircle(
-                            color = if (idx % 3 == 0) C.amber.copy(alpha = 0.88f) else C.green.copy(alpha = 0.88f),
-                            radius = 2.8.dp.toPx(),
-                            center = particle
-                        )
-                    }
-
-                    val shimmerX = size.width * shimmer
-                    drawRoundRect(
-                        brush = Brush.horizontalGradient(
-                            listOf(Color.Transparent, C.green.copy(alpha = 0.16f), Color.Transparent)
-                        ),
-                        topLeft = Offset(shimmerX - 120f, 0f),
-                        size = Size(120f, size.height),
-                        cornerRadius = CornerRadius(28f, 28f)
+                    drawLine(
+                        color = C.green.copy(alpha = 0.22f),
+                        start = Offset(size.width * 0.14f, size.height * 0.76f),
+                        end = Offset(size.width * 0.86f, size.height * 0.76f),
+                        strokeWidth = 1.dp.toPx()
                     )
-
-                    nodes.forEachIndexed { idx, node ->
-                        val glow = if (idx == 5) 14.dp.toPx() else 10.dp.toPx()
+                    val floatingDots = listOf(
+                        Offset(size.width * 0.10f, size.height * 0.32f),
+                        Offset(size.width * 0.14f, size.height * 0.64f),
+                        Offset(size.width * 0.27f, size.height * 0.18f),
+                        Offset(size.width * 0.31f, size.height * 0.52f)
+                    )
+                    floatingDots.forEachIndexed { index, offset ->
                         drawCircle(
-                            color = if (idx == 5) C.amber.copy(alpha = 0.18f) else C.green.copy(alpha = 0.12f),
-                            radius = glow,
-                            center = node
-                        )
-                        drawCircle(
-                            color = if (idx == 5) C.amber else C.green,
-                            radius = if (idx == 5) 4.2.dp.toPx() else 3.2.dp.toPx(),
-                            center = node
+                            color = C.green.copy(alpha = 0.24f + (index * 0.06f)),
+                            radius = if (index == 0) 6.dp.toPx() else 4.dp.toPx(),
+                            center = offset
                         )
                     }
+                    val orbitPoint = Offset(
+                        x = center.x + kotlin.math.cos(Math.toRadians(orbit.toDouble())).toFloat() * size.minDimension * 0.14f,
+                        y = center.y + kotlin.math.sin(Math.toRadians(orbit.toDouble())).toFloat() * size.minDimension * 0.14f
+                    )
+                    drawCircle(C.green.copy(alpha = 0.18f), radius = 16.dp.toPx(), center = center)
+                    drawCircle(C.green.copy(alpha = 0.70f), radius = 7.dp.toPx(), center = center)
+                    drawCircle(C.green.copy(alpha = 0.40f), radius = 5.dp.toPx(), center = orbitPoint)
                 }
-                Box(
-                    Modifier
-                        .size(64.dp)
-                        .graphicsLayer {
-                            scaleX = pulse
-                            scaleY = pulse
-                        }
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(C.amber.copy(alpha = 0.94f), C.amber.copy(alpha = 0.68f))
-                            )
-                        )
-                        .border(1.dp, C.amber.copy(alpha = 0.55f), RoundedCornerShape(18.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Outlined.AutoMode, null, tint = C.bg, modifier = Modifier.size(26.dp))
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                PillBadge("Awaiting automation", C.green)
-                PillBadge("Recent transactions", C.cyan)
-                PillBadge("Dispatch timeline", C.amber)
             }
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    "No Activity Yet",
+                    "Scanning for activity...",
                     color = C.t1,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 1.2.sp,
                     textAlign = TextAlign.Center
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "Start automation to unlock a live dispatch network, transaction history, and execution flow insights.",
+                    "Transactions will appear here",
                     color = C.t2,
-                    fontSize = 13.sp,
-                    lineHeight = 20.sp,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 18.dp)
                 )
