@@ -13,12 +13,12 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 
 internal object C {
-    var bg by mutableStateOf(Color(0xFF111318))
-    var surface by mutableStateOf(Color(0xFF171A20))
-    var card by mutableStateOf(Color(0xFF1C2129))
-    var cardHi by mutableStateOf(Color(0xFF242B35))
-    var border by mutableStateOf(Color(0xFF313845))
-    var borderHi by mutableStateOf(Color(0xFF465062))
+    var bg by mutableStateOf(Color(0xFF0C1017))
+    var surface by mutableStateOf(Color(0xFF19161D))
+    var card by mutableStateOf(Color(0xFF2B262A))
+    var cardHi by mutableStateOf(Color(0xFF343035))
+    var border by mutableStateOf(Color(0xFF5B4F54))
+    var borderHi by mutableStateOf(Color(0xFF75696E))
     var cyan by mutableStateOf(Color(0xFFF7A600))
     var cyanDim by mutableStateOf(cyan.copy(alpha = 0.12f))
     var cyanGlow by mutableStateOf(cyan.copy(alpha = 0.20f))
@@ -77,12 +77,12 @@ private fun onColorFor(color: Color): Color =
 
 internal fun buildAppColorScheme(accent: ThemeAccent, dark: Boolean): ColorScheme {
     val palette = accentPaletteSpec(accent)
-    val background = if (dark) Color(0xFF111318) else Color(0xFFF6F7FB)
-    val surface = if (dark) Color(0xFF171A20) else Color(0xFFFFFFFF)
-    val surfaceVariantBase = if (dark) Color(0xFF1F252E) else Color(0xFFF1F4F8)
-    val surfaceVariant = lerp(surfaceVariantBase, palette.primary, if (dark) 0.12f else 0.06f)
-    val outline = lerp(if (dark) Color(0xFF313845) else Color(0xFFD6DBE4), palette.primary, if (dark) 0.22f else 0.10f)
-    val outlineVariant = lerp(if (dark) Color(0xFF465062) else Color(0xFFE4E7EC), palette.secondary, if (dark) 0.18f else 0.10f)
+    val background = if (dark) Color(0xFF0C1017) else Color(0xFFF6F7FB)
+    val surface = if (dark) Color(0xFF19161D) else Color(0xFFFFFFFF)
+    val surfaceVariantBase = if (dark) Color(0xFF312B30) else Color(0xFFF1F4F8)
+    val surfaceVariant = lerp(surfaceVariantBase, palette.primary, if (dark) 0.10f else 0.06f)
+    val outline = lerp(if (dark) Color(0xFF5B4F54) else Color(0xFFD6DBE4), palette.primary, if (dark) 0.16f else 0.10f)
+    val outlineVariant = lerp(if (dark) Color(0xFF75696E) else Color(0xFFE4E7EC), palette.secondary, if (dark) 0.12f else 0.10f)
 
     return if (dark) {
         darkColorScheme(

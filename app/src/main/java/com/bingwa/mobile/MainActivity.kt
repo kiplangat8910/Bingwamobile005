@@ -1342,20 +1342,18 @@ private fun ConsoleQuickStat(label: String, value: String, accent: Color) {
 private fun RowScope.ConsoleTabChip(
     text: String,
     selected: Boolean,
-    icon: ImageVector,
     onClick: () -> Unit
 ) {
-    val accent = if (text == "History") C.red else C.amber
     val bg by animateColorAsState(
-        if (selected) accent.copy(alpha = 0.18f) else Color.Transparent,
+        if (selected) C.cardHi else Color.Transparent,
         label = "console_tab_bg"
     )
     val fg by animateColorAsState(
-        if (selected) accent else C.t2,
+        if (selected) C.t1 else C.t2,
         label = "console_tab_fg"
     )
     val border by animateColorAsState(
-        if (selected) accent.copy(alpha = 0.45f) else Color.Transparent,
+        if (selected) C.borderHi.copy(alpha = 0.65f) else Color.Transparent,
         label = "console_tab_border"
     )
     Box(
@@ -1365,7 +1363,7 @@ private fun RowScope.ConsoleTabChip(
             .background(
                 if (selected) {
                     Brush.linearGradient(
-                        listOf(accent.copy(alpha = 0.98f), accent.copy(alpha = 0.62f))
+                        listOf(bg, bg)
                     )
                 } else {
                     Brush.linearGradient(listOf(bg, bg))
@@ -1378,12 +1376,11 @@ private fun RowScope.ConsoleTabChip(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.Center
         ) {
-            Icon(icon, null, tint = if (selected) C.bg else fg, modifier = Modifier.size(16.dp))
             Text(
                 text,
-                color = if (selected) C.bg else fg,
+                color = fg,
                 fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
                 fontSize = 15.sp
             )
@@ -1924,8 +1921,8 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(98.dp)
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                    .height(104.dp)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
@@ -1964,7 +1961,7 @@ private fun NavBarItemButton(item: Screen, selected: Boolean, onClick: () -> Uni
     val selectedTint = C.amber
     Column(
         modifier = Modifier
-            .width(64.dp)
+            .width(68.dp)
             .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 6.dp),
@@ -1990,7 +1987,7 @@ private fun NavBarItemButton(item: Screen, selected: Boolean, onClick: () -> Uni
         }
         Text(
             item.label,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             color = if (selected) selectedTint else C.t3,
             maxLines = 1
@@ -2022,7 +2019,7 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
             border = BorderStroke(2.dp, color.copy(alpha = 0.85f)),
             shadowElevation = 18.dp,
             modifier = Modifier
-                .size(62.dp)
+                .size(74.dp)
                 .combinedClickable(
                     onClick = {
                         Toast.makeText(
@@ -2038,7 +2035,7 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
                 Box(
                     Modifier
                         .matchParentSize()
-                        .padding(8.dp)
+                        .padding(7.dp)
                         .clip(CircleShape)
                         .background(color.copy(alpha = 0.14f))
                 )
@@ -2360,18 +2357,11 @@ private fun HomeDashboardHeader(running: Boolean) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val headerMaxWidth = maxWidth
         val compact = headerMaxWidth < 380.dp
-        val iconSize = if (compact) 54.dp else 64.dp
         val titleSize = if (compact) 32.sp else 40.sp
         val titleLineHeight = if (compact) 34.sp else 42.sp
         val subtitleSize = if (compact) 15.sp else 17.sp
         val subtitleLineHeight = if (compact) 19.sp else 21.sp
         val subtitleMaxWidth = if (headerMaxWidth > 520.dp) 360.dp else headerMaxWidth
-        val descriptionMaxWidth = if (headerMaxWidth > 560.dp) 420.dp else headerMaxWidth
-        val description = if (running) {
-            "Live monitoring is active and ready to process new automation activity."
-        } else {
-            "Automation is paused. Use the center power control below when you are ready to resume."
-        }
         val badgeAnim = rememberInfiniteTransition(label = "header_badge")
         val shimmerProgress by badgeAnim.animateFloat(
             initialValue = -0.3f,
@@ -2391,32 +2381,8 @@ private fun HomeDashboardHeader(running: Boolean) {
                 .fillMaxWidth()
                 .padding(horizontal = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(iconSize)
-                    .shadow(22.dp, RoundedCornerShape(20.dp), clip = false)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                C.amber.copy(alpha = 0.22f),
-                                C.surface.copy(alpha = 0.86f)
-                            )
-                        )
-                    )
-                    .border(1.dp, C.amber.copy(alpha = 0.34f), RoundedCornerShape(20.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(Brush.radialGradient(listOf(C.amber.copy(alpha = 0.16f), Color.Transparent)))
-                )
-                Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(if (compact) 24.dp else 28.dp))
-            }
-
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -2497,15 +2463,6 @@ private fun HomeDashboardHeader(running: Boolean) {
                     )
                 }
             }
-
-            Text(
-                description,
-                modifier = Modifier.widthIn(max = descriptionMaxWidth),
-                textAlign = TextAlign.Center,
-                color = C.t3,
-                fontSize = 13.sp,
-                lineHeight = 19.sp
-            )
 
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 RelayHotspotStatusChip()
@@ -3445,37 +3402,66 @@ fun VolcanicBalanceCard(
                 }
             }
             Divider(color = C.w08)
-            if (compactStats) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        StatCell("$sent", "SENT", C.green, Modifier.weight(1f))
-                        StatCell("$pending", "PENDING", C.amber, Modifier.weight(1f))
-                    }
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        StatCell("$failed", "FAILED", C.red, Modifier.weight(1f))
-                        RateStatCard(rate = rate, modifier = Modifier.weight(1f))
-                    }
-                }
-            } else {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    StatCell("$sent", "SENT", C.green, Modifier.weight(1f))
-                    StatCell("$pending", "PENDING", C.amber, Modifier.weight(1f))
-                    StatCell("$failed", "FAILED", C.red, Modifier.weight(1f))
-                    RateStatCard(rate = rate, modifier = Modifier.weight(1f))
-                }
+            HomeStatsRow(sent = sent, pending = pending, failed = failed, rate = rate, compact = compactStats)
+        }
+    }
+}
+
+@Composable
+private fun HomeStatsRow(sent: Int, pending: Int, failed: Int, rate: Int, compact: Boolean) {
+    if (compact) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                StatCell("$sent", "SENT", C.green, Modifier.weight(1f))
+                StatCell("$pending", "PENDING", C.amber, Modifier.weight(1f))
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StatCell("$failed", "FAILED", C.red, Modifier.weight(1f))
+                RateStatCard(rate = rate, modifier = Modifier.weight(1f))
             }
         }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            InlineStatCell("$sent", "SENT", C.green, Modifier.weight(1f))
+            InlineStatDivider()
+            InlineStatCell("$pending", "PENDING", C.amber, Modifier.weight(1f))
+            InlineStatDivider()
+            InlineStatCell("$failed", "FAILED", C.red, Modifier.weight(1f))
+            InlineStatDivider()
+            RateStatCard(rate = rate, modifier = Modifier.weight(1.15f))
+        }
+    }
+}
+
+@Composable
+private fun InlineStatDivider() {
+    Box(
+        Modifier
+            .width(1.dp)
+            .height(54.dp)
+            .background(C.w08)
+    )
+}
+
+@Composable
+private fun InlineStatCell(value: String, label: String, color: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(value, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = color, maxLines = 1)
+        Text(label, fontSize = 9.sp, color = C.t3, letterSpacing = 0.8.sp, textAlign = TextAlign.Center)
     }
 }
 
@@ -4121,8 +4107,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                     .border(1.dp, C.border.copy(alpha = 0.9f), RoundedCornerShape(24.dp))
                     .padding(6.dp)
             ) {
-                ConsoleTabChip("Dispatch", tab == 0, Icons.Filled.Send) { tab = 0 }
-                ConsoleTabChip("History", tab == 1, Icons.Outlined.History) { tab = 1 }
+                ConsoleTabChip("Dispatch", tab == 0) { tab = 0 }
+                ConsoleTabChip("History", tab == 1) { tab = 1 }
             }
             AnimatedContent(
                 targetState = tab,
@@ -4143,14 +4129,6 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             "pending" -> FeedbackBanner("…  Dispatching — awaiting USSD response…", C.amber)
                             "relayed" -> FeedbackBanner("→  Forwarded to Relay phone for execution", C.blue)
                         }
-                        ConsoleHeroCard(
-                            dispatchReady = dispatchReady,
-                            bannerState = bannerState,
-                            enabledOfferCount = enabledOffers.size,
-                            directoryCount = consoleDirectory.size,
-                            historyCount = history.size,
-                            smsSearchLoading = smsSearchLoading
-                        )
                         ConsoleSectionCard(
                             title = "Customer Target",
                             subtitle = "Capture the customer number and use smart matching from saved contacts and M-PESA history.",
@@ -4165,7 +4143,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                     .horizontalScroll(rememberScrollState()),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                PillBadge(if (phone.isBlank()) "Waiting for phone" else "Phone captured", C.cyan)
+                                PillBadge(if (phone.isBlank()) "Waiting for phone" else "Phone captured", C.amber)
                                 if (resolvedClientName.isNotBlank()) PillBadge("Matched customer", C.green)
                                 if (smsSearchLoading) PillBadge("Refreshing matches", C.blue)
                             }
@@ -4212,7 +4190,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                                     else -> null
                                                 }
                                             },
-                                            placeholder = { Text("0712345678", color = C.t3) },
+                                            placeholder = { Text("0712 345 678", color = C.t3) },
                                             trailingIcon = if (phone.isNotBlank()) ({
                                                 IconButton(onClick = { phone = ""; phoneErr = null }) {
                                                     Icon(Icons.Filled.Clear, null, tint = C.t2, modifier = Modifier.size(16.dp))
@@ -4228,7 +4206,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                                 unfocusedContainerColor = Color.Transparent,
                                                 focusedTextColor = C.t1,
                                                 unfocusedTextColor = C.t1,
-                                                cursorColor = C.cyan,
+                                                cursorColor = C.amber,
                                                 focusedPlaceholderColor = C.t3,
                                                 unfocusedPlaceholderColor = C.t3
                                             ),
