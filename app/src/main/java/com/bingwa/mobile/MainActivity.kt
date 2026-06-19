@@ -3154,10 +3154,43 @@ fun VolcanicBalanceCard(
     spin: Float
 ) {
     Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-            .background(surfaceGradient())
-            .border(1.dp, C.borderHi, RoundedCornerShape(20.dp)).padding(18.dp)
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(C.cardHi.copy(alpha = 0.98f), C.card.copy(alpha = 0.98f), C.surface.copy(alpha = 0.95f))
+                )
+            )
+            .border(1.dp, C.borderHi, RoundedCornerShape(22.dp))
+            .padding(18.dp)
     ) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .drawBehind {
+                    val wavePath = Path().apply {
+                        moveTo(0f, size.height * 0.55f)
+                        cubicTo(
+                            size.width * 0.16f, size.height * 0.44f,
+                            size.width * 0.28f, size.height * 0.78f,
+                            size.width * 0.44f, size.height * 0.60f
+                        )
+                        cubicTo(
+                            size.width * 0.58f, size.height * 0.48f,
+                            size.width * 0.72f, size.height * 0.70f,
+                            size.width, size.height * 0.40f
+                        )
+                    }
+                    drawPath(
+                        path = wavePath,
+                        brush = Brush.horizontalGradient(
+                            listOf(Color.Transparent, C.amber.copy(alpha = 0.14f), C.green.copy(alpha = 0.10f))
+                        ),
+                        style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                }
+        )
         Column {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -3171,7 +3204,7 @@ fun VolcanicBalanceCard(
                         Text(
                             airBal.ifBlank { "—" },
                             modifier = Modifier.weight(1f),
-                            fontSize = 26.sp,
+                            fontSize = 27.sp,
                             fontWeight = FontWeight.Black,
                             lineHeight = 28.sp,
                             color = C.t1,
@@ -3179,8 +3212,27 @@ fun VolcanicBalanceCard(
                             overflow = TextOverflow.Clip
                         )
                         Spacer(Modifier.width(8.dp))
-                        Icon(Icons.Outlined.Refresh, null, tint = if (isRefreshing) C.blue else C.t3,
-                            modifier = Modifier.size(16.dp).then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier).clickable { onRefresh() })
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = C.surface.copy(alpha = 0.86f),
+                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f)),
+                            modifier = Modifier.clickable { onRefresh() }
+                        ) {
+                            Box(
+                                Modifier
+                                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Refresh,
+                                    null,
+                                    tint = if (isRefreshing) C.blue else C.t3,
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
+                                )
+                            }
+                        }
                     }
                     Text(if (isRefreshing) "refreshing…" else "tap card to refresh", color = C.t3, fontSize = 10.sp)
                 }
@@ -3189,7 +3241,7 @@ fun VolcanicBalanceCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("TOKENS", color = C.t2, fontSize = 9.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(5.dp))
-                        Box(Modifier.size(5.dp).clip(CircleShape).background(if (unlimitedLabel != null) C.green else C.cyan))
+                        Box(Modifier.size(5.dp).clip(CircleShape).background(if (unlimitedLabel != null) C.green else C.amber))
                     }
                     Spacer(Modifier.height(6.dp))
                     if (unlimitedLabel != null) {
@@ -3211,7 +3263,10 @@ fun VolcanicBalanceCard(
                 Box(Modifier.width(1.dp).height(32.dp).background(C.w08))
                 StatCell("$failed", "FAILED", C.red)
                 Box(Modifier.width(1.dp).height(32.dp).background(C.w08))
-                DonutRing(rate, C.green, 48.dp, 5.dp)
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DonutRing(rate, C.green, 52.dp, 5.dp)
+                    Text("SUCCESS RATE", color = C.t3, fontSize = 8.sp, letterSpacing = 0.8.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -3725,39 +3780,107 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                 if (resolvedClientName.isNotBlank()) PillBadge("Matched customer", C.green)
                                 if (smsSearchLoading) PillBadge("Refreshing matches", C.blue)
                             }
-                            OutlinedTextField(
-                                value = phone,
-                                onValueChange = {
-                                    val digitsOnly = it.filter(Char::isDigit).take(10)
-                                    phone = digitsOnly
-                                    bannerState = null
-                                    phoneErr = when {
-                                        digitsOnly.isBlank() -> null
-                                        digitsOnly.length < 10 -> "Enter all 10 digits"
-                                        else -> null
-                                    }
-                                },
-                                placeholder = { Text("0712345678", color = C.t3) },
-                                leadingIcon = { Icon(Icons.Filled.Phone, null, tint = if (phone.isNotEmpty()) C.cyan else C.t2) },
-                                trailingIcon = if (phone.isNotBlank()) ({
-                                    IconButton(onClick = { phone = ""; phoneErr = null }) {
-                                        Icon(Icons.Filled.Clear, null, tint = C.t2, modifier = Modifier.size(16.dp))
-                                    }
-                                }) else null,
-                                isError = phoneErr != null,
-                                supportingText = {
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = C.card.copy(alpha = 0.96f),
+                                border = BorderStroke(
+                                    1.dp,
                                     when {
-                                        phoneErr != null -> Text(phoneErr ?: "", color = C.red)
-                                        exactPhoneMatch != null -> Text("Matched from ${exactPhoneMatch?.source}", color = C.green)
-                                        smsSearchLoading -> Text("Checking saved contacts and M-PESA history…", color = C.t2)
+                                        phoneErr != null -> C.red.copy(alpha = 0.34f)
+                                        phone.isNotBlank() -> C.cyan.copy(alpha = 0.28f)
+                                        else -> C.border.copy(alpha = 0.82f)
                                     }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = fieldColors(),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
-                            )
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .size(46.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(C.surface.copy(alpha = 0.9f))
+                                            .border(1.dp, C.border.copy(alpha = 0.85f), RoundedCornerShape(14.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Filled.Phone, null, tint = C.t1, modifier = Modifier.size(20.dp))
+                                    }
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Recipient Number", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                        OutlinedTextField(
+                                            value = phone,
+                                            onValueChange = {
+                                                val digitsOnly = it.filter(Char::isDigit).take(10)
+                                                phone = digitsOnly
+                                                bannerState = null
+                                                phoneErr = when {
+                                                    digitsOnly.isBlank() -> null
+                                                    digitsOnly.length < 10 -> "Enter all 10 digits"
+                                                    else -> null
+                                                }
+                                            },
+                                            placeholder = { Text("0712345678", color = C.t3) },
+                                            trailingIcon = if (phone.isNotBlank()) ({
+                                                IconButton(onClick = { phone = ""; phoneErr = null }) {
+                                                    Icon(Icons.Filled.Clear, null, tint = C.t2, modifier = Modifier.size(16.dp))
+                                                }
+                                            }) else null,
+                                            isError = phoneErr != null,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(0.dp),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = Color.Transparent,
+                                                unfocusedBorderColor = Color.Transparent,
+                                                focusedContainerColor = Color.Transparent,
+                                                unfocusedContainerColor = Color.Transparent,
+                                                focusedTextColor = C.t1,
+                                                unfocusedTextColor = C.t1,
+                                                cursorColor = C.cyan,
+                                                focusedPlaceholderColor = C.t3,
+                                                unfocusedPlaceholderColor = C.t3
+                                            ),
+                                            textStyle = TextStyle(
+                                                fontSize = 18.sp,
+                                                lineHeight = 20.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = C.t1
+                                            ),
+                                            singleLine = true,
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                                        )
+                                    }
+                                    Box(
+                                        Modifier
+                                            .size(30.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (phone.matches(Regex("^[0-9]{10}$"))) C.green.copy(alpha = 0.14f) else C.surface
+                                            )
+                                            .border(
+                                                1.dp,
+                                                if (phone.matches(Regex("^[0-9]{10}$"))) C.green.copy(alpha = 0.40f) else C.border.copy(alpha = 0.82f),
+                                                CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            if (phone.matches(Regex("^[0-9]{10}$"))) Icons.Filled.Check else Icons.Filled.KeyboardArrowDown,
+                                            null,
+                                            tint = if (phone.matches(Regex("^[0-9]{10}$"))) C.green else C.t2,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            when {
+                                phoneErr != null -> Text(phoneErr ?: "", color = C.red, fontSize = 12.sp)
+                                exactPhoneMatch != null -> Text("Matched from ${exactPhoneMatch?.source}", color = C.green, fontSize = 12.sp)
+                                smsSearchLoading -> Text("Checking saved contacts and M-PESA history…", color = C.t2, fontSize = 12.sp)
+                            }
                             AnimatedVisibility(visible = resolvedClientName.isNotBlank()) {
                                 Surface(
                                     shape = RoundedCornerShape(14.dp),
@@ -3835,19 +3958,36 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             Box(
                                 Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(C.card)
-                                    .border(1.dp, C.border, RoundedCornerShape(20.dp))
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(C.cardHi.copy(alpha = 0.96f), C.card.copy(alpha = 0.96f))
+                                        )
+                                    )
+                                    .border(1.dp, C.border.copy(alpha = 0.86f), RoundedCornerShape(22.dp))
                                     .clickable { offerExp = true }
                                     .padding(16.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(C.amberDim), contentAlignment = Alignment.Center) {
-                                        Icon(Icons.Filled.Wifi, null, tint = C.cyan, modifier = Modifier.size(18.dp))
+                                    Box(
+                                        Modifier
+                                            .size(48.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    listOf(C.amber.copy(alpha = 0.26f), C.amber.copy(alpha = 0.10f))
+                                                )
+                                            )
+                                            .border(1.dp, C.amber.copy(alpha = 0.34f), RoundedCornerShape(16.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(22.dp))
                                     }
                                     Spacer(Modifier.width(14.dp))
                                     Column(Modifier.weight(1f)) {
-                                        Text(selOffer?.name ?: "Choose a bundle", color = if (selOffer != null) C.t1 else C.t2, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Text("Data Bundle", color = C.t2, fontSize = 12.sp)
+                                        Spacer(Modifier.height(3.dp))
+                                        Text(selOffer?.name ?: "Choose a bundle", color = if (selOffer != null) C.t1 else C.t2, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                                         selOffer?.let { selected ->
                                             Text("KES ${selected.price}  ·  ${selected.executionMode}", color = C.amber, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                         } ?: Text("Select an enabled offer to continue", color = C.t3, fontSize = 12.sp)
@@ -3878,21 +4018,28 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             Row(
                                 Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(20.dp))
+                                    .clip(RoundedCornerShape(22.dp))
                                     .background(C.card)
-                                    .border(1.dp, C.border, RoundedCornerShape(20.dp))
+                                    .border(1.dp, C.border, RoundedCornerShape(22.dp))
                                     .padding(5.dp),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 listOf("SIMPLE" to Icons.Filled.FlashOn, "ADVANCED" to Icons.Outlined.AutoMode).forEach { (m, ic) ->
                                     val active = mode == m
                                     val activeAccent = if (m == "ADVANCED") C.amber else C.cyan
-                                    val modeBg by animateColorAsState(if (active) activeAccent else Color.Transparent, label = "console_mode_bg")
                                     Box(
                                         Modifier
                                             .weight(1f)
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(modeBg)
+                                            .clip(RoundedCornerShape(18.dp))
+                                            .background(
+                                                if (active) {
+                                                    Brush.linearGradient(
+                                                        listOf(activeAccent.copy(alpha = 0.92f), activeAccent.copy(alpha = 0.58f))
+                                                    )
+                                                } else {
+                                                    Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                                                }
+                                            )
                                             .clickable { mode = m }
                                             .padding(vertical = 16.dp),
                                         contentAlignment = Alignment.Center
