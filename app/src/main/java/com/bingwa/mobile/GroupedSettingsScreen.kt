@@ -16,6 +16,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +60,7 @@ import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Router
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SimCard
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.Sms
@@ -72,6 +75,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -83,6 +87,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -98,6 +104,11 @@ import androidx.compose.material3.TextButton
 import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import kotlin.math.absoluteValue
 
 private sealed class SettingsDest {
     data object Home : SettingsDest()
@@ -1178,10 +1189,42 @@ private fun TransactionSettings(onBack: () -> Unit) {
     var autoClear by remember { mutableStateOf(prefs.safeGetString("auto_clear", "Never") ?: "Never") }
     var clearExpanded by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var activeTab by remember { mutableStateOf(TransactionHistoryFilter.ALL) }
+    var searchQuery by remember { mutableStateOf("") }
     var history by remember {
-        mutableStateOf(TransactionStore.load(ctx).sortedByDescending { it.timestamp })
+        mutableStateOf(TransactionStore.load(ctx).sortedByDescending { transactionHistoryTimestamp(it) })
     }
+    val offers = remember { OfferRepository.load(ctx).filter { it.enabled } }
     val clearOptions = listOf("Daily", "Weekly", "Monthly", "Yearly", "Never")
+    val tabs = TransactionHistoryFilter.entries.map { filter ->
+        TransactionHistoryTab(
+            filter = filter,
+            label = filter.label,
+            count = if (filter == TransactionHistoryFilter.ALL) {
+                history.size
+            } else {
+                history.count { transactionHistoryFilterFor(it, offers) == filter }
+            }
+        )
+    }
+    val normalizedQuery = searchQuery.trim()
+    val filteredHistory = history
+        .sortedByDescending { transactionHistoryTimestamp(it) }
+        .filter { tx ->
+            val matchesTab = activeTab == TransactionHistoryFilter.ALL ||
+                transactionHistoryFilterFor(tx, offers) == activeTab
+            val matchesQuery = normalizedQuery.isBlank() ||
+                tx.clientName.contains(normalizedQuery, ignoreCase = true) ||
+                tx.description.contains(normalizedQuery, ignoreCase = true) ||
+                tx.phoneNumber.contains(normalizedQuery, ignoreCase = true)
+            matchesTab && matchesQuery
+        }
+    val groupedHistory = filteredHistory.groupBy { transactionHistoryDateLabel(it) }
+    val todayCompleted = history.filter {
+        transactionHistoryFilterFor(it, offers) == TransactionHistoryFilter.COMPLETED && isTransactionToday(it)
+    }
+    val totalTodayCollected = todayCompleted.sumOf { transactionHistoryAmountValue(it) }
+    val unmatchedCount = history.count { transactionHistoryFilterFor(it, offers) == TransactionHistoryFilter.UNMATCHED }
 
     if (confirmClear) {
         AlertDialog(
@@ -1202,39 +1245,129 @@ private fun TransactionSettings(onBack: () -> Unit) {
         )
     }
 
-    Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
-        SettingsTopBar("Transaction History", "Clear summaries, recent activity, and cleanup controls", onBack)
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SettingsGroup("Overview") {
-                TransactionHistoryOverview(history = history)
-            }
-
-            SettingsGroup("Recent Activity") {
-                if (history.isEmpty()) {
-                    Column(
-                        Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text("No transactions recorded yet.", color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "New collections and dispatch results will appear here automatically once activity starts.",
-                            color = C.t2,
-                            fontSize = 12.sp,
-                            lineHeight = 18.sp
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(C.bg)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color(0xFF10101A),
+                            C.bg
                         )
-                    }
-                } else {
-                    Column(
-                        Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        history.take(12).forEach { tx ->
-                            TransactionHistoryRow(tx = tx)
-                        }
-                    }
+                    )
+                )
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(C.surface.copy(alpha = 0.92f), RoundedCornerShape(14.dp))
+                ) {
+                    Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = C.t1)
+                }
+                Text(
+                    "Transaction History",
+                    color = C.t1,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                IconButton(
+                    onClick = { confirmClear = true },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(C.surface.copy(alpha = 0.92f), RoundedCornerShape(14.dp))
+                ) {
+                    Icon(Icons.Rounded.DeleteSweep, contentDescription = "Clear", tint = C.t1)
                 }
             }
+            Spacer(Modifier.height(18.dp))
+            TransactionHistoryHeroCard(
+                totalTodayCollected = totalTodayCollected,
+                completedTodayCount = todayCompleted.size,
+                unmatchedCount = unmatchedCount
+            )
+            Spacer(Modifier.height(16.dp))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text("Search by name or number...", color = C.t3) },
+                leadingIcon = {
+                    Icon(Icons.Rounded.Search, contentDescription = null, tint = C.t3)
+                },
+                shape = RoundedCornerShape(18.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = C.surface.copy(alpha = 0.88f),
+                    unfocusedContainerColor = C.surface.copy(alpha = 0.72f),
+                    focusedBorderColor = C.border.copy(alpha = 0.95f),
+                    unfocusedBorderColor = C.border.copy(alpha = 0.72f),
+                    focusedTextColor = C.t1,
+                    unfocusedTextColor = C.t1,
+                    cursorColor = C.cyan,
+                    focusedLeadingIconColor = C.t3,
+                    unfocusedLeadingIconColor = C.t3,
+                    focusedPlaceholderColor = C.t3,
+                    unfocusedPlaceholderColor = C.t3
+                )
+            )
+            Spacer(Modifier.height(14.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                tabs.forEach { tab ->
+                    TransactionHistoryTabChip(
+                        tab = tab,
+                        isActive = activeTab == tab.filter,
+                        onClick = { activeTab = tab.filter }
+                    )
+                }
+            }
+        }
 
+        Column(
+            Modifier.padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Spacer(Modifier.height(8.dp))
+            if (filteredHistory.isEmpty()) {
+                TransactionHistoryEmptyState(
+                    hasTransactions = history.isNotEmpty(),
+                    filterLabel = activeTab.label,
+                    hasSearch = normalizedQuery.isNotBlank()
+                )
+            } else {
+                groupedHistory.forEach { (dateLabel, items) ->
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            dateLabel.uppercase(Locale.getDefault()),
+                            color = C.t3,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        items.forEach { tx ->
+                            TransactionHistoryRow(tx = tx, offers = offers)
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                }
+            }
             SettingsGroup("Retention & Cleanup") {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
                     SettingsRowIcon(Icons.Rounded.Autorenew)
@@ -1271,176 +1404,443 @@ private fun TransactionSettings(onBack: () -> Unit) {
     }
 }
 
-@Composable
-private fun TransactionHistoryOverview(history: List<Transaction>) {
-    val completedCount = history.count { it.statusEnum == TransactionStatus.SUCCESS }
-    val inFlightCount = history.count {
-        it.statusEnum == TransactionStatus.PENDING ||
-            it.statusEnum == TransactionStatus.PROCESSING ||
-            it.statusEnum == TransactionStatus.RETRYING
-    }
-    val attentionCount = history.count {
-        it.statusEnum == TransactionStatus.FAILED || it.statusEnum == TransactionStatus.CANCELLED
-    }
-    val totalCollected = history
-        .filter { it.statusEnum == TransactionStatus.SUCCESS && it.amountValue > 0.0 }
-        .sumOf { it.amountValue }
-        .toInt()
-    val totalRecords = history.size
-    val successRate = if (totalRecords == 0) "0%" else "${(completedCount * 100) / totalRecords}%"
-    val latestActivity = history.firstOrNull()?.date?.ifBlank { "No activity yet" } ?: "No activity yet"
+private enum class TransactionHistoryFilter(val label: String) {
+    ALL("All"),
+    COMPLETED("Completed"),
+    PENDING("Pending"),
+    FAILED("Failed"),
+    UNMATCHED("Unmatched")
+}
 
-    Column(
-        Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+private data class TransactionHistoryTab(
+    val filter: TransactionHistoryFilter,
+    val label: String,
+    val count: Int
+)
+
+private val TransactionHistoryGradient = listOf(
+    Color(0xFF6C63FF),
+    Color(0xFFA29BFE),
+    Color(0xFF4ECDC4)
+)
+
+@Composable
+private fun TransactionHistoryHeroCard(
+    totalTodayCollected: Double,
+    completedTodayCount: Int,
+    unmatchedCount: Int
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.linearGradient(TransactionHistoryGradient),
+                shape = RoundedCornerShape(24.dp)
+            )
+            .padding(horizontal = 20.dp, vertical = 18.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(112.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.10f))
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 36.dp, top = 64.dp)
+                .size(84.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.08f))
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                "TODAY'S COLLECTED",
+                color = Color.White.copy(alpha = 0.82f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                transactionHistoryCurrency(totalTodayCollected),
+                color = Color.White,
+                fontSize = 30.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Text(
+                if (unmatchedCount > 0) {
+                    "$completedTodayCount successful transactions • $unmatchedCount unmatched to review"
+                } else {
+                    "$completedTodayCount successful transactions"
+                },
+                color = Color.White.copy(alpha = 0.78f),
+                fontSize = 12.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun TransactionHistoryTabChip(
+    tab: TransactionHistoryTab,
+    isActive: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(999.dp)
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(
+                if (isActive) {
+                    Brush.horizontalGradient(TransactionHistoryGradient)
+                } else {
+                    Brush.horizontalGradient(
+                        listOf(
+                            C.surface.copy(alpha = 0.74f),
+                            C.surface.copy(alpha = 0.60f)
+                        )
+                    )
+                },
+                shape
+            )
+            .border(
+                width = if (isActive) 0.dp else 1.dp,
+                color = if (isActive) Color.Transparent else C.border.copy(alpha = 0.72f),
+                shape = shape
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         Text(
-            "Use this view to monitor collections, spot failures quickly, and manage retention from one place.",
-            color = C.t2,
-            fontSize = 12.sp,
-            lineHeight = 18.sp
+            "${tab.label} ${tab.count}",
+            color = if (isActive) Color.White else C.t2,
+            fontSize = 13.sp,
+            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
         )
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            TransactionSummaryCard("Records", totalRecords.toString(), "All saved items", C.cyan, Modifier.weight(1f))
-            TransactionSummaryCard("Collected", "KES $totalCollected", "Successful totals", C.green, Modifier.weight(1f))
-        }
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            TransactionSummaryCard("Success Rate", successRate, "$completedCount completed", C.blue, Modifier.weight(1f))
-            TransactionSummaryCard("Attention", (inFlightCount + attentionCount).toString(), "Pending or failed", C.orange, Modifier.weight(1f))
-        }
-        Surface(
-            color = C.surface.copy(alpha = 0.78f),
-            shape = RoundedCornerShape(18.dp),
-            border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(C.green)
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Latest Activity", color = C.t3, fontSize = 11.sp)
-                    Text(latestActivity, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
-        }
     }
 }
 
 @Composable
-private fun TransactionSummaryCard(
-    label: String,
-    value: String,
-    supporting: String,
-    tint: androidx.compose.ui.graphics.Color,
-    modifier: Modifier = Modifier
+private fun TransactionHistoryEmptyState(
+    hasTransactions: Boolean,
+    filterLabel: String,
+    hasSearch: Boolean
 ) {
     Surface(
-        color = C.surface.copy(alpha = 0.78f),
-        shape = RoundedCornerShape(18.dp),
+        color = C.surface.copy(alpha = 0.82f),
+        shape = RoundedCornerShape(24.dp),
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
-        modifier = modifier
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(label, color = C.t3, fontSize = 11.sp)
-            Text(value, color = tint, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(supporting, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                if (hasTransactions) "No matching transactions" else "No transactions recorded yet",
+                color = C.t1,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                when {
+                    !hasTransactions ->
+                        "New collections and dispatch results will appear here automatically."
+                    hasSearch ->
+                        "Try a different name, phone number, or switch back to the ${filterLabel.lowercase(Locale.getDefault())} tab."
+                    else ->
+                        "There are no ${filterLabel.lowercase(Locale.getDefault())} transactions right now."
+                },
+                color = C.t2,
+                fontSize = 12.sp,
+                lineHeight = 18.sp
+            )
         }
     }
 }
 
 @Composable
-private fun TransactionHistoryRow(tx: Transaction) {
-    val tint = when (tx.statusEnum) {
-        TransactionStatus.SUCCESS -> C.green
-        TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
-        else -> C.orange
-    }
+private fun TransactionHistoryRow(
+    tx: Transaction,
+    offers: List<OfferItem>
+) {
+    val classification = transactionHistoryFilterFor(tx, offers)
+    val accent = transactionHistoryAccent(classification)
+    val avatarColor = transactionAvatarColor(tx)
+    val expectedOffer = resolveOfferForHistory(tx, offers)
     val title = tx.clientName.ifBlank {
         tx.description.ifBlank { "Transaction #${tx.id}" }
     }
-    val detailParts = buildList {
-        tx.description
-            .takeIf { it.isNotBlank() && !it.equals(title, ignoreCase = true) }
-            ?.let(::add)
-        tx.phoneNumber
-            .takeIf { it.isNotBlank() }
-            ?.let { add(maskTransactionPhone(it)) }
-        when (tx.source) {
-            TX_SOURCE_AUTOMATED -> add("Automated")
-            TX_SOURCE_CONSOLE -> add("Console")
-            TX_SOURCE_SMS_COMMAND -> add("SMS Command")
-            TX_SOURCE_AIRTIME -> add("Airtime")
-            TX_SOURCE_SYSTEM -> add("System")
+    val primaryDetail = tx.phoneNumber
+        .takeIf { it.isNotBlank() }
+        ?.let(::maskTransactionPhone)
+        ?: transactionSourceLabel(tx.source)
+    val note = when (classification) {
+        TransactionHistoryFilter.UNMATCHED -> {
+            val received = transactionHistoryCurrency(transactionHistoryAmountValue(tx))
+            expectedOffer?.let {
+                "Received $received but ${it.name} is set to KES ${it.price}"
+            } ?: "Received $received but it does not match any configured offer"
         }
+        else -> tx.description
+            .takeIf { it.isNotBlank() && !it.equals(title, ignoreCase = true) }
+            ?: transactionSourceLabel(tx.source)
     }
+    val amountPrefix = if (classification == TransactionHistoryFilter.FAILED || tx.source == TX_SOURCE_AIRTIME) "-" else "+"
 
     Surface(
         color = C.surface.copy(alpha = 0.84f),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.68f)),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(12.dp)
-                    .clip(CircleShape)
-                    .background(tint)
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(3.dp))
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(avatarColor.copy(alpha = 0.18f))
+                    .border(1.dp, avatarColor.copy(alpha = 0.34f), RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
                 Text(
-                    detailParts.take(2).joinToString(" • ").ifBlank { "Recorded transaction" },
-                    color = C.t3,
-                    fontSize = 11.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 16.sp
+                    transactionAvatarText(tx),
+                    color = avatarColor,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold
                 )
             }
-            Spacer(Modifier.width(10.dp))
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(tx.amount.ifBlank { "-" }, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Surface(
-                    color = tint.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(1.dp, tint.copy(alpha = 0.2f))
-                ) {
+            Spacer(Modifier.width(14.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    title,
+                    color = C.t1,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        tx.status.ifBlank { tx.statusEnum.value },
-                        color = tint,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        primaryDetail,
+                        color = C.t3,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                    TransactionStatusBadge(classification = classification, accent = accent)
                 }
-                Text(tx.date.ifBlank { "Just now" }, color = C.t3, fontSize = 10.sp)
+                Text(
+                    note,
+                    color = if (classification == TransactionHistoryFilter.UNMATCHED) accent else C.t2,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    amountPrefix + transactionHistoryCurrency(transactionHistoryAmountValue(tx)),
+                    color = accent,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    transactionHistoryTimeLabel(tx),
+                    color = C.t3,
+                    fontSize = 11.sp
+                )
             }
         }
     }
 }
+
+@Composable
+private fun TransactionStatusBadge(
+    classification: TransactionHistoryFilter,
+    accent: Color
+) {
+    Surface(
+        color = accent.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.24f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(accent)
+            )
+            Text(
+                classification.label,
+                color = accent,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+private fun transactionHistoryFilterFor(
+    tx: Transaction,
+    offers: List<OfferItem>
+): TransactionHistoryFilter {
+    if (isTransactionUnmatched(tx, offers)) return TransactionHistoryFilter.UNMATCHED
+    return when (tx.statusEnum) {
+        TransactionStatus.SUCCESS -> TransactionHistoryFilter.COMPLETED
+        TransactionStatus.FAILED, TransactionStatus.CANCELLED -> TransactionHistoryFilter.FAILED
+        else -> TransactionHistoryFilter.PENDING
+    }
+}
+
+private fun isTransactionUnmatched(
+    tx: Transaction,
+    offers: List<OfferItem>
+): Boolean {
+    if (tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED) return false
+    val amount = transactionHistoryAmountValue(tx)
+    if (amount <= 0.0 || tx.source == TX_SOURCE_AIRTIME) return false
+    val expectedOffer = resolveOfferForHistory(tx, offers)
+    return if (expectedOffer != null) {
+        expectedOffer.price.toDouble() != amount
+    } else {
+        offers.none { it.enabled && it.price.toDouble() == amount }
+    }
+}
+
+private fun resolveOfferForHistory(
+    tx: Transaction,
+    offers: List<OfferItem>
+): OfferItem? {
+    tx.offerId.takeIf { it >= 0 }?.let { offerId ->
+        offers.firstOrNull { it.id == offerId }?.let { return it }
+    }
+    offers.firstOrNull { it.name.trim().equals(tx.description.trim(), ignoreCase = true) }?.let { return it }
+    if (tx.amountValue > 0.0) {
+        offers.firstOrNull { it.price == tx.amountValue.toInt() }?.let { return it }
+    }
+    val normalizedCode = UssdHelper.normalizeUssdCode(tx.ussdCode, tx.phoneNumber)
+    return offers.firstOrNull {
+        UssdHelper.normalizeUssdCode(it.ussdCode, tx.phoneNumber) == normalizedCode
+    }
+}
+
+private fun transactionHistoryAccent(classification: TransactionHistoryFilter): Color =
+    when (classification) {
+        TransactionHistoryFilter.COMPLETED -> C.green
+        TransactionHistoryFilter.FAILED -> C.red
+        TransactionHistoryFilter.UNMATCHED -> C.orange
+        TransactionHistoryFilter.PENDING -> Color(0xFFF7B731)
+        TransactionHistoryFilter.ALL -> C.cyan
+    }
+
+private fun transactionAvatarColor(tx: Transaction): Color {
+    val palette = listOf(
+        Color(0xFF6C63FF),
+        Color(0xFF00C9A7),
+        Color(0xFF4ECDC4),
+        Color(0xFFFD79A8),
+        Color(0xFFF7B731)
+    )
+    return palette[tx.id.absoluteValue % palette.size]
+}
+
+private fun transactionAvatarText(tx: Transaction): String {
+    val source = tx.clientName
+        .ifBlank { tx.description }
+        .ifBlank { tx.phoneNumber }
+        .ifBlank { "TX" }
+    val parts = source
+        .trim()
+        .split(Regex("\\s+"))
+        .filter { it.isNotBlank() }
+    return when {
+        parts.size >= 2 -> "${parts[0].first()}${parts[1].first()}".uppercase(Locale.getDefault())
+        parts.isNotEmpty() -> parts.first().take(2).uppercase(Locale.getDefault())
+        else -> "TX"
+    }
+}
+
+private fun transactionSourceLabel(source: String): String =
+    when (source) {
+        TX_SOURCE_AUTOMATED -> "Automated"
+        TX_SOURCE_CONSOLE -> "Console"
+        TX_SOURCE_SMS_COMMAND -> "SMS Command"
+        TX_SOURCE_AIRTIME -> "Airtime"
+        else -> "System"
+    }
+
+private fun transactionHistoryAmountValue(tx: Transaction): Double =
+    tx.amountValue.takeIf { it > 0.0 }
+        ?: Regex("""\d+(?:\.\d+)?""").find(tx.amount)?.value?.toDoubleOrNull()
+        ?: 0.0
+
+private fun transactionHistoryCurrency(amount: Double): String {
+    val rounded = amount.toLong().toDouble()
+    val body = if (amount == rounded) {
+        rounded.toLong().toString()
+    } else {
+        String.format(Locale.getDefault(), "%.2f", amount)
+    }
+    return "KES $body"
+}
+
+private fun transactionHistoryTimestamp(tx: Transaction): Long {
+    if (tx.timestamp > 0L) return tx.timestamp
+    return runCatching {
+        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse(tx.date)?.time ?: 0L
+    }.getOrDefault(0L)
+}
+
+private fun transactionHistoryDateLabel(tx: Transaction): String {
+    val timestamp = transactionHistoryTimestamp(tx)
+    if (timestamp <= 0L) return tx.date.substringBefore(" ").ifBlank { "Earlier" }
+    val now = Calendar.getInstance()
+    val item = Calendar.getInstance().apply { timeInMillis = timestamp }
+    val yesterday = (now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1) }
+    return when {
+        sameDay(item, now) -> "Today"
+        sameDay(item, yesterday) -> "Yesterday · ${SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(timestamp))}"
+        else -> SimpleDateFormat("EEE · MMM d", Locale.getDefault()).format(Date(timestamp))
+    }
+}
+
+private fun transactionHistoryTimeLabel(tx: Transaction): String {
+    val timestamp = transactionHistoryTimestamp(tx)
+    if (timestamp <= 0L) return tx.date.ifBlank { "Just now" }
+    return SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(timestamp)).uppercase(Locale.getDefault())
+}
+
+private fun isTransactionToday(tx: Transaction): Boolean {
+    val timestamp = transactionHistoryTimestamp(tx)
+    if (timestamp <= 0L) return false
+    return sameDay(
+        Calendar.getInstance().apply { timeInMillis = timestamp },
+        Calendar.getInstance()
+    )
+}
+
+private fun sameDay(first: Calendar, second: Calendar): Boolean =
+    first.get(Calendar.YEAR) == second.get(Calendar.YEAR) &&
+        first.get(Calendar.DAY_OF_YEAR) == second.get(Calendar.DAY_OF_YEAR)
 
 private fun maskTransactionPhone(phone: String): String {
     val digits = phone.filter(Char::isDigit)
