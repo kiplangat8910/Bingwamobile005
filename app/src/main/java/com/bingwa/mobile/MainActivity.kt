@@ -2204,7 +2204,7 @@ fun HomeScreenVolcanic(
         else -> Dp.Unspecified
     }
     val horizontalPadding = if (screenWidth >= 700.dp) 24.dp else 16.dp
-    val balanceCardLift = if (screenWidth >= 700.dp) (-22).dp else (-16).dp
+    val balanceCardLift = if (screenWidth >= 700.dp) (-28).dp else (-20).dp
     val automatedTxns = txns.filter { it.showInRecent }.sortedByDescending { it.timestamp }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
@@ -3312,13 +3312,13 @@ fun VolcanicBalanceCard(
             )
             .border(1.dp, C.borderHi.copy(alpha = 0.92f), RoundedCornerShape(22.dp))
             .animateContentSize(animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing))
-            .padding(horizontal = 18.dp, vertical = 20.dp)
+            .padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
         val compactTop = maxWidth < 380.dp
         val compactStats = maxWidth < 430.dp
-        val sectionSpacing = if (compactTop) 10.dp else 14.dp
-        val sectionValueSize = if (compactTop) 24.sp else 30.sp
-        val sectionValueLineHeight = if (compactTop) 28.sp else 32.sp
+        val sectionSpacing = if (compactTop) 8.dp else 10.dp
+        val sectionValueSize = if (compactTop) 22.sp else 27.sp
+        val sectionValueLineHeight = if (compactTop) 25.sp else 29.sp
         val sectionSubtitleSize = if (compactTop) 9.sp else 10.sp
         val statSpacing = if (compactStats) 6.dp else 10.dp
 
@@ -3348,7 +3348,7 @@ fun VolcanicBalanceCard(
                     )
                 }
         )
-        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -3358,9 +3358,9 @@ fun VolcanicBalanceCard(
                         .weight(1f)
                         .clip(RoundedCornerShape(18.dp))
                         .clickable(onClick = onRefresh)
-                        .padding(end = if (compactTop) 10.dp else 16.dp, top = 4.dp, bottom = 4.dp),
+                        .padding(end = if (compactTop) 8.dp else 14.dp, top = 2.dp, bottom = 2.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(if (compactTop) 8.dp else 10.dp)
+                    verticalArrangement = Arrangement.spacedBy(if (compactTop) 6.dp else 8.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -3419,7 +3419,7 @@ fun VolcanicBalanceCard(
                 Box(
                     Modifier
                         .width(1.dp)
-                        .height(if (compactTop) 88.dp else 96.dp)
+                        .height(if (compactTop) 78.dp else 84.dp)
                         .background(
                             Brush.verticalGradient(
                                 listOf(
@@ -3434,9 +3434,9 @@ fun VolcanicBalanceCard(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = if (compactTop) 10.dp else 16.dp, top = 4.dp, bottom = 4.dp),
+                        .padding(start = if (compactTop) 8.dp else 14.dp, top = 2.dp, bottom = 2.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(if (compactTop) 8.dp else 10.dp)
+                    verticalArrangement = Arrangement.spacedBy(if (compactTop) 6.dp else 8.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
