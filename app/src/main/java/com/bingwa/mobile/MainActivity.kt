@@ -3549,7 +3549,7 @@ fun VolcanicBalanceCard(
 
 @Composable
 private fun HomeStatsRow(sent: Int, pending: Int, failed: Int, rate: Int, compact: Boolean, spacing: Dp) {
-    val cells: @Composable () -> Unit = {
+    val cells: @Composable RowScope.() -> Unit = {
         HomeStatusMetricCard(
             label = "Sent",
             value = sent.toString(),
@@ -3891,87 +3891,6 @@ fun StatCell(value: String, label: String, color: Color, modifier: Modifier = Mo
         ) {
             Text(value, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold, color = color, maxLines = 1)
             Text(label, fontSize = 9.sp, color = C.t3, letterSpacing = 0.8.sp, textAlign = TextAlign.Center, lineHeight = 11.sp)
-        }
-    }
-}
-
-@Composable
-private fun RateStatCard(rate: Int, compact: Boolean, modifier: Modifier = Modifier) {
-    val rateColor = when {
-        rate >= 80 -> C.green
-        rate >= 50 -> C.amber
-        else -> C.red
-    }
-    Surface(
-        modifier = modifier,
-        color = C.surface.copy(alpha = 0.82f),
-        shape = RoundedCornerShape(if (compact) 16.dp else 18.dp),
-        border = BorderStroke(1.dp, rateColor.copy(alpha = 0.18f))
-    ) {
-        Column(
-            modifier = Modifier
-                .background(
-                    Brush.verticalGradient(
-                        listOf(rateColor.copy(alpha = 0.12f), Color.Transparent)
-                    )
-                )
-                .padding(horizontal = if (compact) 10.dp else 12.dp, vertical = if (compact) 11.dp else 13.dp),
-            verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = rateColor.copy(alpha = 0.12f),
-                    border = BorderStroke(1.dp, rateColor.copy(alpha = 0.20f))
-                ) {
-                    Box(
-                        modifier = Modifier.size(if (compact) 28.dp else 30.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Outlined.TrendingUp, null, tint = rateColor, modifier = Modifier.size(if (compact) 15.dp else 16.dp))
-                    }
-                }
-                Text(
-                    "SUCCESS RATE",
-                    color = C.t3,
-                    fontSize = if (compact) 8.sp else 9.sp,
-                    letterSpacing = 0.8.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                DonutRing(rate, rateColor, if (compact) 40.dp else 46.dp, if (compact) 4.dp else 5.dp)
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        when {
-                            rate >= 80 -> "Strong completion"
-                            rate >= 50 -> "Stable delivery"
-                            else -> "Needs review"
-                        },
-                        color = C.t1,
-                        fontSize = if (compact) 10.sp else 11.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        "Based on recent automated requests",
-                        color = C.t2,
-                        fontSize = if (compact) 9.sp else 10.sp,
-                        lineHeight = if (compact) 12.sp else 13.sp
-                    )
-                }
-            }
-        }
-    }
-}
-            )
         }
     }
 }
