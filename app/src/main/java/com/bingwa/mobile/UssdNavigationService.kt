@@ -383,7 +383,7 @@ class UssdNavigationService : AccessibilityService() {
             val step = advancedSteps[currentStep]
             val menuSignature = parseMenuSignature(root, lastFinalResponse)
             if (step != "INPUT_PHONE") {
-                captureSignatureStepIfNeeded(currentStep, step, menuSignature)
+                captureSignatureStepIfNeeded(currentStep, step, menuSignature, lastFinalResponse)
             }
             val resolved = resolveStepInput(currentStep, step, menuSignature)
             if (!advancedActive) {
@@ -561,13 +561,19 @@ class UssdNavigationService : AccessibilityService() {
         return minOf(base + (attempt.toLong() * increment), 36L)
     }
 
-    private fun captureSignatureStepIfNeeded(stepIndex: Int, rawStep: String, menu: ParsedMenuSignature?) {
+    private fun captureSignatureStepIfNeeded(
+        stepIndex: Int,
+        rawStep: String,
+        menu: ParsedMenuSignature?,
+        dialogText: String
+    ) {
         if (!signatureLearningMode || !rawStep.all(Char::isDigit) || menu == null) return
         val optionLabel = menu.options[rawStep] ?: return
         val captured = UssdSignatureStep(
             stepIndex = stepIndex,
             expectedInput = rawStep,
             menuTitle = menu.title,
+            menuText = normalizeCollapsedText(dialogText),
             selectedOptionLabel = optionLabel,
             menuOptionsSnapshot = menu.options.values
                 .map { normalizeCollapsedText(it) }

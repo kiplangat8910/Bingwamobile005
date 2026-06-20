@@ -683,7 +683,8 @@ private data class LearnedStepDetail(
     val menuTitle: String,
     val enteredInput: String,
     val selectedOptionLabel: String,
-    val popupTexts: List<String>
+    val recordedTexts: List<String>,
+    val menuOptionsSnapshot: List<String>
 )
 
 private fun buildLearnedStepDetails(
@@ -705,10 +706,10 @@ private fun buildLearnedStepDetails(
             menuTitle = step?.menuTitle.orEmpty(),
             enteredInput = latestCapture?.enteredInput.orEmpty().ifBlank { step?.expectedInput.orEmpty() },
             selectedOptionLabel = latestCapture?.selectedOptionLabel.orEmpty().ifBlank { step?.selectedOptionLabel.orEmpty() },
-            popupTexts = captures
-                .map { it.popupText.trim() }
+            recordedTexts = (listOf(step?.menuText.orEmpty()) + captures.map { it.popupText.trim() })
                 .filter { it.isNotBlank() }
-                .distinct()
+                .distinct(),
+            menuOptionsSnapshot = step?.menuOptionsSnapshot.orEmpty()
         )
     }
 }
@@ -1362,6 +1363,7 @@ private fun RowScope.ConsoleTabChip(
         Modifier
             .weight(1f)
             .clip(RoundedCornerShape(18.dp))
+            .heightIn(min = 52.dp)
             .background(
                 if (selected) {
                     Brush.linearGradient(
@@ -1373,7 +1375,7 @@ private fun RowScope.ConsoleTabChip(
             )
             .border(1.dp, border, RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 16.dp),
+            .padding(horizontal = 12.dp, vertical = 14.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -4188,9 +4190,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
             Column(
                 Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 BoxWithConstraints(
@@ -4198,49 +4199,67 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                         .fillMaxWidth()
                         .widthIn(max = 720.dp)
                 ) {
-                    val compact = maxWidth < 420.dp
-                    val fieldShape = RoundedCornerShape(22.dp)
-                    val iconBoxSize = if (compact) 40.dp else 46.dp
-                    val bodySize = if (compact) 17.sp else 18.sp
-
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        when (bannerState) {
-                            "success" -> FeedbackBanner("✓  Bundle dispatched successfully", C.green)
-                            "failed" -> FeedbackBanner("✗  Dispatch failed. Check USSD logs.", C.red)
-                            "pending" -> FeedbackBanner("…  Dispatching now. Waiting for USSD response.", C.amber)
-                            "relayed" -> FeedbackBanner("→  Forwarded to Relay phone for execution", C.blue)
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(26.dp),
-                            color = C.card.copy(alpha = 0.96f),
-                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.88f)),
-                            modifier = Modifier.fillMaxWidth()
+                    Surface(
+                        shape = RoundedCornerShape(26.dp),
+                        color = C.card.copy(alpha = 0.97f),
+                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(7.dp),
+                            horizontalArrangement = Arrangement.spacedBy(7.dp)
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                ConsoleTabChip("Dispatch", consoleTab == "DISPATCH") { consoleTab = "DISPATCH" }
-                                ConsoleTabChip("History", consoleTab == "HISTORY") { consoleTab = "HISTORY" }
-                            }
+                            ConsoleTabChip("Dispatch", consoleTab == "DISPATCH") { consoleTab = "DISPATCH" }
+                            ConsoleTabChip("History", consoleTab == "HISTORY") { consoleTab = "HISTORY" }
                         }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = true),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = 720.dp)
+                            .fillMaxHeight()
+                    ) {
+                        val compact = maxWidth < 420.dp
+                        val fieldShape = RoundedCornerShape(22.dp)
+                        val iconBoxSize = if (compact) 40.dp else 46.dp
+                        val bodySize = if (compact) 17.sp else 18.sp
 
                         if (consoleTab == "DISPATCH") {
-                            Surface(
-                                shape = RoundedCornerShape(26.dp),
-                                color = C.card.copy(alpha = 0.95f),
-                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
-                                modifier = Modifier.fillMaxWidth()
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(18.dp),
-                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                when (bannerState) {
+                                    "success" -> FeedbackBanner("✓  Bundle dispatched successfully", C.green)
+                                    "failed" -> FeedbackBanner("✗  Dispatch failed. Check USSD logs.", C.red)
+                                    "pending" -> FeedbackBanner("…  Dispatching now. Waiting for USSD response.", C.amber)
+                                    "relayed" -> FeedbackBanner("→  Forwarded to Relay phone for execution", C.blue)
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(26.dp),
+                                    color = C.card.copy(alpha = 0.95f),
+                                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(18.dp),
+                                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
                                     Surface(
                                         shape = fieldShape,
                                         color = C.surface.copy(alpha = 0.72f),
@@ -4532,52 +4551,60 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                             fontSize = 14.sp
                                         )
                                     }
+                                    }
                                 }
                             }
                         } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                Text("History", color = C.t1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                                PillBadge("${consoleHistory.size} total", C.t2)
-                            }
-
-                            if (consoleHistory.isEmpty()) {
-                                Surface(
-                                    shape = RoundedCornerShape(26.dp),
-                                    color = C.card.copy(alpha = 0.95f),
-                                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
-                                    modifier = Modifier.fillMaxWidth()
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 18.dp, vertical = 24.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Icon(Icons.Outlined.History, null, tint = C.t2, modifier = Modifier.size(24.dp))
-                                        Text("No console history yet", color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                                        Text(
-                                            "Executed manual dispatches will appear here.",
-                                            color = C.t2,
-                                            fontSize = 13.sp,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
+                                    Text("History", color = C.t1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                                    PillBadge("${consoleHistory.size} total", C.t2)
                                 }
-                            } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    consoleHistory.take(12).forEach { tx ->
-                                        GithubActivityCard(
-                                            tx = tx,
-                                            onClick = { selectedHistoryTxId = tx.id }
+
+                                if (consoleHistory.isEmpty()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(26.dp),
+                                        color = C.card.copy(alpha = 0.95f),
+                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 18.dp, vertical = 24.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            allTxns.remove(tx)
-                                            saveTransactions(ctx, allTxns.toList())
-                                            if (selectedHistoryTxId == tx.id) selectedHistoryTxId = -1
+                                            Icon(Icons.Outlined.History, null, tint = C.t2, modifier = Modifier.size(24.dp))
+                                            Text("No console history yet", color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                "Executed manual dispatches will appear here.",
+                                                color = C.t2,
+                                                fontSize = 13.sp,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        consoleHistory.take(12).forEach { tx ->
+                                            GithubActivityCard(
+                                                tx = tx,
+                                                onClick = { selectedHistoryTxId = tx.id }
+                                            ) {
+                                                allTxns.remove(tx)
+                                                saveTransactions(ctx, allTxns.toList())
+                                                if (selectedHistoryTxId == tx.id) selectedHistoryTxId = -1
+                                            }
                                         }
                                     }
                                 }
@@ -5956,7 +5983,7 @@ private fun SignatureApprovalDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "The app learned ${pendingSteps.size} menu step(s) and captured ${pendingCaptures.size} popup(s). Approve to replace the saved signature, or relearn if anything looks wrong.",
+                    "The app learned ${pendingSteps.size} menu step(s) and captured ${pendingCaptures.size} popup(s). Approve to replace the saved signature, or relearn if anything looks wrong. Each saved step keeps the recorded text and the option that was chosen.",
                     color = C.t2,
                     fontSize = 12.sp,
                     lineHeight = 18.sp
@@ -6128,8 +6155,16 @@ private fun SignatureLearningDetailsDialog(
                                         fontSize = 11.sp
                                     )
                                 }
-                                if (detail.popupTexts.isNotEmpty()) {
-                                    detail.popupTexts.forEach { popupText ->
+                                if (detail.menuOptionsSnapshot.isNotEmpty()) {
+                                    Text(
+                                        "Visible options: ${detail.menuOptionsSnapshot.joinToString(" | ")}",
+                                        color = C.t3,
+                                        fontSize = 10.sp,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+                                if (detail.recordedTexts.isNotEmpty()) {
+                                    detail.recordedTexts.forEach { popupText ->
                                         Surface(
                                             modifier = Modifier.fillMaxWidth(),
                                             shape = RoundedCornerShape(12.dp),
@@ -6147,7 +6182,7 @@ private fun SignatureLearningDetailsDialog(
                                     }
                                 } else {
                                     Text(
-                                        "No captured text was saved for this step.",
+                                        "No recorded text was saved for this step.",
                                         color = C.t3,
                                         fontSize = 11.sp
                                     )
@@ -6162,6 +6197,114 @@ private fun SignatureLearningDetailsDialog(
             TextButton(onClick = onDismiss) { Text("Close", color = C.cyan) }
         }
     )
+}
+
+@Composable
+private fun CompactDialogSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    checkedTrackColor: Color,
+    uncheckedThumbColor: Color = C.red
+) {
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) 20.dp else 3.dp,
+        animationSpec = tween(180),
+        label = "compact_dialog_switch"
+    )
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) checkedTrackColor.copy(alpha = 0.92f) else C.surface,
+        label = "compact_dialog_switch_track"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (checked) checkedTrackColor.copy(alpha = 0.34f) else uncheckedThumbColor.copy(alpha = 0.62f),
+        label = "compact_dialog_switch_border"
+    )
+    val thumbColor by animateColorAsState(
+        targetValue = if (checked) C.bg else uncheckedThumbColor,
+        label = "compact_dialog_switch_thumb"
+    )
+    Box(
+        modifier = Modifier
+            .width(44.dp)
+            .height(26.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(trackColor)
+            .border(1.dp, borderColor, RoundedCornerShape(999.dp))
+            .clickable { onCheckedChange(!checked) }
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = thumbOffset, y = 3.dp)
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(thumbColor)
+        )
+    }
+}
+
+@Composable
+private fun CompactDialogToggleCard(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    icon: ImageVector,
+    checkedAccent: Color,
+    uncheckedAccent: Color = C.red,
+    badgeText: String? = null
+) {
+    val accent = if (checked) checkedAccent else uncheckedAccent
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = if (checked) checkedAccent.copy(alpha = 0.12f) else uncheckedAccent.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.24f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(accent.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    badgeText?.let {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = accent.copy(alpha = 0.14f)
+                        ) {
+                            Text(
+                                it.uppercase(Locale.getDefault()),
+                                color = accent,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.7.sp,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+                Text(description, color = C.t2, fontSize = 10.sp, lineHeight = 14.sp)
+            }
+            CompactDialogSwitch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                checkedTrackColor = checkedAccent,
+                uncheckedThumbColor = uncheckedAccent
+            )
+        }
+    }
 }
 
 @Composable
@@ -6206,70 +6349,22 @@ private fun OfferDialogSection(title: String, subtitle: String? = null, content:
 
 @Composable
 private fun OfferStatusCard(enabled: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    val accent = if (enabled) C.green else C.red
     val badgeText = if (enabled) "Live" else "Paused"
     val description = if (enabled) {
         "Visible in console and available for matching."
     } else {
         "Hidden from matching until you turn it back on."
     }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = if (enabled) C.greenDim.copy(alpha = 0.18f) else C.red.copy(alpha = 0.08f),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.26f))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(accent.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    if (enabled) Icons.Rounded.CheckCircle else Icons.Rounded.PauseCircle,
-                    contentDescription = null,
-                    tint = accent
-                )
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Bundle status", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = accent.copy(alpha = 0.14f)
-                    ) {
-                        Text(
-                            badgeText.uppercase(Locale.getDefault()),
-                            color = accent,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.8.sp,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-                Text(description, color = C.t2, fontSize = 11.sp, lineHeight = 15.sp)
-            }
-            Switch(
-                checked = enabled,
-                onCheckedChange = onCheckedChange,
-                colors = SwitchDefaults.colors(
-                    checkedTrackColor = C.green,
-                    checkedThumbColor = C.bg,
-                    uncheckedTrackColor = C.red.copy(alpha = 0.40f)
-                )
-            )
-        }
-    }
+    CompactDialogToggleCard(
+        title = "Bundle status",
+        description = description,
+        checked = enabled,
+        onCheckedChange = onCheckedChange,
+        icon = if (enabled) Icons.Rounded.CheckCircle else Icons.Rounded.PauseCircle,
+        checkedAccent = C.green,
+        uncheckedAccent = C.red,
+        badgeText = badgeText
+    )
 }
 
 @Composable
@@ -6440,45 +6535,20 @@ fun OfferDialog(
                         title = "USSD Protection",
                         subtitle = "Advanced mode can learn live menu labels and safely react when network menus change."
                     ) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(18.dp),
-                            color = if (signatureEnabled) C.greenDim.copy(alpha = 0.18f) else C.w04,
-                            border = BorderStroke(1.dp, if (signatureEnabled) C.green.copy(alpha = 0.26f) else C.border.copy(alpha = 0.9f))
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 14.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    Modifier
-                                        .size(40.dp)
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(if (signatureEnabled) C.green.copy(alpha = 0.14f) else C.surface),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Outlined.Security, null, tint = if (signatureEnabled) C.green else C.t2)
-                                }
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text("Detect USSD code changes", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                    Text(
-                                        if (signatureEnabled) "Protection is on and this bundle can detect menu changes before executing."
-                                        else "Turn this on to learn live menu labels and make offer execution safer.",
-                                        color = C.t2,
-                                        fontSize = 11.sp,
-                                        lineHeight = 16.sp
-                                    )
-                                }
-                                Switch(
-                                    checked = signatureEnabled,
-                                    onCheckedChange = { signatureEnabled = it },
-                                    colors = SwitchDefaults.colors(checkedTrackColor = C.green, uncheckedTrackColor = C.border)
-                                )
-                            }
-                        }
+                        CompactDialogToggleCard(
+                            title = "Detect USSD code changes",
+                            description = if (signatureEnabled) {
+                                "Protection is on and this bundle can detect menu changes before executing."
+                            } else {
+                                "Turn this on to learn live menu labels and keep a reviewable step-by-step record."
+                            },
+                            checked = signatureEnabled,
+                            onCheckedChange = { signatureEnabled = it },
+                            icon = Icons.Outlined.Security,
+                            checkedAccent = C.green,
+                            uncheckedAccent = C.red,
+                            badgeText = if (signatureEnabled) "Guard on" else "Guard off"
+                        )
                         if (signatureEnabled) {
                             DialogDropdown(
                                 "When codes change",
@@ -6585,7 +6655,7 @@ fun OfferDialog(
                                     }
                                     if (hasLearnedSignature) {
                                         Text(
-                                            "Tap to view every learned step, full text, and chosen option.",
+                                            "Tap to view every learned step, recorded text, and chosen option.",
                                             color = C.cyan,
                                             fontSize = 10.sp,
                                             lineHeight = 14.sp

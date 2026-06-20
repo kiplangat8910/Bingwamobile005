@@ -221,7 +221,7 @@ class AutomationService : Service() {
         val learnedLabel = updated?.name ?: offerLabel
         val captureSummary = when {
             result.learningCaptures.isEmpty() -> ""
-            else -> " Captured ${result.learningCaptures.size} USSD popup(s) and the selected option at each step."
+            else -> " Captured ${result.learningCaptures.size} USSD popup(s), the selected option, and the recorded text for each step."
         }
         val finalPopup = result.learningCaptures.lastOrNull()?.popupText
             ?.replace(Regex("\\s+"), " ")
