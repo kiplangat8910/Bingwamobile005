@@ -2205,7 +2205,12 @@ fun HomeScreenVolcanic(
     }
     val horizontalPadding = if (screenWidth >= 700.dp) 24.dp else 16.dp
     val balanceCardLift = if (screenWidth >= 700.dp) (-28).dp else (-20).dp
-    val automatedTxns = txns.filter { it.showInRecent }.sortedByDescending { it.timestamp }
+    val automatedTxns = txns
+        .filter { it.showInRecent }
+        .sortedWith(
+            compareBy<Transaction> { recentActivityPriority(it) }
+                .thenByDescending { it.timestamp }
+        )
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
     val sent = automatedTxns.count { it.status == TransactionStatus.SUCCESS.value }
@@ -2294,6 +2299,8 @@ fun HomeScreenVolcanic(
                 ) {
                     RecentActivityHeader(
                         automatedCount = automatedTxns.size,
+                        pendingCount = pending,
+                        failedCount = failed,
                         modifier = Modifier
                             .fillMaxWidth()
                             .widthIn(max = maxContentWidth)
@@ -2477,17 +2484,33 @@ private fun HomeDashboardHeader(running: Boolean) {
 }
 
 @Composable
-private fun RecentActivityHeader(automatedCount: Int, modifier: Modifier = Modifier) {
+private fun RecentActivityHeader(
+    automatedCount: Int,
+    pendingCount: Int,
+    failedCount: Int,
+    modifier: Modifier = Modifier
+) {
     BoxWithConstraints(modifier = modifier) {
-        val badgeText = "$automatedCount automated"
-        val badgeColor = if (automatedCount == 0) C.t2 else C.green
+        val attentionCount = pendingCount + failedCount
+        val badgeText = when {
+            attentionCount > 0 -> "$attentionCount active"
+            automatedCount == 0 -> "0 tracked"
+            else -> "$automatedCount tracked"
+        }
+        val badgeColor = when {
+            failedCount > 0 -> C.red
+            pendingCount > 0 -> C.amber
+            automatedCount == 0 -> C.t2
+            else -> C.green
+        }
+        val subtitle = "Live queue, failures, and latest successful runs"
         if (maxWidth < 430.dp) {
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Row(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -2499,8 +2522,10 @@ private fun RecentActivityHeader(automatedCount: Int, modifier: Modifier = Modif
                             .background(Brush.verticalGradient(listOf(C.amber, C.amber.copy(alpha = 0.20f))))
                     )
                     Text("Recent Activity", color = C.t1, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                    Spacer(Modifier.weight(1f))
+                    PillBadge(badgeText, badgeColor)
                 }
-                PillBadge(badgeText, badgeColor)
+                Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 17.sp)
             }
         } else {
             Row(
@@ -2524,12 +2549,22 @@ private fun RecentActivityHeader(automatedCount: Int, modifier: Modifier = Modif
                         )
                         Text("Recent Activity", color = C.t1, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
                     }
+                    Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 17.sp)
                 }
                 Spacer(Modifier.width(12.dp))
                 PillBadge(badgeText, badgeColor)
             }
         }
     }
+}
+
+private fun recentActivityPriority(tx: Transaction): Int = when (tx.statusEnum) {
+    TransactionStatus.PENDING,
+    TransactionStatus.PROCESSING,
+    TransactionStatus.RETRYING -> 0
+    TransactionStatus.FAILED,
+    TransactionStatus.CANCELLED -> 1
+    TransactionStatus.SUCCESS -> 2
 }
 
 @Composable

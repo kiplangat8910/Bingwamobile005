@@ -97,6 +97,7 @@ import androidx.compose.material3.TextButton
 import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import java.util.Locale
 
 private sealed class SettingsDest {
     data object Home : SettingsDest()
@@ -190,18 +191,28 @@ private fun SettingsHome(
                 ) {
                     Text("Control Center", color = C.t1, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        "Everything is grouped for faster setup, cleaner navigation, and a more premium admin experience.",
+                        "Start with transaction history first, then move into automation, tools, and support.",
                         color = C.t2,
                         fontSize = 12.sp,
                         lineHeight = 18.sp
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MiniTag("History", C.amber)
                         MiniTag("Automation", C.cyan)
                         MiniTag("Tools", C.green)
-                        MiniTag("Appearance", C.blue)
                     }
                 }
             }
+            SettingsGroup("Priority") {
+                LinkRow(
+                    Icons.Rounded.DeleteSweep,
+                    "Transaction History",
+                    "View recent records, status health, and cleanup controls",
+                    C.amber,
+                    onOpenTransactions
+                )
+            }
+
             SettingsGroup("Core") {
                 LinkRow(Icons.Rounded.SimCard, "SIM Settings", "USSD execution, customer notification, and admin reply SIMs", C.cyan, onOpenSim)
                 GroupDivider()
@@ -234,8 +245,6 @@ private fun SettingsHome(
                 LinkRow(Icons.Rounded.DarkMode, "Appearance", "Theme and system colors", C.orange, onOpenAppearance)
                 GroupDivider()
                 LinkRow(Icons.Rounded.Warning, "Admin Alerts", "Low airtime, low tokens, low battery", C.red, onOpenAlerts)
-                GroupDivider()
-                LinkRow(Icons.Rounded.DeleteSweep, "Transactions", "Auto-clear and clear history", C.t2, onOpenTransactions)
             }
         }
         Spacer(Modifier.height(UiDimens.Spacing2xl))
@@ -1207,6 +1216,32 @@ private fun TransactionSettings(onBack: () -> Unit) {
     var clearExpanded by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     val clearOptions = listOf("Daily", "Weekly", "Monthly", "Yearly", "Never")
+    var transactions by remember {
+        mutableStateOf(
+            runCatching { TransactionStore.load(ctx).sortedByDescending { it.timestamp } }
+                .getOrElse {
+                    Log.e("Settings", "Failed to load transaction history", it)
+                    emptyList()
+                }
+        )
+    }
+    val successfulCount = transactions.count { it.statusEnum == TransactionStatus.SUCCESS }
+    val activeCount = transactions.count {
+        it.statusEnum == TransactionStatus.PENDING ||
+            it.statusEnum == TransactionStatus.PROCESSING ||
+            it.statusEnum == TransactionStatus.RETRYING
+    }
+    val failedCount = transactions.count {
+        it.statusEnum == TransactionStatus.FAILED || it.statusEnum == TransactionStatus.CANCELLED
+    }
+    val successfulValue = transactions
+        .filter { it.statusEnum == TransactionStatus.SUCCESS }
+        .sumOf { it.amountValue }
+    val successfulValueLabel = if (successfulValue % 1.0 == 0.0) {
+        successfulValue.toInt().toString()
+    } else {
+        String.format(Locale.getDefault(), "%.2f", successfulValue)
+    }
 
     if (confirmClear) {
         AlertDialog(
@@ -1214,6 +1249,7 @@ private fun TransactionSettings(onBack: () -> Unit) {
             confirmButton = {
                 TextButton(onClick = {
                     ctx.getSharedPreferences("transactions", Context.MODE_PRIVATE).edit().remove("list").apply()
+                    transactions = emptyList()
                     Toast.makeText(ctx, "Transactions cleared", Toast.LENGTH_SHORT).show()
                     confirmClear = false
                 }) { Text("Clear", color = C.red) }
@@ -1227,9 +1263,78 @@ private fun TransactionSettings(onBack: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
-        SettingsTopBar("Transactions", "History retention and cleanup", onBack)
+        SettingsTopBar("Transaction History", "Monitor records first, then manage retention", onBack)
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SettingsGroup("Transactions") {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                color = C.cardHi.copy(alpha = 0.96f),
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.92f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                listOf(
+                                    C.amber.copy(alpha = 0.16f),
+                                    C.cyan.copy(alpha = 0.10f),
+                                    C.cardHi.copy(alpha = 0.96f)
+                                )
+                            )
+                        )
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text("History Overview", color = C.t1, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Use this section to audit what happened recently before jumping into cleanup actions.",
+                        color = C.t2,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        TransactionOverviewStat("All Records", transactions.size.toString(), C.cyan, Modifier.weight(1f))
+                        TransactionOverviewStat("Completed", successfulCount.toString(), C.green, Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        TransactionOverviewStat("Pending", activeCount.toString(), C.amber, Modifier.weight(1f))
+                        TransactionOverviewStat("Failed", failedCount.toString(), C.red, Modifier.weight(1f))
+                    }
+                    Text(
+                        "Successful value: KES $successfulValueLabel",
+                        color = C.t1,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            SettingsGroup("Recent Records") {
+                if (transactions.isEmpty()) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No transaction history yet", color = C.t3, fontSize = 13.sp)
+                    }
+                } else {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        transactions.take(6).forEachIndexed { index, tx ->
+                            TransactionHistoryPreviewRow(tx)
+                            if (index < transactions.take(6).lastIndex) {
+                                Spacer(Modifier.height(10.dp))
+                                GroupDivider()
+                                Spacer(Modifier.height(10.dp))
+                            }
+                        }
+                    }
+                }
+            }
+
+            SettingsGroup("History Controls") {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
                     SettingsRowIcon(Icons.Rounded.Autorenew)
                     Spacer(Modifier.width(12.dp))
@@ -1262,5 +1367,122 @@ private fun TransactionSettings(onBack: () -> Unit) {
             }
         }
         Spacer(Modifier.height(22.dp))
+    }
+}
+
+@Composable
+private fun TransactionOverviewStat(
+    label: String,
+    value: String,
+    accent: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = C.surface.copy(alpha = 0.72f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.22f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(label, color = C.t2, fontSize = 11.sp)
+            Text(value, color = accent, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+        }
+    }
+}
+
+@Composable
+private fun TransactionHistoryPreviewRow(tx: Transaction) {
+    val statusColor = when (tx.statusEnum) {
+        TransactionStatus.SUCCESS -> C.green
+        TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
+        TransactionStatus.PENDING, TransactionStatus.PROCESSING, TransactionStatus.RETRYING -> C.amber
+    }
+    val initials = tx.clientName
+        .ifBlank { tx.phoneNumber.ifBlank { "TX" } }
+        .split(" ")
+        .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+        .take(2)
+        .joinToString("")
+        .ifBlank { "TX" }
+    val subtitle = listOf(
+        tx.phoneNumber.takeIf { it.isNotBlank() },
+        tx.description.takeIf { it.isNotBlank() }
+    ).joinToString(" • ")
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(statusColor.copy(alpha = 0.12f))
+                .border(1.dp, statusColor.copy(alpha = 0.24f), RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(initials, color = statusColor, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                tx.clientName.ifBlank { "Unknown customer" },
+                color = C.t1,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                subtitle.ifBlank { "Transaction details not captured" },
+                color = C.t2,
+                fontSize = 11.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                tx.date.ifBlank { "Time not recorded" },
+                color = C.t3,
+                fontSize = 10.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                tx.amount.ifBlank { "-" },
+                color = C.t1,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = statusColor.copy(alpha = 0.10f),
+                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.22f))
+            ) {
+                Text(
+                    tx.status,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    color = statusColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+            }
+        }
     }
 }
