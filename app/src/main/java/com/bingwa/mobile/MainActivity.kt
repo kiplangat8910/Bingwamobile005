@@ -3314,10 +3314,16 @@ fun VolcanicBalanceCard(
                 )
             )
             .border(1.dp, C.borderHi.copy(alpha = 0.92f), RoundedCornerShape(22.dp))
-            .padding(18.dp)
+            .animateContentSize(animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing))
+            .padding(horizontal = 18.dp, vertical = 20.dp)
     ) {
-        val compactTop = maxWidth < 470.dp
-        val compactStats = maxWidth < 560.dp
+        val compactTop = maxWidth < 380.dp
+        val compactStats = maxWidth < 430.dp
+        val sectionSpacing = if (compactTop) 10.dp else 14.dp
+        val sectionValueSize = if (compactTop) 24.sp else 30.sp
+        val sectionValueLineHeight = if (compactTop) 28.sp else 32.sp
+        val sectionSubtitleSize = if (compactTop) 9.sp else 10.sp
+        val statSpacing = if (compactStats) 6.dp else 10.dp
 
         Box(
             Modifier
@@ -3345,123 +3351,189 @@ fun VolcanicBalanceCard(
                     )
                 }
         )
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (compactTop) {
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    HomeMetricBlock(
-                        title = "AIRTIME BALANCE",
-                        value = airBal.ifBlank { "—" },
-                        detail = if (isRefreshing) "Refreshing balance and token metrics..." else "Tap refresh to sync the latest balance.",
-                        accent = C.blue,
-                        trailing = {
-                            RefreshGlassButton(
-                                isRefreshing = isRefreshing,
-                                spin = spin,
-                                onRefresh = onRefresh
-                            )
-                        }
-                    )
-                    Divider(color = C.w08)
-                    HomeMetricBlock(
-                        title = "TOKENS",
-                        value = unlimitedLabel ?: tokenBal.toString(),
-                        detail = unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available units",
-                        accent = if (unlimitedLabel != null) C.green else C.amber,
-                        valueColor = if (unlimitedLabel != null) C.green else C.t1
+        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = if (compactTop) 10.dp else 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(sectionSpacing)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(Modifier.size(6.dp).clip(CircleShape).background(C.blue))
+                        Text(
+                            "AIRTIME BALANCE",
+                            color = C.t2,
+                            fontSize = 9.sp,
+                            letterSpacing = 1.6.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    AnimatedContent(
+                        targetState = airBal.ifBlank { "—" },
+                        transitionSpec = {
+                            (fadeIn(tween(220)) + slideInVertically(animationSpec = tween(220)) { it / 5 }) togetherWith
+                                (fadeOut(tween(180)) + slideOutVertically(animationSpec = tween(180)) { -it / 5 })
+                        },
+                        label = "airtime_balance_value"
+                    ) { balanceValue ->
+                        Text(
+                            balanceValue,
+                            fontSize = sectionValueSize,
+                            fontWeight = FontWeight.Black,
+                            lineHeight = sectionValueLineHeight,
+                            color = C.t1,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    RefreshGlassButton(
+                        isRefreshing = isRefreshing,
+                        spin = spin,
+                        onRefresh = onRefresh
                     )
                 }
-            } else {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    HomeMetricBlock(
-                        title = "AIRTIME BALANCE",
-                        value = airBal.ifBlank { "—" },
-                        detail = if (isRefreshing) "Refreshing balance and token metrics..." else "Tap refresh to sync the latest balance.",
-                        accent = C.blue,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 14.dp),
-                        trailing = {
-                            RefreshGlassButton(
-                                isRefreshing = isRefreshing,
-                                spin = spin,
-                                onRefresh = onRefresh
+
+                Box(
+                    Modifier
+                        .width(1.dp)
+                        .height(if (compactTop) 118.dp else 126.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    C.borderHi.copy(alpha = 0.72f),
+                                    Color.Transparent
+                                )
                             )
-                        }
-                    )
-                    Box(Modifier.width(1.dp).height(72.dp).background(C.w08))
-                    HomeMetricBlock(
-                        title = "TOKENS",
-                        value = unlimitedLabel ?: tokenBal.toString(),
-                        detail = unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available units",
-                        accent = if (unlimitedLabel != null) C.green else C.amber,
-                        valueColor = if (unlimitedLabel != null) C.green else C.t1,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 18.dp)
-                    )
+                        )
+                )
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = if (compactTop) 10.dp else 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(sectionSpacing)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(Modifier.size(6.dp).clip(CircleShape).background(if (unlimitedLabel != null) C.green else C.amber))
+                        Text(
+                            "TOKENS",
+                            color = C.t2,
+                            fontSize = 9.sp,
+                            letterSpacing = 1.6.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    AnimatedContent(
+                        targetState = unlimitedLabel ?: tokenBal.toString(),
+                        transitionSpec = {
+                            (fadeIn(tween(220)) + slideInVertically(animationSpec = tween(220)) { it / 5 }) togetherWith
+                                (fadeOut(tween(180)) + slideOutVertically(animationSpec = tween(180)) { -it / 5 })
+                        },
+                        label = "token_balance_value"
+                    ) { tokenValue ->
+                        Text(
+                            tokenValue,
+                            fontSize = sectionValueSize,
+                            fontWeight = FontWeight.Black,
+                            lineHeight = sectionValueLineHeight,
+                            color = if (unlimitedLabel != null) C.green else C.t1,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    AnimatedContent(
+                        targetState = unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available Units",
+                        transitionSpec = {
+                            (fadeIn(tween(220)) + slideInVertically(animationSpec = tween(220)) { it / 6 }) togetherWith
+                                (fadeOut(tween(180)) + slideOutVertically(animationSpec = tween(180)) { -it / 6 })
+                        },
+                        label = "token_balance_subtitle"
+                    ) { subtitle ->
+                        Text(
+                            subtitle,
+                            color = C.t3,
+                            fontSize = sectionSubtitleSize,
+                            lineHeight = 14.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
             Divider(color = C.w08)
-            HomeStatsRow(sent = sent, pending = pending, failed = failed, rate = rate, compact = compactStats)
+            HomeStatsRow(
+                sent = sent,
+                pending = pending,
+                failed = failed,
+                rate = rate,
+                compact = compactStats,
+                spacing = statSpacing
+            )
         }
     }
 }
 
 @Composable
-private fun HomeStatsRow(sent: Int, pending: Int, failed: Int, rate: Int, compact: Boolean) {
-    if (compact) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                StatCell("$sent", "SENT", C.green, Modifier.weight(1f))
-                StatCell("$pending", "PENDING", C.amber, Modifier.weight(1f))
-            }
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                StatCell("$failed", "FAILED", C.red, Modifier.weight(1f))
-                RateStatCard(rate = rate, modifier = Modifier.weight(1f))
-            }
-        }
-    } else {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            InlineStatCell("$sent", "SENT", C.green, Modifier.weight(1f))
-            InlineStatDivider()
-            InlineStatCell("$pending", "PENDING", C.amber, Modifier.weight(1f))
-            InlineStatDivider()
-            InlineStatCell("$failed", "FAILED", C.red, Modifier.weight(1f))
-            InlineStatDivider()
-            RateStatCard(rate = rate, modifier = Modifier.weight(1.15f))
-        }
-    }
-}
-
-@Composable
-private fun InlineStatDivider() {
-    Box(
-        Modifier
-            .width(1.dp)
-            .height(54.dp)
-            .background(C.w08)
-    )
-}
-
-@Composable
-private fun InlineStatCell(value: String, label: String, color: Color, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.padding(horizontal = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+private fun HomeStatsRow(sent: Int, pending: Int, failed: Int, rate: Int, compact: Boolean, spacing: Dp) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(spacing),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(value, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = color, maxLines = 1)
-        Text(label, fontSize = 9.sp, color = C.t3, letterSpacing = 0.8.sp, textAlign = TextAlign.Center)
+        InlineStatCell("$sent", "SENT", C.green, compact, Modifier.weight(1f))
+        InlineStatCell("$pending", "PENDING", C.amber, compact, Modifier.weight(1f))
+        InlineStatCell("$failed", "FAILED", C.red, compact, Modifier.weight(1f))
+        RateStatCard(rate = rate, compact = compact, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun InlineStatCell(value: String, label: String, color: Color, compact: Boolean, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        color = C.surface.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(if (compact) 14.dp else 16.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.78f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = if (compact) 6.dp else 10.dp, vertical = if (compact) 10.dp else 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 4.dp)
+        ) {
+            Text(
+                value,
+                fontSize = if (compact) 16.sp else 21.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = color,
+                maxLines = 1
+            )
+            Text(
+                label,
+                fontSize = if (compact) 8.sp else 9.sp,
+                color = C.t3,
+                letterSpacing = 0.8.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = if (compact) 10.sp else 11.sp
+            )
+        }
     }
 }
 
@@ -3580,20 +3652,28 @@ fun StatCell(value: String, label: String, color: Color, modifier: Modifier = Mo
 }
 
 @Composable
-private fun RateStatCard(rate: Int, modifier: Modifier = Modifier) {
+private fun RateStatCard(rate: Int, compact: Boolean, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
         color = C.surface.copy(alpha = 0.78f),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(if (compact) 14.dp else 16.dp),
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.78f))
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = if (compact) 6.dp else 10.dp, vertical = if (compact) 10.dp else 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 6.dp)
         ) {
-            DonutRing(rate, C.green, 52.dp, 5.dp)
-            Text("SUCCESS RATE", color = C.t3, fontSize = 8.sp, letterSpacing = 0.8.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 10.sp)
+            DonutRing(rate, C.green, if (compact) 40.dp else 52.dp, if (compact) 4.dp else 5.dp)
+            Text(
+                "SUCCESS RATE",
+                color = C.t3,
+                fontSize = if (compact) 7.sp else 8.sp,
+                letterSpacing = 0.8.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                lineHeight = if (compact) 9.sp else 10.sp
+            )
         }
     }
 }
