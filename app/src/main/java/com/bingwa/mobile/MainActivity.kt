@@ -3316,8 +3316,7 @@ fun VolcanicBalanceCard(
             .border(1.dp, C.borderHi.copy(alpha = 0.92f), RoundedCornerShape(22.dp))
             .padding(18.dp)
     ) {
-        val compactTop = maxWidth < 470.dp
-        val compactStats = maxWidth < 560.dp
+        val compactCard = maxWidth < 420.dp
 
         Box(
             Modifier
@@ -3346,63 +3345,58 @@ fun VolcanicBalanceCard(
                 }
         )
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (compactTop) {
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    HomeMetricBlock(
-                        title = "AIRTIME BALANCE",
-                        value = airBal.ifBlank { "—" },
-                        detail = if (isRefreshing) "Refreshing balance and token metrics..." else "Tap refresh to sync the latest balance.",
-                        accent = C.blue,
-                        trailing = {
-                            RefreshGlassButton(
-                                isRefreshing = isRefreshing,
-                                spin = spin,
-                                onRefresh = onRefresh
-                            )
-                        }
-                    )
-                    Divider(color = C.w08)
-                    HomeMetricBlock(
-                        title = "TOKENS",
-                        value = unlimitedLabel ?: tokenBal.toString(),
-                        detail = unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available units",
-                        accent = if (unlimitedLabel != null) C.green else C.amber,
-                        valueColor = if (unlimitedLabel != null) C.green else C.t1
-                    )
-                }
-            } else {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    HomeMetricBlock(
-                        title = "AIRTIME BALANCE",
-                        value = airBal.ifBlank { "—" },
-                        detail = if (isRefreshing) "Refreshing balance and token metrics..." else "Tap refresh to sync the latest balance.",
-                        accent = C.blue,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 14.dp),
-                        trailing = {
-                            RefreshGlassButton(
-                                isRefreshing = isRefreshing,
-                                spin = spin,
-                                onRefresh = onRefresh
-                            )
-                        }
-                    )
-                    Box(Modifier.width(1.dp).height(72.dp).background(C.w08))
-                    HomeMetricBlock(
-                        title = "TOKENS",
-                        value = unlimitedLabel ?: tokenBal.toString(),
-                        detail = unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available units",
-                        accent = if (unlimitedLabel != null) C.green else C.amber,
-                        valueColor = if (unlimitedLabel != null) C.green else C.t1,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 18.dp)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                HomeMetricBlock(
+                    title = "AIRTIME BALANCE",
+                    value = airBal.ifBlank { "KSh 0" },
+                    detail = if (isRefreshing) "Refreshing balance..." else "Tap refresh to sync",
+                    accent = C.amber,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = if (compactCard) 10.dp else 14.dp),
+                    valueSize = if (compactCard) 28.sp else 34.sp,
+                    detailSize = if (compactCard) 10.sp else 11.sp,
+                    detailLineHeight = if (compactCard) 13.sp else 15.sp
+                )
+                Box(
+                    Modifier
+                        .width(1.dp)
+                        .height(if (compactCard) 92.dp else 110.dp)
+                        .background(C.w08)
+                )
+                Box(
+                    modifier = Modifier.padding(horizontal = if (compactCard) 10.dp else 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    RefreshGlassButton(
+                        isRefreshing = isRefreshing,
+                        spin = spin,
+                        onRefresh = onRefresh,
+                        compact = compactCard
                     )
                 }
+                Box(
+                    Modifier
+                        .width(1.dp)
+                        .height(if (compactCard) 92.dp else 110.dp)
+                        .background(C.w08)
+                )
+                HomeMetricBlock(
+                    title = "TOKENS",
+                    value = unlimitedLabel ?: tokenBal.toString(),
+                    detail = unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "units",
+                    accent = if (unlimitedLabel != null) C.green else C.amber,
+                    valueColor = if (unlimitedLabel != null) C.green else C.t1,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = if (compactCard) 10.dp else 18.dp),
+                    valueSize = if (compactCard) 28.sp else 34.sp,
+                    detailSize = if (compactCard) 10.sp else 11.sp,
+                    detailLineHeight = if (compactCard) 13.sp else 15.sp
+                )
             }
             Divider(color = C.w08)
-            HomeStatsRow(sent = sent, pending = pending, failed = failed, rate = rate, compact = compactStats)
+            HomeStatsRow(sent = sent, pending = pending, failed = failed, rate = rate, compact = compactCard)
         }
     }
 }
@@ -3473,6 +3467,9 @@ private fun HomeMetricBlock(
     accent: Color,
     modifier: Modifier = Modifier,
     valueColor: Color = C.t1,
+    valueSize: TextUnit = 30.sp,
+    detailSize: TextUnit = 10.sp,
+    detailLineHeight: TextUnit = 14.sp,
     trailing: @Composable (() -> Unit)? = null
 ) {
     Column(
@@ -3496,9 +3493,9 @@ private fun HomeMetricBlock(
         }
         Text(
             value,
-            fontSize = 30.sp,
+            fontSize = valueSize,
             fontWeight = FontWeight.Black,
-            lineHeight = 32.sp,
+            lineHeight = valueSize,
             color = valueColor,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
@@ -3506,8 +3503,8 @@ private fun HomeMetricBlock(
         Text(
             detail,
             color = C.t3,
-            fontSize = 10.sp,
-            lineHeight = 14.sp,
+            fontSize = detailSize,
+            lineHeight = detailLineHeight,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
@@ -3518,7 +3515,8 @@ private fun HomeMetricBlock(
 private fun RefreshGlassButton(
     isRefreshing: Boolean,
     spin: Float,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    compact: Boolean = false
 ) {
     Box(
         modifier = Modifier
@@ -3537,7 +3535,7 @@ private fun RefreshGlassButton(
     ) {
         Box(
             Modifier
-                .size(46.dp)
+                .size(if (compact) 40.dp else 46.dp)
                 .background(
                     Brush.radialGradient(
                         listOf(
@@ -3553,7 +3551,7 @@ private fun RefreshGlassButton(
                 null,
                 tint = if (isRefreshing) C.amber else C.t1,
                 modifier = Modifier
-                    .size(18.dp)
+                    .size(if (compact) 16.dp else 18.dp)
                     .then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
             )
         }
@@ -3581,20 +3579,13 @@ fun StatCell(value: String, label: String, color: Color, modifier: Modifier = Mo
 
 @Composable
 private fun RateStatCard(rate: Int, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        color = C.surface.copy(alpha = 0.78f),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.78f))
+    Column(
+        modifier = modifier.padding(horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            DonutRing(rate, C.green, 52.dp, 5.dp)
-            Text("SUCCESS RATE", color = C.t3, fontSize = 8.sp, letterSpacing = 0.8.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 10.sp)
-        }
+        DonutRing(rate, C.green, 52.dp, 5.dp)
+        Text("SUCCESS RATE", color = C.t3, fontSize = 8.sp, letterSpacing = 0.8.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 10.sp)
     }
 }
 
