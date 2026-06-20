@@ -2204,6 +2204,7 @@ fun HomeScreenVolcanic(
         else -> Dp.Unspecified
     }
     val horizontalPadding = if (screenWidth >= 700.dp) 24.dp else 16.dp
+    val balanceCardLift = if (screenWidth >= 700.dp) (-14).dp else (-10).dp
     val automatedTxns = txns.filter { it.showInRecent }.sortedByDescending { it.timestamp }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
@@ -2263,7 +2264,9 @@ fun HomeScreenVolcanic(
             }
             item {
                 Box(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset(y = balanceCardLift),
                     contentAlignment = Alignment.Center
                 ) {
                     VolcanicBalanceCard(
