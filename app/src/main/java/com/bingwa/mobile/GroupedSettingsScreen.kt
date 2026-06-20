@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -202,6 +203,16 @@ private fun SettingsHome(
                     }
                 }
             }
+            SettingsGroup("Transactions") {
+                LinkRow(
+                    Icons.Rounded.Schedule,
+                    "Transaction History",
+                    "View recent payments, statuses, and collections first",
+                    C.green,
+                    onOpenTransactions
+                )
+            }
+
             SettingsGroup("Core") {
                 LinkRow(Icons.Rounded.SimCard, "SIM Settings", "USSD execution, customer notification, and admin reply SIMs", C.cyan, onOpenSim)
                 GroupDivider()
@@ -234,8 +245,6 @@ private fun SettingsHome(
                 LinkRow(Icons.Rounded.DarkMode, "Appearance", "Theme and system colors", C.orange, onOpenAppearance)
                 GroupDivider()
                 LinkRow(Icons.Rounded.Warning, "Admin Alerts", "Low airtime, low tokens, low battery", C.red, onOpenAlerts)
-                GroupDivider()
-                LinkRow(Icons.Rounded.DeleteSweep, "Transactions", "Auto-clear and clear history", C.t2, onOpenTransactions)
             }
         }
         Spacer(Modifier.height(UiDimens.Spacing2xl))
@@ -1206,6 +1215,9 @@ private fun TransactionSettings(onBack: () -> Unit) {
     var autoClear by remember { mutableStateOf(prefs.safeGetString("auto_clear", "Never") ?: "Never") }
     var clearExpanded by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var history by remember {
+        mutableStateOf(TransactionStore.load(ctx).sortedByDescending { it.timestamp })
+    }
     val clearOptions = listOf("Daily", "Weekly", "Monthly", "Yearly", "Never")
 
     if (confirmClear) {
@@ -1214,6 +1226,7 @@ private fun TransactionSettings(onBack: () -> Unit) {
             confirmButton = {
                 TextButton(onClick = {
                     ctx.getSharedPreferences("transactions", Context.MODE_PRIVATE).edit().remove("list").apply()
+                    history = emptyList()
                     Toast.makeText(ctx, "Transactions cleared", Toast.LENGTH_SHORT).show()
                     confirmClear = false
                 }) { Text("Clear", color = C.red) }
@@ -1227,9 +1240,24 @@ private fun TransactionSettings(onBack: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
-        SettingsTopBar("Transactions", "History retention and cleanup", onBack)
+        SettingsTopBar("Transaction History", "Most important records first, then retention and cleanup", onBack)
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SettingsGroup("Transactions") {
+            SettingsGroup("Transaction History") {
+                TransactionHistoryOverview(history = history)
+                if (history.isNotEmpty()) {
+                    GroupDivider()
+                    Column(
+                        Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        history.take(8).forEach { tx ->
+                            TransactionHistoryRow(tx = tx)
+                        }
+                    }
+                }
+            }
+
+            SettingsGroup("Retention & Cleanup") {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
                     SettingsRowIcon(Icons.Rounded.Autorenew)
                     Spacer(Modifier.width(12.dp))
@@ -1263,4 +1291,150 @@ private fun TransactionSettings(onBack: () -> Unit) {
         }
         Spacer(Modifier.height(22.dp))
     }
+}
+
+@Composable
+private fun TransactionHistoryOverview(history: List<Transaction>) {
+    val completedCount = history.count { it.statusEnum == TransactionStatus.SUCCESS }
+    val inFlightCount = history.count {
+        it.statusEnum == TransactionStatus.PENDING ||
+            it.statusEnum == TransactionStatus.PROCESSING ||
+            it.statusEnum == TransactionStatus.RETRYING
+    }
+    val attentionCount = history.count {
+        it.statusEnum == TransactionStatus.FAILED || it.statusEnum == TransactionStatus.CANCELLED
+    }
+    val totalCollected = history
+        .filter { it.statusEnum == TransactionStatus.SUCCESS && it.amountValue > 0.0 }
+        .sumOf { it.amountValue }
+        .toInt()
+
+    Column(
+        Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            "Latest transactions are visible here so operations teams can verify payment flow before touching cleanup controls.",
+            color = C.t2,
+            fontSize = 12.sp,
+            lineHeight = 18.sp
+        )
+        Surface(
+            color = C.surface.copy(alpha = 0.78f),
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TransactionOverviewMetric("Collected", "KES $totalCollected", C.green, Modifier.weight(1f))
+                TransactionOverviewMetric("Success", completedCount.toString(), C.cyan, Modifier.weight(1f))
+                TransactionOverviewMetric("Attention", (inFlightCount + attentionCount).toString(), C.orange, Modifier.weight(1f))
+            }
+        }
+        if (history.isEmpty()) {
+            Text(
+                "No transactions recorded yet. New collections, failures, and pending payments will appear here automatically.",
+                color = C.t3,
+                fontSize = 12.sp,
+                lineHeight = 18.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun TransactionOverviewMetric(label: String, value: String, tint: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(tint)
+        )
+        Text(label, color = C.t3, fontSize = 11.sp)
+        Text(value, color = tint, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun TransactionHistoryRow(tx: Transaction) {
+    val tint = when (tx.statusEnum) {
+        TransactionStatus.SUCCESS -> C.green
+        TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
+        else -> C.orange
+    }
+    val title = tx.clientName.ifBlank {
+        tx.description.ifBlank { "Transaction #${tx.id}" }
+    }
+    val detailParts = buildList {
+        tx.description
+            .takeIf { it.isNotBlank() && !it.equals(title, ignoreCase = true) }
+            ?.let(::add)
+        tx.phoneNumber
+            .takeIf { it.isNotBlank() }
+            ?.let { add(maskTransactionPhone(it)) }
+        when (tx.source) {
+            TX_SOURCE_AUTOMATED -> add("Automated")
+            TX_SOURCE_AIRTIME -> add("Airtime")
+        }
+    }
+
+    Surface(
+        color = C.surface.copy(alpha = 0.84f),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.68f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .background(tint)
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    detailParts.take(2).joinToString(" • ").ifBlank { "Recorded transaction" },
+                    color = C.t3,
+                    fontSize = 11.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 16.sp
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(tx.amount.ifBlank { "-" }, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Surface(
+                    color = tint.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(1.dp, tint.copy(alpha = 0.2f))
+                ) {
+                    Text(
+                        tx.status.ifBlank { tx.statusEnum.value },
+                        color = tint,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+                Text(tx.date.ifBlank { "Just now" }, color = C.t3, fontSize = 10.sp)
+            }
+        }
+    }
+}
+
+private fun maskTransactionPhone(phone: String): String {
+    val digits = phone.filter(Char::isDigit)
+    if (digits.length < 7) return phone
+    return digits.take(4) + "..." + digits.takeLast(2)
 }

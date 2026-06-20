@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -460,6 +461,16 @@ private fun HighlightCard(title: String, detail: String) {
 
 @Composable
 private fun RecentActivitySection(recentTransactions: List<Transaction>) {
+    val successCount = recentTransactions.count { it.statusEnum == TransactionStatus.SUCCESS }
+    val inFlightCount = recentTransactions.count {
+        it.statusEnum == TransactionStatus.PENDING ||
+            it.statusEnum == TransactionStatus.PROCESSING ||
+            it.statusEnum == TransactionStatus.RETRYING
+    }
+    val attentionCount = recentTransactions.count {
+        it.statusEnum == TransactionStatus.FAILED || it.statusEnum == TransactionStatus.CANCELLED
+    }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -487,6 +498,22 @@ private fun RecentActivitySection(recentTransactions: List<Transaction>) {
             )
         }
 
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Keep this feed focused on the latest automated runs: customer, bundle, amount, duration, and outcome.",
+            color = C.t2,
+            fontSize = 12.sp,
+            lineHeight = 18.sp
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ActivityInsightChip("Success", successCount.toString(), C.green, Modifier.weight(1f))
+            ActivityInsightChip("In Flight", inFlightCount.toString(), C.orange, Modifier.weight(1f))
+            ActivityInsightChip("Attention", attentionCount.toString(), C.red, Modifier.weight(1f))
+        }
         Spacer(Modifier.height(20.dp))
         if (recentTransactions.isEmpty()) {
             RecentActivityShowcase()
@@ -506,6 +533,24 @@ private fun RecentActivitySection(recentTransactions: List<Transaction>) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ActivityInsightChip(label: String, value: String, tint: Color, modifier: Modifier = Modifier) {
+    Surface(
+        color = C.surface.copy(alpha = 0.82f),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.7f)),
+        modifier = modifier
+    ) {
+        Column(
+            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(label, color = C.t3, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(value, color = tint, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -568,12 +613,42 @@ private fun RecentActivityShowcase() {
                     )
                 }
             }
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(end = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text("Automated activity appears here", color = C.t1, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "Show customer, bundle, amount, run time, and failure reason so it complements full history in Settings.",
+                    color = C.t2,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun ActivityRow(tx: Transaction) {
+    val title = tx.clientName.ifBlank {
+        tx.description.ifBlank { "Transaction" }
+    }
+    val subtitle = buildList {
+        tx.description
+            .takeIf { it.isNotBlank() && !it.equals(title, ignoreCase = true) }
+            ?.let(::add)
+        tx.phoneNumber
+            .takeIf { it.isNotBlank() }
+            ?.let { add(maskActivityPhone(it)) }
+        if (tx.executionDurationMs > 0L) {
+            add("${formatActivityDuration(tx.executionDurationMs)} run")
+        } else if (tx.date.isNotBlank()) {
+            add(tx.date)
+        }
+    }.take(2).joinToString(" • ").ifBlank { "Latest automated transaction" }
     val statusColor = when (tx.statusEnum) {
         TransactionStatus.SUCCESS -> C.green
         TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
@@ -597,21 +672,56 @@ private fun ActivityRow(tx: Transaction) {
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    tx.description.ifBlank { "Transaction" },
+                    title,
                     color = C.t1,
                     fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(2.dp))
-                Text(tx.date.ifBlank { tx.status }, color = C.t3, fontSize = 11.sp)
+                Text(
+                    subtitle,
+                    color = C.t3,
+                    fontSize = 11.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 16.sp
+                )
             }
             Spacer(Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.End) {
                 Text(tx.amount.ifBlank { "-" }, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(2.dp))
-                Text(tx.status, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                Text(
+                    buildString {
+                        append(tx.status)
+                        if (tx.date.isNotBlank()) {
+                            append(" • ")
+                            append(tx.date)
+                        }
+                    },
+                    color = statusColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
+    }
+}
+
+private fun maskActivityPhone(phone: String): String {
+    val digits = phone.filter(Char::isDigit)
+    if (digits.length < 7) return phone
+    return digits.take(4) + "..." + digits.takeLast(2)
+}
+
+private fun formatActivityDuration(durationMs: Long): String {
+    val seconds = (durationMs / 1000L).coerceAtLeast(1L)
+    return when {
+        seconds < 60L -> "${seconds}s"
+        seconds < 3600L -> "${seconds / 60L}m"
+        else -> "${seconds / 3600L}h"
     }
 }
 
