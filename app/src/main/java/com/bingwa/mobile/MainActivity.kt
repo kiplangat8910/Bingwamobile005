@@ -4088,6 +4088,9 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
     var offerExp by remember { mutableStateOf(false) }
     var bannerState by remember { mutableStateOf<String?>(null) }
     var pendingTxId by remember { mutableIntStateOf(-1) }
+    var latestPanelExpanded by rememberSaveable { mutableStateOf(true) }
+    var historyPanelExpanded by rememberSaveable { mutableStateOf(false) }
+    var selectedConsoleTxId by rememberSaveable { mutableIntStateOf(-1) }
     var smsSearchContacts by remember { mutableStateOf<List<SavedContact>>(emptyList()) }
     var smsSearchLoading by remember { mutableStateOf(false) }
     val fallbackResolvedClientName = remember(phone, allTxns.size) { resolveClientNameByPhone(ctx, phone) }
@@ -4113,6 +4116,11 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
     val dispatchReady = remember(phone, selOffer) {
         phone.matches(Regex("^[0-9]{10}$")) && selOffer != null
     }
+    val consoleHistory = allTxns
+        .filter { it.source == TX_SOURCE_CONSOLE }
+        .sortedByDescending { it.timestamp }
+    val latestConsoleTx = consoleHistory.firstOrNull()
+    val selectedConsoleTx = consoleHistory.firstOrNull { it.id == selectedConsoleTxId }
     val inf = rememberInfiniteTransition(label = "console_dispatch")
     val pendingButtonScale by inf.animateFloat(
         initialValue = 1f,
@@ -4179,14 +4187,37 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
     }
 
     Box(Modifier.fillMaxSize().background(C.bg)) {
+        Box(
+            Modifier
+                .size(360.dp)
+                .offset((-160).dp, 40.dp)
+                .background(
+                    Brush.radialGradient(
+                        listOf(C.cyan.copy(alpha = 0.14f), Color.Transparent)
+                    ),
+                    CircleShape
+                )
+        )
+        Box(
+            Modifier
+                .size(320.dp)
+                .align(Alignment.BottomEnd)
+                .offset(110.dp, 120.dp)
+                .background(
+                    Brush.radialGradient(
+                        listOf(C.blue.copy(alpha = 0.10f), Color.Transparent)
+                    ),
+                    CircleShape
+                )
+        )
         Column(Modifier.fillMaxSize()) {
-            PageHeader("Console", "Manual bundle dispatch with quick customer matching and cleaner controls")
+            PageHeader("Console", "Execute USSD commands manually")
             Column(
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Column(
@@ -4199,322 +4230,519 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                         "pending" -> FeedbackBanner("…  Dispatching now. Waiting for USSD response.", C.amber)
                         "relayed" -> FeedbackBanner("→  Forwarded to Relay phone for execution", C.blue)
                     }
-                    ConsoleHeroCard(
-                        dispatchReady = dispatchReady,
-                        bannerState = bannerState,
-                        enabledOfferCount = enabledOffers.size,
-                        directoryCount = consoleDirectory.size,
-                        historyCount = allTxns.count { it.source == TX_SOURCE_CONSOLE },
-                        smsSearchLoading = smsSearchLoading
-                    )
-                    ConsoleSectionCard(
-                        title = "Quick Dispatch",
-                        subtitle = "Recipient, offer, and mode are compact so the console stays cleaner on every screen size.",
-                        accent = if (dispatchReady) C.green else C.cyan,
-                        icon = Icons.Filled.Send,
-                        highlighted = true
+                    Surface(
+                        shape = RoundedCornerShape(28.dp),
+                        color = C.card.copy(alpha = 0.92f),
+                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.84f)),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        BoxWithConstraints(Modifier.fillMaxWidth()) {
-                            val compact = maxWidth < 420.dp
-                            val fieldShape = RoundedCornerShape(if (compact) 18.dp else 20.dp)
-                            val iconBoxSize = if (compact) 38.dp else 44.dp
-                            val controlPadding = if (compact) 12.dp else 14.dp
-                            val titleSize = if (compact) 16.sp else 18.sp
-                            val bodySize = if (compact) 16.sp else 18.sp
-
-                            Column(verticalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 14.dp)) {
-                                FieldLabel("Recipient")
-                                Surface(
-                                    shape = fieldShape,
-                                    color = C.card.copy(alpha = 0.96f),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        when {
-                                            phoneErr != null -> C.red.copy(alpha = 0.34f)
-                                            phone.isNotBlank() -> C.cyan.copy(alpha = 0.28f)
-                                            else -> C.border.copy(alpha = 0.82f)
-                                        }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(
+                                            C.cyan.copy(alpha = 0.08f),
+                                            C.cardHi.copy(alpha = 0.96f),
+                                            Color(0xFF0F1930).copy(alpha = 0.92f)
+                                        )
                                     )
+                                )
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            ConsolePanelLabel("Console Phone Number", C.cyan)
+                            ConsoleGlowField(
+                                accent = C.cyan,
+                                borderColor = when {
+                                    phoneErr != null -> C.red.copy(alpha = 0.55f)
+                                    dispatchReady -> C.green.copy(alpha = 0.50f)
+                                    else -> C.cyan.copy(alpha = 0.72f)
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Icon(Icons.Filled.Phone, null, tint = C.t2, modifier = Modifier.size(24.dp))
+                                    OutlinedTextField(
+                                        value = phone,
+                                        onValueChange = {
+                                            val digitsOnly = it.filter(Char::isDigit).take(10)
+                                            phone = digitsOnly
+                                            bannerState = null
+                                            phoneErr = when {
+                                                digitsOnly.isBlank() -> null
+                                                digitsOnly.length < 10 -> "Enter all 10 digits"
+                                                else -> null
+                                            }
+                                        },
+                                        placeholder = { Text("Customer Phone Number", color = C.t3) },
+                                        trailingIcon = if (phone.isNotBlank()) ({
+                                            IconButton(onClick = { phone = ""; phoneErr = null; bannerState = null }) {
+                                                Icon(Icons.Filled.Clear, null, tint = C.t2, modifier = Modifier.size(16.dp))
+                                            }
+                                        }) else null,
+                                        isError = phoneErr != null,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(0.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = Color.Transparent,
+                                            unfocusedBorderColor = Color.Transparent,
+                                            focusedContainerColor = Color.Transparent,
+                                            unfocusedContainerColor = Color.Transparent,
+                                            focusedTextColor = C.t1,
+                                            unfocusedTextColor = C.t1,
+                                            cursorColor = C.amber,
+                                            focusedPlaceholderColor = C.t3,
+                                            unfocusedPlaceholderColor = C.t3
+                                        ),
+                                        textStyle = TextStyle(
+                                            fontSize = 17.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = C.t1
+                                        ),
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                                    )
+                                }
+                            }
+
+                            when {
+                                phoneErr != null -> Text(phoneErr ?: "", color = C.red, fontSize = 12.sp)
+                                exactPhoneMatch != null -> Text("Matched from ${exactPhoneMatch.source}", color = C.green, fontSize = 12.sp)
+                                smsSearchLoading -> Text("Searching saved contacts and M-PESA messages...", color = C.t2, fontSize = 12.sp)
+                            }
+
+                            AnimatedVisibility(visible = resolvedClientName.isNotBlank()) {
+                                Text(
+                                    text = "Matched customer: $resolvedClientName",
+                                    color = C.green,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            ConsolePanelLabel("Data Offer", C.borderHi)
+                            Box {
+                                ConsoleGlowField(
+                                    accent = C.blue,
+                                    borderColor = C.borderHi.copy(alpha = 0.68f),
+                                    onClick = { offerExp = true }
                                 ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(horizontal = controlPadding, vertical = if (compact) 10.dp else 12.dp),
+                                            .padding(horizontal = 16.dp, vertical = 18.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 12.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        Box(
-                                            Modifier
-                                                .size(iconBoxSize)
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .background(C.surface.copy(alpha = 0.9f))
-                                                .border(1.dp, C.border.copy(alpha = 0.85f), RoundedCornerShape(12.dp)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(Icons.Filled.Phone, null, tint = C.t1, modifier = Modifier.size(if (compact) 18.dp else 20.dp))
-                                        }
-                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                            Text("Recipient number", color = C.t2, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                                            OutlinedTextField(
-                                                value = phone,
-                                                onValueChange = {
-                                                    val digitsOnly = it.filter(Char::isDigit).take(10)
-                                                    phone = digitsOnly
-                                                    bannerState = null
-                                                    phoneErr = when {
-                                                        digitsOnly.isBlank() -> null
-                                                        digitsOnly.length < 10 -> "Enter all 10 digits"
-                                                        else -> null
-                                                    }
-                                                },
-                                                placeholder = { Text("0712 345 678", color = C.t3) },
-                                                trailingIcon = if (phone.isNotBlank()) ({
-                                                    IconButton(onClick = { phone = ""; phoneErr = null }) {
-                                                        Icon(Icons.Filled.Clear, null, tint = C.t2, modifier = Modifier.size(16.dp))
-                                                    }
-                                                }) else null,
-                                                isError = phoneErr != null,
-                                                modifier = Modifier.fillMaxWidth(),
-                                                shape = RoundedCornerShape(0.dp),
-                                                colors = OutlinedTextFieldDefaults.colors(
-                                                    focusedBorderColor = Color.Transparent,
-                                                    unfocusedBorderColor = Color.Transparent,
-                                                    focusedContainerColor = Color.Transparent,
-                                                    unfocusedContainerColor = Color.Transparent,
-                                                    focusedTextColor = C.t1,
-                                                    unfocusedTextColor = C.t1,
-                                                    cursorColor = C.amber,
-                                                    focusedPlaceholderColor = C.t3,
-                                                    unfocusedPlaceholderColor = C.t3
-                                                ),
-                                                textStyle = TextStyle(
-                                                    fontSize = bodySize,
-                                                    lineHeight = if (compact) 18.sp else 20.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = C.t1
-                                                ),
-                                                singleLine = true,
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
-                                            )
-                                        }
-                                        Box(
-                                            Modifier
-                                                .size(if (compact) 28.dp else 30.dp)
-                                                .clip(CircleShape)
-                                                .background(
-                                                    if (phone.matches(Regex("^[0-9]{10}$"))) C.green.copy(alpha = 0.14f) else C.surface
-                                                )
-                                                .border(
-                                                    1.dp,
-                                                    if (phone.matches(Regex("^[0-9]{10}$"))) C.green.copy(alpha = 0.40f) else C.border.copy(alpha = 0.82f),
-                                                    CircleShape
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                if (phone.matches(Regex("^[0-9]{10}$"))) Icons.Filled.Check else Icons.Filled.KeyboardArrowDown,
-                                                null,
-                                                tint = if (phone.matches(Regex("^[0-9]{10}$"))) C.green else C.t2,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                                when {
-                                    phoneErr != null -> Text(phoneErr ?: "", color = C.red, fontSize = 12.sp)
-                                    exactPhoneMatch != null -> Text("Matched from ${exactPhoneMatch.source}", color = C.green, fontSize = 12.sp)
-                                    smsSearchLoading -> Text("Searching saved contacts and M-PESA messages...", color = C.t2, fontSize = 12.sp)
-                                }
-                                AnimatedVisibility(visible = resolvedClientName.isNotBlank()) {
-                                    Surface(
-                                        shape = RoundedCornerShape(14.dp),
-                                        color = C.greenDim,
-                                        border = BorderStroke(1.dp, C.green.copy(alpha = 0.24f))
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Icon(Icons.Outlined.Badge, null, tint = C.green, modifier = Modifier.size(16.dp))
-                                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                                Text("Matched customer", color = C.green, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
-                                                Text(resolvedClientName, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                FieldLabel("Offer")
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clip(fieldShape)
-                                        .background(
-                                            Brush.verticalGradient(
-                                                listOf(C.cardHi.copy(alpha = 0.96f), C.card.copy(alpha = 0.96f))
-                                            )
+                                        Icon(Icons.Outlined.SettingsInputAntenna, null, tint = C.t2, modifier = Modifier.size(24.dp))
+                                        Text(
+                                            text = selOffer?.name ?: "Select Offer",
+                                            modifier = Modifier.weight(1f),
+                                            color = if (selOffer != null) C.t1 else C.t2,
+                                            fontSize = 17.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
-                                        .border(1.dp, C.border.copy(alpha = 0.86f), fieldShape)
-                                        .clickable { offerExp = true }
-                                        .padding(controlPadding)
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            Modifier
-                                                .size(iconBoxSize)
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .background(
-                                                    Brush.verticalGradient(
-                                                        listOf(C.amber.copy(alpha = 0.26f), C.amber.copy(alpha = 0.10f))
-                                                    )
-                                                )
-                                                .border(1.dp, C.amber.copy(alpha = 0.34f), RoundedCornerShape(12.dp)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(if (compact) 19.dp else 21.dp))
-                                        }
-                                        Spacer(Modifier.width(if (compact) 10.dp else 12.dp))
-                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                            Text("Selected offer", color = C.t2, fontSize = 11.sp)
-                                            Text(
-                                                selOffer?.name ?: "Choose an offer",
-                                                color = if (selOffer != null) C.t1 else C.t2,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = titleSize,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            selOffer?.let { selected ->
-                                                Text("KES ${selected.price}", color = C.amber, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                            } ?: Text("Select an enabled offer to continue", color = C.t3, fontSize = 11.sp)
-                                        }
-                                        Icon(Icons.Filled.KeyboardArrowDown, null, tint = C.t2)
+                                        Icon(Icons.Filled.KeyboardArrowDown, null, tint = C.t2, modifier = Modifier.size(24.dp))
                                     }
-                                    DropdownMenu(
-                                        expanded = offerExp,
-                                        onDismissRequest = { offerExp = false },
+                                }
+                                DropdownMenu(
+                                    expanded = offerExp,
+                                    onDismissRequest = { offerExp = false },
+                                    modifier = Modifier
+                                        .background(C.cardHi, RoundedCornerShape(14.dp))
+                                        .border(1.dp, C.border, RoundedCornerShape(14.dp))
+                                ) {
+                                    enabledOffers.forEach { o ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(o.name, color = C.t1)
+                                                    Text("KES ${o.price}  •  ${o.executionMode}", color = C.amber)
+                                                }
+                                            },
+                                            onClick = {
+                                                selOffer = o
+                                                mode = o.executionMode
+                                                offerExp = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text("Mode:", color = C.t2, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = C.surface.copy(alpha = 0.54f),
+                                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.84f)),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Row(
                                         modifier = Modifier
-                                            .background(C.cardHi, RoundedCornerShape(14.dp))
-                                            .border(1.dp, C.border, RoundedCornerShape(14.dp))
+                                            .fillMaxWidth()
+                                            .padding(4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        enabledOffers.forEach { o ->
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Column {
-                                                        Text(o.name, color = C.t1)
-                                                        Text("KES ${o.price}", color = C.amber)
-                                                    }
-                                                },
-                                                onClick = { selOffer = o; mode = o.executionMode; offerExp = false }
+                                        ConsoleModeChip(
+                                            text = "SIMPLE",
+                                            icon = Icons.Outlined.Settings,
+                                            selected = mode == "SIMPLE",
+                                            onClick = { mode = "SIMPLE" },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        ConsoleModeChip(
+                                            text = "ADVANCED",
+                                            icon = Icons.Outlined.Code,
+                                            selected = mode == "ADVANCED",
+                                            onClick = { mode = "ADVANCED" },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    val selectedOffer = selOffer
+                                    phoneErr = when {
+                                        phone.isBlank() -> "Phone number required"
+                                        !phone.matches(Regex("^[0-9]{10}$")) -> "Must be exactly 10 digits"
+                                        selectedOffer == null -> "Choose an offer"
+                                        else -> null
+                                    }
+                                    if (phoneErr == null && selectedOffer != null) {
+                                        vib(ctx, 70L)
+                                        if (RelayManager.shouldRelayOffer(ctx, selectedOffer)) {
+                                            val sent = RelayManager.forwardBuyAmount(ctx, phone, selectedOffer.price)
+                                            bannerState = if (sent) "relayed" else "failed"
+                                        } else {
+                                            bannerState = "pending"
+                                            val finalCode = selectedOffer.ussdCode.replace("pn", phone, true)
+                                            val txId = createPendingTransaction(
+                                                ctx,
+                                                selectedOffer.name,
+                                                "KSh ${selectedOffer.price}",
+                                                phone,
+                                                finalCode,
+                                                clientName = resolvedClientName,
+                                                source = TX_SOURCE_CONSOLE,
+                                                showInRecent = false,
+                                                offerId = selectedOffer.id
                                             )
+                                            pendingTxId = txId
+                                            selectedConsoleTxId = txId
+                                            ctx.startOfferAutomation(selectedOffer, phone, txId, finalCode, mode)
                                         }
                                     }
-                                }
-
-                                FieldLabel("Mode")
-                                Row(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clip(fieldShape)
-                                        .background(C.card)
-                                        .border(1.dp, C.border, fieldShape)
-                                        .padding(4.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    listOf("SIMPLE" to Icons.Filled.FlashOn, "ADVANCED" to Icons.Outlined.AutoMode).forEach { (m, ic) ->
-                                        val active = mode == m
-                                        val activeAccent = if (m == "ADVANCED") C.amber else C.cyan
-                                        Box(
-                                            Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(16.dp))
-                                                .background(
-                                                    if (active) {
-                                                        Brush.linearGradient(
-                                                            listOf(activeAccent.copy(alpha = 0.92f), activeAccent.copy(alpha = 0.58f))
-                                                        )
-                                                    } else {
-                                                        Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
-                                                    }
-                                                )
-                                                .clickable { mode = m }
-                                                .padding(vertical = if (compact) 12.dp else 14.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(ic, null, tint = if (active) C.bg else C.t2, modifier = Modifier.size(16.dp))
-                                                Spacer(Modifier.width(8.dp))
-                                                Text(
-                                                    m,
-                                                    color = if (active) C.bg else C.t2,
-                                                    fontWeight = if (active) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                                    fontSize = if (compact) 12.sp else 13.sp
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Button(
-                                    onClick = {
-                                        val selectedOffer = selOffer
-                                        phoneErr = when {
-                                            phone.isBlank() -> "Phone number required"
-                                            !phone.matches(Regex("^[0-9]{10}$")) -> "Must be exactly 10 digits"
-                                            selectedOffer == null -> "Choose an offer"
-                                            else -> null
-                                        }
-                                        if (phoneErr == null && selectedOffer != null) {
-                                            vib(ctx, 70L)
-                                            if (RelayManager.shouldRelayOffer(ctx, selectedOffer)) {
-                                                val sent = RelayManager.forwardBuyAmount(ctx, phone, selectedOffer.price)
-                                                bannerState = if (sent) "relayed" else "failed"
-                                            } else {
-                                                bannerState = "pending"
-                                                val finalCode = selectedOffer.ussdCode.replace("pn", phone, true)
-                                                val txId = createPendingTransaction(
-                                                    ctx,
-                                                    selectedOffer.name,
-                                                    "KSh ${selectedOffer.price}",
-                                                    phone,
-                                                    finalCode,
-                                                    clientName = resolvedClientName,
-                                                    source = TX_SOURCE_CONSOLE,
-                                                    showInRecent = false,
-                                                    offerId = selectedOffer.id
-                                                )
-                                                pendingTxId = txId
-                                                ctx.startOfferAutomation(selectedOffer, phone, txId, finalCode, mode)
-                                            }
-                                        }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(76.dp)
+                                    .graphicsLayer {
+                                        val scale = if (bannerState == "pending") pendingButtonScale else 1f
+                                        scaleX = scale
+                                        scaleY = scale
                                     },
+                                shape = RoundedCornerShape(999.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = C.amber,
+                                    contentColor = C.bg
+                                ),
+                                enabled = selOffer != null
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = C.t1.copy(alpha = 0.18f),
+                                    border = BorderStroke(1.dp, C.t1.copy(alpha = 0.18f))
+                                ) {
+                                    Box(
+                                        modifier = Modifier.size(44.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Filled.PlayArrow, null, tint = C.bg, modifier = Modifier.size(22.dp))
+                                    }
+                                }
+                                Spacer(Modifier.width(14.dp))
+                                Text(
+                                    text = if (bannerState == "pending") "Executing USSD Request" else "Execute USSD Request",
+                                    color = C.bg,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 16.sp
+                                )
+                            }
+                        }
+                    }
+
+                    ConsoleResultPanel(
+                        title = "Results Panel",
+                        subtitle = "Latest Execution Result",
+                        expanded = latestPanelExpanded,
+                        onToggle = { latestPanelExpanded = !latestPanelExpanded }
+                    ) {
+                        if (latestConsoleTx == null) {
+                            Text(
+                                "No execution result yet. Your latest manual USSD request will appear here.",
+                                color = C.t2,
+                                fontSize = 13.sp,
+                                lineHeight = 20.sp
+                            )
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(18.dp),
+                                color = C.surface.copy(alpha = 0.56f),
+                                border = BorderStroke(1.dp, transactionStatusColor(latestConsoleTx).copy(alpha = 0.24f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedConsoleTxId = latestConsoleTx.id }
+                            ) {
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(if (compact) 56.dp else 58.dp)
-                                        .graphicsLayer {
-                                            val scale = if (bannerState == "pending") pendingButtonScale else 1f
-                                            scaleX = scale
-                                            scaleY = scale
-                                        },
-                                    shape = RoundedCornerShape(18.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = C.amber, contentColor = C.bg),
-                                    enabled = selOffer != null
+                                        .padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Icon(Icons.Filled.Send, null, tint = C.bg, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(10.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            latestConsoleTx.description.ifBlank { "Manual request" },
+                                            color = C.t1,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        PillBadge(latestConsoleTx.status, transactionStatusColor(latestConsoleTx))
+                                    }
                                     Text(
-                                        if (bannerState == "pending") "EXECUTING..." else "EXECUTE",
-                                        color = C.bg,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 14.sp
+                                        latestConsoleTx.phoneNumber.ifBlank { "Phone number not captured" },
+                                        color = C.t2,
+                                        fontSize = 13.sp
+                                    )
+                                    Text(
+                                        latestConsoleTx.ussdResponse.ifBlank {
+                                            latestConsoleTx.ussdTranscript.lineSequence().firstOrNull().orEmpty()
+                                                .ifBlank { "Tap to view the full execution details." }
+                                        },
+                                        color = C.t2,
+                                        fontSize = 12.sp,
+                                        lineHeight = 18.sp,
+                                        maxLines = 4,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
+
+                    ConsoleResultPanel(
+                        title = "Results Panel",
+                        subtitle = if (consoleHistory.isEmpty()) "No execution history yet" else "${consoleHistory.size} manual executions",
+                        expanded = historyPanelExpanded,
+                        onToggle = { historyPanelExpanded = !historyPanelExpanded }
+                    ) {
+                        if (consoleHistory.isEmpty()) {
+                            Text(
+                                "History will appear here after you execute a manual USSD request.",
+                                color = C.t2,
+                                fontSize = 13.sp,
+                                lineHeight = 20.sp
+                            )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                consoleHistory.take(4).forEach { tx ->
+                                    GithubActivityCard(
+                                        tx = tx,
+                                        onClick = { selectedConsoleTxId = tx.id }
+                                    ) {
+                                        allTxns.remove(tx)
+                                        saveTransactions(ctx, allTxns.toList())
+                                        if (selectedConsoleTxId == tx.id) selectedConsoleTxId = -1
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+            }
+        }
+
+        if (selectedConsoleTx != null) {
+            RecentTransactionDetailsDialog(
+                tx = selectedConsoleTx,
+                onDismiss = { selectedConsoleTxId = -1 },
+                onDelete = {
+                    allTxns.removeAll { it.id == selectedConsoleTx.id }
+                    saveTransactions(ctx, allTxns.toList())
+                    selectedConsoleTxId = -1
+                },
+                onRetry = { tx ->
+                    val result = retryRecentTransaction(ctx, tx)
+                    Toast.makeText(ctx, result.message, if (result.success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG).show()
+                    if (result.success) {
+                        selectedConsoleTxId = if (result.newTxId >= 0) result.newTxId else -1
+                        latestPanelExpanded = true
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConsolePanelLabel(text: String, accent: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(text, color = accent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(accent.copy(alpha = 0.44f))
+        )
+    }
+}
+
+@Composable
+private fun ConsoleGlowField(
+    accent: Color,
+    borderColor: Color,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    content: @Composable RowScope.() -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xFF14203A).copy(alpha = 0.72f),
+        border = BorderStroke(1.dp, borderColor),
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(12.dp, RoundedCornerShape(18.dp), clip = false)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            accent.copy(alpha = 0.08f),
+                            Color.Transparent,
+                            accent.copy(alpha = 0.04f)
+                        )
+                    )
+                )
+        ) {
+            Row(content = content)
+        }
+    }
+}
+
+@Composable
+private fun ConsoleModeChip(
+    text: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (selected) C.amber else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(icon, null, tint = if (selected) C.bg else C.t2, modifier = Modifier.size(18.dp))
+            Text(
+                text = text,
+                color = if (selected) C.bg else C.t2,
+                fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                fontSize = 14.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConsoleResultPanel(
+    title: String,
+    subtitle: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = C.card.copy(alpha = 0.90f),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            C.cyan.copy(alpha = 0.04f),
+                            C.cardHi.copy(alpha = 0.94f),
+                            Color(0xFF101A31).copy(alpha = 0.92f)
+                        )
+                    )
+                )
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggle),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(title, color = C.t1, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(subtitle, color = C.t2, fontSize = 13.sp)
+                }
+                Icon(
+                    if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    null,
+                    tint = C.t2,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            AnimatedVisibility(visible = expanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    content = content
+                )
             }
         }
     }
