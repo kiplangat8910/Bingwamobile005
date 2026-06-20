@@ -163,77 +163,44 @@ private fun SettingsHome(
 ) {
     val ctx = LocalContext.current
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
-        PageHeader("Settings", "Clean, grouped access to automation, tools, and support")
+        PageHeader("Settings", "Organized access to history, execution, automation, and support")
         Column(
             Modifier.padding(horizontal = UiDimens.ScreenPaddingHorizontal),
             verticalArrangement = Arrangement.spacedBy(UiDimens.SpacingLg)
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                color = C.cardHi.copy(alpha = 0.94f),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
-            ) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(
-                            androidx.compose.ui.graphics.Brush.linearGradient(
-                                listOf(
-                                    C.cyan.copy(alpha = 0.14f),
-                                    C.blue.copy(alpha = 0.08f),
-                                    C.cardHi.copy(alpha = 0.96f)
-                                )
-                            )
-                        )
-                        .padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text("Control Center", color = C.t1, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Text(
-                        "Everything is grouped for faster setup, cleaner navigation, and a more premium admin experience.",
-                        color = C.t2,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        MiniTag("Automation", C.cyan)
-                        MiniTag("Tools", C.green)
-                        MiniTag("Appearance", C.blue)
-                    }
-                }
-            }
-            SettingsGroup("Transactions") {
+            SettingsGroup("History & Offers") {
                 LinkRow(
                     Icons.Rounded.Schedule,
                     "Transaction History",
-                    "View recent payments, statuses, and collections first",
+                    "Review payments, statuses, summaries, and cleanup controls",
                     C.green,
                     onOpenTransactions
                 )
+                GroupDivider()
+                LinkRow(Icons.Rounded.Tag, "Offers & USSD Codes", "Manage available bundles and execution codes", C.cyan, onOpenOffers)
+                GroupDivider()
+                LinkRow(Icons.Rounded.Contacts, "Contacts", "Keep saved customer names clean and easy to search", C.blue, onOpenContacts)
             }
 
-            SettingsGroup("Core") {
-                LinkRow(Icons.Rounded.SimCard, "SIM Settings", "USSD execution, customer notification, and admin reply SIMs", C.cyan, onOpenSim)
+            SettingsGroup("Execution Setup") {
+                LinkRow(Icons.Rounded.SimCard, "SIM Settings", "Choose SIMs for USSD, customer notifications, and admin replies", C.cyan, onOpenSim)
                 GroupDivider()
-                LinkRow(Icons.Rounded.SyncAlt, "Relay (Two‑Phone Mode)", "Relay via SMS or hotspot between two phones", C.blue, onOpenRelay)
+                LinkRow(Icons.Rounded.SyncAlt, "Relay (Two‑Phone Mode)", "Configure SMS or hotspot relay between two phones", C.blue, onOpenRelay)
                 GroupDivider()
-                LinkRow(Icons.Rounded.PhoneAndroid, "Remote Control", "Admin phone, prefix, PIN, commands", C.purple, onOpenRemote)
-                GroupDivider()
-                LinkRow(Icons.Rounded.NotificationsActive, "Customer Notifications", "Success, pending, failure templates", C.green, onOpenNotifications)
+                LinkRow(Icons.Rounded.PhoneAndroid, "Remote Control", "Manage admin phone, prefix, PIN, and remote commands", C.purple, onOpenRemote)
             }
 
-            SettingsGroup("Automation") {
-                LinkRow(Icons.Rounded.SmartToy, "Automation Settings", "Enable automation, retry, auto-save contacts", C.cyan, onOpenAutomation)
+            SettingsGroup("Automation & Alerts") {
+                LinkRow(Icons.Rounded.SmartToy, "Automation Settings", "Control automation, retries, and auto-save behavior", C.cyan, onOpenAutomation)
                 GroupDivider()
-                LinkRow(Icons.Rounded.Contacts, "Contacts", "Import and manage saved customer names", C.green, onOpenContacts)
+                LinkRow(Icons.Rounded.NotificationsActive, "Customer Notifications", "Edit success, pending, and failure templates", C.green, onOpenNotifications)
+                GroupDivider()
+                LinkRow(Icons.Rounded.Warning, "Admin Alerts", "Low airtime, low tokens, and low battery alerts", C.red, onOpenAlerts)
             }
 
-            SettingsGroup("Bundles") {
-                LinkRow(Icons.Rounded.Tag, "Offers & USSD Codes", "Add, edit, remove bundles", C.cyan, onOpenOffers)
-            }
-
-            SettingsGroup("Tools & Support") {
+            SettingsGroup("Appearance & Support") {
+                LinkRow(Icons.Rounded.DarkMode, "Appearance", "Adjust theme and system colors", C.orange, onOpenAppearance)
+                GroupDivider()
                 LinkRow(Icons.Rounded.Info, "Setup Doctor", "Check permissions, compatibility, battery rules, and alarms", C.green, onOpenDiagnostics)
                 GroupDivider()
                 LinkRow(Icons.Rounded.AccessibilityNew, "Accessibility", "Open your phone Accessibility settings", C.cyan) {
@@ -241,10 +208,6 @@ private fun SettingsHome(
                         ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
                 }
-                GroupDivider()
-                LinkRow(Icons.Rounded.DarkMode, "Appearance", "Theme and system colors", C.orange, onOpenAppearance)
-                GroupDivider()
-                LinkRow(Icons.Rounded.Warning, "Admin Alerts", "Low airtime, low tokens, low battery", C.red, onOpenAlerts)
             }
         }
         Spacer(Modifier.height(UiDimens.Spacing2xl))
@@ -1240,17 +1203,32 @@ private fun TransactionSettings(onBack: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
-        SettingsTopBar("Transaction History", "Most important records first, then retention and cleanup", onBack)
+        SettingsTopBar("Transaction History", "Clear summaries, recent activity, and cleanup controls", onBack)
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SettingsGroup("Transaction History") {
+            SettingsGroup("Overview") {
                 TransactionHistoryOverview(history = history)
-                if (history.isNotEmpty()) {
-                    GroupDivider()
+            }
+
+            SettingsGroup("Recent Activity") {
+                if (history.isEmpty()) {
+                    Column(
+                        Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("No transactions recorded yet.", color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "New collections and dispatch results will appear here automatically once activity starts.",
+                            color = C.t2,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp
+                        )
+                    }
+                } else {
                     Column(
                         Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        history.take(8).forEach { tx ->
+                        history.take(12).forEach { tx ->
                             TransactionHistoryRow(tx = tx)
                         }
                     }
@@ -1308,54 +1286,82 @@ private fun TransactionHistoryOverview(history: List<Transaction>) {
         .filter { it.statusEnum == TransactionStatus.SUCCESS && it.amountValue > 0.0 }
         .sumOf { it.amountValue }
         .toInt()
+    val totalRecords = history.size
+    val successRate = if (totalRecords == 0) "0%" else "${(completedCount * 100) / totalRecords}%"
+    val latestActivity = history.firstOrNull()?.date?.ifBlank { "No activity yet" } ?: "No activity yet"
 
     Column(
         Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            "Latest transactions are visible here so operations teams can verify payment flow before touching cleanup controls.",
+            "Use this view to monitor collections, spot failures quickly, and manage retention from one place.",
             color = C.t2,
             fontSize = 12.sp,
             lineHeight = 18.sp
         )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            TransactionSummaryCard("Records", totalRecords.toString(), "All saved items", C.cyan, Modifier.weight(1f))
+            TransactionSummaryCard("Collected", "KES $totalCollected", "Successful totals", C.green, Modifier.weight(1f))
+        }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            TransactionSummaryCard("Success Rate", successRate, "$completedCount completed", C.blue, Modifier.weight(1f))
+            TransactionSummaryCard("Attention", (inFlightCount + attentionCount).toString(), "Pending or failed", C.orange, Modifier.weight(1f))
+        }
         Surface(
             color = C.surface.copy(alpha = 0.78f),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(18.dp),
             border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                TransactionOverviewMetric("Collected", "KES $totalCollected", C.green, Modifier.weight(1f))
-                TransactionOverviewMetric("Success", completedCount.toString(), C.cyan, Modifier.weight(1f))
-                TransactionOverviewMetric("Attention", (inFlightCount + attentionCount).toString(), C.orange, Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(C.green)
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Latest Activity", color = C.t3, fontSize = 11.sp)
+                    Text(latestActivity, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
-        }
-        if (history.isEmpty()) {
-            Text(
-                "No transactions recorded yet. New collections, failures, and pending payments will appear here automatically.",
-                color = C.t3,
-                fontSize = 12.sp,
-                lineHeight = 18.sp
-            )
         }
     }
 }
 
 @Composable
-private fun TransactionOverviewMetric(label: String, value: String, tint: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Box(
-            modifier = Modifier
-                .size(10.dp)
-                .clip(CircleShape)
-                .background(tint)
-        )
-        Text(label, color = C.t3, fontSize = 11.sp)
-        Text(value, color = tint, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+private fun TransactionSummaryCard(
+    label: String,
+    value: String,
+    supporting: String,
+    tint: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = C.surface.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
+        modifier = modifier
+    ) {
+        Column(
+            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(label, color = C.t3, fontSize = 11.sp)
+            Text(value, color = tint, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(supporting, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -1378,7 +1384,10 @@ private fun TransactionHistoryRow(tx: Transaction) {
             ?.let { add(maskTransactionPhone(it)) }
         when (tx.source) {
             TX_SOURCE_AUTOMATED -> add("Automated")
+            TX_SOURCE_CONSOLE -> add("Console")
+            TX_SOURCE_SMS_COMMAND -> add("SMS Command")
             TX_SOURCE_AIRTIME -> add("Airtime")
+            TX_SOURCE_SYSTEM -> add("System")
         }
     }
 
