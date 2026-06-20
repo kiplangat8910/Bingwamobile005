@@ -1393,6 +1393,105 @@ private fun RowScope.ConsoleTabChip(
 }
 
 @Composable
+private fun ConsoleHistoryPreviewCard(
+    tx: Transaction,
+    onClick: () -> Unit
+) {
+    val statusColor = when (tx.status) {
+        TransactionStatus.SUCCESS.value -> C.green
+        TransactionStatus.FAILED.value, TransactionStatus.CANCELLED.value -> C.red
+        TransactionStatus.PROCESSING.value, TransactionStatus.PENDING.value, TransactionStatus.RETRYING.value -> C.amber
+        else -> C.t2
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = C.card.copy(alpha = 0.95f),
+        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.22f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        tx.clientName.ifBlank { "Unknown Customer" },
+                        color = C.t1,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        tx.phoneNumber.ifBlank { "Phone not available" },
+                        color = C.t2,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        tx.amount,
+                        color = C.t1,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = statusColor.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            tx.status,
+                            color = statusColor,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    tx.description.ifBlank { "Transaction" },
+                    color = C.cyan,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    tx.date,
+                    color = C.t3,
+                    fontSize = 10.sp,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun FeedbackBanner(msg: String, color: Color) {
     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = color.copy(alpha = 0.10f), border = BorderStroke(1.dp, color.copy(alpha = 0.3f))) {
         Row(Modifier.padding(12.dp)) {
@@ -4230,16 +4329,27 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             .fillMaxHeight()
                     ) {
                         val compact = maxWidth < 420.dp
-                        val fieldShape = RoundedCornerShape(22.dp)
-                        val iconBoxSize = if (compact) 40.dp else 46.dp
-                        val bodySize = if (compact) 17.sp else 18.sp
+                        val shortViewport = maxHeight < 760.dp
+                        val veryShortViewport = maxHeight < 690.dp
+                        val fieldShape = RoundedCornerShape(if (veryShortViewport) 20.dp else 22.dp)
+                        val iconBoxSize = if (compact || shortViewport) 38.dp else 44.dp
+                        val bodySize = if (compact || shortViewport) 16.sp else 18.sp
+                        val cardPadding = if (veryShortViewport) 14.dp else 18.dp
+                        val sectionSpacing = if (veryShortViewport) 10.dp else 14.dp
+                        val fieldVerticalPadding = if (veryShortViewport) 10.dp else 12.dp
+                        val offerRowPadding = if (veryShortViewport) 12.dp else 16.dp
+                        val executeHeight = if (veryShortViewport) 52.dp else 58.dp
+                        val visibleHistoryCount = when {
+                            veryShortViewport -> 3
+                            shortViewport -> 4
+                            else -> 5
+                        }
 
                         if (consoleTab == "DISPATCH") {
                             Column(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                                    .fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(sectionSpacing)
                             ) {
                                 when (bannerState) {
                                     "success" -> FeedbackBanner("✓  Bundle dispatched successfully", C.green)
@@ -4252,13 +4362,15 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                     shape = RoundedCornerShape(26.dp),
                                     color = C.card.copy(alpha = 0.95f),
                                     border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f, fill = true)
                                 ) {
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(18.dp),
-                                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                                            .padding(cardPadding),
+                                        verticalArrangement = Arrangement.spacedBy(sectionSpacing)
                                     ) {
                                     Surface(
                                         shape = fieldShape,
@@ -4275,7 +4387,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                .padding(horizontal = 16.dp, vertical = fieldVerticalPadding),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
@@ -4332,15 +4444,25 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                         }
                                     }
 
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        PillBadge("${enabledOffers.size} enabled offers", C.amber)
-                                        selOffer?.let { PillBadge("KES ${it.price}", C.green) }
-                                        PillBadge(mode, C.amber)
+                                    if (compact) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                PillBadge("${enabledOffers.size} enabled offers", C.amber)
+                                                selOffer?.let { PillBadge("KES ${it.price}", C.green) }
+                                            }
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                PillBadge(mode, C.amber)
+                                            }
+                                        }
+                                    } else {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            PillBadge("${enabledOffers.size} enabled offers", C.amber)
+                                            selOffer?.let { PillBadge("KES ${it.price}", C.green) }
+                                            PillBadge(mode, C.amber)
+                                        }
                                     }
 
                                     when {
@@ -4358,7 +4480,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                                    .padding(horizontal = 12.dp, vertical = if (veryShortViewport) 8.dp else 10.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
@@ -4381,29 +4503,29 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                                                    .padding(horizontal = 14.dp, vertical = offerRowPadding),
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                                             ) {
                                                 Box(
                                                     modifier = Modifier
-                                                        .size(if (compact) 52.dp else 58.dp)
+                                                        .size(if (compact || shortViewport) 46.dp else 54.dp)
                                                         .clip(RoundedCornerShape(16.dp))
                                                         .background(C.amber.copy(alpha = 0.12f))
                                                         .border(1.dp, C.amber.copy(alpha = 0.24f), RoundedCornerShape(16.dp)),
                                                     contentAlignment = Alignment.Center
                                                 ) {
-                                                    Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(22.dp))
+                                                    Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(if (compact || shortViewport) 19.dp else 22.dp))
                                                 }
                                                 Column(
                                                     modifier = Modifier.weight(1f),
-                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                                    verticalArrangement = Arrangement.spacedBy(2.dp)
                                                 ) {
                                                     Text(
                                                         selOffer?.name ?: "Choose an offer",
                                                         color = if (selOffer != null) C.t1 else C.t2,
                                                         fontWeight = FontWeight.Bold,
-                                                        fontSize = if (compact) 16.sp else 18.sp,
+                                                        fontSize = if (compact || shortViewport) 15.sp else 17.sp,
                                                         maxLines = 1,
                                                         overflow = TextOverflow.Ellipsis
                                                     )
@@ -4466,19 +4588,19 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                                             if (active) accent else Color.Transparent
                                                         )
                                                         .clickable { mode = m }
-                                                        .padding(vertical = 16.dp),
+                                                        .padding(vertical = if (veryShortViewport) 12.dp else 14.dp),
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     Row(
                                                         verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                     ) {
-                                                        Icon(ic, null, tint = if (active) C.bg else C.t2, modifier = Modifier.size(18.dp))
+                                                        Icon(ic, null, tint = if (active) C.bg else C.t2, modifier = Modifier.size(16.dp))
                                                         Text(
                                                             m,
                                                             color = if (active) C.bg else C.t2,
                                                             fontWeight = if (active) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                                            fontSize = 14.sp
+                                                            fontSize = 13.sp
                                                         )
                                                     }
                                                 }
@@ -4493,8 +4615,10 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                             "Runs with the simpler flow for straightforward dispatch."
                                         },
                                         color = C.t2,
-                                        fontSize = 13.sp,
-                                        lineHeight = 22.sp
+                                        fontSize = 12.sp,
+                                        lineHeight = 18.sp,
+                                        maxLines = if (veryShortViewport) 2 else 3,
+                                        overflow = TextOverflow.Ellipsis
                                     )
 
                                     Button(
@@ -4532,7 +4656,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                         },
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(58.dp)
+                                            .height(executeHeight)
                                             .graphicsLayer {
                                                 val scale = if (bannerState == "pending") pendingButtonScale else 1f
                                                 scaleX = scale
@@ -4548,7 +4672,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                             if (bannerState == "pending") "EXECUTING..." else "EXECUTE",
                                             color = C.bg,
                                             fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 14.sp
+                                            fontSize = 13.sp
                                         )
                                     }
                                     }
@@ -4557,9 +4681,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                         } else {
                             Column(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                                    .fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(sectionSpacing)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -4575,16 +4698,19 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                         shape = RoundedCornerShape(26.dp),
                                         color = C.card.copy(alpha = 0.95f),
                                         border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f, fill = true)
                                     ) {
                                         Column(
                                             modifier = Modifier
-                                                .fillMaxWidth()
+                                                .fillMaxSize()
                                                 .padding(horizontal = 18.dp, vertical = 24.dp),
                                             horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            verticalArrangement = Arrangement.Center
                                         ) {
                                             Icon(Icons.Outlined.History, null, tint = C.t2, modifier = Modifier.size(24.dp))
+                                            Spacer(Modifier.height(8.dp))
                                             Text("No console history yet", color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                                             Text(
                                                 "Executed manual dispatches will appear here.",
@@ -4595,16 +4721,33 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                         }
                                     }
                                 } else {
-                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        consoleHistory.take(12).forEach { tx ->
-                                            GithubActivityCard(
-                                                tx = tx,
-                                                onClick = { selectedHistoryTxId = tx.id }
-                                            ) {
-                                                allTxns.remove(tx)
-                                                saveTransactions(ctx, allTxns.toList())
-                                                if (selectedHistoryTxId == tx.id) selectedHistoryTxId = -1
+                                    Surface(
+                                        shape = RoundedCornerShape(26.dp),
+                                        color = C.card.copy(alpha = 0.95f),
+                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f, fill = true)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(if (veryShortViewport) 14.dp else 16.dp),
+                                            verticalArrangement = Arrangement.spacedBy(if (veryShortViewport) 8.dp else 10.dp)
+                                        ) {
+                                            consoleHistory.take(visibleHistoryCount).forEach { tx ->
+                                                ConsoleHistoryPreviewCard(
+                                                    tx = tx,
+                                                    onClick = { selectedHistoryTxId = tx.id }
+                                                )
                                             }
+                                            Spacer(Modifier.weight(1f, fill = true))
+                                            Text(
+                                                "Showing latest ${minOf(visibleHistoryCount, consoleHistory.size)} of ${consoleHistory.size}. Tap a row to open full details.",
+                                                color = C.t3,
+                                                fontSize = 11.sp,
+                                                lineHeight = 15.sp
+                                            )
                                         }
                                     }
                                 }
