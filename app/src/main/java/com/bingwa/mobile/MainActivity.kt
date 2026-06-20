@@ -2520,7 +2520,7 @@ private fun RecentActivityHeader(automatedCount: Int, modifier: Modifier = Modif
                                 .background(Brush.verticalGradient(listOf(C.amber, C.amber.copy(alpha = 0.20f))))
                         )
                         Text("Recent Activity", color = C.t1, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
-                    )
+                    }
                 }
                 Spacer(Modifier.width(12.dp))
                 PillBadge(badgeText, badgeColor)
