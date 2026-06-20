@@ -4,6 +4,7 @@ data class UssdSignatureStep(
     val stepIndex: Int = 0,
     val expectedInput: String = "",
     val menuTitle: String = "",
+    val menuText: String = "",
     val selectedOptionLabel: String = "",
     val menuOptionsSnapshot: List<String> = emptyList()
 )
