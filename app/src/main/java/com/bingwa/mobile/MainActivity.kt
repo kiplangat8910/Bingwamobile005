@@ -2215,7 +2215,7 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
                                 )
                             )
                         )
-                }
+                )
                 Icon(
                     Icons.Outlined.PowerSettingsNew,
                     null,
@@ -2769,7 +2769,7 @@ private fun RecentActivityMotionRail(compact: Boolean) {
                     center = Offset(progressX.coerceIn(startX, endX), centerY)
                 )
             }
-    }
+    )
 }
 
 @Composable
