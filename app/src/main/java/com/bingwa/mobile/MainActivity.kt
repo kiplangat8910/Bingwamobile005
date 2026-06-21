@@ -887,6 +887,35 @@ fun PageHeader(title: String, subtitle: String) {
 }
 
 @Composable
+private fun ConsoleHeader(title: String, subtitle: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(top = 8.dp, bottom = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            title,
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = (-1.0).sp,
+            color = C.t1,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            subtitle,
+            color = C.t2,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
 private fun SectionHeader(title: String, subtitle: String, accent: Color) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -2007,11 +2036,11 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 12.dp)
+            .padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 8.dp)
     ) {
         val compact = maxWidth < 420.dp
-        val centerSlotWidth = if (compact) 82.dp else 94.dp
-        val navHeight = if (compact) 88.dp else 96.dp
+        val centerSlotWidth = if (compact) 76.dp else 86.dp
+        val navHeight = if (compact) 78.dp else 86.dp
         Surface(
             shape = RoundedCornerShape(30.dp),
             color = C.surface.copy(alpha = 0.98f),
@@ -2062,7 +2091,7 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .offset(y = if (compact) (-10).dp else (-12).dp)
+                        .offset(y = if (compact) (-8).dp else (-10).dp)
                         .width(centerSlotWidth),
                     contentAlignment = Alignment.Center
                 ) {
@@ -2128,7 +2157,7 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
     val haloColor = color.copy(alpha = if (running) 0.22f else 0.18f)
     Box(
         modifier = modifier
-            .size(if (compact) 72.dp else 80.dp),
+            .size(if (compact) 64.dp else 72.dp),
         contentAlignment = Alignment.Center
     ) {
         Box(
@@ -2144,7 +2173,7 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
             border = BorderStroke(2.dp, color.copy(alpha = 0.88f)),
             shadowElevation = 18.dp,
             modifier = Modifier
-                .size(if (compact) 60.dp else 66.dp)
+                .size(if (compact) 52.dp else 58.dp)
                 .combinedClickable(
                     onClick = {
                         Toast.makeText(
@@ -2172,7 +2201,7 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
                     Icons.Outlined.PowerSettingsNew,
                     null,
                     tint = color,
-                    modifier = Modifier.size(if (compact) 21.dp else 24.dp)
+                    modifier = Modifier.size(if (compact) 19.dp else 22.dp)
                 )
             }
         }
@@ -4285,12 +4314,12 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
 
     Box(Modifier.fillMaxSize().background(C.bg)) {
         Column(Modifier.fillMaxSize()) {
-            PageHeader("Console", "Manual dispatch & history")
+            ConsoleHeader("Console", "Manual dispatch & history")
             Column(
                 Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 BoxWithConstraints(
@@ -4329,17 +4358,19 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             .fillMaxHeight()
                     ) {
                         val compact = maxWidth < 420.dp
-                        val shortViewport = maxHeight < 760.dp
-                        val veryShortViewport = maxHeight < 690.dp
-                        val fieldShape = RoundedCornerShape(if (veryShortViewport) 20.dp else 22.dp)
-                        val iconBoxSize = if (compact || shortViewport) 38.dp else 44.dp
-                        val bodySize = if (compact || shortViewport) 16.sp else 18.sp
-                        val cardPadding = if (veryShortViewport) 14.dp else 18.dp
-                        val sectionSpacing = if (veryShortViewport) 10.dp else 14.dp
-                        val fieldVerticalPadding = if (veryShortViewport) 10.dp else 12.dp
-                        val offerRowPadding = if (veryShortViewport) 12.dp else 16.dp
-                        val executeHeight = if (veryShortViewport) 52.dp else 58.dp
+                        val shortViewport = maxHeight < 780.dp
+                        val veryShortViewport = maxHeight < 710.dp
+                        val ultraShortViewport = maxHeight < 640.dp
+                        val fieldShape = RoundedCornerShape(if (ultraShortViewport) 18.dp else if (veryShortViewport) 20.dp else 22.dp)
+                        val iconBoxSize = if (compact || shortViewport) 34.dp else 40.dp
+                        val bodySize = if (compact || shortViewport) 15.sp else 17.sp
+                        val cardPadding = if (ultraShortViewport) 12.dp else if (veryShortViewport) 14.dp else 16.dp
+                        val sectionSpacing = if (ultraShortViewport) 8.dp else if (veryShortViewport) 10.dp else 12.dp
+                        val fieldVerticalPadding = if (ultraShortViewport) 8.dp else if (veryShortViewport) 10.dp else 11.dp
+                        val offerRowPadding = if (ultraShortViewport) 10.dp else if (veryShortViewport) 12.dp else 14.dp
+                        val executeHeight = if (ultraShortViewport) 48.dp else if (veryShortViewport) 52.dp else 56.dp
                         val visibleHistoryCount = when {
+                            ultraShortViewport -> 2
                             veryShortViewport -> 3
                             shortViewport -> 4
                             else -> 5
@@ -4399,7 +4430,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                                     .border(1.dp, C.border.copy(alpha = 0.82f), RoundedCornerShape(14.dp)),
                                                 contentAlignment = Alignment.Center
                                             ) {
-                                                Icon(Icons.Filled.Phone, null, tint = C.t2, modifier = Modifier.size(20.dp))
+                                                Icon(Icons.Filled.Phone, null, tint = C.t2, modifier = Modifier.size(if (ultraShortViewport) 17.dp else 18.dp))
                                             }
                                             OutlinedTextField(
                                                 value = phone,
@@ -4480,7 +4511,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(horizontal = 12.dp, vertical = if (veryShortViewport) 8.dp else 10.dp),
+                                                    .padding(horizontal = 12.dp, vertical = if (ultraShortViewport) 7.dp else if (veryShortViewport) 8.dp else 10.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
@@ -4509,13 +4540,13 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                             ) {
                                                 Box(
                                                     modifier = Modifier
-                                                        .size(if (compact || shortViewport) 46.dp else 54.dp)
+                                                        .size(if (compact || shortViewport) 42.dp else 48.dp)
                                                         .clip(RoundedCornerShape(16.dp))
                                                         .background(C.amber.copy(alpha = 0.12f))
                                                         .border(1.dp, C.amber.copy(alpha = 0.24f), RoundedCornerShape(16.dp)),
                                                     contentAlignment = Alignment.Center
                                                 ) {
-                                                    Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(if (compact || shortViewport) 19.dp else 22.dp))
+                                                    Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(if (compact || shortViewport) 17.dp else 20.dp))
                                                 }
                                                 Column(
                                                     modifier = Modifier.weight(1f),
@@ -4525,14 +4556,14 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                                         selOffer?.name ?: "Choose an offer",
                                                         color = if (selOffer != null) C.t1 else C.t2,
                                                         fontWeight = FontWeight.Bold,
-                                                        fontSize = if (compact || shortViewport) 15.sp else 17.sp,
+                                                        fontSize = if (compact || shortViewport) 14.sp else 16.sp,
                                                         maxLines = 1,
                                                         overflow = TextOverflow.Ellipsis
                                                     )
                                                     Text(
                                                         selOffer?.let { "KES ${it.price}  •  ${it.executionMode}" } ?: "Select an enabled offer",
                                                         color = if (selOffer != null) C.amber else C.t3,
-                                                        fontSize = 12.sp,
+                                                        fontSize = 11.sp,
                                                         fontWeight = FontWeight.SemiBold
                                                     )
                                                 }
@@ -4588,7 +4619,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                                             if (active) accent else Color.Transparent
                                                         )
                                                         .clickable { mode = m }
-                                                        .padding(vertical = if (veryShortViewport) 12.dp else 14.dp),
+                                                        .padding(vertical = if (ultraShortViewport) 10.dp else if (veryShortViewport) 12.dp else 13.dp),
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     Row(
@@ -4600,7 +4631,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                                             m,
                                                             color = if (active) C.bg else C.t2,
                                                             fontWeight = if (active) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                                            fontSize = 13.sp
+                                                            fontSize = 12.sp
                                                         )
                                                     }
                                                 }
@@ -4615,9 +4646,9 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                             "Runs with the simpler flow for straightforward dispatch."
                                         },
                                         color = C.t2,
-                                        fontSize = 12.sp,
-                                        lineHeight = 18.sp,
-                                        maxLines = if (veryShortViewport) 2 else 3,
+                                        fontSize = 11.sp,
+                                        lineHeight = 16.sp,
+                                        maxLines = if (ultraShortViewport) 1 else if (veryShortViewport) 2 else 3,
                                         overflow = TextOverflow.Ellipsis
                                     )
 
@@ -4672,7 +4703,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                             if (bannerState == "pending") "EXECUTING..." else "EXECUTE",
                                             color = C.bg,
                                             fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 13.sp
+                                            fontSize = 12.sp
                                         )
                                     }
                                     }
