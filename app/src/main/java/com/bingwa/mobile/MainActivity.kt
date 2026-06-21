@@ -81,7 +81,7 @@ import java.util.*
 import kotlin.math.cos
 import kotlin.math.sin
 
-private data class ConsoleSearchEntry(
+private data class ManualSearchEntry(
     val name: String,
     val phone: String,
     val source: String,
@@ -483,14 +483,14 @@ fun choosePreferredClientName(current: String, candidate: String): String {
     }
 }
 
-private fun mergeConsoleSearchEntry(existing: ConsoleSearchEntry?, incoming: ConsoleSearchEntry): ConsoleSearchEntry {
+private fun mergeManualSearchEntry(existing: ManualSearchEntry?, incoming: ManualSearchEntry): ManualSearchEntry {
     if (existing == null) return incoming
     val preferredName = choosePreferredClientName(existing.name, incoming.name)
     val preferredSource = when {
         existing.source == "Saved" || incoming.source != "Saved" -> existing.source
         else -> incoming.source
     }
-    return ConsoleSearchEntry(
+    return ManualSearchEntry(
         name = preferredName,
         phone = existing.phone,
         source = preferredSource,
@@ -498,23 +498,23 @@ private fun mergeConsoleSearchEntry(existing: ConsoleSearchEntry?, incoming: Con
     )
 }
 
-private fun buildConsoleSearchEntries(
+private fun buildManualSearchEntries(
     context: Context,
     allTxns: List<Transaction>,
     smsContacts: List<SavedContact>
-): List<ConsoleSearchEntry> {
-    val merged = linkedMapOf<String, ConsoleSearchEntry>()
+): List<ManualSearchEntry> {
+    val merged = linkedMapOf<String, ManualSearchEntry>()
 
     fun addEntry(name: String, phone: String, source: String, lastSeen: Long = 0L) {
         val normalizedPhone = SmsCommandHandler.normalizePhone(phone)
         if (!normalizedPhone.matches(Regex("^0\\d{9}$"))) return
-        val incoming = ConsoleSearchEntry(
+        val incoming = ManualSearchEntry(
             name = formatClientName(name),
             phone = normalizedPhone,
             source = source,
             lastSeen = lastSeen
         )
-        merged[normalizedPhone] = mergeConsoleSearchEntry(merged[normalizedPhone], incoming)
+        merged[normalizedPhone] = mergeManualSearchEntry(merged[normalizedPhone], incoming)
     }
 
     loadContacts(context.getSharedPreferences("saved_contacts", Context.MODE_PRIVATE))
@@ -525,12 +525,12 @@ private fun buildConsoleSearchEntries(
     }
 
     return merged.values.sortedWith(
-        compareByDescending<ConsoleSearchEntry> { it.lastSeen }
+        compareByDescending<ManualSearchEntry> { it.lastSeen }
             .thenBy { it.name.ifBlank { it.phone }.lowercase(Locale.getDefault()) }
     )
 }
 
-private fun rankConsoleSearchEntries(query: String, entries: List<ConsoleSearchEntry>): List<ConsoleSearchEntry> {
+private fun rankManualSearchEntries(query: String, entries: List<ManualSearchEntry>): List<ManualSearchEntry> {
     val trimmed = query.trim()
     if (trimmed.isBlank()) return emptyList()
 
@@ -578,7 +578,7 @@ private fun rankConsoleSearchEntries(query: String, entries: List<ConsoleSearchE
             if (score <= 0) null else entry to score
         }
         .sortedWith(
-            compareByDescending<Pair<ConsoleSearchEntry, Int>> { it.second }
+            compareByDescending<Pair<ManualSearchEntry, Int>> { it.second }
                 .thenByDescending { it.first.lastSeen }
                 .thenBy { it.first.name.ifBlank { it.first.phone }.lowercase(Locale.getDefault()) }
         )
@@ -587,12 +587,12 @@ private fun rankConsoleSearchEntries(query: String, entries: List<ConsoleSearchE
         .toList()
 }
 
-private fun autoMatchConsoleEntries(phone: String, entries: List<ConsoleSearchEntry>): List<ConsoleSearchEntry> {
+private fun autoMatchManualEntries(phone: String, entries: List<ManualSearchEntry>): List<ManualSearchEntry> {
     val normalized = SmsCommandHandler.normalizePhone(phone)
     if (normalized.length < 3) return emptyList()
 
-    return rankConsoleSearchEntries(phone, entries).sortedWith(
-        compareByDescending<ConsoleSearchEntry> { SmsCommandHandler.normalizePhone(it.phone) == normalized }
+    return rankManualSearchEntries(phone, entries).sortedWith(
+        compareByDescending<ManualSearchEntry> { SmsCommandHandler.normalizePhone(it.phone) == normalized }
             .thenByDescending { it.source == "Saved" }
             .thenByDescending { it.lastSeen }
             .thenBy { it.name.ifBlank { it.phone }.lowercase(Locale.getDefault()) }
@@ -888,7 +888,7 @@ fun PageHeader(title: String, subtitle: String) {
 }
 
 @Composable
-private fun ConsoleHeader(title: String, subtitle: String) {
+private fun ManualHeader(title: String, subtitle: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1149,7 +1149,7 @@ fun FieldLabel(text: String) = Text(
 )
 
 @Composable
-private fun ConsoleSectionCard(
+private fun ManualSectionCard(
     title: String,
     subtitle: String,
     accent: Color,
@@ -1219,7 +1219,7 @@ private fun ConsoleSectionCard(
 }
 
 @Composable
-private fun ConsoleHeroCard(
+private fun ManualHeroCard(
     dispatchReady: Boolean,
     bannerState: String?,
     enabledOfferCount: Int,
@@ -1318,9 +1318,9 @@ private fun ConsoleHeroCard(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                ConsoleQuickStat("Enabled offers", enabledOfferCount.toString(), C.cyan)
-                ConsoleQuickStat("Directory", directoryCount.toString(), C.green)
-                ConsoleQuickStat("History", historyCount.toString(), C.blue)
+                ManualQuickStat("Enabled offers", enabledOfferCount.toString(), C.cyan)
+                ManualQuickStat("Directory", directoryCount.toString(), C.green)
+                ManualQuickStat("History", historyCount.toString(), C.blue)
             }
             Surface(
                 shape = RoundedCornerShape(18.dp),
@@ -1349,7 +1349,7 @@ private fun ConsoleHeroCard(
 }
 
 @Composable
-private fun ConsoleQuickStat(label: String, value: String, accent: Color) {
+private fun ManualQuickStat(label: String, value: String, accent: Color) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = C.surface.copy(alpha = 0.88f),
@@ -1372,7 +1372,7 @@ private fun ConsoleQuickStat(label: String, value: String, accent: Color) {
 }
 
 @Composable
-private fun RowScope.ConsoleTabChip(
+private fun RowScope.ManualTabChip(
     text: String,
     selected: Boolean,
     onClick: () -> Unit
@@ -1423,7 +1423,7 @@ private fun RowScope.ConsoleTabChip(
 }
 
 @Composable
-private fun ConsoleHistoryPreviewCard(
+private fun ManualHistoryPreviewCard(
     tx: Transaction,
     onClick: () -> Unit
 ) {
@@ -2020,7 +2020,7 @@ fun BingwaApp() {
                         },
                         onToggleRunning = toggleRunning
                     )
-                    Screen.Console  -> ConsoleScreen(txns)
+                    Screen.Manual   -> ManualScreen(txns)
                     Screen.Tokens   -> TokensScreen()
                     Screen.Contacts -> ContactsScreen()
                     Screen.Settings -> GroupedSettingsScreen()
@@ -3600,7 +3600,7 @@ private fun transactionStatusColor(tx: Transaction): Color = when (tx.statusEnum
 
 private fun transactionTypeLabel(tx: Transaction): String = when (tx.source) {
     TX_SOURCE_AUTOMATED -> "Automated"
-    TX_SOURCE_CONSOLE -> "Manual"
+    TX_SOURCE_MANUAL -> "Manual"
     TX_SOURCE_SMS_COMMAND -> "SMS Command"
     TX_SOURCE_AIRTIME -> "Airtime"
     else -> "Activity"
@@ -3608,7 +3608,7 @@ private fun transactionTypeLabel(tx: Transaction): String = when (tx.source) {
 
 private fun transactionTypeColor(tx: Transaction): Color = when (tx.source) {
     TX_SOURCE_AUTOMATED -> C.green
-    TX_SOURCE_CONSOLE -> C.purple
+    TX_SOURCE_MANUAL -> C.purple
     TX_SOURCE_SMS_COMMAND -> C.blue
     TX_SOURCE_AIRTIME -> C.orange
     else -> C.cyan
@@ -4682,7 +4682,7 @@ fun VolcanicTxCard(tx: Transaction, onDelete: () -> Unit) {
     }
     val typeLabel = when (tx.source) {
         TX_SOURCE_AUTOMATED -> "Automated"
-        TX_SOURCE_CONSOLE -> "Manual"
+        TX_SOURCE_MANUAL -> "Manual"
         TX_SOURCE_SMS_COMMAND -> "SMS Command"
         TX_SOURCE_AIRTIME -> "Airtime"
         else -> "Activity"
@@ -5006,16 +5006,16 @@ private fun SubtleRefreshGlyph(
     }
 }
 
-// ─── Console Screen ──────────────────────────────────────────────────────
+// ─── Manual Screen ───────────────────────────────────────────────────────
 @Composable
-fun ConsoleScreen(allTxns: MutableList<Transaction>) {
+fun ManualScreen(allTxns: MutableList<Transaction>) {
     val ctx = LocalContext.current
     var offers by remember { mutableStateOf(OfferRepository.load(ctx).toList()) }
     var phone by remember { mutableStateOf("") }
     var phoneErr by remember { mutableStateOf<String?>(null) }
     var selOffer by remember { mutableStateOf(offers.firstOrNull { it.enabled }) }
     var mode by remember { mutableStateOf("ADVANCED") }
-    var consoleTab by rememberSaveable { mutableStateOf("DISPATCH") }
+    var manualTab by rememberSaveable { mutableStateOf("DISPATCH") }
     var offerExp by remember { mutableStateOf(false) }
     var bannerState by remember { mutableStateOf<String?>(null) }
     var pendingTxId by remember { mutableIntStateOf(-1) }
@@ -5031,12 +5031,12 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                 .toList()
         }
     }
-    val consoleDirectory by remember(ctx, smsSearchContacts) {
-        derivedStateOf { buildConsoleSearchEntries(ctx, allTxns.toList(), smsSearchContacts) }
+    val manualDirectory by remember(ctx, smsSearchContacts) {
+        derivedStateOf { buildManualSearchEntries(ctx, allTxns.toList(), smsSearchContacts) }
     }
     val normalizedPhone = remember(phone) { SmsCommandHandler.normalizePhone(phone) }
-    val phoneMatches by remember(phone, consoleDirectory) {
-        derivedStateOf { autoMatchConsoleEntries(phone, consoleDirectory) }
+    val phoneMatches by remember(phone, manualDirectory) {
+        derivedStateOf { autoMatchManualEntries(phone, manualDirectory) }
     }
     val exactPhoneMatch = remember(normalizedPhone, phoneMatches) {
         phoneMatches.firstOrNull { SmsCommandHandler.normalizePhone(it.phone) == normalizedPhone }
@@ -5045,8 +5045,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
     val dispatchReady = remember(phone, selOffer) {
         phone.matches(Regex("^[0-9]{10}$")) && selOffer != null
     }
-    val consoleHistory = allTxns.filter { it.source == TX_SOURCE_CONSOLE }.sortedByDescending { it.timestamp }
-    val selectedHistoryTx = consoleHistory.firstOrNull { it.id == selectedHistoryTxId }
+    val manualHistory = allTxns.filter { it.source == TX_SOURCE_MANUAL }.sortedByDescending { it.timestamp }
+    val selectedHistoryTx = manualHistory.firstOrNull { it.id == selectedHistoryTxId }
     val inf = rememberInfiniteTransition(label = "console_dispatch")
     val pendingButtonScale by inf.animateFloat(
         initialValue = 1f,
@@ -5129,7 +5129,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
     }
     val commandPhone = if (phone.length == 10) phone else "0712345678"
     val commandCode = selOffer?.ussdCode?.replace("pn", commandPhone, true) ?: "*544*1*1#"
-    val executeDispatch = {
+    val executeManualRun = {
         val selectedOffer = selOffer
         phoneErr = when {
             phone.isBlank() -> "Phone number required"
@@ -5152,7 +5152,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                     phone,
                     finalCode,
                     clientName = resolvedClientName,
-                    source = TX_SOURCE_CONSOLE,
+                    source = TX_SOURCE_MANUAL,
                     showInRecent = false,
                     offerId = selectedOffer.id
                 )
@@ -5222,9 +5222,9 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            ConsoleStatusLed(color = C.cyan, glowing = true)
-                            ConsoleStatusLed(color = C.amber, glowing = true, blinking = true)
-                            ConsoleStatusLed(color = C.t3, glowing = false)
+                            ManualStatusLed(color = C.cyan, glowing = true)
+                            ManualStatusLed(color = C.amber, glowing = true, blinking = true)
+                            ManualStatusLed(color = C.t3, glowing = false)
                             Text(
                                 "AGENT 042",
                                 color = C.t3,
@@ -5292,16 +5292,16 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             .padding(horizontal = 20.dp, vertical = 18.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        ConsoleTerminalTabButton(
+                        ManualTerminalTabButton(
                             text = "Manual",
-                            active = consoleTab == "DISPATCH",
-                            onClick = { consoleTab = "DISPATCH" },
+                            active = manualTab == "DISPATCH",
+                            onClick = { manualTab = "DISPATCH" },
                             modifier = Modifier.weight(1f)
                         )
-                        ConsoleTerminalTabButton(
+                        ManualTerminalTabButton(
                             text = "History",
-                            active = consoleTab == "HISTORY",
-                            onClick = { consoleTab = "HISTORY" },
+                            active = manualTab == "HISTORY",
+                            onClick = { manualTab = "HISTORY" },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -5314,7 +5314,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                         color = Color(0xFF1B2022),
                         border = BorderStroke(1.dp, Color(0xFF2A3032))
                     ) {
-                        if (consoleTab == "DISPATCH") {
+                        if (manualTab == "DISPATCH") {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -5322,7 +5322,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                 verticalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
                                 if (bannerMessage != null && bannerColor != null) {
-                                    ConsoleTerminalBanner(
+                                    ManualTerminalBanner(
                                         message = bannerMessage,
                                         color = bannerColor
                                     )
@@ -5400,7 +5400,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(5.dp)
                                         ) {
-                                            ConsoleStatusLed(color = C.cyan, glowing = true, blinking = true)
+                                            ManualStatusLed(color = C.cyan, glowing = true, blinking = true)
                                             Text(
                                                 "LIVE",
                                                 color = C.cyan,
@@ -5416,12 +5416,12 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    ConsoleTerminalReadout("${enabledOffers.size} OFFERS")
-                                    ConsoleTerminalReadout(
+                                    ManualTerminalReadout("${enabledOffers.size} OFFERS")
+                                    ManualTerminalReadout(
                                         selOffer?.let { "KES ${it.price}" } ?: "NO OFFER",
                                         accent = C.cyan
                                     )
-                                    ConsoleTerminalReadout(mode, accent = C.amber, filled = true)
+                                    ManualTerminalReadout(mode, accent = C.amber, filled = true)
                                 }
 
                                 when {
@@ -5461,7 +5461,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                 )
 
                                 Box {
-                                    ConsolePaperSlipCard(
+                                    ManualPaperSlipCard(
                                         name = selOffer?.name ?: "Choose an offer",
                                         meta = selOffer?.let { "KES ${it.price} · ${it.executionMode}" } ?: "Select an enabled offer",
                                         ticketNo = "No.${selOffer?.id?.toString()?.padStart(4, '0') ?: "----"}",
@@ -5506,14 +5506,14 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                 )
 
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    ConsoleModeToggleButton(
+                                    ManualModeToggleButton(
                                         label = "SIMPLE",
                                         icon = Icons.Filled.FlashOn,
                                         active = mode == "SIMPLE",
                                         onClick = { mode = "SIMPLE" },
                                         modifier = Modifier.weight(1f)
                                     )
-                                    ConsoleModeToggleButton(
+                                    ManualModeToggleButton(
                                         label = "ADVANCED",
                                         icon = Icons.Outlined.AutoMode,
                                         active = mode == "ADVANCED",
@@ -5539,13 +5539,13 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                     )
                                 }
 
-                                ConsoleTransmitLine(
+                                ManualTransmitLine(
                                     code = commandCode,
                                     phone = commandPhone
                                 )
 
                                 Button(
-                                    onClick = executeDispatch,
+                                    onClick = executeManualRun,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(56.dp)
@@ -5599,10 +5599,10 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
-                                    ConsoleTerminalReadout("${consoleHistory.size} TOTAL")
+                                    ManualTerminalReadout("${manualHistory.size} TOTAL")
                                 }
 
-                                if (consoleHistory.isEmpty()) {
+                                if (manualHistory.isEmpty()) {
                                     Surface(
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(18.dp),
@@ -5633,8 +5633,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                     }
                                 } else {
                                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        consoleHistory.forEach { tx ->
-                                            ConsoleTerminalHistoryRow(
+                                        manualHistory.forEach { tx ->
+                                            ManualTerminalHistoryRow(
                                                 tx = tx,
                                                 onClick = { selectedHistoryTxId = tx.id }
                                             )
@@ -5662,7 +5662,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                     Toast.makeText(ctx, result.message, if (result.success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG).show()
                     if (result.success) {
                         selectedHistoryTxId = if (result.newTxId >= 0) result.newTxId else -1
-                        consoleTab = "HISTORY"
+                        manualTab = "HISTORY"
                     }
                 }
             )
@@ -5671,7 +5671,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
 }
 
 @Composable
-private fun ConsoleStatusLed(
+private fun ManualStatusLed(
     color: Color,
     glowing: Boolean,
     blinking: Boolean = false
@@ -5701,7 +5701,7 @@ private fun ConsoleStatusLed(
 }
 
 @Composable
-private fun ConsoleTerminalTabButton(
+private fun ManualTerminalTabButton(
     text: String,
     active: Boolean,
     onClick: () -> Unit,
@@ -5740,7 +5740,7 @@ private fun ConsoleTerminalTabButton(
 }
 
 @Composable
-private fun ConsoleTerminalBanner(message: String, color: Color) {
+private fun ManualTerminalBanner(message: String, color: Color) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = color.copy(alpha = 0.10f),
@@ -5758,7 +5758,7 @@ private fun ConsoleTerminalBanner(message: String, color: Color) {
 }
 
 @Composable
-private fun ConsoleTerminalReadout(
+private fun ManualTerminalReadout(
     text: String,
     accent: Color = C.t2,
     filled: Boolean = false
@@ -5780,7 +5780,7 @@ private fun ConsoleTerminalReadout(
 }
 
 @Composable
-private fun ConsolePaperSlipCard(
+private fun ManualPaperSlipCard(
     name: String,
     meta: String,
     ticketNo: String,
@@ -5863,7 +5863,7 @@ private fun ConsolePaperSlipCard(
 }
 
 @Composable
-private fun ConsoleModeToggleButton(
+private fun ManualModeToggleButton(
     label: String,
     icon: ImageVector,
     active: Boolean,
@@ -5897,7 +5897,7 @@ private fun ConsoleModeToggleButton(
 }
 
 @Composable
-private fun ConsoleTransmitLine(
+private fun ManualTransmitLine(
     code: String,
     phone: String
 ) {
@@ -5929,7 +5929,7 @@ private fun ConsoleTransmitLine(
 }
 
 @Composable
-private fun ConsoleTerminalHistoryRow(
+private fun ManualTerminalHistoryRow(
     tx: Transaction,
     onClick: () -> Unit
 ) {

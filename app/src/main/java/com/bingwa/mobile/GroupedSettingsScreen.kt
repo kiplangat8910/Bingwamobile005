@@ -1929,7 +1929,7 @@ private fun transactionAvatarText(tx: Transaction): String {
 private fun transactionSourceLabel(source: String): String =
     when (source) {
         TX_SOURCE_AUTOMATED -> "Automated"
-        TX_SOURCE_CONSOLE -> "Console"
+        TX_SOURCE_MANUAL -> "Manual"
         TX_SOURCE_SMS_COMMAND -> "SMS Command"
         TX_SOURCE_AIRTIME -> "Airtime"
         else -> "System"

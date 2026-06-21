@@ -1,7 +1,8 @@
 package com.bingwa.mobile
 
 const val TX_SOURCE_AUTOMATED = "AUTOMATED"
-const val TX_SOURCE_CONSOLE = "CONSOLE"
+const val TX_SOURCE_MANUAL = "CONSOLE"
+const val TX_SOURCE_CONSOLE = TX_SOURCE_MANUAL
 const val TX_SOURCE_SMS_COMMAND = "SMS_COMMAND"
 const val TX_SOURCE_AIRTIME = "AIRTIME"
 const val TX_SOURCE_SYSTEM = "SYSTEM"
