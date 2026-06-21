@@ -892,7 +892,7 @@ private fun ConsoleHeader(title: String, subtitle: String) {
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 24.dp, top = 6.dp, bottom = 10.dp),
+            .padding(start = 24.dp, top = 6.dp, end = 24.dp, bottom = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
