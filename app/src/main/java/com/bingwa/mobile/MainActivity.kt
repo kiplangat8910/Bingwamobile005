@@ -2039,7 +2039,7 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
             .padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 8.dp)
     ) {
         val compact = maxWidth < 420.dp
-        val centerSlotWidth = if (compact) 88.dp else 100.dp
+        val centerSlotWidth = if (compact) 82.dp else 92.dp
         val navHeight = if (compact) 78.dp else 86.dp
         Surface(
             shape = RoundedCornerShape(30.dp),
@@ -2091,7 +2091,7 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .offset(y = if (compact) (-2).dp else (-4).dp)
+                        .offset(y = if (compact) (-8).dp else (-10).dp)
                         .width(centerSlotWidth),
                     contentAlignment = Alignment.Center
                 ) {
@@ -2169,7 +2169,7 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
     }
     Box(
         modifier = modifier
-            .size(width = if (compact) 78.dp else 88.dp, height = if (compact) 80.dp else 90.dp),
+            .size(if (compact) 72.dp else 80.dp),
         contentAlignment = Alignment.Center
     ) {
         Box(
@@ -2183,12 +2183,12 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
                 .background(color.copy(alpha = pulseAlpha))
         )
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = CircleShape,
             color = C.cardHi,
             border = BorderStroke(2.dp, color.copy(alpha = 0.88f)),
             shadowElevation = 18.dp,
             modifier = Modifier
-                .size(width = if (compact) 62.dp else 68.dp, height = if (compact) 68.dp else 74.dp)
+                .size(if (compact) 52.dp else 58.dp)
                 .combinedClickable(
                     onClick = {
                         Toast.makeText(
@@ -2200,38 +2200,27 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
                     onLongClick = holdAction
                 )
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 8.dp, bottom = 7.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
-            ) {
+            Box(contentAlignment = Alignment.Center) {
                 Box(
-                    Modifier
-                        .size(if (compact) 30.dp else 34.dp)
+                    modifier = Modifier
+                        .matchParentSize()
+                        .padding(6.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
-                                listOf(color.copy(alpha = 0.30f), color.copy(alpha = 0.08f))
+                                listOf(
+                                    color.copy(alpha = 0.34f),
+                                    color.copy(alpha = 0.12f),
+                                    Color.Transparent
+                                )
                             )
                         )
-                ) {
-                    Icon(
-                        Icons.Outlined.PowerSettingsNew,
-                        null,
-                        tint = color,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .size(if (compact) 18.dp else 20.dp)
-                    )
                 }
-                Text(
-                    text = if (running) "ON" else "OFF",
+                Icon(
+                    Icons.Outlined.PowerSettingsNew,
+                    null,
                     color = color,
-                    fontSize = if (compact) 10.sp else 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.sp
+                    modifier = Modifier.size(if (compact) 20.dp else 22.dp)
                 )
             }
         }
@@ -2386,7 +2375,7 @@ fun HomeScreenVolcanic(
     val horizontalPadding = if (screenWidth >= 700.dp) 24.dp else 16.dp
     val balanceCardLift = if (screenWidth >= 700.dp) (-32).dp else (-24).dp
     val headerToCardGap = if (screenWidth >= 700.dp) 30.dp else 26.dp
-    val recentActivityContentGap = if (screenWidth >= 700.dp) 80.dp else 68.dp
+    val recentActivityContentGap = if (screenWidth >= 700.dp) 20.dp else 14.dp
     val automatedTxns = txns.filter { it.showInRecent }.sortedByDescending { it.timestamp }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
@@ -2666,7 +2655,7 @@ private fun RecentActivityHeader(automatedCount: Int, modifier: Modifier = Modif
         val compact = maxWidth < 400.dp
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -2715,65 +2704,57 @@ private fun RecentActivityHeader(automatedCount: Int, modifier: Modifier = Modif
 private fun RecentActivityMotionRail(compact: Boolean) {
     val railAnim = rememberInfiniteTransition(label = "recent_activity_rail")
     val travel by railAnim.animateFloat(
-        initialValue = -0.15f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing)),
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing)),
         label = "recent_activity_rail_travel"
     )
-    val pulse by railAnim.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(tween(1800, easing = EaseInOutSine), RepeatMode.Reverse),
-        label = "recent_activity_rail_pulse"
-    )
-    val railHeight = if (compact) 34.dp else 38.dp
-    val glowColor = C.green.copy(alpha = 0.24f)
+    val railHeight = if (compact) 10.dp else 12.dp
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(railHeight)
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(999.dp))
             .background(
                 Brush.horizontalGradient(
                     listOf(
-                        C.surface.copy(alpha = 0.92f),
-                        C.cardHi.copy(alpha = 0.88f),
-                        C.surface.copy(alpha = 0.92f)
+                        C.surface.copy(alpha = 0.82f),
+                        C.cardHi.copy(alpha = 0.76f),
+                        C.surface.copy(alpha = 0.82f)
                     )
                 )
             )
-            .border(1.dp, C.border.copy(alpha = 0.62f), RoundedCornerShape(18.dp))
+            .border(1.dp, C.border.copy(alpha = 0.48f), RoundedCornerShape(999.dp))
             .drawBehind {
                 val centerY = size.height / 2f
-                val startX = size.width * 0.08f
-                val endX = size.width * 0.92f
+                val startX = size.width * 0.04f
+                val endX = size.width * 0.96f
                 val lineWidth = endX - startX
                 val progressX = startX + (lineWidth * travel)
-                val sparkRadius = size.height * 0.12f * pulse
-                val sweepWidth = size.width * 0.20f
+                val sweepWidth = size.width * 0.16f
 
                 drawLine(
                     brush = Brush.horizontalGradient(
                         listOf(
-                            C.orange.copy(alpha = 0.26f),
-                            C.blue.copy(alpha = 0.32f),
-                            C.green.copy(alpha = 0.28f)
+                            C.orange.copy(alpha = 0.20f),
+                            C.blue.copy(alpha = 0.18f),
+                            C.orange.copy(alpha = 0.20f)
                         ),
                         startX = startX,
                         endX = endX
                     ),
                     start = Offset(startX, centerY),
                     end = Offset(endX, centerY),
-                    strokeWidth = size.height * 0.12f
+                    strokeWidth = size.height * 0.28f
                 )
 
                 drawRoundRect(
                     brush = Brush.horizontalGradient(
                         listOf(
                             Color.Transparent,
-                            C.green.copy(alpha = 0.05f),
-                            glowColor,
+                            C.orange.copy(alpha = 0.08f),
+                            C.green.copy(alpha = 0.22f),
                             Color.Transparent
                         ),
                         startX = progressX - sweepWidth,
@@ -2782,48 +2763,12 @@ private fun RecentActivityMotionRail(compact: Boolean) {
                     cornerRadius = CornerRadius(size.height, size.height)
                 )
 
-                listOf(0.20f, 0.50f, 0.80f).forEach { fraction ->
-                    drawCircle(
-                        color = C.t3.copy(alpha = 0.38f),
-                        radius = size.height * 0.08f,
-                        center = Offset(startX + (lineWidth * fraction), centerY)
-                    )
-                }
-
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        listOf(C.green.copy(alpha = 0.92f), C.green.copy(alpha = 0.12f))
-                    ),
-                    radius = sparkRadius * 2.8f,
-                    center = Offset(progressX.coerceIn(startX, endX), centerY)
-                )
                 drawCircle(
                     color = C.green,
-                    radius = sparkRadius,
+                    radius = size.height * 0.28f,
                     center = Offset(progressX.coerceIn(startX, endX), centerY)
                 )
             }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                "Live stream",
-                color = C.t3,
-                fontSize = if (compact) 10.sp else 11.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                "Fresh automation pulse",
-                color = C.green,
-                fontSize = if (compact) 10.sp else 11.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
     }
 }
 
