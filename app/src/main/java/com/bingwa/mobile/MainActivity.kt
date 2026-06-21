@@ -1107,7 +1107,7 @@ private fun TokensHeroCard(
                 color = if (activePlan != null) C.green else C.t1
             )
             Text(
-                if (activePlan != null) "${activePlan.label} plan is active" else "Ready for your next USSD automation runs",
+                if (activePlan != null) "${activePlan.label} unlimited plan is active" else "Tokens never expire and stay ready for your next USSD automation run",
                 color = C.t2,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
@@ -1128,15 +1128,20 @@ private fun TokensHeroCard(
                     )
                 }
             }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                PurchasePerkChip(Icons.Outlined.Bolt, "1 token = 1 USSD call", C.cyan)
-                PurchasePerkChip(Icons.Outlined.Shield, "Balance never expires", C.green)
-                PurchasePerkChip(Icons.Outlined.Refresh, "Airtime top-up flow", C.blue)
+                PurchasePerkChip(
+                    icon = if (activePlan != null) Icons.Outlined.Shield else Icons.Outlined.Bolt,
+                    label = if (activePlan != null) "Unlimited access remains active until the timer ends" else "1 token = 1 USSD call",
+                    accent = if (activePlan != null) C.blue else C.cyan
+                )
+                PurchasePerkChip(
+                    icon = Icons.Outlined.Verified,
+                    label = if (activePlan != null) "Use the remaining time before expiry" else "Tokens never expire",
+                    accent = C.green
+                )
             }
         }
     }
@@ -2040,7 +2045,7 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
             .padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 8.dp)
     ) {
         val compact = maxWidth < 420.dp
-        val centerSlotWidth = if (compact) 82.dp else 92.dp
+        val centerSlotWidth = if (compact) 92.dp else 106.dp
         val navHeight = if (compact) 78.dp else 86.dp
         Surface(
             shape = RoundedCornerShape(30.dp),
@@ -2092,7 +2097,7 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .offset(y = if (compact) (-8).dp else (-10).dp)
+                        .offset(y = if (compact) (-6).dp else (-8).dp)
                         .width(centerSlotWidth),
                     contentAlignment = Alignment.Center
                 ) {
@@ -2170,12 +2175,12 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
     }
     Box(
         modifier = modifier
-            .size(if (compact) 72.dp else 80.dp),
+            .size(if (compact) 82.dp else 92.dp),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .size(if (compact) 60.dp else 68.dp)
+                .size(if (compact) 68.dp else 78.dp)
                 .graphicsLayer {
                     scaleX = pulseScale
                     scaleY = pulseScale
@@ -2189,7 +2194,7 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
             border = BorderStroke(2.dp, color.copy(alpha = 0.88f)),
             shadowElevation = 18.dp,
             modifier = Modifier
-                .size(if (compact) 52.dp else 58.dp)
+                .size(if (compact) 60.dp else 68.dp)
                 .combinedClickable(
                     onClick = {
                         Toast.makeText(
@@ -2221,7 +2226,7 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
                     Icons.Outlined.PowerSettingsNew,
                     null,
                     tint = color,
-                    modifier = Modifier.size(if (compact) 20.dp else 22.dp)
+                    modifier = Modifier.size(if (compact) 22.dp else 26.dp)
                 )
             }
         }
@@ -2382,24 +2387,6 @@ fun HomeScreenVolcanic(
         infiniteRepeatable(tween(1200, easing = LinearEasing)),
         label = "spin"
     )
-    val timeLabel by produceState(
-        initialValue = SimpleDateFormat("H:mm", Locale.getDefault()).format(Date()),
-        key1 = ctx
-    ) {
-        while (true) {
-            value = SimpleDateFormat("H:mm", Locale.getDefault()).format(Date())
-            delay(30_000L)
-        }
-    }
-    val batteryInfo by produceState(
-        initialValue = BatteryStatus.read(ctx),
-        key1 = ctx
-    ) {
-        while (true) {
-            value = BatteryStatus.read(ctx)
-            delay(60_000L)
-        }
-    }
     val topTransactions = automatedTxns.take(6)
 
     Box(
@@ -2453,19 +2440,11 @@ fun HomeScreenVolcanic(
                             .widthIn(max = 420.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        HomeHardwareStrip(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .statusBarsPadding()
-                                .padding(top = 4.dp),
-                            timeLabel = timeLabel,
-                            batteryPercent = batteryInfo.percent
-                        )
                         HomeHeroHeader(running = running)
                         HomeSplitBalanceCard(
-                            airBal = airBal.ifBlank { "—" },
+                            airBal = airBal.ifBlank { "0.00" },
                             tokenValue = unlimitedLabel ?: tokenBal.toString(),
-                            tokenHint = unlimitedRemaining ?: "Available units",
+                            tokenHint = unlimitedRemaining ?: "Tokens never expire",
                             isRefreshing = isRefreshing,
                             spin = spin,
                             onRefresh = onRefresh
@@ -2631,7 +2610,8 @@ private fun HomeHeroHeader(running: Boolean) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 6.dp, start = 10.dp, end = 10.dp),
+            .statusBarsPadding()
+            .padding(top = 2.dp, start = 10.dp, end = 10.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -2642,14 +2622,14 @@ private fun HomeHeroHeader(running: Boolean) {
                 fontWeight = FontWeight.ExtraBold,
                 textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(5.dp))
+            Spacer(Modifier.height(3.dp))
             Text(
                 "USSD Automation Platform",
                 color = Color(0xFF8A9396),
                 fontSize = 12.5.sp,
                 textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
             Surface(
                 shape = RoundedCornerShape(999.dp),
                 color = Color.Transparent,
@@ -2719,7 +2699,11 @@ private fun HomeSplitBalanceCard(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 Box(Modifier.size(5.dp).clip(CircleShape).background(amber))
                 Text(
                     "AIRTIME BALANCE",
@@ -2727,34 +2711,36 @@ private fun HomeSplitBalanceCard(
                     fontSize = 9.5.sp,
                     letterSpacing = 1.2.sp
                 )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text(
-                    airBal,
-                    color = text,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontFamily = FontFamily.Monospace
-                )
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF2E3437)),
-                    contentAlignment = Alignment.Center
+                Spacer(Modifier.weight(1f))
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFF2E3437),
+                    border = BorderStroke(1.dp, lineSoft)
                 ) {
-                    Icon(
-                        Icons.Outlined.Refresh,
-                        null,
-                        tint = textDim,
-                        modifier = Modifier
-                            .size(12.dp)
-                            .then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
-                    )
+                    Box(
+                        modifier = Modifier.size(28.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Outlined.Refresh,
+                            null,
+                            tint = textDim,
+                            modifier = Modifier
+                                .size(14.dp)
+                                .then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
+                        )
+                    }
                 }
             }
+            Text(
+                airBal,
+                color = text,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontFamily = FontFamily.Monospace
+            )
             Text(
                 if (isRefreshing) "checking balance" else "tap card to refresh",
                 color = textDimmer,
@@ -2770,19 +2756,17 @@ private fun HomeSplitBalanceCard(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 14.dp),
-            horizontalAlignment = Alignment.End,
+                .padding(start = 14.dp, end = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    "TOKENS",
-                    color = textDimmer,
-                    fontSize = 9.5.sp,
-                    letterSpacing = 1.2.sp
-                )
-                Box(Modifier.size(5.dp).clip(CircleShape).background(amber))
-            }
+            Text(
+                "TOKENS",
+                color = textDimmer,
+                fontSize = 9.5.sp,
+                letterSpacing = 1.2.sp,
+                textAlign = TextAlign.Center
+            )
             Text(
                 tokenValue,
                 color = text,
@@ -2791,13 +2775,13 @@ private fun HomeSplitBalanceCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 fontFamily = FontFamily.Monospace,
-                textAlign = TextAlign.End
+                textAlign = TextAlign.Center
             )
             Text(
                 tokenHint,
                 color = textDimmer,
                 fontSize = 10.5.sp,
-                textAlign = TextAlign.End,
+                textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -5412,15 +5396,17 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                                     }
                                 }
 
-                                Row(
-                                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    ManualTerminalReadout("${enabledOffers.size} OFFERS")
-                                    ManualTerminalReadout(
-                                        selOffer?.let { "KES ${it.price}" } ?: "NO OFFER",
-                                        accent = C.cyan
-                                    )
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        ManualTerminalReadout("${enabledOffers.size} OFFERS")
+                                        ManualTerminalReadout(
+                                            selOffer?.let { "KES ${it.price}" } ?: "NO OFFER",
+                                            accent = C.cyan
+                                        )
+                                    }
                                     ManualTerminalReadout(mode, accent = C.amber, filled = true)
                                 }
 
@@ -5475,11 +5461,11 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                                             .background(C.cardHi, RoundedCornerShape(14.dp))
                                             .border(1.dp, C.border, RoundedCornerShape(14.dp))
                                     ) {
-                                        enabledOffers.forEach { o ->
+                                        enabledOffers.forEachIndexed { index, o ->
                                             DropdownMenuItem(
                                                 text = {
                                                     Column {
-                                                        Text(o.name, color = C.t1)
+                                                        Text("${index + 1}. ${o.name}", color = C.t1)
                                                         Text(
                                                             "KES ${o.price} · ${o.executionMode}",
                                                             color = C.amber,
@@ -6047,7 +6033,7 @@ fun TokensScreen() {
                 .background(Brush.radialGradient(listOf(C.blue.copy(alpha = 0.08f), Color.Transparent)), CircleShape)
         )
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            PageHeader("Tokens", "Purchase tokens and plans for faster automation")
+            PageHeader("Tokens", if (activePlan != null) "View your active unlimited access and renew when needed" else "View token balance and buy only what you need")
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -6055,8 +6041,8 @@ fun TokensScreen() {
                 TokensHeroCard(balance = bal, activePlan = activePlan, remainingMs = remMs)
 
                 SectionHeader(
-                    title = "Top Up",
-                    subtitle = "Choose a token pack when you want flexible pay-as-you-go usage.",
+                    title = "Token Packs",
+                    subtitle = "Choose a clean token pack for pay-as-you-go usage.",
                     accent = C.cyan
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -6067,7 +6053,7 @@ fun TokensScreen() {
 
                 SectionHeader(
                     title = "Unlimited",
-                    subtitle = "Best for high-volume usage with active time-based access.",
+                    subtitle = "Best for high-volume usage when you want time-based unlimited access.",
                     accent = C.blue
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -6155,15 +6141,10 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
                         Text("POPULAR", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = C.cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("${p.tokens}", color = C.t1, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("tokens", color = C.t2, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                }
+                Text("Tokens", color = C.t2, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("${p.tokens}", color = C.t1, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
                 Text("KSh ${p.ksh}", color = if (p.popular) C.cyan else C.t3, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MiniTag("Instant top-up", C.green)
-                    MiniTag("Flexible usage", C.blue)
-                }
+                Text("Tokens never expire", color = C.green, fontSize = 11.sp, fontWeight = FontWeight.Medium)
             }
 
             Button(
@@ -7361,7 +7342,7 @@ private fun SignatureApprovalDialog(
         onDismissRequest = onDismiss,
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Approve Learned Signature", color = C.t1, fontWeight = FontWeight.Bold)
+                Text("Verify Learned Signature", color = C.t1, fontWeight = FontWeight.Bold)
                 Text(
                     offer.name,
                     color = C.t2,
@@ -7372,7 +7353,7 @@ private fun SignatureApprovalDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "The app learned ${pendingSteps.size} menu step(s) and captured ${pendingCaptures.size} popup(s). Approve to replace the saved signature, or relearn if anything looks wrong. Each saved step keeps the recorded text and the option that was chosen.",
+                    "The app learned ${pendingSteps.size} menu step(s) and captured ${pendingCaptures.size} popup(s). Verify it if every step and selection is correct, or relearn it if anything looks wrong. Each saved step keeps the recorded text and the option that was chosen.",
                     color = C.t2,
                     fontSize = 12.sp,
                     lineHeight = 18.sp
@@ -7420,7 +7401,7 @@ private fun SignatureApprovalDialog(
                     onClick = onApprove,
                     colors = ButtonDefaults.buttonColors(containerColor = C.green)
                 ) {
-                    Text("Approve", color = C.bg, fontWeight = FontWeight.Bold)
+                    Text("Verify", color = C.bg, fontWeight = FontWeight.Bold)
                 }
             }
         },
@@ -7645,31 +7626,30 @@ private fun CompactDialogToggleCard(
     val accent = if (checked) checkedAccent else uncheckedAccent
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         color = if (checked) checkedAccent.copy(alpha = 0.12f) else uncheckedAccent.copy(alpha = 0.08f),
         border = BorderStroke(1.dp, accent.copy(alpha = 0.24f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(10.dp))
                     .background(accent.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
             }
             Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(top = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 badgeText?.let {
@@ -7690,14 +7670,12 @@ private fun CompactDialogToggleCard(
                 }
                 Text(description, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
             }
-            Box(modifier = Modifier.padding(top = 2.dp)) {
-                CompactDialogSwitch(
-                    checked = checked,
-                    onCheckedChange = onCheckedChange,
-                    checkedTrackColor = checkedAccent,
-                    uncheckedThumbColor = uncheckedAccent
-                )
-            }
+            CompactDialogSwitch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                checkedTrackColor = checkedAccent,
+                uncheckedThumbColor = uncheckedAccent
+            )
         }
     }
 }
@@ -7706,7 +7684,7 @@ private fun CompactDialogToggleCard(
 private fun OfferDialogSection(title: String, subtitle: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(18.dp),
         color = C.cardHi.copy(alpha = 0.92f),
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
     ) {
@@ -7717,15 +7695,15 @@ private fun OfferDialogSection(title: String, subtitle: String? = null, content:
                         listOf(C.cardHi.copy(alpha = 0.98f), C.card.copy(alpha = 0.90f))
                     )
                 )
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
                 Box(
                     Modifier
                         .padding(top = 3.dp)
                         .width(4.dp)
-                        .height(38.dp)
+                        .height(28.dp)
                         .clip(RoundedCornerShape(999.dp))
                         .background(C.cyan)
                 )

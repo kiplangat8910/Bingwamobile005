@@ -582,22 +582,52 @@ class MpesaReceiver : BroadcastReceiver() {
             val phone = resolveMaskedNumber(context, rawPhone, clientName)
             Log.d(TAG, "Resolved phone: $rawPhone -> $phone (name: $clientName)")
 
-            val tokenPrefs = context.getSharedPreferences("TokenStore", Context.MODE_PRIVATE)
-            val tokenBalance = tokenPrefs.getInt("balance", 0)
-            val unlimited = UnlimitedManager(context).isActive()
-            if (!unlimited && tokenBalance < 1) {
-                notify(context, "Token Error", "Insufficient tokens to process bundle for $phone")
-                return
-            }
-
             val offer = RelayManager.findOfferByPrice(context, amount)
             val us = UssdStorage(context)
             val code = offer?.ussdCode ?: us.getUssdForAmount(amount.toDouble())
             val label = offer?.name ?: (us.getLabels()[amount.toDouble()] ?: "Data Bundle (KSh $amount)")
             val mode = offer?.executionMode ?: "ADVANCED"
             val targetDevice = offer?.targetDevice ?: "PRIMARY"
+            val finalCode = code?.replace("pn", phone, ignoreCase = true).orEmpty()
+
+            val tokenPrefs = context.getSharedPreferences("TokenStore", Context.MODE_PRIVATE)
+            val tokenBalance = tokenPrefs.getInt("balance", 0)
+            val unlimited = UnlimitedManager(context).isActive()
+            if (!unlimited && tokenBalance < 1) {
+                addTransaction(context, Transaction(
+                    description = label,
+                    amount = "KSh $amount",
+                    amountValue = amount.toDouble(),
+                    date = getCurrentDate(),
+                    status = TransactionStatus.FAILED.value,
+                    statusEnum = TransactionStatus.FAILED,
+                    ussdCode = finalCode,
+                    phoneNumber = phone,
+                    clientName = clientName,
+                    ussdResponse = "Failed: insufficient tokens to process this bundle.",
+                    source = TX_SOURCE_AUTOMATED,
+                    showInRecent = true,
+                    offerId = offer?.id ?: -1
+                ))
+                notify(context, "Token Error", "Insufficient tokens to process bundle for $phone")
+                return
+            }
 
             if (code == null) {
+                addTransaction(context, Transaction(
+                    description = label,
+                    amount = "KSh $amount",
+                    amountValue = amount.toDouble(),
+                    date = getCurrentDate(),
+                    status = TransactionStatus.FAILED.value,
+                    statusEnum = TransactionStatus.FAILED,
+                    phoneNumber = phone,
+                    clientName = clientName,
+                    ussdResponse = "Failed: no bundle configuration found for this amount.",
+                    source = TX_SOURCE_AUTOMATED,
+                    showInRecent = true,
+                    offerId = offer?.id ?: -1
+                ))
                 notify(context, "No Bundle Configured", "No bundle configured for KSh $amount")
                 return
             }
@@ -606,8 +636,6 @@ class MpesaReceiver : BroadcastReceiver() {
                 tokenPrefs.edit().putInt("balance", tokenBalance - 1).apply()
                 TokenManager.tokenBalanceListener?.invoke(tokenBalance - 1)
             }
-
-            val finalCode = code.replace("pn", phone, ignoreCase = true)
 
             if (RelayManager.isPrimary(context) && targetDevice.uppercase() == "RELAY") {
                 val sent = RelayManager.forwardBuyAmount(context, phone, amount)
@@ -618,6 +646,21 @@ class MpesaReceiver : BroadcastReceiver() {
                         tokenPrefs.edit().putInt("balance", tokenBalance).apply()
                         TokenManager.tokenBalanceListener?.invoke(tokenBalance)
                     }
+                    addTransaction(context, Transaction(
+                        description = label,
+                        amount = "KSh $amount",
+                        amountValue = amount.toDouble(),
+                        date = getCurrentDate(),
+                        status = TransactionStatus.FAILED.value,
+                        statusEnum = TransactionStatus.FAILED,
+                        ussdCode = finalCode,
+                        phoneNumber = phone,
+                        clientName = clientName,
+                        ussdResponse = "Failed: could not forward the bundle to the relay phone.",
+                        source = TX_SOURCE_AUTOMATED,
+                        showInRecent = true,
+                        offerId = offer?.id ?: -1
+                    ))
                     notify(context, "Relay Error", "Could not forward $label to Relay phone. Please check Two‑Phone settings.")
                 }
                 return
