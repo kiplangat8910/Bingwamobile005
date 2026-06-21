@@ -4424,471 +4424,531 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
         if (selOffer == null) mode = "ADVANCED"
     }
 
-    Box(Modifier.fillMaxSize().background(C.bg)) {
-        Column(Modifier.fillMaxSize()) {
-            ConsoleHeader("Console", "Manual dispatch & history")
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .imePadding()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 720.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(26.dp),
-                        color = C.card.copy(alpha = 0.97f),
-                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(7.dp),
-                            horizontalArrangement = Arrangement.spacedBy(7.dp)
-                        ) {
-                            ConsoleTabChip("Dispatch", consoleTab == "DISPATCH") { consoleTab = "DISPATCH" }
-                            ConsoleTabChip("History", consoleTab == "HISTORY") { consoleTab = "HISTORY" }
-                        }
-                    }
-                }
+    val clockLabel = remember { SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()) }
+    val bannerColor = when (bannerState) {
+        "success" -> C.green
+        "failed" -> C.red
+        "pending" -> C.amber
+        "relayed" -> C.blue
+        else -> null
+    }
+    val bannerMessage = when (bannerState) {
+        "success" -> "Bundle dispatched successfully"
+        "failed" -> "Dispatch failed. Check USSD logs."
+        "pending" -> "Dispatching now. Waiting for USSD response."
+        "relayed" -> "Forwarded to Relay phone for execution"
+        else -> null
+    }
+    val commandPhone = if (phone.length == 10) phone else "0712345678"
+    val commandCode = selOffer?.ussdCode?.replace("pn", commandPhone, true) ?: "*544*1*1#"
+    val executeDispatch = {
+        val selectedOffer = selOffer
+        phoneErr = when {
+            phone.isBlank() -> "Phone number required"
+            !phone.matches(Regex("^[0-9]{10}$")) -> "Must be exactly 10 digits"
+            selectedOffer == null -> "Choose an offer"
+            else -> null
+        }
+        if (phoneErr == null && selectedOffer != null) {
+            vib(ctx, 70L)
+            if (RelayManager.shouldRelayOffer(ctx, selectedOffer)) {
+                val sent = RelayManager.forwardBuyAmount(ctx, phone, selectedOffer.price)
+                bannerState = if (sent) "relayed" else "failed"
+            } else {
+                bannerState = "pending"
+                val finalCode = selectedOffer.ussdCode.replace("pn", phone, true)
+                val txId = createPendingTransaction(
+                    ctx,
+                    selectedOffer.name,
+                    "KSh ${selectedOffer.price}",
+                    phone,
+                    finalCode,
+                    clientName = resolvedClientName,
+                    source = TX_SOURCE_CONSOLE,
+                    showInRecent = false,
+                    offerId = selectedOffer.id
+                )
+                pendingTxId = txId
+                ctx.startOfferAutomation(selectedOffer, phone, txId, finalCode, mode)
+            }
+        }
+    }
 
-                Box(
+    Box(Modifier.fillMaxSize().background(C.bg)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .imePadding()
+                .padding(horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(Modifier.statusBarsPadding())
+            Spacer(Modifier.height(10.dp))
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 430.dp)
+                    .padding(bottom = 20.dp),
+                shape = RoundedCornerShape(34.dp),
+                color = Color(0xFF121618),
+                border = BorderStroke(1.dp, Color(0xFF2A302F)),
+                shadowElevation = 22.dp
+            ) {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = true),
-                    contentAlignment = Alignment.TopCenter
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0xFF171C1E),
+                                    Color(0xFF101314)
+                                )
+                            )
+                        )
+                        .padding(bottom = 18.dp)
                 ) {
-                    BoxWithConstraints(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .widthIn(max = 720.dp)
-                            .fillMaxHeight()
+                            .height(12.dp),
+                        contentAlignment = Alignment.TopCenter
                     ) {
-                        val compact = maxWidth < 420.dp
-                        val shortViewport = maxHeight < 780.dp
-                        val veryShortViewport = maxHeight < 710.dp
-                        val ultraShortViewport = maxHeight < 640.dp
-                        val fieldShape = RoundedCornerShape(if (ultraShortViewport) 18.dp else if (veryShortViewport) 20.dp else 22.dp)
-                        val iconBoxSize = if (compact || shortViewport) 34.dp else 40.dp
-                        val bodySize = if (compact || shortViewport) 15.sp else 17.sp
-                        val cardPadding = if (ultraShortViewport) 10.dp else if (veryShortViewport) 12.dp else if (shortViewport) 14.dp else 16.dp
-                        val sectionSpacing = if (ultraShortViewport) 6.dp else if (veryShortViewport) 8.dp else if (shortViewport) 10.dp else 12.dp
-                        val fieldVerticalPadding = if (ultraShortViewport) 7.dp else if (veryShortViewport) 8.dp else if (shortViewport) 10.dp else 11.dp
-                        val offerRowPadding = if (ultraShortViewport) 8.dp else if (veryShortViewport) 10.dp else if (shortViewport) 12.dp else 14.dp
-                        val executeHeight = if (ultraShortViewport) 46.dp else if (veryShortViewport) 50.dp else 56.dp
-                        val visibleHistoryCount = when {
-                            ultraShortViewport -> 2
-                            veryShortViewport -> 3
-                            shortViewport -> 4
-                            else -> 5
-                        }
+                        Box(
+                            modifier = Modifier
+                                .width(112.dp)
+                                .height(18.dp)
+                                .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                                .background(Color(0xFF050605))
+                        )
+                    }
 
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ConsoleStatusLed(color = C.cyan, glowing = true)
+                            ConsoleStatusLed(color = C.amber, glowing = true, blinking = true)
+                            ConsoleStatusLed(color = C.t3, glowing = false)
+                            Text(
+                                "AGENT 042",
+                                color = C.t3,
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                clockLabel,
+                                color = C.t2,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color.Transparent,
+                                border = BorderStroke(1.dp, C.t3.copy(alpha = 0.6f))
+                            ) {
+                                Text(
+                                    if (dispatchReady) "READY" else "IDLE",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                    color = if (dispatchReady) C.cyan else C.t3,
+                                    fontSize = 9.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier.padding(horizontal = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            "DISPATCH TERMINAL",
+                            color = C.amber,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.6.sp
+                        )
+                        Text(
+                            "Console",
+                            color = C.t1,
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = (-0.4).sp
+                        )
+                        Text(
+                            "Manual dispatch & history",
+                            color = C.t2,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 18.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ConsoleTerminalTabButton(
+                            text = "Dispatch",
+                            active = consoleTab == "DISPATCH",
+                            onClick = { consoleTab = "DISPATCH" },
+                            modifier = Modifier.weight(1f)
+                        )
+                        ConsoleTerminalTabButton(
+                            text = "History",
+                            active = consoleTab == "HISTORY",
+                            onClick = { consoleTab = "HISTORY" },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color(0xFF1B2022),
+                        border = BorderStroke(1.dp, Color(0xFF2A3032))
+                    ) {
                         if (consoleTab == "DISPATCH") {
                             Column(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(sectionSpacing)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 18.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
-                                when (bannerState) {
-                                    "success" -> FeedbackBanner("✓  Bundle dispatched successfully", C.green)
-                                    "failed" -> FeedbackBanner("✗  Dispatch failed. Check USSD logs.", C.red)
-                                    "pending" -> FeedbackBanner("…  Dispatching now. Waiting for USSD response.", C.amber)
-                                    "relayed" -> FeedbackBanner("→  Forwarded to Relay phone for execution", C.blue)
+                                if (bannerMessage != null && bannerColor != null) {
+                                    ConsoleTerminalBanner(
+                                        message = bannerMessage,
+                                        color = bannerColor
+                                    )
                                 }
 
+                                Text(
+                                    "TARGET NUMBER",
+                                    color = C.t3,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.4.sp
+                                )
+
                                 Surface(
-                                    shape = RoundedCornerShape(26.dp),
-                                    color = C.card.copy(alpha = 0.95f),
-                                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f, fill = true)
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color(0xFF121617),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        when {
+                                            phoneErr != null -> C.red.copy(alpha = 0.46f)
+                                            phone.isNotBlank() -> C.cyan.copy(alpha = 0.28f)
+                                            else -> Color(0xFF394144)
+                                        }
+                                    )
                                 ) {
-                                    Column(
+                                    Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(cardPadding),
-                                        verticalArrangement = Arrangement.spacedBy(sectionSpacing)
+                                            .padding(horizontal = 14.dp, vertical = 13.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
-                                    Surface(
-                                        shape = fieldShape,
-                                        color = C.surface.copy(alpha = 0.72f),
-                                        border = BorderStroke(
-                                            1.dp,
-                                            when {
-                                                phoneErr != null -> C.red.copy(alpha = 0.30f)
-                                                phone.isNotBlank() -> C.borderHi.copy(alpha = 0.86f)
-                                                else -> C.border.copy(alpha = 0.82f)
+                                        Icon(
+                                            Icons.Outlined.Phone,
+                                            null,
+                                            tint = C.t2,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        BasicTextField(
+                                            value = phone,
+                                            onValueChange = {
+                                                val digitsOnly = it.filter(Char::isDigit).take(10)
+                                                phone = digitsOnly
+                                                bannerState = null
+                                                phoneErr = when {
+                                                    digitsOnly.isBlank() -> null
+                                                    digitsOnly.length < 10 -> "Enter all 10 digits"
+                                                    else -> null
+                                                }
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            singleLine = true,
+                                            textStyle = TextStyle(
+                                                color = C.t1,
+                                                fontSize = 18.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontFamily = FontFamily.Monospace,
+                                                letterSpacing = 0.4.sp
+                                            ),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                            cursorBrush = SolidColor(C.cyan),
+                                            decorationBox = { innerTextField ->
+                                                if (phone.isBlank()) {
+                                                    Text(
+                                                        "0712345678",
+                                                        color = C.t3,
+                                                        fontSize = 18.sp,
+                                                        fontFamily = FontFamily.Monospace
+                                                    )
+                                                }
+                                                innerTextField()
                                             }
                                         )
-                                    ) {
                                         Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 16.dp, vertical = fieldVerticalPadding),
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(5.dp)
                                         ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(iconBoxSize)
-                                                    .clip(RoundedCornerShape(14.dp))
-                                                    .background(C.cardHi.copy(alpha = 0.88f))
-                                                    .border(1.dp, C.border.copy(alpha = 0.82f), RoundedCornerShape(14.dp)),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(Icons.Filled.Phone, null, tint = C.t2, modifier = Modifier.size(if (ultraShortViewport) 17.dp else 18.dp))
-                                            }
-                                            OutlinedTextField(
-                                                value = phone,
-                                                onValueChange = {
-                                                    val digitsOnly = it.filter(Char::isDigit).take(10)
-                                                    phone = digitsOnly
-                                                    bannerState = null
-                                                    phoneErr = when {
-                                                        digitsOnly.isBlank() -> null
-                                                        digitsOnly.length < 10 -> "Enter all 10 digits"
-                                                        else -> null
-                                                    }
-                                                },
-                                                placeholder = { Text("0712345678", color = C.t3) },
-                                                trailingIcon = if (phone.isNotBlank()) ({
-                                                    IconButton(onClick = { phone = ""; phoneErr = null; bannerState = null }) {
-                                                        Icon(Icons.Filled.Clear, null, tint = C.t2, modifier = Modifier.size(16.dp))
-                                                    }
-                                                }) else null,
-                                                isError = phoneErr != null,
-                                                modifier = Modifier.weight(1f),
-                                                shape = RoundedCornerShape(0.dp),
-                                                colors = OutlinedTextFieldDefaults.colors(
-                                                    focusedBorderColor = Color.Transparent,
-                                                    unfocusedBorderColor = Color.Transparent,
-                                                    focusedContainerColor = Color.Transparent,
-                                                    unfocusedContainerColor = Color.Transparent,
-                                                    focusedTextColor = C.t1,
-                                                    unfocusedTextColor = C.t1,
-                                                    cursorColor = C.amber,
-                                                    focusedPlaceholderColor = C.t3,
-                                                    unfocusedPlaceholderColor = C.t3
-                                                ),
-                                                textStyle = TextStyle(
-                                                    fontSize = bodySize,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = C.t1
-                                                ),
-                                                singleLine = true,
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                                            ConsoleStatusLed(color = C.cyan, glowing = true, blinking = true)
+                                            Text(
+                                                "LIVE",
+                                                color = C.cyan,
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.SemiBold
                                             )
                                         }
                                     }
+                                }
 
-                                    if (compact) {
-                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                PillBadge("${enabledOffers.size} enabled offers", C.amber)
-                                                selOffer?.let { PillBadge("KES ${it.price}", C.green) }
-                                            }
-                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                PillBadge(mode, C.amber)
-                                            }
-                                        }
-                                    } else {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            PillBadge("${enabledOffers.size} enabled offers", C.amber)
-                                            selOffer?.let { PillBadge("KES ${it.price}", C.green) }
-                                            PillBadge(mode, C.amber)
-                                        }
-                                    }
+                                Row(
+                                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    ConsoleTerminalReadout("${enabledOffers.size} OFFERS")
+                                    ConsoleTerminalReadout(
+                                        selOffer?.let { "KES ${it.price}" } ?: "NO OFFER",
+                                        accent = C.cyan
+                                    )
+                                    ConsoleTerminalReadout(mode, accent = C.amber, filled = true)
+                                }
 
-                                    when {
-                                        phoneErr != null -> Text(phoneErr ?: "", color = C.red, fontSize = 12.sp)
-                                        exactPhoneMatch != null -> Text("Matched from ${exactPhoneMatch.source}", color = C.green, fontSize = 12.sp)
-                                        smsSearchLoading -> Text("Searching saved contacts and M-PESA messages...", color = C.t2, fontSize = 12.sp)
-                                    }
+                                when {
+                                    phoneErr != null -> Text(phoneErr ?: "", color = C.red, fontSize = 12.sp)
+                                    exactPhoneMatch != null -> Text("Matched from ${exactPhoneMatch.source}", color = C.green, fontSize = 12.sp)
+                                    smsSearchLoading -> Text("Refreshing saved contacts and M-PESA matches...", color = C.t2, fontSize = 12.sp)
+                                }
 
-                                    AnimatedVisibility(visible = resolvedClientName.isNotBlank()) {
-                                        Surface(
-                                            shape = RoundedCornerShape(16.dp),
-                                            color = C.greenDim,
-                                            border = BorderStroke(1.dp, C.green.copy(alpha = 0.22f))
-                                        ) {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 12.dp, vertical = if (ultraShortViewport) 7.dp else if (veryShortViewport) 8.dp else 10.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Icon(Icons.Outlined.Badge, null, tint = C.green, modifier = Modifier.size(16.dp))
-                                                Text(resolvedClientName, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                            }
-                                        }
-                                    }
-
-                                    FieldLabel("Data Bundle")
-                                    Box {
-                                        Surface(
-                                            shape = fieldShape,
-                                            color = C.cardHi.copy(alpha = 0.92f),
-                                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.84f)),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { offerExp = true }
-                                        ) {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 14.dp, vertical = offerRowPadding),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(if (compact || shortViewport) 42.dp else 48.dp)
-                                                        .clip(RoundedCornerShape(16.dp))
-                                                        .background(C.amber.copy(alpha = 0.12f))
-                                                        .border(1.dp, C.amber.copy(alpha = 0.24f), RoundedCornerShape(16.dp)),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Icon(Icons.Filled.FlashOn, null, tint = C.amber, modifier = Modifier.size(if (compact || shortViewport) 17.dp else 20.dp))
-                                                }
-                                                Column(
-                                                    modifier = Modifier.weight(1f),
-                                                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                                                ) {
-                                                    Text(
-                                                        selOffer?.name ?: "Choose an offer",
-                                                        color = if (selOffer != null) C.t1 else C.t2,
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = if (compact || shortViewport) 14.sp else 16.sp,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                    Text(
-                                                        selOffer?.let { "KES ${it.price}  •  ${it.executionMode}" } ?: "Select an enabled offer",
-                                                        color = if (selOffer != null) C.amber else C.t3,
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.SemiBold
-                                                    )
-                                                }
-                                                Icon(Icons.Filled.KeyboardArrowDown, null, tint = C.t2)
-                                            }
-                                        }
-                                        DropdownMenu(
-                                            expanded = offerExp,
-                                            onDismissRequest = { offerExp = false },
-                                            modifier = Modifier
-                                                .background(C.cardHi, RoundedCornerShape(14.dp))
-                                                .border(1.dp, C.border, RoundedCornerShape(14.dp))
-                                        ) {
-                                            enabledOffers.forEach { o ->
-                                                DropdownMenuItem(
-                                                    text = {
-                                                        Column {
-                                                            Text(o.name, color = C.t1)
-                                                            Text("KES ${o.price}  •  ${o.executionMode}", color = C.amber)
-                                                        }
-                                                    },
-                                                    onClick = {
-                                                        selOffer = o
-                                                        mode = o.executionMode
-                                                        offerExp = false
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    FieldLabel("Execution Mode")
+                                AnimatedVisibility(visible = resolvedClientName.isNotBlank()) {
                                     Surface(
-                                        shape = RoundedCornerShape(24.dp),
-                                        color = C.card.copy(alpha = 0.95f),
-                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
-                                        modifier = Modifier.fillMaxWidth()
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = C.green.copy(alpha = 0.10f),
+                                        border = BorderStroke(1.dp, C.green.copy(alpha = 0.24f))
                                     ) {
                                         Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(6.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(7.dp)
                                         ) {
-                                            listOf("SIMPLE" to Icons.Filled.FlashOn, "ADVANCED" to Icons.Outlined.AutoMode).forEach { (m, ic) ->
-                                                val active = mode == m
-                                                val accent = if (m == "ADVANCED") C.amber else C.t2
-                                                Box(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .clip(RoundedCornerShape(20.dp))
-                                                        .background(
-                                                            if (active) accent else Color.Transparent
-                                                        )
-                                                        .clickable { mode = m }
-                                                        .padding(vertical = if (ultraShortViewport) 10.dp else if (veryShortViewport) 12.dp else 13.dp),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Row(
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                                    ) {
-                                                        Icon(ic, null, tint = if (active) C.bg else C.t2, modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Outlined.Badge, null, tint = C.green, modifier = Modifier.size(14.dp))
+                                            Text(
+                                                resolvedClientName,
+                                                color = C.t1,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Text(
+                                    "BUNDLE",
+                                    color = C.t3,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.4.sp
+                                )
+
+                                Box {
+                                    ConsolePaperSlipCard(
+                                        name = selOffer?.name ?: "Choose an offer",
+                                        meta = selOffer?.let { "KES ${it.price} · ${it.executionMode}" } ?: "Select an enabled offer",
+                                        ticketNo = "No.${selOffer?.id?.toString()?.padStart(4, '0') ?: "----"}",
+                                        enabled = enabledOffers.isNotEmpty(),
+                                        onClick = { offerExp = true }
+                                    )
+                                    DropdownMenu(
+                                        expanded = offerExp,
+                                        onDismissRequest = { offerExp = false },
+                                        modifier = Modifier
+                                            .background(C.cardHi, RoundedCornerShape(14.dp))
+                                            .border(1.dp, C.border, RoundedCornerShape(14.dp))
+                                    ) {
+                                        enabledOffers.forEach { o ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Column {
+                                                        Text(o.name, color = C.t1)
                                                         Text(
-                                                            m,
-                                                            color = if (active) C.bg else C.t2,
-                                                            fontWeight = if (active) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                                            "KES ${o.price} · ${o.executionMode}",
+                                                            color = C.amber,
                                                             fontSize = 12.sp
                                                         )
                                                     }
+                                                },
+                                                onClick = {
+                                                    selOffer = o
+                                                    mode = o.executionMode
+                                                    offerExp = false
                                                 }
-                                            }
+                                            )
                                         }
                                     }
+                                }
 
+                                Text(
+                                    "MODE",
+                                    color = C.t3,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.4.sp
+                                )
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    ConsoleModeToggleButton(
+                                        label = "SIMPLE",
+                                        icon = Icons.Filled.FlashOn,
+                                        active = mode == "SIMPLE",
+                                        onClick = { mode = "SIMPLE" },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    ConsoleModeToggleButton(
+                                        label = "ADVANCED",
+                                        icon = Icons.Outlined.AutoMode,
+                                        active = mode == "ADVANCED",
+                                        onClick = { mode = "ADVANCED" },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Icon(Icons.Outlined.Info, null, tint = C.t2, modifier = Modifier.size(14.dp))
                                     Text(
                                         if (mode == "ADVANCED") {
-                                            "Navigates USSD popup automatically (requires Accessibility)."
+                                            "Auto-navigates the USSD popup. Requires Accessibility access."
                                         } else {
-                                            "Runs with the simpler flow for straightforward dispatch."
+                                            "Uses the simpler dispatch flow for straightforward requests."
                                         },
                                         color = C.t2,
                                         fontSize = 11.sp,
-                                        lineHeight = 16.sp,
-                                        maxLines = if (ultraShortViewport) 1 else if (veryShortViewport) 2 else 3,
-                                        overflow = TextOverflow.Ellipsis
+                                        lineHeight = 16.sp
                                     )
+                                }
 
-                                    Button(
-                                        onClick = {
-                                            val selectedOffer = selOffer
-                                            phoneErr = when {
-                                                phone.isBlank() -> "Phone number required"
-                                                !phone.matches(Regex("^[0-9]{10}$")) -> "Must be exactly 10 digits"
-                                                selectedOffer == null -> "Choose an offer"
-                                                else -> null
-                                            }
-                                            if (phoneErr == null && selectedOffer != null) {
-                                                vib(ctx, 70L)
-                                                if (RelayManager.shouldRelayOffer(ctx, selectedOffer)) {
-                                                    val sent = RelayManager.forwardBuyAmount(ctx, phone, selectedOffer.price)
-                                                    bannerState = if (sent) "relayed" else "failed"
-                                                } else {
-                                                    bannerState = "pending"
-                                                    val finalCode = selectedOffer.ussdCode.replace("pn", phone, true)
-                                                    val txId = createPendingTransaction(
-                                                        ctx,
-                                                        selectedOffer.name,
-                                                        "KSh ${selectedOffer.price}",
-                                                        phone,
-                                                        finalCode,
-                                                        clientName = resolvedClientName,
-                                                        source = TX_SOURCE_CONSOLE,
-                                                        showInRecent = false,
-                                                        offerId = selectedOffer.id
-                                                    )
-                                                    pendingTxId = txId
-                                                    ctx.startOfferAutomation(selectedOffer, phone, txId, finalCode, mode)
-                                                }
-                                            }
+                                ConsoleTransmitLine(
+                                    code = commandCode,
+                                    phone = commandPhone
+                                )
+
+                                Button(
+                                    onClick = executeDispatch,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp)
+                                        .graphicsLayer {
+                                            val scale = if (bannerState == "pending") pendingButtonScale else 1f
+                                            scaleX = scale
+                                            scaleY = scale
                                         },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(executeHeight)
-                                            .graphicsLayer {
-                                                val scale = if (bannerState == "pending") pendingButtonScale else 1f
-                                                scaleX = scale
-                                                scaleY = scale
-                                            },
-                                        shape = RoundedCornerShape(20.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = C.amber, contentColor = C.bg),
-                                        enabled = selOffer != null
-                                    ) {
-                                        Icon(Icons.Filled.Send, null, tint = C.bg, modifier = Modifier.size(18.dp))
-                                        Spacer(Modifier.width(10.dp))
-                                        Text(
-                                            if (bannerState == "pending") "EXECUTING..." else "EXECUTE",
-                                            color = C.bg,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 12.sp
-                                        )
-                                    }
-                                    }
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = C.amber,
+                                        contentColor = C.bg
+                                    ),
+                                    enabled = selOffer != null
+                                ) {
+                                    Icon(Icons.Filled.Send, null, tint = C.bg, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        if (bannerState == "pending") "EXECUTING..." else "EXECUTE",
+                                        color = C.bg,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 15.sp,
+                                        letterSpacing = 0.6.sp
+                                    )
                                 }
                             }
                         } else {
                             Column(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(sectionSpacing)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 18.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("History", color = C.t1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                                    PillBadge("${consoleHistory.size} total", C.t2)
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            "HISTORY",
+                                            color = C.amber,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.4.sp
+                                        )
+                                        Text(
+                                            "Recent manual dispatches",
+                                            color = C.t1,
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    ConsoleTerminalReadout("${consoleHistory.size} TOTAL")
                                 }
 
                                 if (consoleHistory.isEmpty()) {
                                     Surface(
-                                        shape = RoundedCornerShape(26.dp),
-                                        color = C.card.copy(alpha = 0.95f),
-                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .weight(1f, fill = true)
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = Color(0xFF121617),
+                                        border = BorderStroke(1.dp, Color(0xFF333B3E))
                                     ) {
                                         Column(
                                             modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(horizontal = 18.dp, vertical = 24.dp),
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 18.dp, vertical = 22.dp),
                                             horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.Center
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Icon(Icons.Outlined.History, null, tint = C.t2, modifier = Modifier.size(24.dp))
-                                            Spacer(Modifier.height(8.dp))
-                                            Text("No console history yet", color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                                            Icon(Icons.Outlined.History, null, tint = C.t2, modifier = Modifier.size(22.dp))
+                                            Text(
+                                                "No console history yet",
+                                                color = C.t1,
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
                                             Text(
                                                 "Executed manual dispatches will appear here.",
                                                 color = C.t2,
-                                                fontSize = 13.sp,
+                                                fontSize = 12.sp,
                                                 textAlign = TextAlign.Center
                                             )
                                         }
                                     }
                                 } else {
-                                    Surface(
-                                        shape = RoundedCornerShape(26.dp),
-                                        color = C.card.copy(alpha = 0.95f),
-                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .weight(1f, fill = true)
-                                    ) {
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(if (veryShortViewport) 14.dp else 16.dp),
-                                            verticalArrangement = Arrangement.spacedBy(if (veryShortViewport) 8.dp else 10.dp)
-                                        ) {
-                                            consoleHistory.take(visibleHistoryCount).forEach { tx ->
-                                                ConsoleHistoryPreviewCard(
-                                                    tx = tx,
-                                                    onClick = { selectedHistoryTxId = tx.id }
-                                                )
-                                            }
-                                            Spacer(Modifier.weight(1f, fill = true))
-                                            Text(
-                                                "Showing latest ${minOf(visibleHistoryCount, consoleHistory.size)} of ${consoleHistory.size}. Tap a row to open full details.",
-                                                color = C.t3,
-                                                fontSize = 11.sp,
-                                                lineHeight = 15.sp
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        consoleHistory.forEach { tx ->
+                                            ConsoleTerminalHistoryRow(
+                                                tx = tx,
+                                                onClick = { selectedHistoryTxId = tx.id }
                                             )
                                         }
                                     }
@@ -4918,6 +4978,334 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                     }
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun ConsoleStatusLed(
+    color: Color,
+    glowing: Boolean,
+    blinking: Boolean = false
+) {
+    val alpha by if (blinking) {
+        rememberInfiniteTransition(label = "console_led_blink").animateFloat(
+            initialValue = 1f,
+            targetValue = 0.35f,
+            animationSpec = infiniteRepeatable(tween(1200, easing = EaseInOutSine), RepeatMode.Reverse),
+            label = "console_led_alpha"
+        )
+    } else {
+        rememberUpdatedState(1f)
+    }
+    Box(
+        modifier = Modifier
+            .size(6.dp)
+            .graphicsLayer { this.alpha = alpha }
+            .clip(CircleShape)
+            .background(color)
+            .then(
+                if (glowing) {
+                    Modifier.border(1.dp, color.copy(alpha = 0.12f), CircleShape)
+                } else Modifier
+            )
+    )
+}
+
+@Composable
+private fun ConsoleTerminalTabButton(
+    text: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomStart = 6.dp, bottomEnd = 6.dp),
+        color = if (active) Color(0xFF252B2E) else Color(0xFF1A1F21),
+        border = BorderStroke(1.dp, if (active) C.amber.copy(alpha = 0.26f) else Color(0xFF2B3234))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text.uppercase(Locale.getDefault()),
+                color = if (active) C.t1 else C.t2,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.4.sp
+            )
+            if (active) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(C.amber)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConsoleTerminalBanner(message: String, color: Color) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = color.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.28f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(Icons.Outlined.Info, null, tint = color, modifier = Modifier.size(14.dp))
+            Text(message, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun ConsoleTerminalReadout(
+    text: String,
+    accent: Color = C.t2,
+    filled: Boolean = false
+) {
+    Surface(
+        shape = RoundedCornerShape(9.dp),
+        color = if (filled) accent else Color.Transparent,
+        border = BorderStroke(1.dp, if (filled) accent else Color(0xFF394144))
+    ) {
+        Text(
+            text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            color = if (filled) C.bg else accent,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+private fun ConsolePaperSlipCard(
+    name: String,
+    meta: String,
+    ticketNo: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .shadow(8.dp, RoundedCornerShape(6.dp)),
+        shape = RoundedCornerShape(6.dp),
+        color = Color(0xFFE8E0CD)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawBehind {
+                    val holeRadius = 3.5.dp.toPx()
+                    val spacing = 14.dp.toPx()
+                    var x = 14.dp.toPx()
+                    while (x < size.width - 10.dp.toPx()) {
+                        drawCircle(Color(0xFF1B2022), holeRadius, Offset(x, 0f))
+                        drawCircle(Color(0xFF1B2022), holeRadius, Offset(x, size.height))
+                        x += spacing
+                    }
+                }
+                .padding(horizontal = 16.dp, vertical = 16.dp)
+        ) {
+            Text(
+                ticketNo,
+                modifier = Modifier.align(Alignment.TopEnd),
+                color = Color(0xFFB8AB8C),
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    C.amber,
+                                    Color(0xFFCF8B2E)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.FlashOn, null, tint = Color(0xFF241804), modifier = Modifier.size(20.dp))
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        name,
+                        color = Color(0xFF2A2420),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        meta,
+                        color = Color(0xFFB06E16),
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Icon(Icons.Filled.KeyboardArrowDown, null, tint = Color(0xFFB8AB8C))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConsoleModeToggleButton(
+    label: String,
+    icon: ImageVector,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 5.dp, bottomEnd = 5.dp),
+        color = if (active) C.amber else Color(0xFF121617),
+        border = BorderStroke(1.dp, if (active) Color(0xFF8A5D18) else Color(0xFF394144))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, null, tint = if (active) Color(0xFF241804) else C.t2, modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(7.dp))
+            Text(
+                label,
+                color = if (active) Color(0xFF241804) else C.t2,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.3.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConsoleTransmitLine(
+    code: String,
+    phone: String
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF0D1011),
+        border = BorderStroke(1.dp, Color(0xFF394144))
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(">", color = C.amber, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+            Text("DIAL", color = C.cyan, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+            Text(code, color = C.cyan, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+            Text("TO", color = C.t3, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+            Text(phone, color = C.cyan, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+            Box(
+                modifier = Modifier
+                    .width(7.dp)
+                    .height(14.dp)
+                    .background(C.cyan)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConsoleTerminalHistoryRow(
+    tx: Transaction,
+    onClick: () -> Unit
+) {
+    val statusColor = transactionStatusColor(tx)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF121617),
+        border = BorderStroke(1.dp, Color(0xFF394144))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(C.amber.copy(alpha = 0.12f))
+                    .border(1.dp, C.amber.copy(alpha = 0.20f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Outlined.History, null, tint = C.amber, modifier = Modifier.size(18.dp))
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    tx.offerName.ifBlank { "Manual dispatch" },
+                    color = C.t1,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "${tx.clientName.ifBlank { tx.phone }} · ${transactionSummaryTime(tx)}",
+                    color = C.t2,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = statusColor.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.20f))
+            ) {
+                Text(
+                    tx.status.uppercase(Locale.getDefault()),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                    color = statusColor,
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 }
