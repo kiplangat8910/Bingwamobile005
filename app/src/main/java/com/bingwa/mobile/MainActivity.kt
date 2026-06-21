@@ -3600,7 +3600,7 @@ private fun transactionStatusColor(tx: Transaction): Color = when (tx.statusEnum
 
 private fun transactionTypeLabel(tx: Transaction): String = when (tx.source) {
     TX_SOURCE_AUTOMATED -> "Automated"
-    TX_SOURCE_CONSOLE -> "Console"
+    TX_SOURCE_CONSOLE -> "Manual"
     TX_SOURCE_SMS_COMMAND -> "SMS Command"
     TX_SOURCE_AIRTIME -> "Airtime"
     else -> "Activity"
@@ -4682,14 +4682,14 @@ fun VolcanicTxCard(tx: Transaction, onDelete: () -> Unit) {
     }
     val typeLabel = when (tx.source) {
         TX_SOURCE_AUTOMATED -> "Automated"
-        TX_SOURCE_CONSOLE -> "Console"
+        TX_SOURCE_CONSOLE -> "Manual"
         TX_SOURCE_SMS_COMMAND -> "SMS Command"
         TX_SOURCE_AIRTIME -> "Airtime"
         else -> "Activity"
     }
     val typeColor = when (typeLabel) {
         "Automated" -> C.green
-        "Console" -> C.purple
+        "Manual" -> C.purple
         "SMS Command" -> C.blue
         "Airtime" -> C.orange
         else -> C.blue
@@ -5122,8 +5122,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
     }
     val bannerMessage = when (bannerState) {
         "success" -> "Bundle dispatched successfully"
-        "failed" -> "Dispatch failed. Check USSD logs."
-        "pending" -> "Dispatching now. Waiting for USSD response."
+        "failed" -> "Manual run failed. Check USSD logs."
+        "pending" -> "Running manually now. Waiting for USSD response."
         "relayed" -> "Forwarded to Relay phone for execution"
         else -> null
     }
@@ -5265,21 +5265,21 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            "DISPATCH TERMINAL",
+                            "MANUAL TERMINAL",
                             color = C.amber,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.6.sp
                         )
                         Text(
-                            "Console",
+                            "Manual",
                             color = C.t1,
                             fontSize = 30.sp,
                             fontWeight = FontWeight.Black,
                             letterSpacing = (-0.4).sp
                         )
                         Text(
-                            "Manual dispatch & history",
+                            "Manual execution & history",
                             color = C.t2,
                             fontSize = 13.sp,
                             lineHeight = 18.sp
@@ -5293,7 +5293,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         ConsoleTerminalTabButton(
-                            text = "Dispatch",
+                            text = "Manual",
                             active = consoleTab == "DISPATCH",
                             onClick = { consoleTab = "DISPATCH" },
                             modifier = Modifier.weight(1f)
@@ -5531,7 +5531,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                         if (mode == "ADVANCED") {
                                             "Auto-navigates the USSD popup. Requires Accessibility access."
                                         } else {
-                                            "Uses the simpler dispatch flow for straightforward requests."
+                                            "Uses the simpler manual flow for straightforward requests."
                                         },
                                         color = C.t2,
                                         fontSize = 11.sp,
@@ -7047,7 +7047,7 @@ fun SettingsScreen() {
             SettingsGroup("Haptics") {
                 ToggleRow(Icons.Rounded.Vibration, "Vibrate on Toggle", "Haptic feedback on start/stop", vibToggle) { vibToggle = it; prefs.edit().putBoolean("vibration_on_toggle", it).apply() }
                 GroupDivider()
-                ToggleRow(Icons.Rounded.PlayArrow, "Vibrate on Dispatch", "Haptic feedback on console send", vibExecute) { vibExecute = it; prefs.edit().putBoolean("vibration_on_execute", it).apply() }
+                ToggleRow(Icons.Rounded.PlayArrow, "Vibrate on Manual", "Haptic feedback on manual send", vibExecute) { vibExecute = it; prefs.edit().putBoolean("vibration_on_execute", it).apply() }
             }
 
             SettingsGroup("System Permissions") {

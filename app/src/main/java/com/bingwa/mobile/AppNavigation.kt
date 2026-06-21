@@ -20,7 +20,7 @@ internal sealed class Screen(
     val iconSel: ImageVector
 ) {
     data object Home : Screen("home", "Home", Icons.Outlined.Home, Icons.Filled.Home)
-    data object Console : Screen("console", "Dispatch", Icons.Outlined.Terminal, Icons.Filled.Terminal)
+    data object Console : Screen("console", "Manual", Icons.Outlined.Terminal, Icons.Filled.Terminal)
     data object Tokens : Screen("tokens", "Tokens", Icons.Outlined.Toll, Icons.Filled.Toll)
     data object Contacts : Screen("contacts", "Contacts", Icons.Outlined.Contacts, Icons.Filled.Contacts)
     data object Settings : Screen("settings", "Setting", Icons.Outlined.Settings, Icons.Filled.Settings)
