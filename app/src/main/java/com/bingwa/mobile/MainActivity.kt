@@ -33,6 +33,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.*
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -5276,7 +5277,7 @@ private fun ConsoleTerminalHistoryRow(
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Text(
-                    tx.offerName.ifBlank { "Manual dispatch" },
+                    tx.description.ifBlank { "Manual dispatch" },
                     color = C.t1,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -5284,7 +5285,7 @@ private fun ConsoleTerminalHistoryRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    "${tx.clientName.ifBlank { tx.phone }} · ${transactionSummaryTime(tx)}",
+                    "${tx.clientName.ifBlank { tx.phoneNumber }} · ${transactionSummaryTime(tx)}",
                     color = C.t2,
                     fontSize = 11.sp,
                     lineHeight = 15.sp,
