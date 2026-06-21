@@ -2366,18 +2366,6 @@ fun HomeScreenVolcanic(
     onToggleRunning: () -> Unit
 ) {
     val ctx = LocalContext.current
-    val configuration = LocalConfiguration.current
-    val screenWidth = configuration.screenWidthDp.dp
-    val maxContentWidth = when {
-        screenWidth >= 960.dp -> 860.dp
-        screenWidth >= 700.dp -> 720.dp
-        else -> Dp.Unspecified
-    }
-    val horizontalPadding = if (screenWidth >= 700.dp) 24.dp else 16.dp
-    val balanceCardLift = if (screenWidth >= 700.dp) (-46).dp else (-36).dp
-    val headerToCardGap = if (screenWidth >= 700.dp) 20.dp else 14.dp
-    val recentSectionLift = if (screenWidth >= 700.dp) (-26).dp else (-22).dp
-    val recentActivityContentGap = if (screenWidth >= 700.dp) 10.dp else 6.dp
     val automatedTxns = txns.filter { it.showInRecent }.sortedByDescending { it.timestamp }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
@@ -2387,37 +2375,72 @@ fun HomeScreenVolcanic(
     }
     val failed = automatedTxns.count { it.status == TransactionStatus.FAILED.value }
     val rate = if (automatedTxns.isNotEmpty()) (sent * 100) / automatedTxns.size else 0
-    val inf = rememberInfiniteTransition(label = "home_inf")
-    val spin by inf.animateFloat(
+    val chromeAnim = rememberInfiniteTransition(label = "home_chrome")
+    val spin by chromeAnim.animateFloat(
         0f,
         360f,
         infiniteRepeatable(tween(1200, easing = LinearEasing)),
         label = "spin"
     )
+    val timeLabel by produceState(
+        initialValue = SimpleDateFormat("H:mm", Locale.getDefault()).format(Date()),
+        key1 = ctx
+    ) {
+        while (true) {
+            value = SimpleDateFormat("H:mm", Locale.getDefault()).format(Date())
+            delay(30_000L)
+        }
+    }
+    val batteryInfo by produceState(
+        initialValue = BatteryStatus.read(ctx),
+        key1 = ctx
+    ) {
+        while (true) {
+            value = BatteryStatus.read(ctx)
+            delay(60_000L)
+        }
+    }
+    val topTransactions = automatedTxns.take(6)
 
-    Box(Modifier.fillMaxSize().background(C.bg)) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF0A0C0D),
+                        Color(0xFF0A0C0D),
+                        Color(0xFF08090A)
+                    )
+                )
+            )
+    ) {
         Box(
             Modifier
                 .size(320.dp)
                 .offset((-120).dp, (-60).dp)
-                .background(Brush.radialGradient(listOf(C.amber.copy(alpha = 0.08f), Color.Transparent)), CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        listOf(Color(0xFFFFB454).copy(alpha = 0.08f), Color.Transparent)
+                    ),
+                    CircleShape
+                )
         )
         Box(
             Modifier
                 .size(280.dp)
                 .align(Alignment.TopEnd)
                 .offset(70.dp, (-20).dp)
-                .background(Brush.radialGradient(listOf(C.blue.copy(alpha = 0.07f), Color.Transparent)), CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        listOf(Color(0xFF74E6D8).copy(alpha = 0.07f), Color.Transparent)
+                    ),
+                    CircleShape
+                )
         )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = horizontalPadding,
-                top = 2.dp,
-                end = horizontalPadding,
-                bottom = 132.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 24.dp)
         ) {
             item {
                 Box(
@@ -2427,92 +2450,44 @@ fun HomeScreenVolcanic(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .widthIn(max = maxContentWidth),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                            .widthIn(max = 420.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Spacer(Modifier.statusBarsPadding())
-                        HomeDashboardHeader(running = running)
-                        Spacer(Modifier.height(headerToCardGap))
-                    }
-                }
-            }
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .offset(y = balanceCardLift),
-                    contentAlignment = Alignment.Center
-                ) {
-                    VolcanicBalanceCard(
-                        airBal = airBal,
-                        tokenBal = tokenBal,
-                        unlimitedLabel = unlimitedLabel,
-                        unlimitedRemaining = unlimitedRemaining,
-                        sent = sent,
-                        pending = pending,
-                        failed = failed,
-                        rate = rate,
-                        isRefreshing = isRefreshing,
-                        onRefresh = onRefresh,
-                        spin = spin,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .widthIn(max = maxContentWidth)
-                    )
-                }
-            }
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .offset(y = recentSectionLift),
-                    contentAlignment = Alignment.Center
-                ) {
-                    RecentActivityHeader(
-                        automatedCount = automatedTxns.size,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .widthIn(max = maxContentWidth)
-                    )
-                }
-            }
-            item {
-                Spacer(Modifier.height(recentActivityContentGap))
-            }
-            if (automatedTxns.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .offset(y = recentSectionLift),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AnimatedEmptyState(
+                        HomeHardwareStrip(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .widthIn(max = maxContentWidth)
+                                .statusBarsPadding()
+                                .padding(top = 4.dp),
+                            timeLabel = timeLabel,
+                            batteryPercent = batteryInfo.percent
                         )
-                    }
-                }
-            } else {
-                items(automatedTxns.take(8), key = { it.id }) { tx ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .offset(y = recentSectionLift),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        GithubActivityCard(
-                            tx = tx,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .widthIn(max = maxContentWidth),
-                            onClick = { selectedTxId = tx.id }
-                        ) {
-                            txns.remove(tx)
-                            saveTransactions(ctx, txns.toList())
-                            if (selectedTxId == tx.id) selectedTxId = -1
-                        }
+                        HomeHeroHeader(running = running)
+                        HomeSplitBalanceCard(
+                            airBal = airBal.ifBlank { "—" },
+                            tokenValue = unlimitedLabel ?: tokenBal.toString(),
+                            tokenHint = unlimitedRemaining ?: "Available units",
+                            isRefreshing = isRefreshing,
+                            spin = spin,
+                            onRefresh = onRefresh
+                        )
+                        HomeStatsStrip(
+                            sent = sent,
+                            pending = pending,
+                            failed = failed,
+                            rate = rate
+                        )
+                        HomeActivityHeading(automatedCount = automatedTxns.size)
+                        HomeActivityPanel(
+                            transactions = topTransactions,
+                            onOpenTransaction = { selectedTxId = it.id },
+                            onDeleteTransaction = { tx ->
+                                txns.remove(tx)
+                                saveTransactions(ctx, txns.toList())
+                                if (selectedTxId == tx.id) selectedTxId = -1
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(12.dp))
                     }
                 }
             }
@@ -2535,6 +2510,664 @@ fun HomeScreenVolcanic(
                     }
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun HomeHardwareStrip(
+    timeLabel: String,
+    batteryPercent: Int?,
+    modifier: Modifier = Modifier
+) {
+    val stripBg = Color(0xFF15191B)
+    val lineSoft = Color(0xFF262D2F)
+    val textDim = Color(0xFF8A9396)
+    val textDimmer = Color(0xFF5B6366)
+    val amber = Color(0xFFFFB454)
+    val cyan = Color(0xFF74E6D8)
+    val ledAnim = rememberInfiniteTransition(label = "home_led")
+    val amberAlpha by ledAnim.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "home_led_alpha"
+    )
+
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .width(116.dp)
+                .height(21.dp)
+                .clip(RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp))
+                .background(Color(0xFF050605))
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.White.copy(alpha = 0.015f), stripBg)
+                    )
+                )
+                .border(1.dp, lineSoft, RoundedCornerShape(24.dp))
+                .padding(start = 22.dp, top = 15.dp, end = 22.dp, bottom = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.size(6.dp).clip(CircleShape).background(cyan).shadow(4.dp, CircleShape))
+                Box(
+                    Modifier
+                        .size(6.dp)
+                        .graphicsLayer { alpha = amberAlpha }
+                        .clip(CircleShape)
+                        .background(amber)
+                )
+                Box(Modifier.size(6.dp).clip(CircleShape).background(textDimmer))
+                Text(
+                    "AGENT 042",
+                    color = textDimmer,
+                    fontSize = 11.sp,
+                    letterSpacing = 0.5.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    timeLabel,
+                    color = textDim,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+                HomeSignalBars(tint = textDim)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(3.dp))
+                        .border(1.dp, textDimmer, RoundedCornerShape(3.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        "${batteryPercent ?: 28}%",
+                        color = textDim,
+                        fontSize = 10.5.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeSignalBars(tint: Color) {
+    Row(
+        modifier = Modifier.height(14.dp),
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        listOf(7.dp, 11.dp, 15.dp, 19.dp).forEach { height ->
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(height)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(tint)
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeHeroHeader(running: Boolean) {
+    val cyan = Color(0xFF74E6D8)
+    val borderColor = if (running) cyan.copy(alpha = 0.35f) else Color(0xFFFFB454).copy(alpha = 0.35f)
+    val pillText = if (running) "AUTOMATION LIVE" else "AUTOMATION IDLE"
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp, start = 10.dp, end = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "Bingwa Mobile",
+                color = Color(0xFFEEF2F1),
+                fontSize = 27.sp,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(5.dp))
+            Text(
+                "USSD Automation Platform",
+                color = Color(0xFF8A9396),
+                fontSize = 12.5.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(12.dp))
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = Color.Transparent,
+                border = BorderStroke(1.dp, borderColor)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(cyan)
+                    )
+                    Text(
+                        pillText,
+                        color = cyan,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeSplitBalanceCard(
+    airBal: String,
+    tokenValue: String,
+    tokenHint: String,
+    isRefreshing: Boolean,
+    spin: Float,
+    onRefresh: () -> Unit
+) {
+    val amber = Color(0xFFFFB454)
+    val cyan = Color(0xFF74E6D8)
+    val text = Color(0xFFEEF2F1)
+    val textDim = Color(0xFF8A9396)
+    val textDimmer = Color(0xFF5B6366)
+    val cardBg = Color(0xFF1C2123)
+    val line = Color(0xFF333B3E)
+    val lineSoft = Color(0xFF262D2F)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        amber.copy(alpha = 0.10f),
+                        cyan.copy(alpha = 0.07f),
+                        cardBg
+                    )
+                )
+            )
+            .border(1.dp, lineSoft, RoundedCornerShape(20.dp))
+            .clickable(onClick = onRefresh)
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(5.dp).clip(CircleShape).background(amber))
+                Text(
+                    "AIRTIME BALANCE",
+                    color = textDimmer,
+                    fontSize = 9.5.sp,
+                    letterSpacing = 1.2.sp
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text(
+                    airBal,
+                    color = text,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontFamily = FontFamily.Monospace
+                )
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF2E3437)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.Refresh,
+                        null,
+                        tint = textDim,
+                        modifier = Modifier
+                            .size(12.dp)
+                            .then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
+                    )
+                }
+            }
+            Text(
+                if (isRefreshing) "checking balance" else "tap card to refresh",
+                color = textDimmer,
+                fontSize = 10.5.sp
+            )
+        }
+        Box(
+            modifier = Modifier
+                .width(1.dp)
+                .height(74.dp)
+                .background(line)
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 14.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "TOKENS",
+                    color = textDimmer,
+                    fontSize = 9.5.sp,
+                    letterSpacing = 1.2.sp
+                )
+                Box(Modifier.size(5.dp).clip(CircleShape).background(amber))
+            }
+            Text(
+                tokenValue,
+                color = text,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.End
+            )
+            Text(
+                tokenHint,
+                color = textDimmer,
+                fontSize = 10.5.sp,
+                textAlign = TextAlign.End,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            HomeSparkLine()
+        }
+    }
+}
+
+@Composable
+private fun HomeSparkLine() {
+    Canvas(modifier = Modifier.size(width = 58.dp, height = 18.dp)) {
+        val path = Path().apply {
+            moveTo(size.width * 0.02f, size.height * 0.72f)
+            cubicTo(
+                size.width * 0.12f,
+                size.height * 0.86f,
+                size.width * 0.24f,
+                size.height * 0.10f,
+                size.width * 0.36f,
+                size.height * 0.33f
+            )
+            cubicTo(
+                size.width * 0.48f,
+                size.height * 0.52f,
+                size.width * 0.62f,
+                size.height * 0.84f,
+                size.width * 0.76f,
+                size.height * 0.38f
+            )
+            cubicTo(
+                size.width * 0.84f,
+                size.height * 0.12f,
+                size.width * 0.91f,
+                size.height * 0.03f,
+                size.width * 0.98f,
+                size.height * 0.12f
+            )
+        }
+        drawPath(
+            path = path,
+            color = Color(0xFF74E6D8),
+            style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
+        )
+        drawCircle(
+            color = Color(0xFF74E6D8),
+            radius = 2.dp.toPx(),
+            center = Offset(size.width * 0.98f, size.height * 0.12f)
+        )
+    }
+}
+
+@Composable
+private fun HomeStatsStrip(
+    sent: Int,
+    pending: Int,
+    failed: Int,
+    rate: Int
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        HomeStatChip(value = sent.toString(), label = "SENT", accent = Color(0xFF74E6D8), modifier = Modifier.weight(1f))
+        HomeStatChip(value = pending.toString(), label = "PENDING", accent = Color(0xFFFFB454), modifier = Modifier.weight(1f))
+        HomeStatChip(value = failed.toString(), label = "FAILED", accent = Color(0xFFEF8273), modifier = Modifier.weight(1f))
+        HomeStatChip(value = "$rate%", label = "SUCCESS", accent = Color(0xFFB6A6EF), modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun HomeStatChip(
+    value: String,
+    label: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFF1C2123))
+            .border(1.dp, accent.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 6.dp, vertical = 11.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            value,
+            color = accent,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            label,
+            color = Color(0xFF5B6366),
+            fontSize = 9.sp,
+            letterSpacing = 1.sp
+        )
+    }
+}
+
+@Composable
+private fun HomeActivityHeading(automatedCount: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(22.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFFFFB454), Color(0xFF74E6D8))
+                        )
+                    )
+            )
+            Text(
+                "Recent Activity",
+                color = Color(0xFFEEF2F1),
+                fontSize = 18.5.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = Color.Transparent,
+            border = BorderStroke(1.dp, Color(0xFF333B3E))
+        ) {
+            Text(
+                if (automatedCount == 0) "0 automated" else "$automatedCount automated",
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                color = Color(0xFF8A9396),
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeActivityPanel(
+    transactions: List<Transaction>,
+    onOpenTransaction: (Transaction) -> Unit,
+    onDeleteTransaction: (Transaction) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color(0xFF1C2123))
+            .border(1.dp, Color(0xFF262D2F), RoundedCornerShape(22.dp))
+            .heightIn(min = 320.dp)
+            .padding(18.dp)
+    ) {
+        repeat(4) { index ->
+            Box(
+                modifier = Modifier
+                    .size(if (index % 2 == 0) 5.dp else 3.dp)
+                    .offset(
+                        x = listOf(28.dp, 74.dp, 210.dp, 276.dp)[index],
+                        y = listOf(36.dp, 82.dp, 24.dp, 112.dp)[index]
+                    )
+                    .clip(CircleShape)
+                    .background(Color(0xFF74E6D8).copy(alpha = 0.28f))
+            )
+        }
+        if (transactions.isEmpty()) {
+            HomeScanningEmptyState(Modifier.fillMaxWidth())
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "DISPATCH RESULTS",
+                    color = Color(0xFF5B6366),
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.1.sp
+                )
+                transactions.forEach { tx ->
+                    HomeDispatchRow(
+                        tx = tx,
+                        onOpen = { onOpenTransaction(tx) },
+                        onDelete = { onDeleteTransaction(tx) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeScanningEmptyState(modifier: Modifier = Modifier) {
+    val anim = rememberInfiniteTransition(label = "scan_panel")
+    val ring1 by anim.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(3000, easing = LinearEasing)),
+        label = "scan_ring_1"
+    )
+    val ring2 by anim.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(3000, easing = LinearEasing),
+            initialStartOffset = StartOffset(1000)
+        ),
+        label = "scan_ring_2"
+    )
+    val ring3 by anim.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(3000, easing = LinearEasing),
+            initialStartOffset = StartOffset(2000)
+        ),
+        label = "scan_ring_3"
+    )
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 14.dp, bottom = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            HomeSonarRing(progress = ring1)
+            HomeSonarRing(progress = ring2)
+            HomeSonarRing(progress = ring3)
+            Box(
+                modifier = Modifier
+                    .size(13.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF74E6D8))
+                    .shadow(12.dp, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {}
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.78f)
+                .height(1.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color.Transparent,
+                            Color(0xFF74E6D8).copy(alpha = 0.50f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Scanning for activity…",
+            color = Color(0xFFEEF2F1),
+            fontSize = 14.5.sp,
+            fontFamily = FontFamily.Monospace
+        )
+        Spacer(Modifier.height(7.dp))
+        Text(
+            "Dispatch results will appear here",
+            color = Color(0xFF5B6366),
+            fontSize = 12.sp,
+            fontFamily = FontFamily.Monospace
+        )
+    }
+}
+
+@Composable
+private fun HomeSonarRing(progress: Float) {
+    val ringSize = lerp(24.dp, 140.dp, progress)
+    Box(
+        modifier = Modifier
+            .size(ringSize)
+            .clip(CircleShape)
+            .border(
+                width = if (progress < 0.08f) 2.dp else 1.dp,
+                color = Color(0xFF74E6D8).copy(alpha = (0.72f - (progress * 0.72f)).coerceAtLeast(0f)),
+                shape = CircleShape
+            )
+    )
+}
+
+@Composable
+private fun HomeDispatchRow(
+    tx: Transaction,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val statusColor = transactionStatusColor(tx)
+    val title = tx.clientName.ifBlank { tx.description.ifBlank { "Recent automation" } }
+    val subtitle = buildString {
+        append(tx.description.ifBlank { "Offer not captured" })
+        tx.phoneNumber.takeIf { it.isNotBlank() }?.let {
+            append("  |  ")
+            append(it)
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF15191B))
+            .border(1.dp, Color(0xFF262D2F), RoundedCornerShape(16.dp))
+            .clickable(onClick = onOpen)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(statusColor)
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                color = Color(0xFFEEF2F1),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                subtitle,
+                color = Color(0xFF8A9396),
+                fontSize = 11.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 16.sp
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                tx.amount.ifBlank { "-" },
+                color = Color(0xFFEEF2F1),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                tx.status,
+                color = statusColor,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+            Icon(Icons.Outlined.Delete, null, tint = Color(0xFFEF8273), modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -6519,7 +7152,9 @@ fun OffersScreen(onBack: () -> Unit) {
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, top = pad.calculateTopPadding() + 10.dp, end = 16.dp, bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (offers.isEmpty()) item { AnimatedEmptyState() }
             else itemsIndexed(offers) { idx, o ->
-                OfferCard(o,
+                OfferCard(
+                    number = idx + 1,
+                    o = o,
                     onEdit = { editItem = o; showDlg = true },
                     onToggle = { persist(offers.toMutableList().also { it[idx] = o.copy(enabled = !o.enabled) }) },
                     onDelete = { persist(offers.toMutableList().also { it.removeAt(idx) }) }
@@ -6611,7 +7246,7 @@ fun OffersScreen(onBack: () -> Unit) {
 }
 
 @Composable
-fun OfferCard(o: OfferItem, onEdit: () -> Unit, onToggle: () -> Unit, onDelete: () -> Unit) {
+fun OfferCard(number: Int, o: OfferItem, onEdit: () -> Unit, onToggle: () -> Unit, onDelete: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     val hasPendingSignature = o.pendingLearnedSignature.isNotEmpty() || o.pendingSignatureLearningCaptures.isNotEmpty()
     Box(
@@ -6630,7 +7265,33 @@ fun OfferCard(o: OfferItem, onEdit: () -> Unit, onToggle: () -> Unit, onDelete: 
                 ) { Icon(Icons.Filled.Wifi, null, tint = if (o.enabled) C.cyan else C.t3, modifier = Modifier.size(18.dp)) }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(o.name, color = if (o.enabled) C.t1 else C.t2, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = C.surface.copy(alpha = 0.92f),
+                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+                        ) {
+                            Text(
+                                number.toString(),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = C.cyan,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Text(
+                            o.name,
+                            color = if (o.enabled) C.t1 else C.t2,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         MiniTag(if (o.enabled) "ACTIVE" else "DISABLED", if (o.enabled) C.green else C.red)
                         MiniTag(o.category.uppercase(), C.orange)
