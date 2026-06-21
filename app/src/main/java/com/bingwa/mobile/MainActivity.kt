@@ -2039,7 +2039,7 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
             .padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 8.dp)
     ) {
         val compact = maxWidth < 420.dp
-        val centerSlotWidth = if (compact) 76.dp else 86.dp
+        val centerSlotWidth = if (compact) 88.dp else 100.dp
         val navHeight = if (compact) 78.dp else 86.dp
         Surface(
             shape = RoundedCornerShape(30.dp),
@@ -2091,7 +2091,7 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .offset(y = if (compact) (-8).dp else (-10).dp)
+                        .offset(y = if (compact) (-2).dp else (-4).dp)
                         .width(centerSlotWidth),
                     contentAlignment = Alignment.Center
                 ) {
@@ -2144,7 +2144,20 @@ private fun NavBarItemButton(item: Screen, selected: Boolean, compact: Boolean, 
 @Composable
 private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
     val ctx = LocalContext.current
-    val color = C.red
+    val color = if (running) C.green else C.red
+    val auraAnim = rememberInfiniteTransition(label = "start_nav_aura")
+    val pulseScale by auraAnim.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "start_nav_pulse_scale"
+    )
+    val pulseAlpha by auraAnim.animateFloat(
+        initialValue = if (running) 0.24f else 0.16f,
+        targetValue = if (running) 0.10f else 0.08f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "start_nav_pulse_alpha"
+    )
     val holdAction = {
         vib(ctx, 70L)
         Toast.makeText(
@@ -2154,26 +2167,28 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
         ).show()
         onClick()
     }
-    val haloColor = color.copy(alpha = if (running) 0.22f else 0.18f)
     Box(
         modifier = modifier
-            .size(if (compact) 64.dp else 72.dp),
+            .size(width = if (compact) 78.dp else 88.dp, height = if (compact) 80.dp else 90.dp),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .matchParentSize()
-                .padding(6.dp)
+                .size(if (compact) 60.dp else 68.dp)
+                .graphicsLayer {
+                    scaleX = pulseScale
+                    scaleY = pulseScale
+                }
                 .clip(CircleShape)
-                .background(if (running) C.green.copy(alpha = 0.14f) else haloColor)
+                .background(color.copy(alpha = pulseAlpha))
         )
         Surface(
-            shape = CircleShape,
+            shape = RoundedCornerShape(28.dp),
             color = C.cardHi,
             border = BorderStroke(2.dp, color.copy(alpha = 0.88f)),
             shadowElevation = 18.dp,
             modifier = Modifier
-                .size(if (compact) 52.dp else 58.dp)
+                .size(width = if (compact) 62.dp else 68.dp, height = if (compact) 68.dp else 74.dp)
                 .combinedClickable(
                     onClick = {
                         Toast.makeText(
@@ -2185,23 +2200,38 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
                     onLongClick = holdAction
                 )
         ) {
-            Box(contentAlignment = Alignment.Center) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 8.dp, bottom = 7.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
+            ) {
                 Box(
                     Modifier
-                        .matchParentSize()
-                        .padding(6.dp)
+                        .size(if (compact) 30.dp else 34.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
                                 listOf(color.copy(alpha = 0.30f), color.copy(alpha = 0.08f))
                             )
                         )
-                )
-                Icon(
-                    Icons.Outlined.PowerSettingsNew,
-                    null,
-                    tint = color,
-                    modifier = Modifier.size(if (compact) 19.dp else 22.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.PowerSettingsNew,
+                        null,
+                        tint = color,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(if (compact) 18.dp else 20.dp)
+                    )
+                }
+                Text(
+                    text = if (running) "ON" else "OFF",
+                    color = color,
+                    fontSize = if (compact) 10.sp else 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.sp
                 )
             }
         }
@@ -2309,16 +2339,24 @@ private fun RelayHotspotStatusChip() {
     }
 
     Surface(
-        shape = RoundedCornerShape(50),
-        color = color.copy(alpha = 0.10f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.45f))
+        shape = RoundedCornerShape(999.dp),
+        color = C.surface.copy(alpha = 0.46f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.34f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(icon, null, tint = color, modifier = Modifier.size(14.dp))
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .background(color.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, tint = color, modifier = Modifier.size(12.dp))
+            }
             Text(label, color = color, fontWeight = FontWeight.ExtraBold, fontSize = 10.sp, letterSpacing = 0.9.sp)
         }
     }
@@ -2506,7 +2544,7 @@ fun HomeScreenVolcanic(
 
 @Composable
 private fun HomeDashboardHeader(running: Boolean) {
-    val statusColor = if (running) C.green else C.orange
+    val statusColor = if (running) C.green else C.red
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val headerMaxWidth = maxWidth
         val compact = headerMaxWidth < 380.dp
@@ -2616,6 +2654,8 @@ private fun HomeDashboardHeader(running: Boolean) {
                     )
                 }
             }
+
+            RelayHotspotStatusChip()
         }
     }
 }
@@ -2624,42 +2664,165 @@ private fun HomeDashboardHeader(running: Boolean) {
 private fun RecentActivityHeader(automatedCount: Int, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier = modifier) {
         val compact = maxWidth < 400.dp
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .width(5.dp)
-                    .height(if (compact) 26.dp else 30.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(C.orange, C.blue.copy(alpha = 0.92f))
-                        )
-                    )
-            )
-            Text(
-                "Recent Activity",
-                modifier = Modifier.weight(1f),
-                color = C.t1,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = if (compact) 18.sp else 20.sp
-            )
-            Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = C.surface.copy(alpha = 0.90f),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.84f))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                Box(
+                    modifier = Modifier
+                        .width(5.dp)
+                        .height(if (compact) 26.dp else 30.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(C.orange, C.blue.copy(alpha = 0.92f))
+                            )
+                        )
+                )
                 Text(
-                    text = if (automatedCount == 0) "0 automated" else "$automatedCount automated",
-                    color = C.t2,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    "Recent Activity",
+                    modifier = Modifier.weight(1f),
+                    color = C.t1,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = if (compact) 18.sp else 20.sp
+                )
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = C.surface.copy(alpha = 0.90f),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.84f))
+                ) {
+                    Text(
+                        text = if (automatedCount == 0) "0 automated" else "$automatedCount automated",
+                        color = C.t2,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
+                }
+            }
+
+            RecentActivityMotionRail(compact = compact)
+        }
+    }
+}
+
+@Composable
+private fun RecentActivityMotionRail(compact: Boolean) {
+    val railAnim = rememberInfiniteTransition(label = "recent_activity_rail")
+    val travel by railAnim.animateFloat(
+        initialValue = -0.15f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing)),
+        label = "recent_activity_rail_travel"
+    )
+    val pulse by railAnim.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "recent_activity_rail_pulse"
+    )
+    val railHeight = if (compact) 34.dp else 38.dp
+    val glowColor = C.green.copy(alpha = 0.24f)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(railHeight)
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(
+                        C.surface.copy(alpha = 0.92f),
+                        C.cardHi.copy(alpha = 0.88f),
+                        C.surface.copy(alpha = 0.92f)
+                    )
+                )
+            )
+            .border(1.dp, C.border.copy(alpha = 0.62f), RoundedCornerShape(18.dp))
+            .drawBehind {
+                val centerY = size.height / 2f
+                val startX = size.width * 0.08f
+                val endX = size.width * 0.92f
+                val lineWidth = endX - startX
+                val progressX = startX + (lineWidth * travel)
+                val sparkRadius = size.height * 0.12f * pulse
+                val sweepWidth = size.width * 0.20f
+
+                drawLine(
+                    brush = Brush.horizontalGradient(
+                        listOf(
+                            C.orange.copy(alpha = 0.26f),
+                            C.blue.copy(alpha = 0.32f),
+                            C.green.copy(alpha = 0.28f)
+                        ),
+                        startX = startX,
+                        endX = endX
+                    ),
+                    start = Offset(startX, centerY),
+                    end = Offset(endX, centerY),
+                    strokeWidth = size.height * 0.12f
+                )
+
+                drawRoundRect(
+                    brush = Brush.horizontalGradient(
+                        listOf(
+                            Color.Transparent,
+                            C.green.copy(alpha = 0.05f),
+                            glowColor,
+                            Color.Transparent
+                        ),
+                        startX = progressX - sweepWidth,
+                        endX = progressX + sweepWidth
+                    ),
+                    cornerRadius = CornerRadius(size.height, size.height)
+                )
+
+                listOf(0.20f, 0.50f, 0.80f).forEach { fraction ->
+                    drawCircle(
+                        color = C.t3.copy(alpha = 0.38f),
+                        radius = size.height * 0.08f,
+                        center = Offset(startX + (lineWidth * fraction), centerY)
+                    )
+                }
+
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(C.green.copy(alpha = 0.92f), C.green.copy(alpha = 0.12f))
+                    ),
+                    radius = sparkRadius * 2.8f,
+                    center = Offset(progressX.coerceIn(startX, endX), centerY)
+                )
+                drawCircle(
+                    color = C.green,
+                    radius = sparkRadius,
+                    center = Offset(progressX.coerceIn(startX, endX), centerY)
                 )
             }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                "Live stream",
+                color = C.t3,
+                fontSize = if (compact) 10.sp else 11.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                "Fresh automation pulse",
+                color = C.green,
+                fontSize = if (compact) 10.sp else 11.sp,
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }
