@@ -2346,7 +2346,9 @@ fun HomeScreenVolcanic(
         else -> Dp.Unspecified
     }
     val horizontalPadding = if (screenWidth >= 700.dp) 24.dp else 16.dp
-    val balanceCardLift = if (screenWidth >= 700.dp) (-28).dp else (-20).dp
+    val balanceCardLift = if (screenWidth >= 700.dp) (-32).dp else (-24).dp
+    val headerToCardGap = if (screenWidth >= 700.dp) 30.dp else 26.dp
+    val recentActivityContentGap = if (screenWidth >= 700.dp) 80.dp else 68.dp
     val automatedTxns = txns.filter { it.showInRecent }.sortedByDescending { it.timestamp }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
@@ -2401,6 +2403,7 @@ fun HomeScreenVolcanic(
                     ) {
                         Spacer(Modifier.statusBarsPadding())
                         HomeDashboardHeader(running = running)
+                        Spacer(Modifier.height(headerToCardGap))
                     }
                 }
             }
@@ -2441,6 +2444,9 @@ fun HomeScreenVolcanic(
                             .widthIn(max = maxContentWidth)
                     )
                 }
+            }
+            item {
+                Spacer(Modifier.height(recentActivityContentGap))
             }
             if (automatedTxns.isEmpty()) {
                 item {
@@ -3438,10 +3444,10 @@ fun VolcanicBalanceCard(
             )
             .border(1.dp, C.borderHi.copy(alpha = 0.80f), RoundedCornerShape(30.dp))
             .animateContentSize(animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing))
-            .padding(horizontal = 16.dp, vertical = 18.dp)
+            .padding(horizontal = 14.dp, vertical = 15.dp)
     ) {
         val compactTop = maxWidth < 380.dp
-        val statSpacing = if (maxWidth < 430.dp) 8.dp else 10.dp
+        val statSpacing = if (maxWidth < 430.dp) 7.dp else 9.dp
 
         Box(
             Modifier
@@ -3478,7 +3484,7 @@ fun VolcanicBalanceCard(
                     )
                 }
         )
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -3493,7 +3499,7 @@ fun VolcanicBalanceCard(
                     modifier = Modifier
                         .align(Alignment.Center)
                         .width(1.dp)
-                        .height(if (compactTop) 92.dp else 104.dp)
+                        .height(if (compactTop) 82.dp else 92.dp)
                         .background(C.w08.copy(alpha = 0.85f))
                 )
                 Row(
@@ -3504,9 +3510,9 @@ fun VolcanicBalanceCard(
                         modifier = Modifier
                             .weight(1f)
                             .clickable(onClick = onRefresh)
-                            .padding(end = if (compactTop) 22.dp else 28.dp),
+                            .padding(end = if (compactTop) 20.dp else 24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -3515,7 +3521,7 @@ fun VolcanicBalanceCard(
                             Text(
                                 text = airBal.ifBlank { "—" },
                                 color = C.t1,
-                                fontSize = if (compactTop) 32.sp else 38.sp,
+                                fontSize = if (compactTop) 29.sp else 34.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -3532,14 +3538,14 @@ fun VolcanicBalanceCard(
                         Text(
                             if (isRefreshing) "checking balance..." else "tap card to refresh",
                             color = C.t3,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             textAlign = TextAlign.Center
                         )
                     }
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .padding(start = if (compactTop) 22.dp else 28.dp),
+                            .padding(start = if (compactTop) 20.dp else 24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
@@ -3554,7 +3560,7 @@ fun VolcanicBalanceCard(
                             Text(
                                 tokenValue,
                                 color = if (unlimitedLabel != null) C.green else C.t1,
-                                fontSize = if (compactTop) 34.sp else 40.sp,
+                                fontSize = if (compactTop) 31.sp else 36.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Center,
                                 maxLines = 1,
@@ -3564,7 +3570,7 @@ fun VolcanicBalanceCard(
                         Text(
                             unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available Units",
                             color = C.t2,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             textAlign = TextAlign.Center,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
@@ -3573,7 +3579,7 @@ fun VolcanicBalanceCard(
                 }
             }
 
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(1.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3648,13 +3654,13 @@ private fun HomeStatusMetricCard(
     ) {
         Column(
             modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 12.dp),
+                .padding(horizontal = 8.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
                 value,
-                fontSize = if (compact) 20.sp else 22.sp,
+                fontSize = if (compact) 18.sp else 20.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = accent,
                 maxLines = 1
@@ -3686,14 +3692,14 @@ private fun RateStatCard(rate: Int, compact: Boolean, modifier: Modifier = Modif
     ) {
         Column(
             modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 12.dp),
+                .padding(horizontal = 8.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
                 "$rate%",
                 color = rateColor,
-                fontSize = if (compact) 20.sp else 22.sp,
+                fontSize = if (compact) 18.sp else 20.sp,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1
             )
