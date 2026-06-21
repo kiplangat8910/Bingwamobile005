@@ -2373,9 +2373,10 @@ fun HomeScreenVolcanic(
         else -> Dp.Unspecified
     }
     val horizontalPadding = if (screenWidth >= 700.dp) 24.dp else 16.dp
-    val balanceCardLift = if (screenWidth >= 700.dp) (-32).dp else (-24).dp
-    val headerToCardGap = if (screenWidth >= 700.dp) 30.dp else 26.dp
-    val recentActivityContentGap = if (screenWidth >= 700.dp) 20.dp else 14.dp
+    val balanceCardLift = if (screenWidth >= 700.dp) (-46).dp else (-36).dp
+    val headerToCardGap = if (screenWidth >= 700.dp) 20.dp else 14.dp
+    val recentSectionLift = if (screenWidth >= 700.dp) (-26).dp else (-22).dp
+    val recentActivityContentGap = if (screenWidth >= 700.dp) 10.dp else 6.dp
     val automatedTxns = txns.filter { it.showInRecent }.sortedByDescending { it.timestamp }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
@@ -2411,11 +2412,11 @@ fun HomeScreenVolcanic(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = horizontalPadding,
-                top = 8.dp,
+                top = 2.dp,
                 end = horizontalPadding,
                 bottom = 132.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
                 Box(
@@ -2461,7 +2462,9 @@ fun HomeScreenVolcanic(
             }
             item {
                 Box(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset(y = recentSectionLift),
                     contentAlignment = Alignment.Center
                 ) {
                     RecentActivityHeader(
@@ -2478,7 +2481,9 @@ fun HomeScreenVolcanic(
             if (automatedTxns.isEmpty()) {
                 item {
                     Box(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset(y = recentSectionLift),
                         contentAlignment = Alignment.Center
                     ) {
                         AnimatedEmptyState(
@@ -2491,7 +2496,9 @@ fun HomeScreenVolcanic(
             } else {
                 items(automatedTxns.take(8), key = { it.id }) { tx ->
                     Box(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset(y = recentSectionLift),
                         contentAlignment = Alignment.Center
                     ) {
                         GithubActivityCard(
@@ -2703,13 +2710,19 @@ private fun RecentActivityHeader(automatedCount: Int, modifier: Modifier = Modif
 @Composable
 private fun RecentActivityMotionRail(compact: Boolean) {
     val railAnim = rememberInfiniteTransition(label = "recent_activity_rail")
-    val travel by railAnim.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing)),
-        label = "recent_activity_rail_travel"
+    val beaconPulse by railAnim.animateFloat(
+        initialValue = 0.94f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(tween(2400, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "recent_activity_rail_beacon_pulse"
     )
-    val railHeight = if (compact) 10.dp else 12.dp
+    val beaconAlpha by railAnim.animateFloat(
+        initialValue = 0.12f,
+        targetValue = 0.28f,
+        animationSpec = infiniteRepeatable(tween(2200, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "recent_activity_rail_beacon_alpha"
+    )
+    val railHeight = if (compact) 8.dp else 10.dp
 
     Box(
         modifier = Modifier
@@ -2728,18 +2741,17 @@ private fun RecentActivityMotionRail(compact: Boolean) {
             .border(1.dp, C.border.copy(alpha = 0.48f), RoundedCornerShape(999.dp))
             .drawBehind {
                 val centerY = size.height / 2f
-                val startX = size.width * 0.04f
-                val endX = size.width * 0.96f
-                val lineWidth = endX - startX
-                val progressX = startX + (lineWidth * travel)
-                val sweepWidth = size.width * 0.16f
+                val startX = size.width * 0.08f
+                val endX = size.width * 0.92f
+                val centerX = size.width / 2f
 
                 drawLine(
                     brush = Brush.horizontalGradient(
                         listOf(
-                            C.orange.copy(alpha = 0.20f),
-                            C.blue.copy(alpha = 0.18f),
-                            C.orange.copy(alpha = 0.20f)
+                            Color.Transparent,
+                            C.green.copy(alpha = 0.20f),
+                            C.blue.copy(alpha = 0.12f),
+                            Color.Transparent
                         ),
                         startX = startX,
                         endX = endX
@@ -2749,24 +2761,15 @@ private fun RecentActivityMotionRail(compact: Boolean) {
                     strokeWidth = size.height * 0.28f
                 )
 
-                drawRoundRect(
-                    brush = Brush.horizontalGradient(
-                        listOf(
-                            Color.Transparent,
-                            C.orange.copy(alpha = 0.08f),
-                            C.green.copy(alpha = 0.22f),
-                            Color.Transparent
-                        ),
-                        startX = progressX - sweepWidth,
-                        endX = progressX + sweepWidth
-                    ),
-                    cornerRadius = CornerRadius(size.height, size.height)
-                )
-
                 drawCircle(
                     color = C.green,
-                    radius = size.height * 0.28f,
-                    center = Offset(progressX.coerceIn(startX, endX), centerY)
+                    radius = (size.height * 0.24f) * beaconPulse,
+                    center = Offset(centerX, centerY)
+                )
+                drawCircle(
+                    color = C.green.copy(alpha = beaconAlpha),
+                    radius = (size.height * 0.62f) * beaconPulse,
+                    center = Offset(centerX, centerY)
                 )
             }
     )
@@ -3540,7 +3543,7 @@ fun VolcanicBalanceCard(
     BoxWithConstraints(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(30.dp))
+            .clip(RoundedCornerShape(26.dp))
             .background(
                 Brush.linearGradient(
                     listOf(
@@ -3550,49 +3553,48 @@ fun VolcanicBalanceCard(
                     )
                 )
             )
-            .border(1.dp, C.borderHi.copy(alpha = 0.80f), RoundedCornerShape(30.dp))
+            .border(1.dp, C.borderHi.copy(alpha = 0.80f), RoundedCornerShape(26.dp))
             .animateContentSize(animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing))
-            .padding(horizontal = 14.dp, vertical = 15.dp)
+            .padding(horizontal = 12.dp, vertical = 12.dp)
     ) {
         val compactTop = maxWidth < 380.dp
-        val statSpacing = if (maxWidth < 430.dp) 7.dp else 9.dp
+        val statSpacing = if (maxWidth < 430.dp) 6.dp else 8.dp
 
         Box(
             Modifier
                 .matchParentSize()
                 .drawBehind {
-                    val wavePath = Path().apply {
-                        moveTo(0f, size.height * 0.56f)
-                        cubicTo(
-                            size.width * 0.16f, size.height * 0.48f,
-                            size.width * 0.28f, size.height * 0.72f,
-                            size.width * 0.44f, size.height * 0.58f
-                        )
-                        cubicTo(
-                            size.width * 0.58f, size.height * 0.40f,
-                            size.width * 0.74f, size.height * 0.74f,
-                            size.width, size.height * 0.26f
-                        )
-                    }
-                    drawPath(
-                        path = wavePath,
-                        brush = Brush.horizontalGradient(
+                    drawRoundRect(
+                        brush = Brush.linearGradient(
                             listOf(
-                                C.orange.copy(alpha = 0.10f),
-                                C.orange.copy(alpha = 0.26f),
-                                C.green.copy(alpha = 0.22f)
-                            )
+                                Color.Transparent,
+                                C.orange.copy(alpha = 0.07f),
+                                C.green.copy(alpha = 0.12f),
+                                Color.Transparent
+                            ),
+                            start = Offset(0f, size.height * 0.18f),
+                            end = Offset(size.width, size.height * 0.82f)
                         ),
-                        style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+                        cornerRadius = CornerRadius(26.dp.toPx(), 26.dp.toPx())
                     )
                     drawCircle(
-                        color = C.green.copy(alpha = 0.82f),
-                        radius = 4.dp.toPx(),
-                        center = Offset(size.width * 0.965f, size.height * 0.26f)
+                        color = C.orange.copy(alpha = 0.16f),
+                        radius = 42.dp.toPx(),
+                        center = Offset(size.width * 0.16f, size.height * 0.18f)
+                    )
+                    drawCircle(
+                        color = C.green.copy(alpha = 0.12f),
+                        radius = 48.dp.toPx(),
+                        center = Offset(size.width * 0.88f, size.height * 0.22f)
+                    )
+                    drawCircle(
+                        color = C.green.copy(alpha = 0.74f),
+                        radius = 3.dp.toPx(),
+                        center = Offset(size.width * 0.91f, size.height * 0.20f)
                     )
                 }
         )
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -3607,7 +3609,7 @@ fun VolcanicBalanceCard(
                     modifier = Modifier
                         .align(Alignment.Center)
                         .width(1.dp)
-                        .height(if (compactTop) 82.dp else 92.dp)
+                        .height(if (compactTop) 72.dp else 80.dp)
                         .background(C.w08.copy(alpha = 0.85f))
                 )
                 Row(
@@ -3618,18 +3620,18 @@ fun VolcanicBalanceCard(
                         modifier = Modifier
                             .weight(1f)
                             .clickable(onClick = onRefresh)
-                            .padding(end = if (compactTop) 20.dp else 24.dp),
+                            .padding(end = if (compactTop) 16.dp else 18.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
                                 text = airBal.ifBlank { "—" },
                                 color = C.t1,
-                                fontSize = if (compactTop) 29.sp else 34.sp,
+                                fontSize = if (compactTop) 25.sp else 29.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -3639,23 +3641,23 @@ fun VolcanicBalanceCard(
                                 null,
                                 tint = C.t3,
                                 modifier = Modifier
-                                    .size(20.dp)
+                                    .size(18.dp)
                                     .then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
                             )
                         }
                         Text(
                             if (isRefreshing) "checking balance..." else "tap card to refresh",
                             color = C.t3,
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             textAlign = TextAlign.Center
                         )
                     }
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .padding(start = if (compactTop) 20.dp else 24.dp),
+                            .padding(start = if (compactTop) 16.dp else 18.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         AnimatedContent(
                             targetState = unlimitedLabel ?: tokenBal.toString(),
@@ -3668,7 +3670,7 @@ fun VolcanicBalanceCard(
                             Text(
                                 tokenValue,
                                 color = if (unlimitedLabel != null) C.green else C.t1,
-                                fontSize = if (compactTop) 31.sp else 36.sp,
+                                fontSize = if (compactTop) 27.sp else 31.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Center,
                                 maxLines = 1,
@@ -3678,7 +3680,7 @@ fun VolcanicBalanceCard(
                         Text(
                             unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available Units",
                             color = C.t2,
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             textAlign = TextAlign.Center,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
@@ -3699,7 +3701,7 @@ fun VolcanicBalanceCard(
                 pending = pending,
                 failed = failed,
                 rate = rate,
-                compact = false,
+                compact = true,
                 spacing = statSpacing
             )
         }
@@ -3719,7 +3721,7 @@ private fun HomeStatsRow(sent: Int, pending: Int, failed: Int, rate: Int, compac
             detail = "",
             accent = C.green,
             icon = Icons.Outlined.Send,
-            compact = false,
+            compact = compact,
             modifier = Modifier.weight(1f)
         )
         HomeStatusMetricCard(
@@ -3728,7 +3730,7 @@ private fun HomeStatsRow(sent: Int, pending: Int, failed: Int, rate: Int, compac
             detail = "",
             accent = C.amber,
             icon = Icons.Outlined.Schedule,
-            compact = false,
+            compact = compact,
             modifier = Modifier.weight(1f)
         )
         HomeStatusMetricCard(
@@ -3737,10 +3739,10 @@ private fun HomeStatsRow(sent: Int, pending: Int, failed: Int, rate: Int, compac
             detail = "",
             accent = C.red,
             icon = Icons.Outlined.ErrorOutline,
-            compact = false,
+            compact = compact,
             modifier = Modifier.weight(1f)
         )
-        RateStatCard(rate = rate, compact = false, modifier = Modifier.weight(1f))
+        RateStatCard(rate = rate, compact = compact, modifier = Modifier.weight(1f))
     }
 }
 
@@ -4186,16 +4188,16 @@ private fun TxDetailRow(label: String, value: String) {
 @Composable
 fun AnimatedEmptyState(modifier: Modifier = Modifier) {
     val anim = rememberInfiniteTransition(label = "empty_anim")
-    val sweep by anim.animateFloat(0f, 1f, infiniteRepeatable(tween(4200, easing = LinearEasing)), label = "sweep")
-    val pulse by anim.animateFloat(0.94f, 1.08f, infiniteRepeatable(tween(2200, easing = EaseInOutSine), RepeatMode.Reverse), label = "pulse")
-    val orbit by anim.animateFloat(0f, 360f, infiniteRepeatable(tween(12000, easing = LinearEasing)), label = "orbit")
-    val illustrationHeight = if (LocalConfiguration.current.screenWidthDp < 400) 180.dp else 216.dp
+    val corePulse by anim.animateFloat(0.96f, 1.05f, infiniteRepeatable(tween(2200, easing = EaseInOutSine), RepeatMode.Reverse), label = "core_pulse")
+    val ringAlpha by anim.animateFloat(0.10f, 0.22f, infiniteRepeatable(tween(2600, easing = EaseInOutSine), RepeatMode.Reverse), label = "ring_alpha")
+    val dotBlink by anim.animateFloat(0.35f, 0.85f, infiniteRepeatable(tween(1800, easing = EaseInOutSine), RepeatMode.Reverse), label = "dot_blink")
+    val illustrationHeight = if (LocalConfiguration.current.screenWidthDp < 400) 162.dp else 188.dp
 
     Box(
         modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .clip(RoundedCornerShape(28.dp))
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(24.dp))
             .background(
                 Brush.verticalGradient(
                     listOf(
@@ -4205,16 +4207,16 @@ fun AnimatedEmptyState(modifier: Modifier = Modifier) {
                     )
                 )
             )
-            .border(1.dp, C.border.copy(alpha = 0.90f), RoundedCornerShape(28.dp))
-            .padding(horizontal = 16.dp, vertical = 18.dp),
+            .border(1.dp, C.border.copy(alpha = 0.90f), RoundedCornerShape(24.dp))
+            .padding(horizontal = 14.dp, vertical = 14.dp),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(
                 Modifier
                     .fillMaxWidth()
                     .height(illustrationHeight)
-                    .clip(RoundedCornerShape(22.dp))
+                    .clip(RoundedCornerShape(20.dp))
                     .background(
                         Brush.verticalGradient(
                             listOf(
@@ -4224,21 +4226,20 @@ fun AnimatedEmptyState(modifier: Modifier = Modifier) {
                             )
                         )
                     ),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.TopCenter
             ) {
-                Canvas(Modifier.matchParentSize()) {
-                    val center = Offset(size.width * 0.50f, size.height * 0.32f)
+                Canvas(
+                    Modifier
+                        .matchParentSize()
+                        .padding(top = 8.dp)
+                ) {
+                    val center = Offset(size.width * 0.50f, size.height * 0.34f)
                     val lineY = size.height * 0.68f
-                    val maxRadius = size.minDimension * 0.22f
-                    val orbitRadians = Math.toRadians(orbit.toDouble())
-                    val orbitDot = Offset(
-                        x = center.x + (cos(orbitRadians) * maxRadius * 0.72f).toFloat(),
-                        y = center.y + (sin(orbitRadians) * maxRadius * 0.72f).toFloat()
-                    )
+                    val maxRadius = size.minDimension * 0.20f
 
                     listOf(0.34f, 0.56f, 0.76f, 0.96f).forEachIndexed { idx, factor ->
                         drawCircle(
-                            color = C.green.copy(alpha = 0.18f - (idx * 0.025f)),
+                            color = C.green.copy(alpha = (ringAlpha - (idx * 0.028f)).coerceAtLeast(0.04f)),
                             radius = maxRadius * factor,
                             center = center,
                             style = Stroke(width = 1.2.dp.toPx())
@@ -4246,48 +4247,45 @@ fun AnimatedEmptyState(modifier: Modifier = Modifier) {
                     }
 
                     val dots = listOf(
-                        Offset(size.width * 0.10f, size.height * 0.28f),
-                        Offset(size.width * 0.14f, size.height * 0.52f),
-                        Offset(size.width * 0.26f, size.height * 0.36f),
-                        Offset(size.width * 0.62f, size.height * 0.24f),
-                        Offset(size.width * 0.82f, size.height * 0.30f)
+                        Offset(size.width * 0.10f, size.height * 0.30f),
+                        Offset(size.width * 0.14f, size.height * 0.56f),
+                        Offset(size.width * 0.24f, size.height * 0.42f),
+                        Offset(size.width * 0.28f, size.height * 0.24f)
                     )
                     dots.forEachIndexed { idx, dot ->
-                        drawCircle(C.green.copy(alpha = 0.18f - idx * 0.02f), radius = (2.5f + idx).dp.toPx() / 1.6f, center = dot)
+                        drawCircle(
+                            C.green.copy(alpha = (0.16f + (dotBlink * 0.14f) - idx * 0.02f).coerceAtLeast(0.08f)),
+                            radius = (2.4f + idx).dp.toPx() / 1.7f,
+                            center = dot
+                        )
                     }
 
-                    val sweepX = size.width * (0.16f + (0.68f * sweep))
                     drawLine(
                         brush = Brush.horizontalGradient(
                             listOf(Color.Transparent, C.green.copy(alpha = 0.30f), Color.Transparent)
                         ),
-                        start = Offset(size.width * 0.18f, lineY),
-                        end = Offset(size.width * 0.82f, lineY),
-                        strokeWidth = 1.2.dp.toPx()
+                        start = Offset(size.width * 0.14f, lineY),
+                        end = Offset(size.width * 0.86f, lineY),
+                        strokeWidth = 1.1.dp.toPx()
                     )
-                    drawCircle(C.green.copy(alpha = 0.10f), radius = 10.dp.toPx(), center = Offset(sweepX, lineY))
-                    drawCircle(C.green.copy(alpha = 0.80f), radius = 2.6.dp.toPx(), center = Offset(sweepX, lineY))
-
-                    drawCircle(C.green.copy(alpha = 0.14f), radius = 15.dp.toPx() * pulse, center = center)
+                    drawCircle(C.green.copy(alpha = 0.12f), radius = 14.dp.toPx() * corePulse, center = center)
                     drawCircle(C.green.copy(alpha = 0.88f), radius = 5.dp.toPx(), center = center)
-                    drawCircle(C.green.copy(alpha = 0.22f), radius = 7.dp.toPx(), center = orbitDot)
-                    drawCircle(C.green.copy(alpha = 0.78f), radius = 2.6.dp.toPx(), center = orbitDot)
                 }
             }
 
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     "Scanning for activity...",
                     color = C.t1,
-                    fontSize = 18.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
                 )
                 Text(
                     "Transactions will appear here",
                     color = C.t2,
-                    fontSize = 14.sp,
-                    lineHeight = 18.sp,
+                    fontSize = 13.sp,
+                    lineHeight = 17.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 18.dp)
                 )
