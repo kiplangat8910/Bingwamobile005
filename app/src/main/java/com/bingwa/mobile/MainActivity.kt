@@ -2219,7 +2219,7 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
                 Icon(
                     Icons.Outlined.PowerSettingsNew,
                     null,
-                    color = color,
+                    tint = color,
                     modifier = Modifier.size(if (compact) 20.dp else 22.dp)
                 )
             }
