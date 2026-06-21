@@ -892,13 +892,13 @@ private fun ConsoleHeader(title: String, subtitle: String) {
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(top = 8.dp, bottom = 8.dp),
+            .padding(horizontal = 24.dp, top = 6.dp, bottom = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
             title,
-            fontSize = 28.sp,
+            fontSize = 30.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = (-1.0).sp,
             color = C.t1,
@@ -4247,6 +4247,8 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
     }
     val consoleHistory = allTxns.filter { it.source == TX_SOURCE_CONSOLE }.sortedByDescending { it.timestamp }
     val selectedHistoryTx = consoleHistory.firstOrNull { it.id == selectedHistoryTxId }
+    val dispatchScrollState = rememberScrollState()
+    val historyScrollState = rememberScrollState()
     val inf = rememberInfiniteTransition(label = "console_dispatch")
     val pendingButtonScale by inf.animateFloat(
         initialValue = 1f,
@@ -4318,6 +4320,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
             Column(
                 Modifier
                     .fillMaxSize()
+                    .imePadding()
                     .padding(horizontal = 16.dp, vertical = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -4369,17 +4372,13 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                         val fieldVerticalPadding = if (ultraShortViewport) 8.dp else if (veryShortViewport) 10.dp else 11.dp
                         val offerRowPadding = if (ultraShortViewport) 10.dp else if (veryShortViewport) 12.dp else 14.dp
                         val executeHeight = if (ultraShortViewport) 48.dp else if (veryShortViewport) 52.dp else 56.dp
-                        val visibleHistoryCount = when {
-                            ultraShortViewport -> 2
-                            veryShortViewport -> 3
-                            shortViewport -> 4
-                            else -> 5
-                        }
 
                         if (consoleTab == "DISPATCH") {
                             Column(
                                 modifier = Modifier
-                                    .fillMaxSize(),
+                                    .fillMaxSize()
+                                    .verticalScroll(dispatchScrollState)
+                                    .padding(bottom = 12.dp),
                                 verticalArrangement = Arrangement.spacedBy(sectionSpacing)
                             ) {
                                 when (bannerState) {
@@ -4395,7 +4394,6 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                     border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .weight(1f, fill = true)
                                 ) {
                                     Column(
                                         modifier = Modifier
@@ -4712,7 +4710,9 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                         } else {
                             Column(
                                 modifier = Modifier
-                                    .fillMaxSize(),
+                                    .fillMaxSize()
+                                    .verticalScroll(historyScrollState)
+                                    .padding(bottom = 12.dp),
                                 verticalArrangement = Arrangement.spacedBy(sectionSpacing)
                             ) {
                                 Row(
@@ -4731,7 +4731,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                         border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .weight(1f, fill = true)
+                                            .heightIn(min = 220.dp)
                                     ) {
                                         Column(
                                             modifier = Modifier
@@ -4756,25 +4756,22 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                         shape = RoundedCornerShape(26.dp),
                                         color = C.card.copy(alpha = 0.95f),
                                         border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .weight(1f, fill = true)
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Column(
                                             modifier = Modifier
-                                                .fillMaxSize()
+                                                .fillMaxWidth()
                                                 .padding(if (veryShortViewport) 14.dp else 16.dp),
                                             verticalArrangement = Arrangement.spacedBy(if (veryShortViewport) 8.dp else 10.dp)
                                         ) {
-                                            consoleHistory.take(visibleHistoryCount).forEach { tx ->
+                                            consoleHistory.forEach { tx ->
                                                 ConsoleHistoryPreviewCard(
                                                     tx = tx,
                                                     onClick = { selectedHistoryTxId = tx.id }
                                                 )
                                             }
-                                            Spacer(Modifier.weight(1f, fill = true))
                                             Text(
-                                                "Showing latest ${minOf(visibleHistoryCount, consoleHistory.size)} of ${consoleHistory.size}. Tap a row to open full details.",
+                                                "Showing all ${consoleHistory.size} console dispatch records. Tap a row to open full details.",
                                                 color = C.t3,
                                                 fontSize = 11.sp,
                                                 lineHeight = 15.sp
