@@ -6550,46 +6550,52 @@ private fun CompactDialogToggleCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
         ) {
             Box(
                 Modifier
-                    .size(34.dp)
+                    .size(36.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(accent.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    badgeText?.let {
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = accent.copy(alpha = 0.14f)
-                        ) {
-                            Text(
-                                it.uppercase(Locale.getDefault()),
-                                color = accent,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.7.sp,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                            )
-                        }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(top = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                badgeText?.let {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = accent.copy(alpha = 0.14f)
+                    ) {
+                        Text(
+                            text = it.uppercase(Locale.getDefault()),
+                            color = accent,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.7.sp,
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
                     }
                 }
-                Text(description, color = C.t2, fontSize = 10.sp, lineHeight = 14.sp)
+                Text(description, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
             }
-            CompactDialogSwitch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                checkedTrackColor = checkedAccent,
-                uncheckedThumbColor = uncheckedAccent
-            )
+            Box(modifier = Modifier.padding(top = 2.dp)) {
+                CompactDialogSwitch(
+                    checked = checked,
+                    onCheckedChange = onCheckedChange,
+                    checkedTrackColor = checkedAccent,
+                    uncheckedThumbColor = uncheckedAccent
+                )
+            }
         }
     }
 }
@@ -6598,7 +6604,7 @@ private fun CompactDialogToggleCard(
 private fun OfferDialogSection(title: String, subtitle: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(20.dp),
         color = C.cardHi.copy(alpha = 0.92f),
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
     ) {
@@ -6609,20 +6615,20 @@ private fun OfferDialogSection(title: String, subtitle: String? = null, content:
                         listOf(C.cardHi.copy(alpha = 0.98f), C.card.copy(alpha = 0.90f))
                     )
                 )
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
                 Box(
                     Modifier
                         .padding(top = 3.dp)
                         .width(4.dp)
-                        .height(30.dp)
+                        .height(38.dp)
                         .clip(RoundedCornerShape(999.dp))
                         .background(C.cyan)
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     if (!subtitle.isNullOrBlank()) {
                         Text(subtitle, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
                     }
@@ -6690,7 +6696,7 @@ fun OfferDialog(
     val canSave = remember(name, price, code) {
         name.isNotBlank() && code.isNotBlank() && (price.toIntOrNull() ?: 0) > 0
     }
-    val maxDialogBodyHeight = (configuration.screenHeightDp.dp * 0.58f).coerceAtLeast(360.dp)
+    val maxDialogBodyHeight = (configuration.screenHeightDp.dp * 0.50f).coerceAtLeast(320.dp)
 
     fun buildOffer(): OfferItem? {
         val p = price.toIntOrNull() ?: 0
@@ -6962,46 +6968,94 @@ fun OfferDialog(
             }
         },
         confirmButton = {
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (mode == "ADVANCED" && signatureEnabled) {
-                    OutlinedButton(
-                        onClick = { buildOffer()?.let(onSaveAndLearn) },
-                        enabled = canSave,
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val compactActions = maxWidth < 360.dp
+                val showSaveAndLearn = mode == "ADVANCED" && signatureEnabled
+
+                if (compactActions && showSaveAndLearn) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold)
+                        TextButton(
+                            onClick = onDismiss,
+                            shape = RoundedCornerShape(16.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedButton(
+                                onClick = { buildOffer()?.let(onSaveAndLearn) },
+                                enabled = canSave,
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
+                            ) {
+                                Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(7.dp))
+                                Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                            Button(
+                                onClick = { buildOffer()?.let(onSave) },
+                                enabled = canSave,
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(17.dp))
+                                    Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            }
+                        }
                     }
-                }
-                Button(
-                    onClick = { buildOffer()?.let(onSave) },
-                    enabled = canSave,
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
-                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(18.dp))
-                        Text("Save", color = C.bg, fontWeight = FontWeight.Bold)
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = onDismiss,
+                            shape = RoundedCornerShape(16.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (showSaveAndLearn) {
+                                OutlinedButton(
+                                    onClick = { buildOffer()?.let(onSaveAndLearn) },
+                                    enabled = canSave,
+                                    shape = RoundedCornerShape(16.dp),
+                                    border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
+                                ) {
+                                    Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
+                                    Spacer(Modifier.width(7.dp))
+                                    Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            }
+                            Button(
+                                onClick = { buildOffer()?.let(onSave) },
+                                enabled = canSave,
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(17.dp))
+                                    Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            }
+                        }
                     }
                 }
             }
         },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                shape = RoundedCornerShape(16.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
-            ) {
-                Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
-            }
-        }
+        dismissButton = {}
     )
 
     if (showSignatureDetails) {
