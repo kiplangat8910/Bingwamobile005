@@ -582,20 +582,42 @@ class MpesaReceiver : BroadcastReceiver() {
             val phone = resolveMaskedNumber(context, rawPhone, clientName)
             Log.d(TAG, "Resolved phone: $rawPhone -> $phone (name: $clientName)")
 
-            val tokenPrefs = context.getSharedPreferences("TokenStore", Context.MODE_PRIVATE)
-            val tokenBalance = tokenPrefs.getInt("balance", 0)
-            val unlimited = UnlimitedManager(context).isActive()
-            if (!unlimited && tokenBalance < 1) {
-                notify(context, "Token Error", "Insufficient tokens to process bundle for $phone")
-                return
-            }
-
             val offer = RelayManager.findOfferByPrice(context, amount)
             val us = UssdStorage(context)
             val code = offer?.ussdCode ?: us.getUssdForAmount(amount.toDouble())
             val label = offer?.name ?: (us.getLabels()[amount.toDouble()] ?: "Data Bundle (KSh $amount)")
             val mode = offer?.executionMode ?: "ADVANCED"
             val targetDevice = offer?.targetDevice ?: "PRIMARY"
+
+            val tokenPrefs = context.getSharedPreferences("TokenStore", Context.MODE_PRIVATE)
+            val tokenBalance = tokenPrefs.getInt("balance", 0)
+            val unlimited = UnlimitedManager(context).isActive()
+            if (!unlimited && tokenBalance < 1) {
+                val failedTxId = addTransaction(context, Transaction(
+                    description = label,
+                    amount = "KSh $amount",
+                    amountValue = amount.toDouble(),
+                    date = getCurrentDate(),
+                    status = TransactionStatus.FAILED.value,
+                    statusEnum = TransactionStatus.FAILED,
+                    ussdCode = code?.replace("pn", phone, ignoreCase = true).orEmpty(),
+                    phoneNumber = phone,
+                    clientName = clientName,
+                    source = TX_SOURCE_AUTOMATED,
+                    showInRecent = true,
+                    offerId = offer?.id ?: -1
+                ))
+                if (failedTxId >= 0) {
+                    saveTransactionOutcome(
+                        context,
+                        failedTxId,
+                        TransactionStatus.FAILED.value,
+                        "Insufficient tokens. Automation did not start because the token balance is 0."
+                    )
+                }
+                notify(context, "Token Error", "Insufficient tokens to process bundle for $phone")
+                return
+            }
 
             if (code == null) {
                 notify(context, "No Bundle Configured", "No bundle configured for KSh $amount")
