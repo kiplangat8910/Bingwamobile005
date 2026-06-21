@@ -53,6 +53,7 @@ import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PersonAdd
@@ -1187,10 +1188,18 @@ private fun TransactionSettings(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val prefs = ctx.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
     var autoClear by remember { mutableStateOf(prefs.safeGetString("auto_clear", "Never") ?: "Never") }
-    var clearExpanded by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
     var activeTab by remember { mutableStateOf(TransactionHistoryFilter.ALL) }
     var searchQuery by remember { mutableStateOf("") }
+    var summaryPeriod by remember {
+        mutableStateOf(
+            TransactionHistorySummaryPeriod.fromValue(
+                prefs.safeGetString("transaction_summary_period", TransactionHistorySummaryPeriod.DAILY.value)
+                    ?: TransactionHistorySummaryPeriod.DAILY.value
+            )
+        )
+    }
     var history by remember {
         mutableStateOf(TransactionStore.load(ctx).sortedByDescending { transactionHistoryTimestamp(it) })
     }
@@ -1220,10 +1229,11 @@ private fun TransactionSettings(onBack: () -> Unit) {
             matchesTab && matchesQuery
         }
     val groupedHistory = filteredHistory.groupBy { transactionHistoryDateLabel(it) }
-    val todayCompleted = history.filter {
-        transactionHistoryFilterFor(it, offers) == TransactionHistoryFilter.COMPLETED && isTransactionToday(it)
+    val summaryCompleted = history.filter {
+        transactionHistoryFilterFor(it, offers) == TransactionHistoryFilter.COMPLETED &&
+            transactionMatchesSummaryPeriod(it, summaryPeriod)
     }
-    val totalTodayCollected = todayCompleted.sumOf { transactionHistoryAmountValue(it) }
+    val totalCollected = summaryCompleted.sumOf { transactionHistoryAmountValue(it) }
     val unmatchedCount = history.count { transactionHistoryFilterFor(it, offers) == TransactionHistoryFilter.UNMATCHED }
 
     if (confirmClear) {
@@ -1248,20 +1258,20 @@ private fun TransactionSettings(onBack: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
-            .background(C.bg)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF0A0C0D),
+                        Color(0xFF111517),
+                        C.bg
+                    )
+                )
+            )
             .verticalScroll(rememberScrollState())
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color(0xFF10101A),
-                            C.bg
-                        )
-                    )
-                )
                 .statusBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 16.dp)
         ) {
@@ -1279,24 +1289,99 @@ private fun TransactionSettings(onBack: () -> Unit) {
                     Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = C.t1)
                 }
                 Text(
-                    "Transaction History",
+                    "Transactions",
                     color = C.t1,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
-                IconButton(
-                    onClick = { confirmClear = true },
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(C.surface.copy(alpha = 0.92f), RoundedCornerShape(14.dp))
-                ) {
-                    Icon(Icons.Rounded.DeleteSweep, contentDescription = "Clear", tint = C.t1)
+                Box {
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(C.surface.copy(alpha = 0.92f), RoundedCornerShape(14.dp))
+                    ) {
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "More", tint = C.t1)
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                        modifier = Modifier
+                            .width(272.dp)
+                            .background(Color(0xFF262C2F), RoundedCornerShape(16.dp))
+                            .border(1.dp, C.border.copy(alpha = 0.74f), RoundedCornerShape(16.dp))
+                    ) {
+                        TransactionMenuSectionTitle("Total Received Window")
+                        TransactionHistorySummaryPeriod.entries.forEach { period ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        period.menuLabel,
+                                        color = if (period == summaryPeriod) C.amber else C.t1,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (period == summaryPeriod) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (period == summaryPeriod) {
+                                        Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = C.amber)
+                                    }
+                                },
+                                onClick = {
+                                    summaryPeriod = period
+                                    prefs.edit().putString("transaction_summary_period", period.value).apply()
+                                    menuExpanded = false
+                                }
+                            )
+                        }
+                        TransactionMenuDivider()
+                        TransactionMenuSectionTitle("Retention & Cleanup")
+                        clearOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Auto-Clear: $option",
+                                        color = if (option == autoClear) C.cyan else C.t1,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (option == autoClear) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (option == autoClear) {
+                                        Icon(Icons.Rounded.Autorenew, contentDescription = null, tint = C.cyan)
+                                    }
+                                },
+                                onClick = {
+                                    autoClear = option
+                                    prefs.edit().putString("auto_clear", option).apply()
+                                    menuExpanded = false
+                                }
+                            )
+                        }
+                        TransactionMenuDivider()
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text("Clear All Transactions", color = C.red, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    Text("Wipe entire transaction history", color = C.t3, fontSize = 11.sp)
+                                }
+                            },
+                            trailingIcon = {
+                                Icon(Icons.Rounded.DeleteSweep, contentDescription = null, tint = C.red)
+                            },
+                            onClick = {
+                                confirmClear = true
+                                menuExpanded = false
+                            }
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(18.dp))
             TransactionHistoryHeroCard(
-                totalTodayCollected = totalTodayCollected,
-                completedTodayCount = todayCompleted.size,
+                summaryPeriod = summaryPeriod,
+                totalCollected = totalCollected,
+                completedCount = summaryCompleted.size,
                 unmatchedCount = unmatchedCount
             )
             Spacer(Modifier.height(16.dp))
@@ -1309,12 +1394,12 @@ private fun TransactionSettings(onBack: () -> Unit) {
                 leadingIcon = {
                     Icon(Icons.Rounded.Search, contentDescription = null, tint = C.t3)
                 },
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = C.surface.copy(alpha = 0.88f),
-                    unfocusedContainerColor = C.surface.copy(alpha = 0.72f),
-                    focusedBorderColor = C.border.copy(alpha = 0.95f),
-                    unfocusedBorderColor = C.border.copy(alpha = 0.72f),
+                    focusedContainerColor = Color(0xFF15191B),
+                    unfocusedContainerColor = Color(0xFF15191B),
+                    focusedBorderColor = Color(0xFF333B3E),
+                    unfocusedBorderColor = Color(0xFF333B3E),
                     focusedTextColor = C.t1,
                     unfocusedTextColor = C.t1,
                     cursorColor = C.cyan,
@@ -1368,39 +1453,23 @@ private fun TransactionSettings(onBack: () -> Unit) {
                     Spacer(Modifier.height(4.dp))
                 }
             }
-            SettingsGroup("Retention & Cleanup") {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SettingsRowIcon(Icons.Rounded.Autorenew)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Auto-Clear Transactions", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        Text("Automatically delete old records", color = C.t2, fontSize = 11.sp)
-                    }
-                    Box {
-                        TextButton(onClick = { clearExpanded = true }) { Text(autoClear, color = C.cyan, fontSize = 12.sp) }
-                        DropdownMenu(
-                            expanded = clearExpanded,
-                            onDismissRequest = { clearExpanded = false },
-                            modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))
-                        ) {
-                            clearOptions.forEach { opt ->
-                                DropdownMenuItem(
-                                    text = { Text(opt, color = if (opt == autoClear) C.cyan else C.t1) },
-                                    onClick = {
-                                        autoClear = opt
-                                        prefs.edit().putString("auto_clear", opt).apply()
-                                        clearExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-                GroupDivider()
-                LinkRow(Icons.Rounded.DeleteSweep, "Clear All Transactions", "Wipe entire transaction history", C.red) { confirmClear = true }
-            }
         }
         Spacer(Modifier.height(22.dp))
+    }
+}
+
+private enum class TransactionHistorySummaryPeriod(
+    val value: String,
+    val menuLabel: String,
+    val heroLabel: String
+) {
+    DAILY("daily", "Daily", "TODAY'S RECEIVED"),
+    WEEKLY("weekly", "Weekly", "THIS WEEK'S RECEIVED"),
+    MONTHLY("monthly", "Monthly", "THIS MONTH'S RECEIVED");
+
+    companion object {
+        fun fromValue(value: String): TransactionHistorySummaryPeriod =
+            entries.find { it.value.equals(value, ignoreCase = true) } ?: DAILY
     }
 }
 
@@ -1418,64 +1487,70 @@ private data class TransactionHistoryTab(
     val count: Int
 )
 
-private val TransactionHistoryGradient = listOf(
-    Color(0xFF6C63FF),
-    Color(0xFFA29BFE),
-    Color(0xFF4ECDC4)
-)
-
 @Composable
 private fun TransactionHistoryHeroCard(
-    totalTodayCollected: Double,
-    completedTodayCount: Int,
+    summaryPeriod: TransactionHistorySummaryPeriod,
+    totalCollected: Double,
+    completedCount: Int,
     unmatchedCount: Int
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                brush = Brush.linearGradient(TransactionHistoryGradient),
-                shape = RoundedCornerShape(24.dp)
+                brush = Brush.linearGradient(
+                    listOf(
+                        Color(0x22FFB454),
+                        Color(0x1674E6D8),
+                        Color(0xFF1C2123)
+                    )
+                ),
+                shape = RoundedCornerShape(22.dp)
             )
+            .border(1.dp, Color(0xFF262D2F), RoundedCornerShape(22.dp))
             .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
-        Box(
+        Row(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .size(112.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.10f))
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 36.dp, top = 64.dp)
-                .size(84.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.08f))
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                .align(Alignment.TopEnd),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            listOf(10.dp, 18.dp, 8.dp, 24.dp, 14.dp).forEach { barHeight ->
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(barHeight)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(C.cyan.copy(alpha = 0.35f))
+                )
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                "TODAY'S COLLECTED",
-                color = Color.White.copy(alpha = 0.82f),
+                summaryPeriod.heroLabel,
+                color = C.t2,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                transactionHistoryCurrency(totalTodayCollected),
-                color = Color.White,
+                transactionHistoryCurrency(totalCollected),
+                color = C.amber,
                 fontSize = 30.sp,
                 fontWeight = FontWeight.ExtraBold
             )
-            Text(
-                if (unmatchedCount > 0) {
-                    "$completedTodayCount successful transactions • $unmatchedCount unmatched to review"
-                } else {
-                    "$completedTodayCount successful transactions"
-                },
-                color = Color.White.copy(alpha = 0.78f),
-                fontSize = 12.sp
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = C.cyan, modifier = Modifier.size(14.dp))
+                Text(
+                    if (unmatchedCount > 0) {
+                        "$completedCount successful transactions • $unmatchedCount unmatched"
+                    } else {
+                        "$completedCount successful transactions"
+                    },
+                    color = C.t2,
+                    fontSize = 12.sp
+                )
+            }
         }
     }
 }
@@ -1487,17 +1562,22 @@ private fun TransactionHistoryTabChip(
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(999.dp)
-    Box(
+    Row(
         modifier = Modifier
             .clip(shape)
             .background(
                 if (isActive) {
-                    Brush.horizontalGradient(TransactionHistoryGradient)
+                    Brush.horizontalGradient(
+                        listOf(
+                            C.amber.copy(alpha = 0.96f),
+                            C.cyan.copy(alpha = 0.92f)
+                        )
+                    )
                 } else {
                     Brush.horizontalGradient(
                         listOf(
-                            C.surface.copy(alpha = 0.74f),
-                            C.surface.copy(alpha = 0.60f)
+                            Color(0xFF1C2123),
+                            Color(0xFF1C2123)
                         )
                     )
                 },
@@ -1505,18 +1585,36 @@ private fun TransactionHistoryTabChip(
             )
             .border(
                 width = if (isActive) 0.dp else 1.dp,
-                color = if (isActive) Color.Transparent else C.border.copy(alpha = 0.72f),
+                color = if (isActive) Color.Transparent else Color(0xFF262D2F),
                 shape = shape
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            "${tab.label} ${tab.count}",
-            color = if (isActive) Color.White else C.t2,
+            tab.label,
+            color = if (isActive) Color(0xFF15191B) else C.t2,
             fontSize = 13.sp,
             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
         )
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(
+                    if (isActive) Color(0x3315191B) else Color(0xFF2E3437),
+                    RoundedCornerShape(999.dp)
+                )
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text(
+                tab.count.toString(),
+                color = if (isActive) Color(0xFF15191B) else C.t3,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
     }
 }
 
@@ -1527,19 +1625,28 @@ private fun TransactionHistoryEmptyState(
     hasSearch: Boolean
 ) {
     Surface(
-        color = C.surface.copy(alpha = 0.82f),
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
+        color = Color(0xFF1C2123),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, Color(0xFF262D2F)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(Color(0xFF2E3437)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.DeleteSweep, contentDescription = null, tint = C.t3, modifier = Modifier.size(20.dp))
+            }
             Text(
                 if (hasTransactions) "No matching transactions" else "No transactions recorded yet",
                 color = C.t1,
-                fontSize = 15.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
@@ -1589,9 +1696,9 @@ private fun TransactionHistoryRow(
     val amountPrefix = if (classification == TransactionHistoryFilter.FAILED || tx.source == TX_SOURCE_AIRTIME) "-" else "+"
 
     Surface(
-        color = C.surface.copy(alpha = 0.84f),
-        shape = RoundedCornerShape(22.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
+        color = Color(0xFF1C2123),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, Color(0xFF262D2F)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -1699,6 +1806,27 @@ private fun TransactionStatusBadge(
     }
 }
 
+@Composable
+private fun TransactionMenuSectionTitle(text: String) {
+    Text(
+        text = text.uppercase(Locale.getDefault()),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        color = C.t3,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
+private fun TransactionMenuDivider() {
+    Spacer(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(Color(0xFF333B3E))
+    )
+}
+
 private fun transactionHistoryFilterFor(
     tx: Transaction,
     offers: List<OfferItem>
@@ -1751,6 +1879,25 @@ private fun transactionHistoryAccent(classification: TransactionHistoryFilter): 
         TransactionHistoryFilter.PENDING -> Color(0xFFF7B731)
         TransactionHistoryFilter.ALL -> C.cyan
     }
+
+private fun transactionMatchesSummaryPeriod(
+    tx: Transaction,
+    period: TransactionHistorySummaryPeriod
+): Boolean {
+    val timestamp = transactionHistoryTimestamp(tx)
+    if (timestamp <= 0L) return false
+    val now = Calendar.getInstance()
+    val item = Calendar.getInstance().apply { timeInMillis = timestamp }
+    return when (period) {
+        TransactionHistorySummaryPeriod.DAILY -> sameDay(item, now)
+        TransactionHistorySummaryPeriod.WEEKLY ->
+            item.get(Calendar.YEAR) == now.get(Calendar.YEAR) &&
+                item.get(Calendar.WEEK_OF_YEAR) == now.get(Calendar.WEEK_OF_YEAR)
+        TransactionHistorySummaryPeriod.MONTHLY ->
+            item.get(Calendar.YEAR) == now.get(Calendar.YEAR) &&
+                item.get(Calendar.MONTH) == now.get(Calendar.MONTH)
+    }
+}
 
 private fun transactionAvatarColor(tx: Transaction): Color {
     val palette = listOf(
