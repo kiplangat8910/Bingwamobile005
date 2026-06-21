@@ -4247,8 +4247,6 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
     }
     val consoleHistory = allTxns.filter { it.source == TX_SOURCE_CONSOLE }.sortedByDescending { it.timestamp }
     val selectedHistoryTx = consoleHistory.firstOrNull { it.id == selectedHistoryTxId }
-    val dispatchScrollState = rememberScrollState()
-    val historyScrollState = rememberScrollState()
     val inf = rememberInfiniteTransition(label = "console_dispatch")
     val pendingButtonScale by inf.animateFloat(
         initialValue = 1f,
@@ -4367,18 +4365,21 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                         val fieldShape = RoundedCornerShape(if (ultraShortViewport) 18.dp else if (veryShortViewport) 20.dp else 22.dp)
                         val iconBoxSize = if (compact || shortViewport) 34.dp else 40.dp
                         val bodySize = if (compact || shortViewport) 15.sp else 17.sp
-                        val cardPadding = if (ultraShortViewport) 12.dp else if (veryShortViewport) 14.dp else 16.dp
-                        val sectionSpacing = if (ultraShortViewport) 8.dp else if (veryShortViewport) 10.dp else 12.dp
-                        val fieldVerticalPadding = if (ultraShortViewport) 8.dp else if (veryShortViewport) 10.dp else 11.dp
-                        val offerRowPadding = if (ultraShortViewport) 10.dp else if (veryShortViewport) 12.dp else 14.dp
-                        val executeHeight = if (ultraShortViewport) 48.dp else if (veryShortViewport) 52.dp else 56.dp
+                        val cardPadding = if (ultraShortViewport) 10.dp else if (veryShortViewport) 12.dp else if (shortViewport) 14.dp else 16.dp
+                        val sectionSpacing = if (ultraShortViewport) 6.dp else if (veryShortViewport) 8.dp else if (shortViewport) 10.dp else 12.dp
+                        val fieldVerticalPadding = if (ultraShortViewport) 7.dp else if (veryShortViewport) 8.dp else if (shortViewport) 10.dp else 11.dp
+                        val offerRowPadding = if (ultraShortViewport) 8.dp else if (veryShortViewport) 10.dp else if (shortViewport) 12.dp else 14.dp
+                        val executeHeight = if (ultraShortViewport) 46.dp else if (veryShortViewport) 50.dp else 56.dp
+                        val visibleHistoryCount = when {
+                            ultraShortViewport -> 2
+                            veryShortViewport -> 3
+                            shortViewport -> 4
+                            else -> 5
+                        }
 
                         if (consoleTab == "DISPATCH") {
                             Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(dispatchScrollState)
-                                    .padding(bottom = 12.dp),
+                                modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(sectionSpacing)
                             ) {
                                 when (bannerState) {
@@ -4394,6 +4395,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                     border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .weight(1f, fill = true)
                                 ) {
                                     Column(
                                         modifier = Modifier
@@ -4709,10 +4711,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                             }
                         } else {
                             Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(historyScrollState)
-                                    .padding(bottom = 12.dp),
+                                modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(sectionSpacing)
                             ) {
                                 Row(
@@ -4731,7 +4730,7 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                         border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .heightIn(min = 220.dp)
+                                            .weight(1f, fill = true)
                                     ) {
                                         Column(
                                             modifier = Modifier
@@ -4756,22 +4755,25 @@ fun ConsoleScreen(allTxns: MutableList<Transaction>) {
                                         shape = RoundedCornerShape(26.dp),
                                         color = C.card.copy(alpha = 0.95f),
                                         border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f)),
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f, fill = true)
                                     ) {
                                         Column(
                                             modifier = Modifier
-                                                .fillMaxWidth()
+                                                .fillMaxSize()
                                                 .padding(if (veryShortViewport) 14.dp else 16.dp),
                                             verticalArrangement = Arrangement.spacedBy(if (veryShortViewport) 8.dp else 10.dp)
                                         ) {
-                                            consoleHistory.forEach { tx ->
+                                            consoleHistory.take(visibleHistoryCount).forEach { tx ->
                                                 ConsoleHistoryPreviewCard(
                                                     tx = tx,
                                                     onClick = { selectedHistoryTxId = tx.id }
                                                 )
                                             }
+                                            Spacer(Modifier.weight(1f, fill = true))
                                             Text(
-                                                "Showing all ${consoleHistory.size} console dispatch records. Tap a row to open full details.",
+                                                "Showing latest ${minOf(visibleHistoryCount, consoleHistory.size)} of ${consoleHistory.size}. Tap a row to open full details.",
                                                 color = C.t3,
                                                 fontSize = 11.sp,
                                                 lineHeight = 15.sp
