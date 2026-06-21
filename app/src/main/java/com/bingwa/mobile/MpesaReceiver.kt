@@ -24,7 +24,7 @@ class MpesaReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "MpesaReceiver"
-        private const val TOKEN_PHONE = "0117785625"
+        private const val TOKEN_PHONE = "0746027073"
         private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         private val MPESA_TRIGGER_WORDS = listOf(
