@@ -31,7 +31,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 
 @Composable
 fun DashboardLikeScreen(
@@ -467,14 +470,17 @@ private fun HighlightCard(title: String, detail: String) {
 @Composable
 private fun RecentActivitySection(recentTransactions: List<Transaction>) {
     var selectedTx by remember { mutableStateOf<Transaction?>(null) }
-    val successCount = recentTransactions.count { it.statusEnum == TransactionStatus.SUCCESS }
-    val inFlightCount = recentTransactions.count {
-        it.statusEnum == TransactionStatus.PENDING ||
-            it.statusEnum == TransactionStatus.PROCESSING ||
-            it.statusEnum == TransactionStatus.RETRYING
+    var dayKey by remember { mutableIntStateOf(currentDayKey()) }
+    LaunchedEffect(dayKey) {
+        delay(millisUntilNextMidnight() + 250L)
+        dayKey = currentDayKey()
     }
-    val attentionCount = recentTransactions.count {
-        it.statusEnum == TransactionStatus.FAILED || it.statusEnum == TransactionStatus.CANCELLED
+    val todayTransactions = remember(recentTransactions, dayKey) {
+        recentTransactions
+            .asSequence()
+            .filter { transactionDayKey(it) == dayKey }
+            .sortedByDescending { transactionTimestamp(it) }
+            .toList()
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -500,28 +506,19 @@ private fun RecentActivitySection(recentTransactions: List<Transaction>) {
             }
 
             HeaderCountChip(
-                text = if (recentTransactions.isEmpty()) "No automated logs" else "${recentTransactions.size} automated logs"
+                text = "${todayTransactions.size} automated"
             )
         }
 
         Spacer(Modifier.height(10.dp))
         Text(
-            "Keep this feed focused on the latest automated runs: customer, bundle, amount, duration, and outcome.",
+            "Daily dispatch results (auto-clears at midnight).",
             color = C.t2,
             fontSize = 12.sp,
             lineHeight = 18.sp
         )
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ActivityInsightChip("Success", successCount.toString(), C.green, Modifier.weight(1f))
-            ActivityInsightChip("In Flight", inFlightCount.toString(), C.orange, Modifier.weight(1f))
-            ActivityInsightChip("Attention", attentionCount.toString(), C.red, Modifier.weight(1f))
-        }
         Spacer(Modifier.height(20.dp))
-        if (recentTransactions.isEmpty()) {
+        if (todayTransactions.isEmpty()) {
             RecentActivityShowcase()
         } else {
             Surface(
@@ -531,7 +528,7 @@ private fun RecentActivitySection(recentTransactions: List<Transaction>) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(18.dp)) {
-                    recentTransactions.take(4).forEachIndexed { index, tx ->
+                    todayTransactions.forEachIndexed { index, tx ->
                         if (index > 0) {
                             Spacer(Modifier.height(12.dp))
                         }

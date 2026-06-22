@@ -2403,7 +2403,16 @@ fun HomeScreenVolcanic(
     onToggleRunning: () -> Unit
 ) {
     val ctx = LocalContext.current
-    val automatedTxns = txns.filter { it.showInRecent }.sortedByDescending { it.timestamp }
+    var dayKey by remember { mutableIntStateOf(currentDayKey()) }
+    LaunchedEffect(dayKey) {
+        delay(millisUntilNextMidnight() + 250L)
+        dayKey = currentDayKey()
+    }
+    val automatedTxns = txns
+        .asSequence()
+        .filter { it.showInRecent && transactionDayKey(it) == dayKey }
+        .sortedByDescending { transactionTimestamp(it) }
+        .toList()
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
     val sent = automatedTxns.count { it.status == TransactionStatus.SUCCESS.value }
@@ -2419,7 +2428,7 @@ fun HomeScreenVolcanic(
         infiniteRepeatable(tween(1200, easing = LinearEasing)),
         label = "spin"
     )
-    val topTransactions = automatedTxns.take(6)
+    val topTransactions = automatedTxns
 
     Box(
         Modifier
@@ -2952,7 +2961,7 @@ private fun HomeActivityHeading(automatedCount: Int) {
             border = BorderStroke(1.dp, Color(0xFF333B3E))
         ) {
             Text(
-                if (automatedCount == 0) "0 total" else "$automatedCount total",
+                "$automatedCount automated",
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 color = Color(0xFF8A9396),
                 fontSize = 11.sp,

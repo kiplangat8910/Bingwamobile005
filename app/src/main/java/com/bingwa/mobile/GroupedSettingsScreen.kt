@@ -1196,8 +1196,8 @@ private fun TransactionSettings(onBack: () -> Unit) {
     var summaryPeriod by remember {
         mutableStateOf(
             TransactionHistorySummaryPeriod.fromValue(
-                prefs.safeGetString("transaction_summary_period", TransactionHistorySummaryPeriod.DAILY.value)
-                    ?: TransactionHistorySummaryPeriod.DAILY.value
+                prefs.safeGetString("transaction_summary_period", TransactionHistorySummaryPeriod.WEEKLY.value)
+                    ?: TransactionHistorySummaryPeriod.WEEKLY.value
             )
         )
     }
@@ -1827,6 +1827,12 @@ private fun TransactionHistoryRow(
                     color = accent,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    transactionStatusLabel(tx),
+                    color = accent.copy(alpha = 0.92f),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
                 Text(
                     transactionHistoryTimeLabel(tx),
