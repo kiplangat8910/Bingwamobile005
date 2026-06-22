@@ -1203,6 +1203,7 @@ private fun TransactionSettings(onBack: () -> Unit) {
     var history by remember {
         mutableStateOf(TransactionStore.load(ctx).sortedByDescending { transactionHistoryTimestamp(it) })
     }
+    var selectedTx by remember { mutableStateOf<Transaction?>(null) }
     val offers = remember { OfferRepository.load(ctx).filter { it.enabled } }
     val clearOptions = listOf("Daily", "Weekly", "Monthly", "Yearly", "Never")
     val tabs = TransactionHistoryFilter.entries.map { filter ->
@@ -1447,7 +1448,7 @@ private fun TransactionSettings(onBack: () -> Unit) {
                             fontWeight = FontWeight.Bold
                         )
                         items.forEach { tx ->
-                            TransactionHistoryRow(tx = tx, offers = offers)
+                            TransactionHistoryRow(tx = tx, offers = offers, onClick = { selectedTx = tx })
                         }
                     }
                     Spacer(Modifier.height(4.dp))
@@ -1455,6 +1456,20 @@ private fun TransactionSettings(onBack: () -> Unit) {
             }
         }
         Spacer(Modifier.height(22.dp))
+    }
+
+    selectedTx?.let { tx ->
+        TransactionDetailDialog(
+            tx = tx,
+            onDismiss = { selectedTx = null },
+            onDelete = {
+                val updated = history.filterNot { it.id == tx.id }
+                TransactionStore.save(ctx, updated)
+                history = updated.sortedByDescending { transactionHistoryTimestamp(it) }
+                Toast.makeText(ctx, "Transaction deleted", Toast.LENGTH_SHORT).show()
+                selectedTx = null
+            }
+        )
     }
 }
 
@@ -1669,7 +1684,8 @@ private fun TransactionHistoryEmptyState(
 @Composable
 private fun TransactionHistoryRow(
     tx: Transaction,
-    offers: List<OfferItem>
+    offers: List<OfferItem>,
+    onClick: () -> Unit
 ) {
     val classification = transactionHistoryFilterFor(tx, offers)
     val accent = transactionHistoryAccent(classification)
@@ -1699,7 +1715,7 @@ private fun TransactionHistoryRow(
         color = Color(0xFF1C2123),
         shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, Color(0xFF262D2F)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier

@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -461,6 +466,7 @@ private fun HighlightCard(title: String, detail: String) {
 
 @Composable
 private fun RecentActivitySection(recentTransactions: List<Transaction>) {
+    var selectedTx by remember { mutableStateOf<Transaction?>(null) }
     val successCount = recentTransactions.count { it.statusEnum == TransactionStatus.SUCCESS }
     val inFlightCount = recentTransactions.count {
         it.statusEnum == TransactionStatus.PENDING ||
@@ -529,11 +535,18 @@ private fun RecentActivitySection(recentTransactions: List<Transaction>) {
                         if (index > 0) {
                             Spacer(Modifier.height(12.dp))
                         }
-                        ActivityRow(tx = tx)
+                        ActivityRow(tx = tx, onClick = { selectedTx = tx })
                     }
                 }
             }
         }
+    }
+
+    selectedTx?.let { tx ->
+        TransactionDetailDialog(
+            tx = tx,
+            onDismiss = { selectedTx = null }
+        )
     }
 }
 
@@ -632,7 +645,7 @@ private fun RecentActivityShowcase() {
 }
 
 @Composable
-private fun ActivityRow(tx: Transaction) {
+private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
     val title = tx.clientName.ifBlank {
         tx.description.ifBlank { "Transaction" }
     }
@@ -658,7 +671,7 @@ private fun ActivityRow(tx: Transaction) {
         color = C.surface.copy(alpha = 0.95f),
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick)
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),

@@ -2473,7 +2473,7 @@ fun HomeScreenVolcanic(
         }
 
         if (selectedTx != null) {
-            RecentTransactionDetailsDialog(
+            TransactionDetailDialog(
                 tx = selectedTx,
                 onDismiss = { selectedTxId = -1 },
                 onDelete = {
