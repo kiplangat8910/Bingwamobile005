@@ -7,7 +7,7 @@ class TokenManager(private val context: Context) {
     fun getBalance(): Int = prefs.safeGetInt("balance", 0)
     fun addTokens(amount: Int) { val newBal = getBalance() + amount; prefs.edit().putInt("balance", newBal).apply(); tokenBalanceListener?.invoke(newBal) }
     fun spendTokens(amount: Int): Boolean { val cur = getBalance(); if (cur < amount) return false; val newBal = cur - amount; prefs.edit().putInt("balance", newBal).apply(); tokenBalanceListener?.invoke(newBal); return true }
-    fun clearBalance(clearUnlimited: Boolean = false) {
+    fun clearBalance(clearUnlimited: Boolean = true) {
         prefs.edit().putInt("balance", 0).apply()
         if (clearUnlimited) {
             UnlimitedManager(context).clear()

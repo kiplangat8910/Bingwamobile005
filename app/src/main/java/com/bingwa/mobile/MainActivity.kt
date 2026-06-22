@@ -679,26 +679,22 @@ fun createPendingTransaction(
     }
 }
 
-private fun pluralize(value: Long, unit: String): String =
-    if (value == 1L) "$value $unit" else "$value ${unit}s"
-
 fun formatRemainingTimeHome(ms: Long): String {
     if (ms <= 0L) return "Expired"
     val totalMinutes = ms / 60_000L
     val days = totalMinutes / (24L * 60L)
     val hours = (totalMinutes % (24L * 60L)) / 60L
     val minutes = totalMinutes % 60L
-    return "${pluralize(days, "day")} ${pluralize(hours, "hour")} ${pluralize(minutes, "minute")} left"
+    return "${days}d ${hours}h ${minutes}m left"
 }
 
 fun formatRemainingTimeDetailed(ms: Long): String {
     if (ms <= 0L) return "Expired"
-    val totalSeconds = ms / 1_000L
-    val days = totalSeconds / 86_400L
-    val hours = (totalSeconds % 86_400L) / 3_600L
-    val minutes = (totalSeconds % 3_600L) / 60L
-    val seconds = totalSeconds % 60L
-    return "${pluralize(days, "day")} ${pluralize(hours, "hour")} ${pluralize(minutes, "minute")} ${pluralize(seconds, "second")} remaining"
+    val totalMinutes = ms / 60_000L
+    val days = totalMinutes / (24L * 60L)
+    val hours = (totalMinutes % (24L * 60L)) / 60L
+    val minutes = totalMinutes % 60L
+    return "${days}d ${hours}h ${minutes}m remaining"
 }
 
 fun formatSignatureLearnedAt(timestamp: Long): String =
@@ -1083,7 +1079,14 @@ private fun PurchasePerkChip(icon: ImageVector, label: String, accent: Color) {
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Icon(icon, null, tint = accent, modifier = Modifier.size(13.dp))
-            Text(label, color = accent, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                label,
+                color = accent,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -1095,6 +1098,7 @@ private fun TokensHeroCard(
     remainingMs: Long
 ) {
     val accent = if (activePlan != null) C.green else C.cyan
+    val remainingLabel = formatRemainingTimeDetailed(remainingMs)
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = C.cardHi.copy(alpha = 0.94f),
@@ -1131,34 +1135,84 @@ private fun TokensHeroCard(
                     letterSpacing = 1.0.sp
                 )
             }
-            Text(
-                if (activePlan != null) "Unlimited" else balance.toString(),
-                fontSize = if (activePlan != null) 48.sp else 72.sp,
-                fontWeight = FontWeight.Black,
-                lineHeight = if (activePlan != null) 52.sp else 72.sp,
-                color = if (activePlan != null) C.green else C.t1
-            )
-            Text(
-                if (activePlan != null) "${activePlan.label} unlimited plan is active" else "Tokens never expire and stay ready for your next USSD automation run",
-                color = C.t2,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center
-            )
             if (activePlan != null) {
+                Text(
+                    "Unlimited",
+                    fontSize = 46.sp,
+                    fontWeight = FontWeight.Black,
+                    lineHeight = 50.sp,
+                    color = C.green,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "${activePlan.label} plan is active",
+                    color = C.t2,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = C.blue.copy(alpha = 0.14f),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    color = C.blue.copy(alpha = 0.12f),
                     border = BorderStroke(1.dp, C.blue.copy(alpha = 0.22f))
                 ) {
-                    Text(
-                        formatRemainingTimeDetailed(remainingMs),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        color = C.blue,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            "Remaining Time",
+                            color = C.t2,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.6.sp,
+                            maxLines = 1
+                        )
+                        Text(
+                            remainingLabel,
+                            color = C.blue,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     )
                 }
+                Text(
+                    "Stored tokens return after unlimited ends",
+                    color = C.t3,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            } else {
+                Text(
+                    balance.toString(),
+                    fontSize = 72.sp,
+                    fontWeight = FontWeight.Black,
+                    lineHeight = 72.sp,
+                    color = C.t1,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "Tokens never expire and stay ready for USSD automation",
+                    color = C.t2,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -1166,7 +1220,7 @@ private fun TokensHeroCard(
             ) {
                 PurchasePerkChip(
                     icon = if (activePlan != null) Icons.Outlined.Shield else Icons.Outlined.Bolt,
-                    label = if (activePlan != null) "Unlimited access remains active until the timer ends" else "1 token = 1 USSD call",
+                    label = if (activePlan != null) "Unlimited access stays active until time ends" else "1 token = 1 USSD call",
                     accent = if (activePlan != null) C.blue else C.cyan
                 )
                 PurchasePerkChip(
@@ -3064,15 +3118,19 @@ private fun HomeScanningEmptyState(modifier: Modifier = Modifier) {
             fontSize = 16.sp,
             fontFamily = FontFamily.Monospace,
             letterSpacing = 1.6.sp,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Spacer(Modifier.height(7.dp))
         Text(
-            "Transactions will appear here",
+            "Transactions appear here after automation starts",
             color = Color(0xFF5B6366),
             fontSize = 13.sp,
             fontFamily = FontFamily.Monospace,
-            letterSpacing = 0.8.sp
+            letterSpacing = 0.8.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -3734,13 +3792,22 @@ private fun GithubEmptyActivityCard() {
             ) {
                 Icon(Icons.Outlined.History, null, tint = C.green, modifier = Modifier.size(22.dp))
             }
-            Text("Scanning for activity", color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             Text(
-                "Transactions will appear here after you start automation from the center button.",
+                "Scanning for activity",
+                color = C.t1,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                "Transactions appear here after you start automation.",
                 color = C.t2,
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -5180,15 +5247,19 @@ fun AnimatedEmptyState(modifier: Modifier = Modifier) {
                     color = C.t1,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    "Transactions will appear here",
+                    "Transactions appear here after automation starts",
                     color = C.t2,
                     fontSize = 13.sp,
                     lineHeight = 17.sp,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 18.dp)
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
