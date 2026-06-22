@@ -128,14 +128,11 @@ class UnlimitedManager(private val context: Context) {
     fun remainingLabel(): String {
         val rem = remainingMs()
         if (rem <= 0L) return "Expired"
-        val totalMinutes = rem / 60_000L
-        val days = totalMinutes / (24L * 60L)
-        val hours = (totalMinutes % (24L * 60L)) / 60L
-        val minutes = totalMinutes % 60L
-        return when {
-            days > 0L -> "${days}d ${hours}h ${minutes}m remaining"
-            hours > 0L -> "${hours}h ${minutes}m remaining"
-            else -> "${minutes}m remaining"
-        }
+        val totalSeconds = rem / 1_000L
+        val days = totalSeconds / 86_400L
+        val hours = (totalSeconds % 86_400L) / 3_600L
+        val minutes = (totalSeconds % 3_600L) / 60L
+        val seconds = totalSeconds % 60L
+        return "${days}d ${hours}h ${minutes}m ${seconds}s remaining"
     }
 }
