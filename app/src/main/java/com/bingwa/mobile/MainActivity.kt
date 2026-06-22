@@ -79,6 +79,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 private data class ManualSearchEntry(
@@ -2494,6 +2495,12 @@ fun HomeScreenVolcanic(
 ) {
     val ctx = LocalContext.current
     var dayKey by remember { mutableIntStateOf(currentDayKey()) }
+    val statusClock by produceState(initialValue = System.currentTimeMillis()) {
+        while (true) {
+            value = System.currentTimeMillis()
+            delay(1000L)
+        }
+    }
     LaunchedEffect(dayKey) {
         delay(millisUntilNextMidnight() + 250L)
         dayKey = currentDayKey()
@@ -2503,16 +2510,17 @@ fun HomeScreenVolcanic(
         .filter { it.showInRecent && transactionDayKey(it) == dayKey }
         .sortedByDescending { transactionTimestamp(it) }
         .toList()
-    val sentCount = automatedTxns.size
-    val pendingCount = automatedTxns.count {
-        it.statusEnum == TransactionStatus.PROCESSING ||
-            it.statusEnum == TransactionStatus.PENDING ||
-            it.statusEnum == TransactionStatus.RETRYING
+    val recentStatuses = automatedTxns.map { homeRecentStatus(it, statusClock) }
+    val pendingCount = recentStatuses.count {
+        it == TransactionStatus.PROCESSING || it == TransactionStatus.PENDING
     }
-    val failedCount = automatedTxns.count {
-        it.statusEnum == TransactionStatus.FAILED || it.statusEnum == TransactionStatus.CANCELLED
+    val failedCount = recentStatuses.count { it == TransactionStatus.FAILED }
+    val completedCount = recentStatuses.count { it == TransactionStatus.SUCCESS }
+    val completionRate = if (automatedTxns.isNotEmpty()) {
+        ((completedCount * 100f) / automatedTxns.size).roundToInt()
+    } else {
+        0
     }
-    val completedCount = automatedTxns.count { it.statusEnum == TransactionStatus.SUCCESS }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
     val chromeAnim = rememberInfiniteTransition(label = "home_chrome")
@@ -2580,10 +2588,10 @@ fun HomeScreenVolcanic(
                             airBal = airBal.ifBlank { "0.00" },
                             tokenValue = if (unlimitedLabel != null) "Unlimited" else tokenBal.toString(),
                             tokenHint = unlimitedRemaining ?: "Tokens never expire",
-                            sentCount = sentCount,
+                            completedCount = completedCount,
                             pendingCount = pendingCount,
                             failedCount = failedCount,
-                            completedCount = completedCount,
+                            ratePercent = completionRate,
                             isRefreshing = isRefreshing,
                             spin = spin,
                             onRefresh = onRefresh
@@ -2591,6 +2599,7 @@ fun HomeScreenVolcanic(
                         HomeActivityHeading(automatedCount = automatedTxns.size)
                         HomeActivityPanel(
                             transactions = topTransactions,
+                            currentTimeMs = statusClock,
                             onOpenTransaction = { selectedTxId = it.id },
                             onDeleteTransaction = { tx ->
                                 txns.remove(tx)
@@ -2799,10 +2808,10 @@ private fun HomeSplitBalanceCard(
     airBal: String,
     tokenValue: String,
     tokenHint: String,
-    sentCount: Int,
+    completedCount: Int,
     pendingCount: Int,
     failedCount: Int,
-    completedCount: Int,
+    ratePercent: Int,
     isRefreshing: Boolean,
     spin: Float,
     onRefresh: () -> Unit
@@ -2971,16 +2980,16 @@ private fun HomeSplitBalanceCard(
                     .background(line)
             )
             HomeStatsRow(
-                sent = sentCount,
+                completed = completedCount,
                 pending = pendingCount,
                 failed = failedCount,
-                completed = completedCount,
+                rate = ratePercent,
                 compact = compact,
                 spacing = statsSpacing,
-                sentAccent = mint,
+                completedAccent = mint,
                 pendingAccent = amber,
                 failedAccent = coral,
-                completedAccent = completedAccent
+                rateAccent = completedAccent
             )
         }
     }
@@ -3079,6 +3088,7 @@ private fun HomeActivityHeading(automatedCount: Int) {
 @Composable
 private fun HomeActivityPanel(
     transactions: List<Transaction>,
+    currentTimeMs: Long,
     onOpenTransaction: (Transaction) -> Unit,
     onDeleteTransaction: (Transaction) -> Unit,
     modifier: Modifier = Modifier
@@ -3110,6 +3120,7 @@ private fun HomeActivityPanel(
             transactions.forEach { tx ->
                 HomeDispatchRow(
                     tx = tx,
+                    currentTimeMs = currentTimeMs,
                     onOpen = { onOpenTransaction(tx) },
                     onDelete = { onDeleteTransaction(tx) }
                 )
@@ -3268,10 +3279,17 @@ private fun HomeSonarRing(progress: Float) {
 @Composable
 private fun HomeDispatchRow(
     tx: Transaction,
+    currentTimeMs: Long,
     onOpen: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val statusColor = transactionStatusColor(tx)
+    val displayStatus = homeRecentStatus(tx, currentTimeMs)
+    val statusColor = transactionStatusColor(displayStatus)
+    val statusLabel = if (displayStatus == TransactionStatus.PROCESSING) {
+        "Processing${processingDots(currentTimeMs)}"
+    } else {
+        homeRecentStatusLabel(displayStatus)
+    }
     val title = tx.clientName.ifBlank { tx.description.ifBlank { "Recent automation" } }
     val phone = tx.phoneNumber.ifBlank { "Phone not available" }
     val serviceLabel = tx.description.ifBlank { "Offer not captured" }
@@ -3367,7 +3385,7 @@ private fun HomeDispatchRow(
                             maxLines = 1
                         )
                         Text(
-                            transactionStatusLabel(tx),
+                            statusLabel,
                             color = statusColor.copy(alpha = 0.96f),
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
@@ -3747,7 +3765,7 @@ private fun GithubOverviewCard(
     tokenBal: Int,
     unlimitedLabel: String?,
     unlimitedRemaining: String?,
-    sent: Int,
+    completed: Int,
     pending: Int,
     failed: Int,
     rate: Int,
@@ -3813,7 +3831,7 @@ private fun GithubOverviewCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                GithubStatPill("Sent", sent.toString(), C.green, Modifier.weight(1f))
+                GithubStatPill("Completed", completed.toString(), C.green, Modifier.weight(1f))
                 GithubStatPill("Pending", pending.toString(), C.amber, Modifier.weight(1f))
                 GithubStatPill("Failed", failed.toString(), C.red, Modifier.weight(1f))
                 GithubStatPill("Rate", "$rate%", if (rate >= 70) C.green else C.amber, Modifier.weight(1f))
@@ -3936,6 +3954,35 @@ private data class TransactionRetryResult(
     val message: String,
     val newTxId: Int = -1
 )
+
+private const val HOME_PROCESSING_WINDOW_MS = 6_000L
+
+private fun homeRecentStatus(tx: Transaction, currentTimeMs: Long = System.currentTimeMillis()): TransactionStatus {
+    val ageMs = (currentTimeMs - transactionTimestamp(tx)).coerceAtLeast(0L)
+    return when (tx.statusEnum) {
+        TransactionStatus.SUCCESS -> TransactionStatus.SUCCESS
+        TransactionStatus.FAILED, TransactionStatus.CANCELLED -> TransactionStatus.FAILED
+        TransactionStatus.PROCESSING,
+        TransactionStatus.PENDING,
+        TransactionStatus.RETRYING -> if (ageMs < HOME_PROCESSING_WINDOW_MS) TransactionStatus.PROCESSING else TransactionStatus.PENDING
+    }
+}
+
+private fun homeRecentStatusLabel(status: TransactionStatus): String = when (status) {
+    TransactionStatus.SUCCESS -> "Completed"
+    TransactionStatus.FAILED, TransactionStatus.CANCELLED -> "Failed"
+    TransactionStatus.PROCESSING -> "Processing"
+    TransactionStatus.PENDING, TransactionStatus.RETRYING -> "Pending"
+}
+
+private fun processingDots(currentTimeMs: Long): String =
+    ".".repeat((((currentTimeMs / 450L) % 3L) + 1L).toInt())
+
+private fun transactionStatusColor(status: TransactionStatus): Color = when (status) {
+    TransactionStatus.SUCCESS -> C.green
+    TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
+    TransactionStatus.PROCESSING, TransactionStatus.PENDING, TransactionStatus.RETRYING -> C.amber
+}
 
 private fun transactionStatusColor(tx: Transaction): Color = when (tx.statusEnum) {
     TransactionStatus.SUCCESS -> C.green
@@ -4330,7 +4377,7 @@ private fun RecentTransactionDetailsDialog(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RecentSummaryChip(text = tx.status, color = statusColor)
+                    RecentSummaryChip(text = homeRecentStatusLabel(homeRecentStatus(tx)), color = statusColor)
                     RecentSummaryChip(text = transactionTypeLabel(tx), color = sourceColor)
                 }
                 Row(
@@ -4507,10 +4554,10 @@ fun VolcanicBalanceCard(
     tokenBal: Int,
     unlimitedLabel: String?,
     unlimitedRemaining: String?,
-    sent: Int,
+    completed: Int,
     pending: Int,
     failed: Int,
-    completed: Int,
+    rate: Int,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     spin: Float,
@@ -4538,10 +4585,10 @@ fun VolcanicBalanceCard(
         val compactTop = maxWidth < 380.dp
         val statSpacing = if (maxWidth < 430.dp) 6.dp else 8.dp
         val headingAccent = Color(0xFFF5AF19)
-        val sentAccent = Color(0xFF1ED89A)
+        val completedAccent = Color(0xFF1ED89A)
         val pendingAccent = Color(0xFFF5AF19)
         val failedAccent = Color(0xFFFF496A)
-        val completedAccent = Color(0xFFB79BFF)
+        val rateAccent = Color(0xFFB79BFF)
         val airtimeValue = airBal.ifBlank { "—" }
         val topTokenValue = unlimitedLabel ?: tokenBal.toString()
         val topTokenCaption = unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available Units"
@@ -4594,12 +4641,12 @@ fun VolcanicBalanceCard(
                         center = Offset(size.width * 0.76f, size.height * 0.16f)
                     )
                     drawCircle(
-                        color = sentAccent,
+                        color = completedAccent,
                         radius = 5.dp.toPx(),
                         center = Offset(size.width * 0.93f, size.height * 0.29f)
                     )
                     drawLine(
-                        color = sentAccent.copy(alpha = 0.24f),
+                        color = completedAccent.copy(alpha = 0.24f),
                         start = Offset(size.width * 0.94f, size.height * 0.34f),
                         end = Offset(size.width * 0.985f, size.height * 0.27f),
                         strokeWidth = 5.dp.toPx(),
@@ -4624,7 +4671,7 @@ fun VolcanicBalanceCard(
                             listOf(
                                 headingAccent.copy(alpha = 0.18f),
                                 Color(0xB8C8A62E),
-                                sentAccent.copy(alpha = 0.42f)
+                                completedAccent.copy(alpha = 0.42f)
                             )
                         ),
                         style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
@@ -4717,7 +4764,7 @@ fun VolcanicBalanceCard(
                         ) { tokenValue ->
                             Text(
                                 tokenValue,
-                                color = if (unlimitedLabel != null) sentAccent else C.t1,
+                                color = if (unlimitedLabel != null) completedAccent else C.t1,
                                 fontSize = topTokenValueFontSize,
                                 fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Center,
@@ -4747,16 +4794,16 @@ fun VolcanicBalanceCard(
                     .background(Color.White.copy(alpha = 0.78f))
             )
             HomeStatsRow(
-                sent = sent,
+                completed = completed,
                 pending = pending,
                 failed = failed,
-                completed = completed,
+                rate = rate,
                 compact = true,
                 spacing = statSpacing,
-                sentAccent = sentAccent,
+                completedAccent = completedAccent,
                 pendingAccent = pendingAccent,
                 failedAccent = failedAccent,
-                completedAccent = completedAccent
+                rateAccent = rateAccent
             )
         }
     }
@@ -4794,16 +4841,16 @@ fun balanceCaptionFontSize(
 
 @Composable
 private fun HomeStatsRow(
-    sent: Int,
+    completed: Int,
     pending: Int,
     failed: Int,
-    completed: Int,
+    rate: Int,
     compact: Boolean,
     spacing: Dp,
-    sentAccent: Color,
+    completedAccent: Color,
     pendingAccent: Color,
     failedAccent: Color,
-    completedAccent: Color
+    rateAccent: Color
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -4811,9 +4858,9 @@ private fun HomeStatsRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         HomeStatusMetricCard(
-            label = "Sent",
-            value = sent.toString(),
-            accent = sentAccent,
+            label = "Completed",
+            value = completed.toString(),
+            accent = completedAccent,
             compact = compact,
             modifier = Modifier.weight(1f)
         )
@@ -4831,10 +4878,9 @@ private fun HomeStatsRow(
             compact = compact,
             modifier = Modifier.weight(1f)
         )
-        HomeStatusMetricCard(
-            label = "Completed",
-            value = completed.toString(),
-            accent = completedAccent,
+        RateStatCard(
+            rate = rate,
+            accent = rateAccent,
             compact = compact,
             modifier = Modifier.weight(1f)
         )
@@ -4904,16 +4950,16 @@ private fun RateStatCard(rate: Int, accent: Color, compact: Boolean, modifier: M
             Text(
                 "$rate%",
                 color = accent,
-                fontSize = if (compact) 24.sp else 28.sp,
+                fontSize = if (compact) 18.sp else 21.sp,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
-                "COMPLETED",
+                "RATE",
                 color = C.t2,
-                fontSize = if (compact) 8.sp else 9.sp,
-                letterSpacing = 1.1.sp,
+                fontSize = if (compact) 7.sp else 8.sp,
+                letterSpacing = if (compact) 0.5.sp else 0.8.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1
             )

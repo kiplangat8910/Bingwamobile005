@@ -35,7 +35,7 @@ fun millisUntilNextMidnight(): Long {
 }
 
 fun transactionStatusLabel(tx: Transaction): String = when (tx.statusEnum) {
-    TransactionStatus.SUCCESS -> "Sent"
+    TransactionStatus.SUCCESS -> "Completed"
     TransactionStatus.PROCESSING -> "Processing"
     TransactionStatus.PENDING -> "Pending"
     TransactionStatus.RETRYING -> "Retrying"
