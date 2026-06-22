@@ -25,7 +25,6 @@ import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -46,7 +45,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,10 +54,6 @@ import kotlinx.coroutines.delay
 fun DashboardLikeScreen(
     airBal: String,
     tokenBal: Int,
-    sent: Int,
-    pending: Int,
-    failed: Int,
-    rate: Int,
     recentTransactions: List<Transaction>,
     running: Boolean,
     isRefreshing: Boolean,
@@ -85,10 +79,6 @@ fun DashboardLikeScreen(
             airtimeCurrency = airtimeCurrency,
             airtimeAmount = airtimeAmount,
             tokenBal = tokenBal,
-            sent = sent,
-            pending = pending,
-            failed = failed,
-            rate = rate,
             isRefreshing = isRefreshing,
             onRefresh = onRefresh
         )
@@ -243,10 +233,6 @@ private fun BalanceOverviewCard(
     airtimeCurrency: String,
     airtimeAmount: String,
     tokenBal: Int,
-    sent: Int,
-    pending: Int,
-    failed: Int,
-    rate: Int,
     isRefreshing: Boolean,
     onRefresh: () -> Unit
 ) {
@@ -357,109 +343,7 @@ private fun BalanceOverviewCard(
 
             Spacer(Modifier.height(16.dp))
             BalanceAccentWave()
-            Spacer(Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(C.w08.copy(alpha = 0.75f))
-            )
-            Spacer(Modifier.height(18.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                DashboardMetric(
-                    label = "SENT",
-                    value = sent.toString(),
-                    valueColor = C.green,
-                    modifier = Modifier.weight(1f),
-                    centered = false
-                )
-                VerticalMetricDivider()
-                DashboardMetric(
-                    label = "PENDING",
-                    value = pending.toString(),
-                    valueColor = C.orange,
-                    modifier = Modifier.weight(1f),
-                    centered = false
-                )
-                VerticalMetricDivider()
-                DashboardMetric(
-                    label = "FAILED",
-                    value = failed.toString(),
-                    valueColor = C.red,
-                    modifier = Modifier.weight(1f),
-                    centered = false
-                )
-                SuccessRateIndicator(rate = rate)
-            }
         }
-    }
-}
-
-@Composable
-private fun DashboardMetric(
-    label: String,
-    value: String,
-    valueColor: Color,
-    modifier: Modifier = Modifier,
-    centered: Boolean = true
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start
-    ) {
-        Text(value, color = valueColor, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-        Spacer(Modifier.height(UiDimens.SpacingXs))
-        Text(
-            label,
-            color = C.t2,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 1.2.sp
-        )
-    }
-}
-
-@Composable
-private fun VerticalMetricDivider() {
-    Box(
-        modifier = Modifier
-            .width(1.dp)
-            .height(64.dp)
-            .background(C.w08)
-    )
-}
-
-@Composable
-private fun SuccessRateIndicator(rate: Int) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(start = 14.dp)) {
-        Box(contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(
-                progress = rate / 100f,
-                modifier = Modifier.size(84.dp),
-                color = C.green,
-                trackColor = C.w08,
-                strokeWidth = 8.dp
-            )
-            Text(
-                text = "${rate}%",
-                color = C.green,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-        }
-        Spacer(Modifier.height(UiDimens.SpacingSm))
-        Text(
-            "SUCCESS RATE",
-            color = C.t2,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 1.2.sp
-        )
     }
 }
 
@@ -524,13 +408,6 @@ private fun RecentActivitySection(recentTransactions: List<Transaction>) {
             )
         }
 
-        Spacer(Modifier.height(10.dp))
-        Text(
-            "Daily dispatch results (auto-clears at midnight).",
-            color = C.t2,
-            fontSize = 12.sp,
-            lineHeight = 18.sp
-        )
         Spacer(Modifier.height(20.dp))
         if (todayTransactions.isEmpty()) {
             RecentActivityShowcase()
@@ -723,13 +600,7 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
                 Text(tx.amount.ifBlank { "-" }, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    buildString {
-                        append(tx.status)
-                        if (tx.date.isNotBlank()) {
-                            append(" • ")
-                            append(tx.date)
-                        }
-                    },
+                    transactionStatusLabel(tx),
                     color = statusColor,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium

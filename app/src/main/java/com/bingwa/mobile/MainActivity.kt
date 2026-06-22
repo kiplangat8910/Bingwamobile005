@@ -2415,12 +2415,6 @@ fun HomeScreenVolcanic(
         .toList()
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
-    val sent = automatedTxns.count { it.status == TransactionStatus.SUCCESS.value }
-    val pending = automatedTxns.count {
-        it.status == TransactionStatus.PENDING.value || it.status == TransactionStatus.PROCESSING.value
-    }
-    val failed = automatedTxns.count { it.status == TransactionStatus.FAILED.value }
-    val rate = if (automatedTxns.isNotEmpty()) (sent * 100) / automatedTxns.size else 0
     val chromeAnim = rememberInfiniteTransition(label = "home_chrome")
     val spin by chromeAnim.animateFloat(
         0f,
@@ -2489,12 +2483,6 @@ fun HomeScreenVolcanic(
                             isRefreshing = isRefreshing,
                             spin = spin,
                             onRefresh = onRefresh
-                        )
-                        HomeStatsStrip(
-                            sent = sent,
-                            pending = pending,
-                            failed = failed,
-                            rate = rate
                         )
                         HomeActivityHeading(automatedCount = automatedTxns.size)
                         HomeActivityPanel(
@@ -2881,56 +2869,6 @@ private fun HomeSparkLine() {
 }
 
 @Composable
-private fun HomeStatsStrip(
-    sent: Int,
-    pending: Int,
-    failed: Int,
-    rate: Int
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        HomeStatChip(value = sent.toString(), label = "SENT", accent = Color(0xFF74E6D8), modifier = Modifier.weight(1f))
-        HomeStatChip(value = pending.toString(), label = "PENDING", accent = Color(0xFFFFB454), modifier = Modifier.weight(1f))
-        HomeStatChip(value = failed.toString(), label = "FAILED", accent = Color(0xFFEF8273), modifier = Modifier.weight(1f))
-        HomeStatChip(value = "$rate%", label = "SUCCESS", accent = Color(0xFFB6A6EF), modifier = Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun HomeStatChip(
-    value: String,
-    label: String,
-    accent: Color,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFF1C2123))
-            .border(1.dp, accent.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
-            .padding(horizontal = 6.dp, vertical = 11.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            value,
-            color = accent,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            label,
-            color = Color(0xFF5B6366),
-            fontSize = 9.sp,
-            letterSpacing = 1.sp
-        )
-    }
-}
-
-@Composable
 private fun HomeActivityHeading(automatedCount: Int) {
     Row(
         modifier = Modifier
@@ -3232,7 +3170,7 @@ private fun HomeDispatchRow(
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                tx.status,
+                transactionStatusLabel(tx),
                 color = statusColor,
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace
