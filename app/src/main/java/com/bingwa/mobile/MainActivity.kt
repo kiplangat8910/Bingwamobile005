@@ -2969,6 +2969,19 @@ private fun HomeActivityPanel(
     onDeleteTransaction: (Transaction) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (transactions.isEmpty()) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .heightIn(min = 320.dp)
+                .padding(18.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            HomeScanningEmptyState(Modifier.fillMaxWidth())
+        }
+        return
+    }
+
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(22.dp))
@@ -2989,27 +3002,23 @@ private fun HomeActivityPanel(
                     .background(Color(0xFF74E6D8).copy(alpha = 0.28f))
             )
         }
-        if (transactions.isEmpty()) {
-            HomeScanningEmptyState(Modifier.fillMaxWidth())
-        } else {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    "DISPATCH RESULTS",
-                    color = Color(0xFF5B6366),
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 1.1.sp
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                "DISPATCH RESULTS",
+                color = Color(0xFF5B6366),
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 1.1.sp
+            )
+            transactions.forEach { tx ->
+                HomeDispatchRow(
+                    tx = tx,
+                    onOpen = { onOpenTransaction(tx) },
+                    onDelete = { onDeleteTransaction(tx) }
                 )
-                transactions.forEach { tx ->
-                    HomeDispatchRow(
-                        tx = tx,
-                        onOpen = { onOpenTransaction(tx) },
-                        onDelete = { onDeleteTransaction(tx) }
-                    )
-                }
             }
         }
     }
@@ -3051,6 +3060,7 @@ private fun HomeScanningEmptyState(modifier: Modifier = Modifier) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(150.dp)
                 .padding(top = 14.dp, bottom = 8.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -3066,20 +3076,6 @@ private fun HomeScanningEmptyState(modifier: Modifier = Modifier) {
                 contentAlignment = Alignment.Center
             ) {}
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.78f)
-                .height(1.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(
-                            Color.Transparent,
-                            Color(0xFF74E6D8).copy(alpha = 0.50f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
         Spacer(Modifier.height(16.dp))
         Text(
             "Scanning for activity…",
@@ -3099,10 +3095,17 @@ private fun HomeScanningEmptyState(modifier: Modifier = Modifier) {
 
 @Composable
 private fun HomeSonarRing(progress: Float) {
-    val ringSize = lerp(24.dp, 140.dp, progress)
+    val minSize = 24.dp
+    val maxSize = 140.dp
+    val minScale = minSize.value / maxSize.value
+    val scale = minScale + ((1f - minScale) * progress)
     Box(
         modifier = Modifier
-            .size(ringSize)
+            .size(maxSize)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .clip(CircleShape)
             .border(
                 width = if (progress < 0.08f) 2.dp else 1.dp,
