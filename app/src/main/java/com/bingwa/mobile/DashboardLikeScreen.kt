@@ -250,6 +250,9 @@ private fun BalanceOverviewCard(
     isRefreshing: Boolean,
     onRefresh: () -> Unit
 ) {
+    val airtimeValueFontSize = balanceValueFontSize(airtimeAmount, 56.sp, 48.sp, 40.sp, 34.sp)
+    val tokenValue = tokenBal.toString()
+    val tokenValueFontSize = balanceValueFontSize(tokenValue, 42.sp, 36.sp, 30.sp, 26.sp)
     Surface(
         color = C.cardHi.copy(alpha = 0.97f),
         shape = RoundedCornerShape(34.dp),
@@ -301,9 +304,12 @@ private fun BalanceOverviewCard(
                         Text(
                             airtimeAmount,
                             color = C.t1,
-                            fontSize = 56.sp,
+                            fontSize = airtimeValueFontSize,
                             fontWeight = FontWeight.ExtraBold,
-                            lineHeight = 54.sp
+                            lineHeight = airtimeValueFontSize * 0.96f,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip
                         )
                         Spacer(Modifier.height(UiDimens.SpacingSm))
                         Text(
@@ -319,7 +325,15 @@ private fun BalanceOverviewCard(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Spacer(Modifier.height(16.dp))
-                        Text(tokenBal.toString(), color = C.t1, fontSize = 42.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(
+                            tokenValue,
+                            color = C.t1,
+                            fontSize = tokenValueFontSize,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip
+                        )
                         Text("units", color = C.t2, fontSize = 15.sp)
                     }
                 }
