@@ -3049,7 +3049,7 @@ private fun HomeScanningEmptyState(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(132.dp),
-            contentAlignment = Alignment.CenterStart
+            contentAlignment = Alignment.Center
         ) {
             listOf(
                 Triple(28.dp, 34.dp, 5.dp),
@@ -3069,8 +3069,8 @@ private fun HomeScanningEmptyState(modifier: Modifier = Modifier) {
 
             Box(
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .offset(x = (-76).dp, y = (-6).dp),
+                    .align(Alignment.Center)
+                    .offset(y = (-6).dp),
                 contentAlignment = Alignment.Center
             ) {
                 Box(
