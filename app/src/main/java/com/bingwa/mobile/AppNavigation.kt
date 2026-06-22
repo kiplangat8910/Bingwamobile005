@@ -23,7 +23,7 @@ internal sealed class Screen(
     data object Manual : Screen("manual", "Manual", Icons.Outlined.Terminal, Icons.Filled.Terminal)
     data object Tokens : Screen("tokens", "Tokens", Icons.Outlined.Toll, Icons.Filled.Toll)
     data object Contacts : Screen("contacts", "Contacts", Icons.Outlined.Contacts, Icons.Filled.Contacts)
-    data object Settings : Screen("settings", "Setting", Icons.Outlined.Settings, Icons.Filled.Settings)
+    data object Settings : Screen("settings", "Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
 }
 
 internal val NAV_ITEMS = listOf(Screen.Home, Screen.Manual, Screen.Tokens, Screen.Settings)

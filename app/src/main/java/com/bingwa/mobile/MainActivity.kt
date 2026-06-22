@@ -1099,135 +1099,151 @@ private fun TokensHeroCard(
 ) {
     val accent = if (activePlan != null) C.green else C.cyan
     val remainingLabel = formatRemainingTimeDetailed(remainingMs)
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = C.cardHi.copy(alpha = 0.94f),
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            accent.copy(alpha = 0.12f),
-                            C.cardHi.copy(alpha = 0.98f),
-                            C.surface.copy(alpha = 0.96f)
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 360.dp
+        val balanceValueFontSize = balanceValueFontSize(
+            value = balance.toString(),
+            short = if (compact) 62.sp else 72.sp,
+            medium = if (compact) 54.sp else 64.sp,
+            long = if (compact) 46.sp else 54.sp,
+            extraLong = if (compact) 38.sp else 46.sp
+        )
+        val unlimitedValueFontSize = if (compact) 40.sp else 46.sp
+        val detailFontSize = if (compact) 12.sp else 13.sp
+        val remainingFontSize = if (compact) 20.sp else 24.sp
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = C.cardHi.copy(alpha = 0.94f),
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                accent.copy(alpha = 0.12f),
+                                C.cardHi.copy(alpha = 0.98f),
+                                C.surface.copy(alpha = 0.96f)
+                            )
                         )
                     )
-                )
-                .padding(horizontal = 20.dp, vertical = 22.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = accent.copy(alpha = 0.10f),
-                border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+                    .padding(
+                        horizontal = if (compact) 16.dp else 20.dp,
+                        vertical = if (compact) 18.dp else 22.dp
+                    ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 12.dp)
             ) {
-                Text(
-                    if (activePlan != null) "UNLIMITED ACCESS" else "TOKEN BALANCE",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    color = accent,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.0.sp
-                )
-            }
-            if (activePlan != null) {
-                Text(
-                    "Unlimited",
-                    fontSize = 46.sp,
-                    fontWeight = FontWeight.Black,
-                    lineHeight = 50.sp,
-                    color = C.green,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    "${activePlan.label} plan is active",
-                    color = C.t2,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
                 Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
-                    color = C.blue.copy(alpha = 0.12f),
-                    border = BorderStroke(1.dp, C.blue.copy(alpha = 0.22f))
+                    shape = RoundedCornerShape(999.dp),
+                    color = accent.copy(alpha = 0.10f),
+                    border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            "Remaining Time",
-                            color = C.t2,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.6.sp,
-                            maxLines = 1
-                        )
-                        Text(
-                            remainingLabel,
-                            color = C.blue,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    Text(
+                        if (activePlan != null) "UNLIMITED ACCESS" else "TOKEN BALANCE",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        color = accent,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.0.sp
+                    )
                 }
-                Text(
-                    "Stored tokens return after unlimited ends",
-                    color = C.t3,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            } else {
-                Text(
-                    balance.toString(),
-                    fontSize = 72.sp,
-                    fontWeight = FontWeight.Black,
-                    lineHeight = 72.sp,
-                    color = C.t1,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    "Tokens never expire and stay ready for USSD automation",
-                    color = C.t2,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                PurchasePerkChip(
-                    icon = if (activePlan != null) Icons.Outlined.Shield else Icons.Outlined.Bolt,
-                    label = if (activePlan != null) "Unlimited access stays active until time ends" else "1 token = 1 USSD call",
-                    accent = if (activePlan != null) C.blue else C.cyan
-                )
-                PurchasePerkChip(
-                    icon = Icons.Outlined.Verified,
-                    label = if (activePlan != null) "Use the remaining time before expiry" else "Tokens never expire",
-                    accent = C.green
-                )
+                if (activePlan != null) {
+                    Text(
+                        "Unlimited",
+                        fontSize = unlimitedValueFontSize,
+                        fontWeight = FontWeight.Black,
+                        lineHeight = unlimitedValueFontSize * 1.08f,
+                        color = C.green,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "${activePlan.label} access active",
+                        color = C.t2,
+                        fontSize = detailFontSize,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(22.dp),
+                        color = C.blue.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, C.blue.copy(alpha = 0.22f))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                "Remaining Time",
+                                color = C.t2,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.6.sp,
+                                maxLines = 1
+                            )
+                            Text(
+                                remainingLabel,
+                                color = C.blue,
+                                fontSize = remainingFontSize,
+                                fontWeight = FontWeight.ExtraBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    Text(
+                        "Stored tokens return after expiry",
+                        color = C.t3,
+                        fontSize = if (compact) 11.sp else 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                } else {
+                    Text(
+                        balance.toString(),
+                        fontSize = balanceValueFontSize,
+                        fontWeight = FontWeight.Black,
+                        lineHeight = balanceValueFontSize,
+                        color = C.t1,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "Tokens never expire",
+                        color = C.t2,
+                        fontSize = detailFontSize,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    PurchasePerkChip(
+                        icon = if (activePlan != null) Icons.Outlined.Shield else Icons.Outlined.Bolt,
+                        label = if (activePlan != null) "Unlimited access stays active until time ends" else "1 token = 1 USSD call",
+                        accent = if (activePlan != null) C.blue else C.cyan
+                    )
+                    PurchasePerkChip(
+                        icon = Icons.Outlined.Verified,
+                        label = if (activePlan != null) "Use the remaining time before expiry" else "Tokens never expire",
+                        accent = C.green
+                    )
+                }
             }
         }
     }
@@ -1701,7 +1717,7 @@ fun LinkRow(icon: ImageVector, title: String, sub: String, color: Color, onClick
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 15.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
         Box(
             Modifier
@@ -1715,11 +1731,32 @@ fun LinkRow(icon: ImageVector, title: String, sub: String, color: Color, onClick
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, color = C.t1, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(
+                title,
+                color = C.t1,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             Spacer(Modifier.height(4.dp))
-            Text(sub, color = C.t2, fontSize = 12.sp, lineHeight = 18.sp)
+            Text(
+                sub,
+                color = C.t2,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
-        Icon(Icons.Filled.ChevronRight, null, tint = C.t2, modifier = Modifier.size(18.dp))
+        Icon(
+            Icons.Filled.ChevronRight,
+            null,
+            tint = C.t2,
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .size(18.dp)
+        )
     }
 }
 
@@ -2199,7 +2236,7 @@ private fun NavBarItemButton(item: Screen, selected: Boolean, compact: Boolean, 
     val selectedTint = C.amber
     Column(
         modifier = Modifier
-            .width(if (compact) 62.dp else 70.dp)
+            .width(if (compact) 60.dp else 68.dp)
             .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(vertical = if (compact) 4.dp else 6.dp),
@@ -2225,10 +2262,13 @@ private fun NavBarItemButton(item: Screen, selected: Boolean, compact: Boolean, 
         }
         Text(
             item.label,
-            fontSize = if (compact) 10.sp else 11.sp,
+            modifier = Modifier.fillMaxWidth(),
+            fontSize = if (compact) 9.sp else 10.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             color = if (selected) selectedTint else C.t3,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -2467,6 +2507,16 @@ fun HomeScreenVolcanic(
         .filter { it.showInRecent && transactionDayKey(it) == dayKey }
         .sortedByDescending { transactionTimestamp(it) }
         .toList()
+    val sentCount = automatedTxns.size
+    val pendingCount = automatedTxns.count {
+        it.statusEnum == TransactionStatus.PROCESSING ||
+            it.statusEnum == TransactionStatus.PENDING ||
+            it.statusEnum == TransactionStatus.RETRYING
+    }
+    val failedCount = automatedTxns.count {
+        it.statusEnum == TransactionStatus.FAILED || it.statusEnum == TransactionStatus.CANCELLED
+    }
+    val completedCount = automatedTxns.count { it.statusEnum == TransactionStatus.SUCCESS }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
     val chromeAnim = rememberInfiniteTransition(label = "home_chrome")
@@ -2532,8 +2582,12 @@ fun HomeScreenVolcanic(
                         HomeHeroHeader(running = running)
                         HomeSplitBalanceCard(
                             airBal = airBal.ifBlank { "0.00" },
-                            tokenValue = unlimitedLabel ?: tokenBal.toString(),
+                            tokenValue = if (unlimitedLabel != null) "Unlimited" else tokenBal.toString(),
                             tokenHint = unlimitedRemaining ?: "Tokens never expire",
+                            sentCount = sentCount,
+                            pendingCount = pendingCount,
+                            failedCount = failedCount,
+                            completedCount = completedCount,
                             isRefreshing = isRefreshing,
                             spin = spin,
                             onRefresh = onRefresh
@@ -2747,23 +2801,26 @@ private fun HomeSplitBalanceCard(
     airBal: String,
     tokenValue: String,
     tokenHint: String,
+    sentCount: Int,
+    pendingCount: Int,
+    failedCount: Int,
+    completedCount: Int,
     isRefreshing: Boolean,
     spin: Float,
     onRefresh: () -> Unit
 ) {
     val amber = Color(0xFFFFB454)
     val cyan = Color(0xFF74E6D8)
+    val mint = Color(0xFF62E2AE)
+    val coral = Color(0xFFFF8A8A)
+    val completedAccent = Color(0xFFB79BFF)
     val text = Color(0xFFEEF2F1)
     val textDim = Color(0xFF8A9396)
     val textDimmer = Color(0xFF5B6366)
     val cardBg = Color(0xFF1C2123)
     val line = Color(0xFF333B3E)
     val lineSoft = Color(0xFF262D2F)
-    val airtimeFontSize = balanceValueFontSize(airBal, 24.sp, 21.sp, 18.sp, 16.sp)
-    val tokenValueFontSize = balanceValueFontSize(tokenValue, 24.sp, 21.sp, 18.sp, 16.sp)
-    val tokenHintFontSize = balanceCaptionFontSize(tokenHint, 10.5.sp, 9.5.sp, 8.5.sp)
-
-    Row(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
@@ -2778,103 +2835,155 @@ private fun HomeSplitBalanceCard(
             )
             .border(1.dp, lineSoft, RoundedCornerShape(20.dp))
             .clickable(onClick = onRefresh)
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
+        val compact = maxWidth < 380.dp
+        val airtimeFontSize = balanceValueFontSize(
+            airBal,
+            if (compact) 22.sp else 24.sp,
+            if (compact) 18.sp else 21.sp,
+            if (compact) 15.sp else 18.sp,
+            if (compact) 13.sp else 15.sp
+        )
+        val tokenValueFontSize = balanceValueFontSize(
+            tokenValue,
+            if (compact) 24.sp else 26.sp,
+            if (compact) 20.sp else 22.sp,
+            if (compact) 17.sp else 19.sp,
+            if (compact) 15.sp else 17.sp
+        )
+        val tokenHintFontSize = balanceCaptionFontSize(
+            tokenHint,
+            if (compact) 10.sp else 10.5.sp,
+            if (compact) 9.sp else 9.5.sp,
+            if (compact) 8.sp else 8.5.sp
+        )
+        val statsSpacing = if (compact) 6.dp else 8.dp
+
         Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(Modifier.size(5.dp).clip(CircleShape).background(amber))
-                Text(
-                    "AIRTIME BALANCE",
-                    color = textDimmer,
-                    fontSize = 9.5.sp,
-                    letterSpacing = 1.2.sp
-                )
-                Spacer(Modifier.weight(1f))
-                Surface(
-                    shape = CircleShape,
-                    color = Color(0xFF2E3437),
-                    border = BorderStroke(1.dp, lineSoft)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Box(
-                        modifier = Modifier.size(28.dp),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(
-                            Icons.Outlined.Refresh,
-                            null,
-                            tint = textDim,
-                            modifier = Modifier
-                                .size(14.dp)
-                                .then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
+                        Box(Modifier.size(5.dp).clip(CircleShape).background(amber))
+                        Text(
+                            "AIRTIME BALANCE",
+                            color = textDimmer,
+                            fontSize = 9.5.sp,
+                            letterSpacing = 1.2.sp,
+                            maxLines = 1
                         )
+                        Spacer(Modifier.weight(1f))
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFF2E3437),
+                            border = BorderStroke(1.dp, lineSoft)
+                        ) {
+                            Box(
+                                modifier = Modifier.size(28.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Refresh,
+                                    null,
+                                    tint = textDim,
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .then(if (isRefreshing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
+                                )
+                            }
+                        }
                     }
+                    Text(
+                        airBal,
+                        color = text,
+                        fontSize = airtimeFontSize,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        if (isRefreshing) "checking balance" else "tap card to refresh",
+                        color = textDimmer,
+                        fontSize = 10.5.sp,
+                        maxLines = 1
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = if (compact) 12.dp else 14.dp)
+                        .width(1.dp)
+                        .height(if (compact) 76.dp else 82.dp)
+                        .background(line)
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        "TOKENS",
+                        color = textDimmer,
+                        fontSize = 9.5.sp,
+                        letterSpacing = 1.2.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                    Text(
+                        tokenValue,
+                        color = text,
+                        fontSize = tokenValueFontSize,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                        fontFamily = FontFamily.Monospace,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        tokenHint,
+                        color = textDimmer,
+                        fontSize = tokenHintFontSize,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    HomeSparkLine()
                 }
             }
-            Text(
-                airBal,
-                color = text,
-                fontSize = airtimeFontSize,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Clip,
-                fontFamily = FontFamily.Monospace
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(line)
             )
-            Text(
-                if (isRefreshing) "checking balance" else "tap card to refresh",
-                color = textDimmer,
-                fontSize = 10.5.sp
+            HomeStatsRow(
+                sent = sentCount,
+                pending = pendingCount,
+                failed = failedCount,
+                completed = completedCount,
+                compact = compact,
+                spacing = statsSpacing,
+                sentAccent = mint,
+                pendingAccent = amber,
+                failedAccent = coral,
+                completedAccent = completedAccent
             )
-        }
-        Box(
-            modifier = Modifier
-                .width(1.dp)
-                .height(74.dp)
-                .background(line)
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 14.dp, end = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                "TOKENS",
-                color = textDimmer,
-                fontSize = 9.5.sp,
-                letterSpacing = 1.2.sp,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                tokenValue,
-                color = text,
-                fontSize = tokenValueFontSize,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Clip,
-                fontFamily = FontFamily.Monospace,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                tokenHint,
-                color = textDimmer,
-                fontSize = tokenHintFontSize,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Clip
-            )
-            HomeSparkLine()
         }
     }
 }
@@ -3201,7 +3310,7 @@ private fun HomeDispatchRow(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.Top
                 ) {
                     Row(
@@ -3246,23 +3355,26 @@ private fun HomeDispatchRow(
                             )
                         }
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        amountLabel,
-                        color = Color(0xFFE8ECEE),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        maxLines = 1
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        transactionStatusLabel(tx),
-                        color = statusColor.copy(alpha = 0.96f),
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        maxLines = 1
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            amountLabel,
+                            color = Color(0xFFE8ECEE),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
+                        )
+                        Text(
+                            transactionStatusLabel(tx),
+                            color = statusColor.copy(alpha = 0.96f),
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
+                        )
+                    }
                 }
                 Spacer(Modifier.height(14.dp))
                 Box(
@@ -3274,55 +3386,62 @@ private fun HomeDispatchRow(
                 Spacer(Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            serviceIcon,
-                            null,
-                            tint = Color(0xFF667074),
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Text(
-                            serviceLabel,
-                            color = Color(0xFF667074),
-                            fontSize = 11.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            Icons.Outlined.Schedule,
-                            null,
-                            tint = Color(0xFF667074),
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Text(
-                            timeLabel,
-                            color = Color(0xFF7C868A),
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        if (relativeLabel.isNotBlank()) {
-                            Text(
-                                "•",
-                                color = Color(0xFF4F5A5F),
-                                fontSize = 11.sp
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                serviceIcon,
+                                null,
+                                tint = Color(0xFF667074),
+                                modifier = Modifier.size(15.dp)
                             )
                             Text(
-                                relativeLabel,
-                                color = statusColor.copy(alpha = 0.96f),
+                                serviceLabel,
+                                color = Color(0xFF667074),
                                 fontSize = 11.sp,
-                                fontFamily = FontFamily.Monospace
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.Schedule,
+                                null,
+                                tint = Color(0xFF667074),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                timeLabel,
+                                color = Color(0xFF7C868A),
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1
+                            )
+                            if (relativeLabel.isNotBlank()) {
+                                Text(
+                                    "•",
+                                    color = Color(0xFF4F5A5F),
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    relativeLabel,
+                                    color = statusColor.copy(alpha = 0.96f),
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                     IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
@@ -4392,7 +4511,7 @@ fun VolcanicBalanceCard(
     sent: Int,
     pending: Int,
     failed: Int,
-    rate: Int,
+    completed: Int,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     spin: Float,
@@ -4423,7 +4542,7 @@ fun VolcanicBalanceCard(
         val sentAccent = Color(0xFF1ED89A)
         val pendingAccent = Color(0xFFF5AF19)
         val failedAccent = Color(0xFFFF496A)
-        val rateAccent = Color(0xFFFF496A)
+        val completedAccent = Color(0xFFB79BFF)
         val airtimeValue = airBal.ifBlank { "—" }
         val topTokenValue = unlimitedLabel ?: tokenBal.toString()
         val topTokenCaption = unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available Units"
@@ -4632,13 +4751,13 @@ fun VolcanicBalanceCard(
                 sent = sent,
                 pending = pending,
                 failed = failed,
-                rate = rate,
+                completed = completed,
                 compact = true,
                 spacing = statSpacing,
                 sentAccent = sentAccent,
                 pendingAccent = pendingAccent,
                 failedAccent = failedAccent,
-                rateAccent = rateAccent
+                completedAccent = completedAccent
             )
         }
     }
@@ -4679,13 +4798,13 @@ private fun HomeStatsRow(
     sent: Int,
     pending: Int,
     failed: Int,
-    rate: Int,
+    completed: Int,
     compact: Boolean,
     spacing: Dp,
     sentAccent: Color,
     pendingAccent: Color,
     failedAccent: Color,
-    rateAccent: Color
+    completedAccent: Color
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -4713,7 +4832,13 @@ private fun HomeStatsRow(
             compact = compact,
             modifier = Modifier.weight(1f)
         )
-        RateStatCard(rate = rate, accent = rateAccent, compact = compact, modifier = Modifier.weight(1f))
+        HomeStatusMetricCard(
+            label = "Completed",
+            value = completed.toString(),
+            accent = completedAccent,
+            compact = compact,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
@@ -4733,26 +4858,30 @@ private fun HomeStatusMetricCard(
     ) {
         Column(
             modifier = Modifier
-                .height(if (compact) 96.dp else 104.dp)
-                .padding(horizontal = 8.dp, vertical = 10.dp),
+                .height(if (compact) 92.dp else 100.dp)
+                .padding(horizontal = 6.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Text(
                 value,
-                fontSize = if (compact) 24.sp else 28.sp,
+                fontSize = if (compact) 22.sp else 26.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = accent,
-                maxLines = 1
+                maxLines = 1,
+                textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(6.dp))
             Text(
                 label.uppercase(Locale.getDefault()),
                 color = C.t2,
-                fontSize = if (compact) 8.sp else 9.sp,
-                letterSpacing = 1.1.sp,
+                fontSize = if (compact) 7.5.sp else 8.5.sp,
+                letterSpacing = if (compact) 0.7.sp else 1.0.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = 1
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -4782,7 +4911,7 @@ private fun RateStatCard(rate: Int, accent: Color, compact: Boolean, modifier: M
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "SUCCESS",
+                "COMPLETED",
                 color = C.t2,
                 fontSize = if (compact) 8.sp else 9.sp,
                 letterSpacing = 1.1.sp,
