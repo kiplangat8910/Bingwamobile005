@@ -3197,6 +3197,14 @@ private fun HomeDispatchRow(
                         fontFamily = FontFamily.Monospace,
                         maxLines = 1
                     )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        transactionStatusLabel(tx),
+                        color = statusColor.copy(alpha = 0.96f),
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1
+                    )
                 }
                 Spacer(Modifier.height(14.dp))
                 Box(
