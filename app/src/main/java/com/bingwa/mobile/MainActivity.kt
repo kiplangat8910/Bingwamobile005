@@ -4432,7 +4432,7 @@ fun VolcanicBalanceCard(
     }
 }
 
-private fun balanceValueFontSize(
+fun balanceValueFontSize(
     value: String,
     short: TextUnit,
     medium: TextUnit,
@@ -4448,7 +4448,7 @@ private fun balanceValueFontSize(
     }
 }
 
-private fun balanceCaptionFontSize(
+fun balanceCaptionFontSize(
     value: String,
     short: TextUnit,
     medium: TextUnit,
