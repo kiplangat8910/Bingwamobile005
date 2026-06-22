@@ -1156,7 +1156,7 @@ private fun TokensHeroCard(
                         fontSize = unlimitedValueFontSize,
                         fontWeight = FontWeight.Black,
                         lineHeight = unlimitedValueFontSize * 1.08f,
-                        color = C.green,
+                        color = C.orange,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1172,8 +1172,8 @@ private fun TokensHeroCard(
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(22.dp),
-                        color = C.blue.copy(alpha = 0.12f),
-                        border = BorderStroke(1.dp, C.blue.copy(alpha = 0.22f))
+                        color = C.red.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, C.red.copy(alpha = 0.22f))
                     ) {
                         Column(
                             modifier = Modifier
@@ -1184,7 +1184,7 @@ private fun TokensHeroCard(
                         ) {
                             Text(
                                 "Remaining Time",
-                                color = C.t2,
+                                color = C.red,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.6.sp,
@@ -1192,7 +1192,7 @@ private fun TokensHeroCard(
                             )
                             Text(
                                 remainingLabel,
-                                color = C.blue,
+                                color = C.red,
                                 fontSize = remainingFontSize,
                                 fontWeight = FontWeight.ExtraBold,
                                 maxLines = 1,
