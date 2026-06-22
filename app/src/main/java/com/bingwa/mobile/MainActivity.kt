@@ -2717,6 +2717,9 @@ private fun HomeSplitBalanceCard(
     val cardBg = Color(0xFF1C2123)
     val line = Color(0xFF333B3E)
     val lineSoft = Color(0xFF262D2F)
+    val airtimeFontSize = balanceValueFontSize(airBal, 24.sp, 21.sp, 18.sp, 16.sp)
+    val tokenValueFontSize = balanceValueFontSize(tokenValue, 24.sp, 21.sp, 18.sp, 16.sp)
+    val tokenHintFontSize = balanceCaptionFontSize(tokenHint, 10.5.sp, 9.5.sp, 8.5.sp)
 
     Row(
         modifier = Modifier
@@ -2776,10 +2779,11 @@ private fun HomeSplitBalanceCard(
             Text(
                 airBal,
                 color = text,
-                fontSize = 24.sp,
+                fontSize = airtimeFontSize,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                overflow = TextOverflow.Clip,
                 fontFamily = FontFamily.Monospace
             )
             Text(
@@ -2811,20 +2815,22 @@ private fun HomeSplitBalanceCard(
             Text(
                 tokenValue,
                 color = text,
-                fontSize = 24.sp,
+                fontSize = tokenValueFontSize,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                overflow = TextOverflow.Clip,
                 fontFamily = FontFamily.Monospace,
                 textAlign = TextAlign.Center
             )
             Text(
                 tokenHint,
                 color = textDimmer,
-                fontSize = 10.5.sp,
+                fontSize = tokenHintFontSize,
                 textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip
             )
             HomeSparkLine()
         }
@@ -3565,6 +3571,8 @@ private fun GithubMetricTile(
     accent: Color,
     modifier: Modifier = Modifier
 ) {
+    val valueFontSize = balanceValueFontSize(value, 19.sp, 17.sp, 15.sp, 13.sp)
+    val captionFontSize = balanceCaptionFontSize(caption, 11.sp, 10.sp, 9.sp)
     Surface(
         color = C.surface,
         shape = RoundedCornerShape(16.dp),
@@ -3582,18 +3590,20 @@ private fun GithubMetricTile(
             Text(
                 value,
                 color = C.t1,
-                fontSize = 19.sp,
+                fontSize = valueFontSize,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                softWrap = false,
+                overflow = TextOverflow.Clip
             )
             Text(
                 caption,
                 color = C.t3,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                fontSize = captionFontSize,
+                lineHeight = captionFontSize * 1.1f,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip
             )
         }
     }
@@ -4264,6 +4274,29 @@ fun VolcanicBalanceCard(
         val pendingAccent = Color(0xFFF5AF19)
         val failedAccent = Color(0xFFFF496A)
         val rateAccent = Color(0xFFFF496A)
+        val airtimeValue = airBal.ifBlank { "—" }
+        val topTokenValue = unlimitedLabel ?: tokenBal.toString()
+        val topTokenCaption = unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available Units"
+        val airtimeFontSize = balanceValueFontSize(
+            airtimeValue,
+            if (compactTop) 34.sp else 40.sp,
+            if (compactTop) 30.sp else 34.sp,
+            if (compactTop) 26.sp else 30.sp,
+            if (compactTop) 22.sp else 26.sp
+        )
+        val topTokenValueFontSize = balanceValueFontSize(
+            topTokenValue,
+            if (compactTop) 42.sp else 52.sp,
+            if (compactTop) 34.sp else 42.sp,
+            if (compactTop) 28.sp else 34.sp,
+            if (compactTop) 24.sp else 28.sp
+        )
+        val topTokenCaptionFontSize = balanceCaptionFontSize(
+            topTokenCaption,
+            if (compactTop) 10.sp else 11.sp,
+            if (compactTop) 9.sp else 10.sp,
+            if (compactTop) 8.sp else 9.sp
+        )
 
         Box(
             Modifier
@@ -4369,12 +4402,13 @@ fun VolcanicBalanceCard(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Text(
-                                text = airBal.ifBlank { "—" },
+                                text = airtimeValue,
                                 color = C.t1,
-                                fontSize = if (compactTop) 34.sp else 40.sp,
+                                fontSize = airtimeFontSize,
                                 fontWeight = FontWeight.ExtraBold,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                softWrap = false,
+                                overflow = TextOverflow.Clip
                             )
                             Icon(
                                 Icons.Outlined.Autorenew,
@@ -4406,7 +4440,7 @@ fun VolcanicBalanceCard(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         AnimatedContent(
-                            targetState = unlimitedLabel ?: tokenBal.toString(),
+                            targetState = topTokenValue,
                             transitionSpec = {
                                 (fadeIn(tween(220)) + slideInVertically(animationSpec = tween(220)) { it / 5 }) togetherWith
                                     (fadeOut(tween(180)) + slideOutVertically(animationSpec = tween(180)) { -it / 5 })
@@ -4416,21 +4450,23 @@ fun VolcanicBalanceCard(
                             Text(
                                 tokenValue,
                                 color = if (unlimitedLabel != null) sentAccent else C.t1,
-                                fontSize = if (compactTop) 42.sp else 52.sp,
+                                fontSize = topTokenValueFontSize,
                                 fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Center,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                softWrap = false,
+                                overflow = TextOverflow.Clip
                             )
                         }
                         Text(
-                            unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available Units",
+                            topTokenCaption,
                             color = C.t2,
-                            fontSize = if (compactTop) 10.sp else 11.sp,
-                            lineHeight = if (compactTop) 13.sp else 15.sp,
+                            fontSize = topTokenCaptionFontSize,
+                            lineHeight = topTokenCaptionFontSize * 1.1f,
                             textAlign = TextAlign.Center,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip
                         )
                     }
                 }
@@ -4455,6 +4491,36 @@ fun VolcanicBalanceCard(
                 rateAccent = rateAccent
             )
         }
+    }
+}
+
+private fun balanceValueFontSize(
+    value: String,
+    short: TextUnit,
+    medium: TextUnit,
+    long: TextUnit,
+    extraLong: TextUnit
+): TextUnit {
+    val length = value.trim().length
+    return when {
+        length <= 8 -> short
+        length <= 12 -> medium
+        length <= 16 -> long
+        else -> extraLong
+    }
+}
+
+private fun balanceCaptionFontSize(
+    value: String,
+    short: TextUnit,
+    medium: TextUnit,
+    long: TextUnit
+): TextUnit {
+    val length = value.trim().length
+    return when {
+        length <= 20 -> short
+        length <= 30 -> medium
+        else -> long
     }
 }
 
