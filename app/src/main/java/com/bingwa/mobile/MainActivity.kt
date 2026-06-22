@@ -1103,14 +1103,14 @@ private fun TokensHeroCard(
         val compact = maxWidth < 360.dp
         val balanceValueFontSize = balanceValueFontSize(
             value = balance.toString(),
-            short = if (compact) 62.sp else 72.sp,
-            medium = if (compact) 54.sp else 64.sp,
-            long = if (compact) 46.sp else 54.sp,
-            extraLong = if (compact) 38.sp else 46.sp
+            short = if (compact) 56.sp else 64.sp,
+            medium = if (compact) 48.sp else 56.sp,
+            long = if (compact) 42.sp else 48.sp,
+            extraLong = if (compact) 34.sp else 40.sp
         )
-        val unlimitedValueFontSize = if (compact) 40.sp else 46.sp
+        val unlimitedValueFontSize = if (compact) 36.sp else 42.sp
         val detailFontSize = if (compact) 12.sp else 13.sp
-        val remainingFontSize = if (compact) 20.sp else 24.sp
+        val remainingFontSize = if (compact) 18.sp else 22.sp
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = C.cardHi.copy(alpha = 0.94f),
@@ -1130,11 +1130,11 @@ private fun TokensHeroCard(
                         )
                     )
                     .padding(
-                        horizontal = if (compact) 16.dp else 20.dp,
-                        vertical = if (compact) 18.dp else 22.dp
+                        horizontal = if (compact) 15.dp else 18.dp,
+                        vertical = if (compact) 16.dp else 18.dp
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 12.dp)
+                verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp)
             ) {
                 Surface(
                     shape = RoundedCornerShape(999.dp),
@@ -2566,7 +2566,7 @@ fun HomeScreenVolcanic(
         )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 24.dp)
+            contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 20.dp)
         ) {
             item {
                 Box(
@@ -2577,7 +2577,7 @@ fun HomeScreenVolcanic(
                         modifier = Modifier
                             .fillMaxWidth()
                             .widthIn(max = 420.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         HomeHeroHeader(running = running)
                         HomeSplitBalanceCard(
@@ -2603,7 +2603,7 @@ fun HomeScreenVolcanic(
                             },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(8.dp))
                     }
                 }
             }
@@ -2755,7 +2755,7 @@ private fun HomeHeroHeader(running: Boolean) {
             Text(
                 "Bingwa Mobile",
                 color = Color(0xFFEEF2F1),
-                fontSize = 27.sp,
+                fontSize = 25.sp,
                 fontWeight = FontWeight.ExtraBold,
                 textAlign = TextAlign.Center
             )
@@ -2763,17 +2763,17 @@ private fun HomeHeroHeader(running: Boolean) {
             Text(
                 "USSD Automation Platform",
                 color = Color(0xFF8A9396),
-                fontSize = 12.5.sp,
+                fontSize = 12.sp,
                 textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
             Surface(
                 shape = RoundedCornerShape(999.dp),
                 color = Color.Transparent,
                 border = BorderStroke(1.dp, borderColor)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
+                    modifier = Modifier.padding(horizontal = 15.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
@@ -2786,12 +2786,14 @@ private fun HomeHeroHeader(running: Boolean) {
                     Text(
                         pillText,
                         color = cyan,
-                        fontSize = 11.5.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.2.sp
                     )
                 }
             }
+            Spacer(Modifier.height(6.dp))
+            RelayHotspotStatusChip()
         }
     }
 }
@@ -2835,7 +2837,7 @@ private fun HomeSplitBalanceCard(
             )
             .border(1.dp, lineSoft, RoundedCornerShape(20.dp))
             .clickable(onClick = onRefresh)
-            .padding(horizontal = 16.dp, vertical = 16.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         val compact = maxWidth < 380.dp
         val airtimeFontSize = balanceValueFontSize(
@@ -2862,7 +2864,7 @@ private fun HomeSplitBalanceCard(
 
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -2870,7 +2872,7 @@ private fun HomeSplitBalanceCard(
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -2919,7 +2921,7 @@ private fun HomeSplitBalanceCard(
                     Text(
                         if (isRefreshing) "checking balance" else "tap card to refresh",
                         color = textDimmer,
-                        fontSize = 10.5.sp,
+                        fontSize = 10.sp,
                         maxLines = 1
                     )
                 }
@@ -2927,13 +2929,13 @@ private fun HomeSplitBalanceCard(
                     modifier = Modifier
                         .padding(horizontal = if (compact) 12.dp else 14.dp)
                         .width(1.dp)
-                        .height(if (compact) 76.dp else 82.dp)
+                        .height(if (compact) 70.dp else 76.dp)
                         .background(line)
                 )
                 Column(
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
                         "TOKENS",
@@ -3036,7 +3038,7 @@ private fun HomeActivityHeading(automatedCount: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 10.dp),
+            .padding(top = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
@@ -6490,7 +6492,7 @@ fun TokensScreen() {
             PageHeader("Tokens", if (activePlan != null) "View your active unlimited access and renew when needed" else "View token balance and buy only what you need")
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 TokensHeroCard(balance = bal, activePlan = activePlan, remainingMs = remMs)
 
@@ -6499,7 +6501,7 @@ fun TokensScreen() {
                     subtitle = "Choose a clean token pack for pay-as-you-go usage.",
                     accent = C.cyan
                 )
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     packs.forEach { p ->
                         TokenTopUpCard(p) { confirm = p.ksh }
                     }
@@ -6510,13 +6512,13 @@ fun TokensScreen() {
                     subtitle = "Best for high-volume usage when you want time-based unlimited access.",
                     accent = C.blue
                 )
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     UnlimitedManager.PLANS.forEach { plan ->
                         UnlimitedPlanCard(plan) { confirm = plan.ksh }
                     }
                 }
 
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(16.dp))
             }
         }
     }
@@ -6563,7 +6565,7 @@ private data class TokenTopUp(val tokens: Int, val ksh: Int, val popular: Boolea
 private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
     Surface(
         color = C.card,
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, if (p.popular) C.cyan.copy(alpha = 0.22f) else C.border.copy(alpha = 0.85f)),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -6579,12 +6581,12 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
                         }
                     )
                 )
-                .padding(horizontal = 16.dp, vertical = 16.dp),
+                .padding(horizontal = 14.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
                 Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 if (p.popular) {
                     Surface(
@@ -6595,10 +6597,10 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
                         Text("POPULAR", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = C.cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                     }
                 }
-                Text("Tokens", color = C.t2, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Text("${p.tokens}", color = C.t1, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-                Text("KSh ${p.ksh}", color = if (p.popular) C.cyan else C.t3, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text("Tokens never expire", color = C.green, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                Text("Tokens", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text("${p.tokens}", color = C.t1, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                Text("KSh ${p.ksh}", color = if (p.popular) C.cyan else C.t3, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text("Tokens never expire", color = C.green, fontSize = 10.sp, fontWeight = FontWeight.Medium)
             }
 
             Button(
@@ -6608,12 +6610,12 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
                     containerColor = if (p.popular) C.cyan else C.cardHi,
                     contentColor = if (p.popular) C.bg else C.t1
                 ),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                modifier = Modifier.height(42.dp)
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                modifier = Modifier.height(38.dp)
             ) {
-                Icon(Icons.Outlined.Bolt, null, modifier = Modifier.size(15.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Buy", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Icon(Icons.Outlined.Bolt, null, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Buy", fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         }
     }
@@ -6623,7 +6625,7 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
 private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
     Surface(
         color = C.card,
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, C.blue.copy(alpha = 0.18f)),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -6635,20 +6637,20 @@ private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
                         listOf(C.blue.copy(alpha = 0.10f), C.card, C.surface.copy(alpha = 0.92f))
                     )
                 )
-                .padding(horizontal = 16.dp, vertical = 16.dp),
+                .padding(horizontal = 14.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
                 Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Unlimited", color = C.t1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("Unlimited", color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
                     Surface(shape = RoundedCornerShape(999.dp), color = C.blue.copy(alpha = 0.14f), border = BorderStroke(1.dp, C.blue.copy(alpha = 0.22f))) {
                         Text(plan.label.uppercase(), modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = C.blue, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
                     }
                 }
-                Text("KSh ${plan.ksh}", color = C.blue, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text("KSh ${plan.ksh}", color = C.blue, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MiniTag("Heavy usage", C.green)
                     MiniTag("Time-based access", C.blue)
@@ -6659,12 +6661,12 @@ private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
                 onClick = onBuy,
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = C.blue, contentColor = C.bg),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                modifier = Modifier.height(42.dp)
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                modifier = Modifier.height(38.dp)
             ) {
-                Icon(Icons.Outlined.Shield, null, modifier = Modifier.size(15.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Buy", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Icon(Icons.Outlined.Shield, null, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Buy", fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         }
     }
