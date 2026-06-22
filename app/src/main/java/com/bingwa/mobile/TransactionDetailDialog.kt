@@ -104,13 +104,6 @@ internal fun TransactionDetailDialog(
     var retrying by remember { mutableStateOf(false) }
     var altPhone by remember { mutableStateOf("") }
     var altDispatching by remember { mutableStateOf(false) }
-    val altSuggestions = remember(tx.id, tx.clientName, tx.phoneNumber) { suggestedAlternativeNumbers(ctx, tx) }
-
-    LaunchedEffect(isDailyLimitHold, altSuggestions) {
-        if (isDailyLimitHold && altPhone.isBlank() && altSuggestions.isNotEmpty()) {
-            altPhone = altSuggestions.first()
-        }
-    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -223,28 +216,6 @@ internal fun TransactionDetailDialog(
                                     unfocusedPlaceholderColor = C.t3
                                 )
                             )
-                            if (altSuggestions.isNotEmpty()) {
-                                Spacer(Modifier.height(10.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    altSuggestions.forEach { suggestion ->
-                                        OutlinedButton(
-                                            onClick = { altPhone = suggestion },
-                                            shape = RoundedCornerShape(999.dp),
-                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.65f)),
-                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                containerColor = C.surface.copy(alpha = 0.92f),
-                                                contentColor = C.t1
-                                            )
-                                        ) {
-                                            Text(suggestion, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                        }
-                                    }
-                                }
-                            }
                             Spacer(Modifier.height(12.dp))
                             Button(
                                 onClick = {
