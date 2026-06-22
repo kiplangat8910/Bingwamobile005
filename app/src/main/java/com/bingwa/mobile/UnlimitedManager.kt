@@ -20,29 +20,35 @@ class UnlimitedManager(private val context: Context) {
     private val prefs = context.getSharedPreferences("UnlimitedStore", Context.MODE_PRIVATE)
 
     fun activate(plan: Plan) {
-        val nowWall = System.currentTimeMillis()
-        val nowElapsed = SystemClock.elapsedRealtime()
-        prefs.edit()
-            .putString("plan_id", plan.id)
-            .putString("plan_label", plan.label)
-            .putInt("plan_ksh", plan.ksh)
-            .putLong("duration_ms", plan.durationMs)
-            .putLong("start_wall", nowWall)
-            .putLong("start_elapsed", nowElapsed)
-            .putLong("last_wall", nowWall)
-            .putLong("last_elapsed", nowElapsed)
-            .putBoolean("tampered", false)
-            .apply()
+        activateInternal(plan.id, plan.label, plan.ksh, plan.durationMs)
     }
 
     fun activateCustom(id: String, label: String, durationMs: Long) {
+        activateInternal(id, label, 0, durationMs)
+    }
+
+    private fun activateInternal(id: String, label: String, ksh: Int, durationMs: Long) {
         val nowWall = System.currentTimeMillis()
         val nowElapsed = SystemClock.elapsedRealtime()
+        val carriedMs = remainingMs().coerceAtLeast(0L)
+        val currentPlan = getActivePlan()?.takeIf { carriedMs > 0L }
+        val totalDurationMs = durationMs + carriedMs
+        val effectiveId = when {
+            carriedMs <= 0L -> id
+            currentPlan?.id?.equals(id, ignoreCase = true) == true -> id
+            else -> "STACKED"
+        }
+        val effectiveLabel = when {
+            carriedMs <= 0L -> label
+            currentPlan == null -> label
+            currentPlan.label.equals(label, ignoreCase = true) -> label
+            else -> "Unlimited Access"
+        }
         prefs.edit()
-            .putString("plan_id", id)
-            .putString("plan_label", label)
-            .putInt("plan_ksh", 0)
-            .putLong("duration_ms", durationMs)
+            .putString("plan_id", effectiveId)
+            .putString("plan_label", effectiveLabel)
+            .putInt("plan_ksh", ksh)
+            .putLong("duration_ms", totalDurationMs)
             .putLong("start_wall", nowWall)
             .putLong("start_elapsed", nowElapsed)
             .putLong("last_wall", nowWall)

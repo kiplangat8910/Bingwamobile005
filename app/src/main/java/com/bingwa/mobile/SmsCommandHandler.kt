@@ -104,9 +104,8 @@ object SmsCommandHandler {
                 sendOwnerNotification(context, "Admin request rejected", "Token clear code time window is not valid.")
                 return true
             }
-            context.getSharedPreferences("TokenStore", Context.MODE_PRIVATE).edit().putInt("balance", 0).apply()
-            TokenManager.tokenBalanceListener?.invoke(0)
-            sendOwnerNotification(context, "Tokens cleared", "Your token balance was cleared to 0 by the admin.")
+            TokenManager(context).clearBalance(clearUnlimited = true)
+            sendOwnerNotification(context, "Access cleared", "Your token balance and unlimited access were cleared by the admin.")
             return true
         }
 

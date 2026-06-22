@@ -71,7 +71,8 @@ fun DashboardLikeScreen(
         DashboardHeader(
             running = running,
             automatedCount = recentTransactions.size,
-            tokenBal = tokenBal
+            tokenBal = tokenBal,
+            unlimitedLabel = unlimitedLabel
         )
 
         Spacer(Modifier.height(UiDimens.SpacingXl))
@@ -79,6 +80,8 @@ fun DashboardLikeScreen(
             airtimeCurrency = airtimeCurrency,
             airtimeAmount = airtimeAmount,
             tokenBal = tokenBal,
+            unlimitedLabel = unlimitedLabel,
+            unlimitedRemaining = unlimitedRemaining,
             isRefreshing = isRefreshing,
             onRefresh = onRefresh
         )
@@ -98,7 +101,7 @@ fun DashboardLikeScreen(
 }
 
 @Composable
-private fun DashboardHeader(running: Boolean, automatedCount: Int, tokenBal: Int) {
+private fun DashboardHeader(running: Boolean, automatedCount: Int, tokenBal: Int, unlimitedLabel: String?) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -126,7 +129,7 @@ private fun DashboardHeader(running: Boolean, automatedCount: Int, tokenBal: Int
                 modifier = Modifier.weight(1f)
             )
             HeaderCountChip(text = "$automatedCount automated")
-            HeaderCountChip(text = "$tokenBal tokens")
+            HeaderCountChip(text = unlimitedLabel ?: "$tokenBal tokens")
         }
     }
 }
@@ -233,11 +236,13 @@ private fun BalanceOverviewCard(
     airtimeCurrency: String,
     airtimeAmount: String,
     tokenBal: Int,
+    unlimitedLabel: String?,
+    unlimitedRemaining: String?,
     isRefreshing: Boolean,
     onRefresh: () -> Unit
 ) {
     val airtimeValueFontSize = balanceValueFontSize(airtimeAmount, 56.sp, 48.sp, 40.sp, 34.sp)
-    val tokenValue = tokenBal.toString()
+    val tokenValue = unlimitedLabel ?: tokenBal.toString()
     val tokenValueFontSize = balanceValueFontSize(tokenValue, 42.sp, 36.sp, 30.sp, 26.sp)
     Surface(
         color = C.cardHi.copy(alpha = 0.97f),
@@ -265,7 +270,7 @@ private fun BalanceOverviewCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 MetricHeading(text = "AIRTIME BALANCE", leadingDot = true)
-                MetricHeading(text = "TOKENS", trailingDot = true)
+                MetricHeading(text = if (unlimitedLabel != null) "UNLIMITED" else "TOKENS", trailingDot = true)
             }
 
             Spacer(Modifier.height(12.dp))
@@ -313,14 +318,20 @@ private fun BalanceOverviewCard(
                         Spacer(Modifier.height(16.dp))
                         Text(
                             tokenValue,
-                            color = C.t1,
+                            color = if (unlimitedLabel != null) C.green else C.t1,
                             fontSize = tokenValueFontSize,
                             fontWeight = FontWeight.ExtraBold,
                             maxLines = 1,
                             softWrap = false,
                             overflow = TextOverflow.Clip
                         )
-                        Text("units", color = C.t2, fontSize = 15.sp)
+                        Text(
+                            unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited active" else "units",
+                            color = C.t2,
+                            fontSize = 15.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
 
