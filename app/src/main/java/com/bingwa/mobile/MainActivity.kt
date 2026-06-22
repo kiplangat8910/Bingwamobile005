@@ -2952,7 +2952,7 @@ private fun HomeActivityHeading(automatedCount: Int) {
             border = BorderStroke(1.dp, Color(0xFF333B3E))
         ) {
             Text(
-                if (automatedCount == 0) "0 automated" else "$automatedCount automated",
+                if (automatedCount == 0) "0 total" else "$automatedCount total",
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 color = Color(0xFF8A9396),
                 fontSize = 11.sp,
@@ -2969,25 +2969,19 @@ private fun HomeActivityPanel(
     onDeleteTransaction: (Transaction) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (transactions.isEmpty()) {
-        Box(
-            modifier = modifier
-                .fillMaxWidth()
-                .heightIn(min = 320.dp)
-                .padding(18.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            HomeScanningEmptyState(Modifier.fillMaxWidth())
-        }
-        return
-    }
-
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(22.dp))
-            .background(Color(0xFF1C2123))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF1D2427),
+                        Color(0xFF171C1E)
+                    )
+                )
+            )
             .border(1.dp, Color(0xFF262D2F), RoundedCornerShape(22.dp))
-            .heightIn(min = 320.dp)
+            .heightIn(min = 248.dp)
             .padding(18.dp)
     ) {
         repeat(4) { index ->
@@ -2995,30 +2989,36 @@ private fun HomeActivityPanel(
                 modifier = Modifier
                     .size(if (index % 2 == 0) 5.dp else 3.dp)
                     .offset(
-                        x = listOf(28.dp, 74.dp, 210.dp, 276.dp)[index],
-                        y = listOf(36.dp, 82.dp, 24.dp, 112.dp)[index]
+                        x = listOf(28.dp, 64.dp, 84.dp, 50.dp)[index],
+                        y = listOf(44.dp, 74.dp, 56.dp, 104.dp)[index]
                     )
                     .clip(CircleShape)
                     .background(Color(0xFF74E6D8).copy(alpha = 0.28f))
             )
         }
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                "DISPATCH RESULTS",
-                color = Color(0xFF5B6366),
-                fontSize = 10.sp,
-                fontFamily = FontFamily.Monospace,
-                letterSpacing = 1.1.sp
-            )
-            transactions.forEach { tx ->
-                HomeDispatchRow(
-                    tx = tx,
-                    onOpen = { onOpenTransaction(tx) },
-                    onDelete = { onDeleteTransaction(tx) }
+        if (transactions.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                HomeScanningEmptyState(Modifier.fillMaxWidth())
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "DISPATCH RESULTS",
+                    color = Color(0xFF5B6366),
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.1.sp
                 )
+                transactions.forEach { tx ->
+                    HomeDispatchRow(
+                        tx = tx,
+                        onOpen = { onOpenTransaction(tx) },
+                        onDelete = { onDeleteTransaction(tx) }
+                    )
+                }
             }
         }
     }
@@ -3076,19 +3076,36 @@ private fun HomeScanningEmptyState(modifier: Modifier = Modifier) {
                 contentAlignment = Alignment.Center
             ) {}
         }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.86f)
+                .height(1.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color.Transparent,
+                            Color(0xFF74E6D8).copy(alpha = 0.34f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
         Spacer(Modifier.height(16.dp))
         Text(
-            "Scanning for activity…",
+            "Scanning for activity...",
             color = Color(0xFFEEF2F1),
-            fontSize = 14.5.sp,
-            fontFamily = FontFamily.Monospace
+            fontSize = 16.sp,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 1.2.sp,
+            fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(7.dp))
         Text(
-            "Dispatch results will appear here",
+            "Transactions will appear here",
             color = Color(0xFF5B6366),
-            fontSize = 12.sp,
-            fontFamily = FontFamily.Monospace
+            fontSize = 13.sp,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 0.6.sp
         )
     }
 }
