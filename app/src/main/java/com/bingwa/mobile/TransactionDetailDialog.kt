@@ -40,6 +40,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -87,6 +89,7 @@ internal fun TransactionDetailDialog(
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val isFailed = tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED
+    val isDailyLimitHold = DailyLimitPolicy.isDailyLimitHold(tx)
     val statusColor = when (tx.statusEnum) {
         TransactionStatus.SUCCESS -> C.green
         TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
@@ -99,6 +102,9 @@ internal fun TransactionDetailDialog(
     }
 
     var retrying by remember { mutableStateOf(false) }
+    var altPhone by remember { mutableStateOf("") }
+    var altDispatching by remember { mutableStateOf(false) }
+    val altSuggestions = remember(tx.id, tx.clientName, tx.phoneNumber) { suggestedAlternativeNumbers(ctx, tx) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -180,6 +186,96 @@ internal fun TransactionDetailDialog(
                         if (!retrying) return@LaunchedEffect
                         delay(1400)
                         retrying = false
+                    }
+
+                    AnimatedVisibility(visible = isDailyLimitHold) {
+                        Column(modifier = Modifier.padding(horizontal = 22.dp, vertical = 10.dp)) {
+                            Text(
+                                "Alternative Number",
+                                color = C.t3,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.2.sp
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            OutlinedTextField(
+                                value = altPhone,
+                                onValueChange = { altPhone = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                placeholder = { Text("0712345678", color = C.t3) },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color(0xFF15191B),
+                                    unfocusedContainerColor = Color(0xFF15191B),
+                                    focusedBorderColor = Color(0xFF333B3E),
+                                    unfocusedBorderColor = Color(0xFF333B3E),
+                                    focusedTextColor = C.t1,
+                                    unfocusedTextColor = C.t1,
+                                    cursorColor = C.cyan,
+                                    focusedPlaceholderColor = C.t3,
+                                    unfocusedPlaceholderColor = C.t3
+                                )
+                            )
+                            if (altSuggestions.isNotEmpty()) {
+                                Spacer(Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    altSuggestions.forEach { suggestion ->
+                                        OutlinedButton(
+                                            onClick = { altPhone = suggestion },
+                                            shape = RoundedCornerShape(999.dp),
+                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.65f)),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                containerColor = C.surface.copy(alpha = 0.92f),
+                                                contentColor = C.t1
+                                            )
+                                        ) {
+                                            Text(suggestion, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Button(
+                                onClick = {
+                                    if (altDispatching) return@Button
+                                    val normalized = SmsCommandHandler.normalizePhone(altPhone)
+                                    val currentPhone = SmsCommandHandler.normalizePhone(tx.phoneNumber)
+                                    if (!normalized.matches(Regex("^0\\d{9}$"))) {
+                                        Toast.makeText(ctx, "Enter a valid alternative number (0712345678).", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+                                    if (normalized == currentPhone) {
+                                        Toast.makeText(ctx, "Alternative number must be different from the original number.", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+                                    altDispatching = true
+                                    val result = DailyLimitPolicy.replaceDailyLimitWithAlternativeNumber(ctx, tx, normalized)
+                                    if (result.success) {
+                                        broadcastTransactionUpdated(ctx, tx.id)
+                                        Toast.makeText(ctx, result.message, Toast.LENGTH_LONG).show()
+                                        onDismiss()
+                                    } else {
+                                        Toast.makeText(ctx, result.message.ifBlank { "Could not start the alternative dispatch." }, Toast.LENGTH_LONG).show()
+                                    }
+                                    altDispatching = false
+                                },
+                                modifier = Modifier.fillMaxWidth().height(54.dp),
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = C.cyan)
+                            ) {
+                                Text(
+                                    if (altDispatching) "Starting…" else "Buy Using Alternative Number",
+                                    color = Color(0xFF15121B),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
                     }
 
                     TransactionDetailSection(
@@ -684,10 +780,16 @@ private fun formatDuration(tx: Transaction): String {
         else -> 0L
     }
     if (durationMs <= 0L) return "Not recorded"
-    val seconds = durationMs / 1000L
-    val minutes = seconds / 60L
-    val remainder = seconds % 60L
-    return if (minutes > 0L) "${minutes}m ${remainder}s" else "${remainder}s"
+    return when {
+        durationMs < 1_000L -> "${durationMs} ms"
+        durationMs < 60_000L -> "${durationMs} ms"
+        else -> {
+            val totalSeconds = durationMs / 1_000L
+            val minutes = totalSeconds / 60L
+            val seconds = totalSeconds % 60L
+            "${minutes}m ${seconds}s (${durationMs}ms)"
+        }
+    }
 }
 
 private fun transactionSource(tx: Transaction): String = when (tx.source) {

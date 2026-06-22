@@ -92,6 +92,50 @@ internal object TransactionStore {
         return newId
     }
 
+    fun insertTransaction(context: Context, tx: Transaction): Int {
+        val current = load(context)
+        val usedIds = current.asSequence().map { it.id }.toHashSet()
+        var newId = ((System.currentTimeMillis() and Int.MAX_VALUE.toLong()).toInt()).coerceAtLeast(1)
+        while (!usedIds.add(newId)) {
+            newId = if (newId == Int.MAX_VALUE) 1 else newId + 1
+        }
+
+        val createdAt = tx.timestamp.takeIf { it > 0L } ?: System.currentTimeMillis()
+        val normalizedStatus = TransactionStatus.fromString(tx.status)
+        val completedAt = tx.completedAt.takeIf { it > 0L } ?: when (normalizedStatus) {
+            TransactionStatus.SUCCESS,
+            TransactionStatus.FAILED,
+            TransactionStatus.CANCELLED -> createdAt
+            else -> 0L
+        }
+        val executionDurationMs = tx.executionDurationMs.takeIf { it > 0L } ?: when {
+            completedAt > 0L -> (completedAt - createdAt).coerceAtLeast(0L)
+            else -> 0L
+        }
+
+        val date = tx.date.ifBlank {
+            java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
+                .format(java.util.Date(createdAt))
+        }
+        val created = tx.copy(
+            id = newId,
+            amountValue = tx.amountValue.takeIf { it > 0.0 } ?: extractAmountValue(tx.amount),
+            date = date,
+            statusEnum = normalizedStatus,
+            clientName = formatClientName(tx.clientName),
+            timestamp = createdAt,
+            completedAt = completedAt,
+            executionDurationMs = executionDurationMs
+        )
+
+        val updated = ArrayList<Transaction>(minOf(current.size + 1, MAX_RECENT_TRANSACTIONS))
+        updated += created
+        current.take(MAX_RECENT_TRANSACTIONS - 1).forEach(updated::add)
+        save(context, updated)
+        broadcastTransactionCreated(context, newId)
+        return newId
+    }
+
     fun saveOutcome(
         context: Context,
         txId: Int,

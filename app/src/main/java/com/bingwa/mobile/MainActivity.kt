@@ -451,6 +451,15 @@ fun broadcastTransactionCreated(context: Context, txId: Int) {
     )
 }
 
+fun broadcastTransactionUpdated(context: Context, txId: Int) {
+    if (txId < 0) return
+    context.sendBroadcast(
+        Intent("com.bingwa.mobile.TX_UPDATED")
+            .setPackage(context.packageName)
+            .apply { putExtra("txId", txId) }
+    )
+}
+
 fun resolveClientNameByPhone(context: Context, phone: String): String {
     val normalized = SmsCommandHandler.normalizePhone(phone)
     if (!normalized.matches(Regex("^0\\d{9}$"))) return ""
@@ -466,6 +475,29 @@ fun resolveClientNameByPhone(context: Context, phone: String): String {
         }
     }
     return ""
+}
+
+fun upsertSavedContact(context: Context, phone: String, name: String) {
+    val normalizedPhone = SmsCommandHandler.normalizePhone(phone)
+    val formattedName = formatClientName(name)
+    if (!normalizedPhone.matches(Regex("^0\\d{9}$"))) return
+    if (formattedName.isBlank()) return
+
+    val prefs = context.getSharedPreferences("saved_contacts", Context.MODE_PRIVATE)
+    val current = loadContacts(prefs).toMutableList()
+    val idx = current.indexOfFirst { SmsCommandHandler.normalizePhone(it.phone) == normalizedPhone }
+    if (idx >= 0) {
+        val existing = current[idx]
+        val improved = choosePreferredClientName(existing.name, formattedName)
+        if (improved.isNotBlank() && improved != existing.name) {
+            current[idx] = existing.copy(name = improved)
+            saveContacts(prefs, current)
+        }
+        return
+    }
+
+    current.add(SavedContact(formattedName, normalizedPhone))
+    saveContacts(prefs, current)
 }
 
 fun choosePreferredClientName(current: String, candidate: String): String {
@@ -3629,10 +3661,7 @@ private fun transactionExecutionDuration(tx: Transaction): String {
             else -> "Still running"
         }
     }
-    val totalSeconds = durationMs / 1_000L
-    val minutes = totalSeconds / 60L
-    val seconds = totalSeconds % 60L
-    return if (minutes > 0L) "${minutes}m ${seconds}s" else "${seconds}s"
+    return formatExecutionMs(durationMs).ifBlank { "${durationMs}ms" }
 }
 
 private fun resolveOfferForRetry(context: Context, tx: Transaction): OfferItem? {
@@ -5123,9 +5152,34 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
         }
         if (phoneErr == null && selectedOffer != null) {
             vib(ctx, 70L)
+            upsertSavedContact(ctx, phone, resolvedClientName)
             if (RelayManager.shouldRelayOffer(ctx, selectedOffer)) {
+                bannerState = "pending"
+                val finalCode = selectedOffer.ussdCode.replace("pn", phone, true)
+                val txId = createPendingTransaction(
+                    ctx,
+                    selectedOffer.name,
+                    "KSh ${selectedOffer.price}",
+                    phone,
+                    finalCode,
+                    clientName = resolvedClientName,
+                    status = TransactionStatus.PROCESSING.value,
+                    source = TX_SOURCE_MANUAL,
+                    showInRecent = false,
+                    offerId = selectedOffer.id
+                )
+                pendingTxId = txId
+                saveTransactionOutcome(ctx, txId, TransactionStatus.PROCESSING.value, "Forwarded to Relay phone for execution.")
+                broadcastTransactionUpdated(ctx, txId)
+
                 val sent = RelayManager.forwardBuyAmount(ctx, phone, selectedOffer.price)
-                bannerState = if (sent) "relayed" else "failed"
+                if (sent) {
+                    bannerState = "relayed"
+                } else {
+                    bannerState = "failed"
+                    saveTransactionOutcome(ctx, txId, TransactionStatus.FAILED.value, "Failed: Relay forwarding failed.")
+                    broadcastTransactionUpdated(ctx, txId)
+                }
             } else {
                 bannerState = "pending"
                 val finalCode = selectedOffer.ussdCode.replace("pn", phone, true)

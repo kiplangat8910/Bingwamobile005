@@ -424,7 +424,7 @@ class MpesaReceiver : BroadcastReceiver() {
             return true
         }
 
-        val dispatchResult = dispatchAlternativeNumber(context, pendingTx, alternativePhone)
+        val dispatchResult = DailyLimitPolicy.dispatchAlternativeNumber(context, pendingTx, alternativePhone)
         if (!dispatchResult.success) {
             SmsCommandHandler.sendSms(
                 context,
@@ -456,82 +456,6 @@ class MpesaReceiver : BroadcastReceiver() {
             "${pendingTx.description} moved from ${pendingTx.phoneNumber} to $alternativePhone."
         )
         return true
-    }
-
-    private data class AlternativeDispatchResult(
-        val success: Boolean,
-        val message: String,
-        val newTxId: Int = -1
-    )
-
-    private fun dispatchAlternativeNumber(
-        context: Context,
-        originalTx: Transaction,
-        alternativePhone: String
-    ): AlternativeDispatchResult {
-        val offer = OfferRepository.findByName(context, originalTx.description)
-            ?: originalTx.amountValue.toInt().takeIf { it > 0 }?.let { OfferRepository.findByPrice(context, it) }
-
-        if (offer != null && RelayManager.isPrimary(context) && offer.targetDevice.uppercase() == "RELAY") {
-            val sent = RelayManager.forwardBuyAmount(context, alternativePhone, offer.price)
-            return if (sent) {
-                AlternativeDispatchResult(
-                    success = true,
-                    message = "Alternative number received. ${offer.name} has been forwarded for $alternativePhone."
-                )
-            } else {
-                AlternativeDispatchResult(
-                    success = false,
-                    message = "We received the alternative number, but Relay forwarding failed. Please try again shortly."
-                )
-            }
-        }
-
-        val finalCode = when {
-            offer != null -> offer.ussdCode.replace("pn", alternativePhone, ignoreCase = true)
-            originalTx.phoneNumber.isNotBlank() && originalTx.ussdCode.contains(originalTx.phoneNumber) ->
-                originalTx.ussdCode.replace(originalTx.phoneNumber, alternativePhone, ignoreCase = true)
-            else -> ""
-        }
-        if (finalCode.isBlank()) {
-            return AlternativeDispatchResult(
-                success = false,
-                message = "We received the alternative number, but could not rebuild the bundle command. Please contact support."
-            )
-        }
-
-        val txId = createPendingTransaction(
-            context,
-            originalTx.description,
-            originalTx.amount,
-            alternativePhone,
-            finalCode,
-            originalTx.clientName,
-            status = if (originalTx.showInRecent) TransactionStatus.PROCESSING.value else TransactionStatus.PENDING.value,
-            source = originalTx.source,
-            showInRecent = originalTx.showInRecent,
-            offerId = offer?.id ?: originalTx.offerId
-        )
-        if (txId < 0) {
-            return AlternativeDispatchResult(
-                success = false,
-                message = "We received the alternative number, but could not save the new dispatch request."
-            )
-        }
-
-        context.startOfferAutomation(
-            offer = offer,
-            phoneNumber = alternativePhone,
-            txId = txId,
-            finalCode = finalCode,
-            mode = offer?.executionMode ?: "ADVANCED"
-        )
-        val offerLabel = offer?.name ?: originalTx.description
-        return AlternativeDispatchResult(
-            success = true,
-            message = "Alternative number received. Dispatch started for $alternativePhone using $offerLabel.",
-            newTxId = txId
-        )
     }
 
     // ── Instance Methods ────────────────────────────────────────────
@@ -839,45 +763,7 @@ class MpesaReceiver : BroadcastReceiver() {
 
     private fun addTransaction(context: Context, tx: Transaction): Int {
         return try {
-            val prefs = context.getSharedPreferences("transactions", Context.MODE_PRIVATE)
-            val arr = try { JSONArray(prefs.getString("list", "[]")) } catch (_: Exception) { JSONArray() }
-            val newId = System.currentTimeMillis().toInt() and 0x7FFFFFFF
-            val newEntry = JSONObject().apply {
-            val createdAt = tx.timestamp.takeIf { it > 0L } ?: System.currentTimeMillis()
-            val normalizedStatus = TransactionStatus.fromString(tx.status)
-            val finishedAt = tx.completedAt.takeIf { it > 0L } ?: when (normalizedStatus) {
-                TransactionStatus.SUCCESS,
-                TransactionStatus.FAILED,
-                TransactionStatus.CANCELLED -> createdAt
-                else -> 0L
-            }
-                put("id", newId)
-                put("description", tx.description)
-                put("amount", tx.amount)
-                put("date", tx.date)
-                put("status", tx.status)
-                put("phoneNumber", tx.phoneNumber)
-                put("clientName", formatClientName(tx.clientName))
-                put("ussdCode", tx.ussdCode)
-                put("ussdResponse", "")
-                put("ussdTranscript", "")
-            put("timestamp", createdAt)
-                put("source", tx.source)
-                put("showInRecent", tx.showInRecent)
-            put("offerId", tx.offerId)
-            put("completedAt", finishedAt)
-            put(
-                "executionDurationMs",
-                tx.executionDurationMs.takeIf { it > 0L }
-                    ?: if (finishedAt > 0L) (finishedAt - createdAt).coerceAtLeast(0L) else 0L
-            )
-            }
-            val newArr = JSONArray()
-            newArr.put(newEntry)
-            for (i in 0 until minOf(arr.length(), 99)) newArr.put(arr.getJSONObject(i))
-            prefs.edit().putString("list", newArr.toString()).apply()
-            broadcastTransactionCreated(context, newId)
-            newId
+            TransactionStore.insertTransaction(context, tx)
         } catch (e: Exception) {
             Log.e(TAG, "addTransaction failed", e)
             -1

@@ -1237,6 +1237,40 @@ private fun TransactionSettings(onBack: () -> Unit) {
     val totalCollected = summaryCompleted.sumOf { transactionHistoryAmountValue(it) }
     val unmatchedCount = history.count { transactionHistoryFilterFor(it, offers) == TransactionHistoryFilter.UNMATCHED }
 
+    DisposableEffect(Unit) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val txId = intent.getIntExtra("txId", -1)
+                if (txId < 0) return
+                when (intent.action) {
+                    ACTION_TX_CREATED,
+                    "com.bingwa.mobile.TX_UPDATED" -> {
+                        val tx = loadTransactionByIdFromPrefs(ctx, txId) ?: return
+                        val idx = history.indexOfFirst { it.id == txId }
+                        val updated = if (idx >= 0) {
+                            history.toMutableList().apply { this[idx] = tx }
+                        } else {
+                            mutableListOf<Transaction>().apply {
+                                add(tx)
+                                addAll(history)
+                            }
+                        }
+                        history = updated.sortedByDescending { transactionHistoryTimestamp(it) }
+                    }
+                }
+            }
+        }
+        val receiverRegistered = registerAppReceiver(ctx, receiver, android.content.IntentFilter().apply {
+            addAction("com.bingwa.mobile.TX_UPDATED")
+            addAction(ACTION_TX_CREATED)
+        })
+        onDispose {
+            if (receiverRegistered) {
+                try { ctx.unregisterReceiver(receiver) } catch (_: Exception) {}
+            }
+        }
+    }
+
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
@@ -1705,9 +1739,21 @@ private fun TransactionHistoryRow(
                 "Received $received but ${it.name} is set to KES ${it.price}"
             } ?: "Received $received but it does not match any configured offer"
         }
-        else -> tx.description
-            .takeIf { it.isNotBlank() && !it.equals(title, ignoreCase = true) }
-            ?: transactionSourceLabel(tx.source)
+        TransactionHistoryFilter.FAILED -> {
+            transactionReasonShort(tx).takeIf { it.isNotBlank() }
+                ?: tx.description.takeIf { it.isNotBlank() && !it.equals(title, ignoreCase = true) }
+                ?: transactionSourceLabel(tx.source)
+        }
+        else -> {
+            if (DailyLimitPolicy.isDailyLimitHold(tx)) {
+                transactionReasonShort(tx).takeIf { it.isNotBlank() }
+                    ?: "Daily limit reached. Use an alternative number or dispatch tomorrow."
+            } else {
+                tx.description
+                    .takeIf { it.isNotBlank() && !it.equals(title, ignoreCase = true) }
+                    ?: transactionSourceLabel(tx.source)
+            }
+        }
     }
     val amountPrefix = if (classification == TransactionHistoryFilter.FAILED || tx.source == TX_SOURCE_AIRTIME) "-" else "+"
 

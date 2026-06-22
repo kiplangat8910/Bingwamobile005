@@ -649,7 +649,12 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
     val title = tx.clientName.ifBlank {
         tx.description.ifBlank { "Transaction" }
     }
+    val shouldShowReason = tx.statusEnum == TransactionStatus.FAILED ||
+        tx.statusEnum == TransactionStatus.CANCELLED ||
+        DailyLimitPolicy.isDailyLimitHold(tx)
+    val reason = if (shouldShowReason) transactionReasonShort(tx) else ""
     val subtitle = buildList {
+        reason.takeIf { it.isNotBlank() }?.let(::add)
         tx.description
             .takeIf { it.isNotBlank() && !it.equals(title, ignoreCase = true) }
             ?.let(::add)
@@ -657,7 +662,7 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
             .takeIf { it.isNotBlank() }
             ?.let { add(maskActivityPhone(it)) }
         if (tx.executionDurationMs > 0L) {
-            add("${formatActivityDuration(tx.executionDurationMs)} run")
+            formatExecutionMs(tx.executionDurationMs).takeIf { it.isNotBlank() }?.let { add("$it run") }
         } else if (tx.date.isNotBlank()) {
             add(tx.date)
         }

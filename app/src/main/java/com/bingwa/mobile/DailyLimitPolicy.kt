@@ -130,6 +130,118 @@ object DailyLimitPolicy {
         return isDailyLimitHold(record.status, record.ussdResponse)
     }
 
+    fun isDailyLimitHold(tx: Transaction?): Boolean {
+        val record = tx ?: return false
+        return isDailyLimitHold(record.status, record.ussdResponse)
+    }
+
+    fun isDailyLimitHold(status: String, response: String): Boolean {
+        if (!status.equals("Pending", ignoreCase = true)) return false
+        val lower = response.lowercase()
+        return UssdResponsePatternManager.DEFAULT_ALREADY_RECOMMENDED_PATTERNS.any { pattern ->
+            lower.contains(pattern.lowercase())
+        } ||
+            lower.contains("once per day") ||
+            lower.contains("alternative number") ||
+            lower.contains("tomorrow morning") ||
+            lower.contains("following day")
+    }
+
+    data class AlternativeDispatchResult(
+        val success: Boolean,
+        val message: String,
+        val newTxId: Int = -1
+    )
+
+    fun dispatchAlternativeNumber(
+        context: Context,
+        originalTx: Transaction,
+        alternativePhone: String
+    ): AlternativeDispatchResult {
+        val offer = OfferRepository.findByName(context, originalTx.description)
+            ?: originalTx.amountValue.toInt().takeIf { it > 0 }?.let { OfferRepository.findByPrice(context, it) }
+
+        if (offer != null && RelayManager.isPrimary(context) && offer.targetDevice.uppercase() == "RELAY") {
+            val sent = RelayManager.forwardBuyAmount(context, alternativePhone, offer.price)
+            return if (sent) {
+                AlternativeDispatchResult(
+                    success = true,
+                    message = "Alternative number received. ${offer.name} has been forwarded for $alternativePhone."
+                )
+            } else {
+                AlternativeDispatchResult(
+                    success = false,
+                    message = "We received the alternative number, but Relay forwarding failed. Please try again shortly."
+                )
+            }
+        }
+
+        val finalCode = when {
+            offer != null -> offer.ussdCode.replace("pn", alternativePhone, ignoreCase = true)
+            originalTx.phoneNumber.isNotBlank() && originalTx.ussdCode.contains(originalTx.phoneNumber) ->
+                originalTx.ussdCode.replace(originalTx.phoneNumber, alternativePhone, ignoreCase = true)
+            else -> ""
+        }
+        if (finalCode.isBlank()) {
+            return AlternativeDispatchResult(
+                success = false,
+                message = "We received the alternative number, but could not rebuild the bundle command. Please contact support."
+            )
+        }
+
+        val txId = createPendingTransaction(
+            context,
+            originalTx.description,
+            originalTx.amount,
+            alternativePhone,
+            finalCode,
+            originalTx.clientName,
+            status = if (originalTx.showInRecent) TransactionStatus.PROCESSING.value else TransactionStatus.PENDING.value,
+            source = originalTx.source,
+            showInRecent = originalTx.showInRecent,
+            offerId = offer?.id ?: originalTx.offerId
+        )
+        if (txId < 0) {
+            return AlternativeDispatchResult(
+                success = false,
+                message = "We received the alternative number, but could not save the new dispatch request."
+            )
+        }
+
+        context.startOfferAutomation(
+            offer = offer,
+            phoneNumber = alternativePhone,
+            txId = txId,
+            finalCode = finalCode,
+            mode = offer?.executionMode ?: "ADVANCED"
+        )
+        val offerLabel = offer?.name ?: originalTx.description
+        return AlternativeDispatchResult(
+            success = true,
+            message = "Alternative number received. Dispatch started for $alternativePhone using $offerLabel.",
+            newTxId = txId
+        )
+    }
+
+    fun replaceDailyLimitWithAlternativeNumber(
+        context: Context,
+        originalTx: Transaction,
+        alternativePhone: String
+    ): AlternativeDispatchResult {
+        val dispatchResult = dispatchAlternativeNumber(context, originalTx, alternativePhone)
+        if (!dispatchResult.success) return dispatchResult
+
+        cancelScheduledRetry(context, originalTx.id)
+        val originalNote = buildString {
+            append(originalTx.ussdResponse.ifBlank { "Daily-limit request replaced by alternative number." })
+            append("\n\nAlternative number used: $alternativePhone.")
+            dispatchResult.newTxId.takeIf { it >= 0 }?.let { append(" Replacement transaction: #$it.") }
+        }
+        saveTransactionOutcome(context, originalTx.id, "Cancelled", originalNote)
+        clearReplyState(context, originalTx.phoneNumber)
+        return dispatchResult
+    }
+
     private fun saveReplyState(context: Context, customerPhone: String, txId: Int, stage: String) {
         val normalizedPhone = SmsCommandHandler.normalizePhone(customerPhone)
         if (normalizedPhone.isBlank() || txId < 0) return
@@ -278,18 +390,6 @@ private fun transactionFromJson(obj: org.json.JSONObject): Transaction {
         completedAt = obj.optLong("completedAt", 0L),
         executionDurationMs = obj.optLong("executionDurationMs", 0L)
     )
-}
-
-private fun isDailyLimitHold(status: String, response: String): Boolean {
-    if (!status.equals("Pending", ignoreCase = true)) return false
-    val lower = response.lowercase()
-    return UssdResponsePatternManager.DEFAULT_ALREADY_RECOMMENDED_PATTERNS.any { pattern ->
-        lower.contains(pattern.lowercase())
-    } ||
-        lower.contains("once per day") ||
-        lower.contains("alternative number") ||
-        lower.contains("tomorrow morning") ||
-        lower.contains("following day")
 }
 
 private fun isSameDay(timestamp: Long, today: Calendar): Boolean {
