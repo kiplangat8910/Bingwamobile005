@@ -2948,7 +2948,7 @@ private fun HomeActivityHeading(automatedCount: Int) {
         }
         Surface(
             shape = RoundedCornerShape(999.dp),
-            color = Color.Transparent,
+            color = Color(0xFF1C2123),
             border = BorderStroke(1.dp, Color(0xFF333B3E))
         ) {
             Text(
@@ -2971,34 +2971,22 @@ private fun HomeActivityPanel(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(26.dp))
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xFF1D2427),
-                        Color(0xFF171C1E)
+                        Color(0xFF1B2225),
+                        Color(0xFF141A1C)
                     )
                 )
             )
-            .border(1.dp, Color(0xFF262D2F), RoundedCornerShape(22.dp))
-            .heightIn(min = 248.dp)
+            .border(1.dp, Color(0xFF2A3235).copy(alpha = 0.92f), RoundedCornerShape(26.dp))
+            .heightIn(min = 244.dp)
             .padding(18.dp)
     ) {
-        repeat(4) { index ->
-            Box(
-                modifier = Modifier
-                    .size(if (index % 2 == 0) 5.dp else 3.dp)
-                    .offset(
-                        x = listOf(28.dp, 64.dp, 84.dp, 50.dp)[index],
-                        y = listOf(44.dp, 74.dp, 56.dp, 104.dp)[index]
-                    )
-                    .clip(CircleShape)
-                    .background(Color(0xFF74E6D8).copy(alpha = 0.28f))
-            )
-        }
         if (transactions.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                HomeScanningEmptyState(Modifier.fillMaxWidth())
+                HomeScanningEmptyState(Modifier.fillMaxSize())
             }
         } else {
             Column(
@@ -3053,50 +3041,84 @@ private fun HomeScanningEmptyState(modifier: Modifier = Modifier) {
     )
 
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(150.dp)
-                .padding(top = 14.dp, bottom = 8.dp),
-            contentAlignment = Alignment.Center
+                .height(132.dp),
+            contentAlignment = Alignment.CenterStart
         ) {
-            HomeSonarRing(progress = ring1)
-            HomeSonarRing(progress = ring2)
-            HomeSonarRing(progress = ring3)
+            listOf(
+                Triple(28.dp, 34.dp, 5.dp),
+                Triple(62.dp, 52.dp, 3.dp),
+                Triple(78.dp, 52.dp, 3.dp),
+                Triple(46.dp, 82.dp, 4.dp),
+                Triple(92.dp, 92.dp, 3.dp)
+            ).forEach { (x, y, s) ->
+                Box(
+                    modifier = Modifier
+                        .offset(x = x, y = y)
+                        .size(s)
+                        .clip(CircleShape)
+                        .background(Color(0xFF74E6D8).copy(alpha = 0.22f))
+                )
+            }
+
             Box(
                 modifier = Modifier
-                    .size(13.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF74E6D8))
-                    .shadow(12.dp, CircleShape),
+                    .align(Alignment.CenterEnd)
+                    .offset(x = (-76).dp, y = (-6).dp),
                 contentAlignment = Alignment.Center
-            ) {}
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(180.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(
+                                    Color(0xFF74E6D8).copy(alpha = 0.08f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
+                )
+                HomeSonarRing(progress = ring1)
+                HomeSonarRing(progress = ring2)
+                HomeSonarRing(progress = ring3)
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF74E6D8))
+                        .shadow(10.dp, CircleShape)
+                )
+            }
         }
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.86f)
+                .fillMaxWidth(0.88f)
                 .height(1.dp)
                 .background(
                     Brush.horizontalGradient(
                         listOf(
                             Color.Transparent,
-                            Color(0xFF74E6D8).copy(alpha = 0.34f),
+                            Color(0xFF74E6D8).copy(alpha = 0.30f),
                             Color.Transparent
                         )
                     )
                 )
         )
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(18.dp))
         Text(
             "Scanning for activity...",
             color = Color(0xFFEEF2F1),
             fontSize = 16.sp,
             fontFamily = FontFamily.Monospace,
-            letterSpacing = 1.2.sp,
+            letterSpacing = 1.6.sp,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(7.dp))
@@ -3105,7 +3127,7 @@ private fun HomeScanningEmptyState(modifier: Modifier = Modifier) {
             color = Color(0xFF5B6366),
             fontSize = 13.sp,
             fontFamily = FontFamily.Monospace,
-            letterSpacing = 0.6.sp
+            letterSpacing = 0.8.sp
         )
     }
 }
