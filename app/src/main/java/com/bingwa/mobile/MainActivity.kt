@@ -2922,44 +2922,36 @@ private fun HomeActivityPanel(
     onDeleteTransaction: (Transaction) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(26.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFF1B2225),
-                        Color(0xFF141A1C)
+    if (transactions.isEmpty()) {
+        Box(
+            modifier = modifier
+                .clip(RoundedCornerShape(26.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color(0xFF1B2225),
+                            Color(0xFF141A1C)
+                        )
                     )
                 )
-            )
-            .border(1.dp, Color(0xFF2A3235).copy(alpha = 0.92f), RoundedCornerShape(26.dp))
-            .heightIn(min = 244.dp)
-            .padding(18.dp)
-    ) {
-        if (transactions.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                HomeScanningEmptyState(Modifier.fillMaxSize())
-            }
-        } else {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    "DISPATCH RESULTS",
-                    color = Color(0xFF5B6366),
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 1.1.sp
+                .border(1.dp, Color(0xFF2A3235).copy(alpha = 0.92f), RoundedCornerShape(26.dp))
+                .heightIn(min = 244.dp)
+                .padding(18.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            HomeScanningEmptyState(Modifier.fillMaxSize())
+        }
+    } else {
+        Column(
+            modifier = modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            transactions.forEach { tx ->
+                HomeDispatchRow(
+                    tx = tx,
+                    onOpen = { onOpenTransaction(tx) },
+                    onDelete = { onDeleteTransaction(tx) }
                 )
-                transactions.forEach { tx ->
-                    HomeDispatchRow(
-                        tx = tx,
-                        onOpen = { onOpenTransaction(tx) },
-                        onDelete = { onDeleteTransaction(tx) }
-                    )
-                }
             }
         }
     }
@@ -3115,73 +3107,218 @@ private fun HomeDispatchRow(
 ) {
     val statusColor = transactionStatusColor(tx)
     val title = tx.clientName.ifBlank { tx.description.ifBlank { "Recent automation" } }
-    val subtitle = buildString {
-        append(tx.description.ifBlank { "Offer not captured" })
-        tx.phoneNumber.takeIf { it.isNotBlank() }?.let {
-            append("  |  ")
-            append(it)
-        }
-    }
+    val phone = tx.phoneNumber.ifBlank { "Phone not available" }
+    val serviceLabel = tx.description.ifBlank { "Offer not captured" }
+    val avatarLabel = recentActivityInitials(title)
+    val amountLabel = recentActivityAmountLabel(tx.amount)
+    val timeLabel = recentActivityTimeLabel(tx)
+    val relativeLabel = recentActivityRelativeLabel(tx)
+    val serviceIcon = recentActivityServiceIcon(serviceLabel)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF15191B))
-            .border(1.dp, Color(0xFF262D2F), RoundedCornerShape(16.dp))
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .height(IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Stretch
     ) {
         Box(
             modifier = Modifier
-                .size(10.dp)
-                .clip(CircleShape)
-                .background(statusColor)
+                .width(5.dp)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(999.dp))
+                .background(statusColor.copy(alpha = 0.82f))
         )
-        Spacer(Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title,
-                color = Color(0xFFEEF2F1),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                subtitle,
-                color = Color(0xFF8A9396),
-                fontSize = 11.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                lineHeight = 16.sp
-            )
-        }
-        Spacer(Modifier.width(10.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                tx.amount.ifBlank { "-" },
-                color = Color(0xFFEEF2F1),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                transactionStatusLabel(tx),
-                color = statusColor,
-                fontSize = 10.sp,
-                fontFamily = FontFamily.Monospace
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-            Icon(Icons.Outlined.Delete, null, tint = Color(0xFFEF8273), modifier = Modifier.size(16.dp))
+        Surface(
+            color = Color(0xFF090B0C),
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(1.dp, Color(0xFF152024).copy(alpha = 0.62f)),
+            modifier = Modifier.weight(1f)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpen)
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF0D1113))
+                                .border(1.dp, statusColor.copy(alpha = 0.18f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                avatarLabel,
+                                color = Color(0xFFB8C0C3),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                title,
+                                color = Color(0xFFE8ECEE),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                phone,
+                                color = Color(0xFF667074),
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        amountLabel,
+                        color = Color(0xFFE8ECEE),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(Color(0xFF11181B))
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            serviceIcon,
+                            null,
+                            tint = Color(0xFF667074),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            serviceLabel,
+                            color = Color(0xFF667074),
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.Schedule,
+                            null,
+                            tint = Color(0xFF667074),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            timeLabel,
+                            color = Color(0xFF7C868A),
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        if (relativeLabel.isNotBlank()) {
+                            Text(
+                                "•",
+                                color = Color(0xFF4F5A5F),
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                relativeLabel,
+                                color = statusColor.copy(alpha = 0.96f),
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                    IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            Icons.Outlined.Delete,
+                            null,
+                            tint = Color(0xFF667074),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
+
+private fun recentActivityInitials(title: String): String {
+    val parts = title.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    return when {
+        parts.size >= 2 -> "${parts[0].first()}${parts[1].first()}".uppercase(Locale.getDefault())
+        parts.isNotEmpty() -> parts[0].take(2).uppercase(Locale.getDefault())
+        else -> "TX"
+    }
+}
+
+private fun recentActivityAmountLabel(amount: String): String {
+    val normalized = amount.trim().removePrefix("+").removePrefix("-").trim()
+    if (normalized.isBlank()) return "KSh -"
+    return when {
+        normalized.startsWith("ksh", ignoreCase = true) -> "KSh " + normalized.substring(3).trim()
+        normalized.startsWith("kes", ignoreCase = true) -> "KSh " + normalized.substring(3).trim()
+        normalized.firstOrNull()?.isDigit() == true -> "KSh $normalized"
+        else -> normalized
+    }
+}
+
+private fun recentActivityTimeLabel(tx: Transaction): String {
+    val timestamp = transactionTimestamp(tx)
+    if (timestamp <= 0L) return tx.date.ifBlank { "--:--" }
+    return SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(timestamp)).uppercase(Locale.getDefault())
+}
+
+private fun recentActivityRelativeLabel(tx: Transaction): String {
+    val timestamp = transactionTimestamp(tx)
+    if (timestamp <= 0L) return ""
+    val delta = (System.currentTimeMillis() - timestamp).coerceAtLeast(0L)
+    val minutes = delta / 60000L
+    val hours = delta / 3600000L
+    return when {
+        minutes < 1L -> "Just now"
+        minutes < 60L -> "${minutes}m ago"
+        hours < 24L -> "${hours}h ago"
+        else -> ""
+    }
+}
+
+private fun recentActivityServiceIcon(serviceLabel: String): ImageVector =
+    if (serviceLabel.contains("sms", ignoreCase = true) || serviceLabel.contains("message", ignoreCase = true)) {
+        Icons.Outlined.Sms
+    } else {
+        Icons.Outlined.PhoneAndroid
+    }
 
 @Composable
 private fun HomeDashboardHeader(running: Boolean) {
