@@ -1183,7 +1183,7 @@ private fun TokensHeroCard(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                    )
+                    }
                 }
                 Text(
                     "Stored tokens return after unlimited ends",
