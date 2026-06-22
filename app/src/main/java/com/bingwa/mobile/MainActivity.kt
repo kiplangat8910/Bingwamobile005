@@ -3051,30 +3051,30 @@ private fun HomeScanningEmptyState(modifier: Modifier = Modifier) {
                 .height(132.dp),
             contentAlignment = Alignment.Center
         ) {
-            listOf(
-                Triple(28.dp, 34.dp, 5.dp),
-                Triple(62.dp, 52.dp, 3.dp),
-                Triple(78.dp, 52.dp, 3.dp),
-                Triple(46.dp, 82.dp, 4.dp),
-                Triple(92.dp, 92.dp, 3.dp)
-            ).forEach { (x, y, s) ->
-                Box(
-                    modifier = Modifier
-                        .offset(x = x, y = y)
-                        .size(s)
-                        .clip(CircleShape)
-                        .background(Color(0xFF74E6D8).copy(alpha = 0.22f))
-                )
-            }
-
             Box(
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .offset(y = (-6).dp),
+                    .size(220.dp, 132.dp),
                 contentAlignment = Alignment.Center
             ) {
+                listOf(
+                    Triple((-84).dp, 26.dp, 5.dp),
+                    Triple((-58).dp, 62.dp, 3.dp),
+                    Triple((54).dp, 60.dp, 3.dp),
+                    Triple((-28).dp, 92.dp, 4.dp),
+                    Triple((82).dp, 18.dp, 3.dp)
+                ).forEach { (x, y, s) ->
+                    Box(
+                        modifier = Modifier
+                            .offset(x = x, y = y)
+                            .size(s)
+                            .clip(CircleShape)
+                            .background(Color(0xFF74E6D8).copy(alpha = 0.22f))
+                    )
+                }
+
                 Box(
                     modifier = Modifier
+                        .offset(y = (-6).dp)
                         .size(180.dp)
                         .clip(CircleShape)
                         .background(
