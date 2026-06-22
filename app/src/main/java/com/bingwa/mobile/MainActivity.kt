@@ -2404,14 +2404,15 @@ fun HomeScreenVolcanic(
 ) {
     val ctx = LocalContext.current
     val automatedTxns = txns.filter { it.showInRecent }.sortedByDescending { it.timestamp }
+    val todayAutomatedTxns = automatedTxns.filter { isTransactionTimestampToday(it.timestamp) }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
-    val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
-    val sent = automatedTxns.count { it.status == TransactionStatus.SUCCESS.value }
-    val pending = automatedTxns.count {
+    val selectedTx = todayAutomatedTxns.firstOrNull { it.id == selectedTxId }
+    val sent = todayAutomatedTxns.count { it.status == TransactionStatus.SUCCESS.value }
+    val pending = todayAutomatedTxns.count {
         it.status == TransactionStatus.PENDING.value || it.status == TransactionStatus.PROCESSING.value
     }
-    val failed = automatedTxns.count { it.status == TransactionStatus.FAILED.value }
-    val rate = if (automatedTxns.isNotEmpty()) (sent * 100) / automatedTxns.size else 0
+    val failed = todayAutomatedTxns.count { it.status == TransactionStatus.FAILED.value }
+    val rate = if (todayAutomatedTxns.isNotEmpty()) (sent * 100) / todayAutomatedTxns.size else 0
     val chromeAnim = rememberInfiniteTransition(label = "home_chrome")
     val spin by chromeAnim.animateFloat(
         0f,
@@ -2419,7 +2420,7 @@ fun HomeScreenVolcanic(
         infiniteRepeatable(tween(1200, easing = LinearEasing)),
         label = "spin"
     )
-    val topTransactions = automatedTxns.take(6)
+    val topTransactions = todayAutomatedTxns.take(6)
 
     Box(
         Modifier
@@ -2481,13 +2482,7 @@ fun HomeScreenVolcanic(
                             spin = spin,
                             onRefresh = onRefresh
                         )
-                        HomeStatsStrip(
-                            sent = sent,
-                            pending = pending,
-                            failed = failed,
-                            rate = rate
-                        )
-                        HomeActivityHeading(automatedCount = automatedTxns.size)
+                        HomeActivityHeading(automatedCount = todayAutomatedTxns.size)
                         HomeActivityPanel(
                             transactions = topTransactions,
                             onOpenTransaction = { selectedTxId = it.id },
@@ -2952,7 +2947,7 @@ private fun HomeActivityHeading(automatedCount: Int) {
             border = BorderStroke(1.dp, Color(0xFF333B3E))
         ) {
             Text(
-                if (automatedCount == 0) "0 total" else "$automatedCount total",
+                if (automatedCount == 0) "0 automated" else "$automatedCount automated",
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 color = Color(0xFF8A9396),
                 fontSize = 11.sp,
@@ -2993,13 +2988,6 @@ private fun HomeActivityPanel(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    "DISPATCH RESULTS",
-                    color = Color(0xFF5B6366),
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 1.1.sp
-                )
                 transactions.forEach { tx ->
                     HomeDispatchRow(
                         tx = tx,
@@ -3208,17 +3196,24 @@ private fun HomeDispatchRow(
         }
         Spacer(Modifier.width(10.dp))
         Column(horizontalAlignment = Alignment.End) {
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = statusColor.copy(alpha = 0.14f),
+                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.22f))
+            ) {
+                Text(
+                    tx.status,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    color = statusColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+            Spacer(Modifier.height(4.dp))
             Text(
-                tx.amount.ifBlank { "-" },
-                color = Color(0xFFEEF2F1),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                tx.status,
-                color = statusColor,
+                transactionRecentTimeLabel(tx),
+                color = Color(0xFF8A9396),
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace
             )
@@ -3227,6 +3222,22 @@ private fun HomeDispatchRow(
         IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
             Icon(Icons.Outlined.Delete, null, tint = Color(0xFFEF8273), modifier = Modifier.size(16.dp))
         }
+    }
+}
+
+private fun isTransactionTimestampToday(timestamp: Long): Boolean {
+    if (timestamp <= 0L) return false
+    val now = Calendar.getInstance()
+    val item = Calendar.getInstance().apply { timeInMillis = timestamp }
+    return now.get(Calendar.YEAR) == item.get(Calendar.YEAR) &&
+        now.get(Calendar.DAY_OF_YEAR) == item.get(Calendar.DAY_OF_YEAR)
+}
+
+private fun transactionRecentTimeLabel(tx: Transaction): String {
+    return if (tx.timestamp > 0L) {
+        SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(tx.timestamp)).uppercase(Locale.getDefault())
+    } else {
+        tx.date.ifBlank { "Now" }
     }
 }
 
