@@ -3807,18 +3807,18 @@ private fun GithubActivityCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .graphicsLayer {
-                            scaleX = avatarPulse
-                            scaleY = avatarPulse
-                        }
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(statusColor.copy(alpha = 0.12f))
-                        .border(1.dp, statusColor.copy(alpha = 0.24f), RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .graphicsLayer {
+                                scaleX = avatarPulse
+                                scaleY = avatarPulse
+                            }
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(statusColor.copy(alpha = 0.12f))
+                            .border(1.dp, statusColor.copy(alpha = 0.24f), RoundedCornerShape(16.dp))
+                    )
                     Text(initials, color = statusColor, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
                 }
                 Spacer(Modifier.width(12.dp))
