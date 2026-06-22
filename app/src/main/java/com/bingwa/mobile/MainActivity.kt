@@ -4976,7 +4976,7 @@ fun AnimatedEmptyState(modifier: Modifier = Modifier) {
                         .matchParentSize()
                         .padding(top = 8.dp)
                 ) {
-                    val center = Offset(size.width * 0.50f, size.height * 0.34f)
+                    val center = size.center
                     val lineY = size.height * 0.68f
                     val maxRadius = size.minDimension * 0.20f
 
