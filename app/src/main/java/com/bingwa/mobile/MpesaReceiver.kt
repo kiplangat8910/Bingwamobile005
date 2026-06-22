@@ -221,7 +221,7 @@ class MpesaReceiver : BroadcastReceiver() {
                 val newArr = JSONArray()
                 newArr.put(newEntry)
                 for (i in 0 until minOf(arr.length(), 99)) newArr.put(arr.getJSONObject(i))
-                prefs.edit().putString("list", newArr.toString()).apply()
+                prefs.edit().putString("list", newArr.toString()).commit()
                 broadcastTransactionCreated(context, newId)
                 newId
             } catch (e: Exception) {
@@ -875,7 +875,7 @@ class MpesaReceiver : BroadcastReceiver() {
             val newArr = JSONArray()
             newArr.put(newEntry)
             for (i in 0 until minOf(arr.length(), 99)) newArr.put(arr.getJSONObject(i))
-            prefs.edit().putString("list", newArr.toString()).apply()
+            prefs.edit().putString("list", newArr.toString()).commit()
             broadcastTransactionCreated(context, newId)
             newId
         } catch (e: Exception) {

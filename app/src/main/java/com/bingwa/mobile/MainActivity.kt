@@ -468,6 +468,26 @@ fun resolveClientNameByPhone(context: Context, phone: String): String {
     return ""
 }
 
+fun upsertSavedContact(context: Context, phone: String, name: String) {
+    val normalized = SmsCommandHandler.normalizePhone(phone)
+    val cleanedName = formatClientName(name)
+    if (!normalized.matches(Regex("^0\\d{9}$")) || cleanedName.isBlank()) return
+
+    val prefs = context.getSharedPreferences("saved_contacts", Context.MODE_PRIVATE)
+    val existing = loadContacts(prefs).toMutableList()
+    val idx = existing.indexOfFirst { SmsCommandHandler.normalizePhone(it.phone) == normalized }
+    if (idx >= 0) {
+        val merged = choosePreferredClientName(existing[idx].name, cleanedName)
+        if (merged != existing[idx].name) {
+            existing[idx] = existing[idx].copy(name = merged)
+            saveContacts(prefs, existing)
+        }
+    } else {
+        existing.add(0, SavedContact(cleanedName, normalized))
+        saveContacts(prefs, existing.take(350))
+    }
+}
+
 fun choosePreferredClientName(current: String, candidate: String): String {
     val currentFormatted = formatClientName(current)
     val candidateFormatted = formatClientName(candidate)
@@ -3095,6 +3115,9 @@ private fun HomeDispatchRow(
             append(it)
         }
     }
+    val failureReason = if (tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED) {
+        transactionFailureReason(tx)
+    } else ""
 
     Row(
         modifier = Modifier
@@ -3131,6 +3154,17 @@ private fun HomeDispatchRow(
                 overflow = TextOverflow.Ellipsis,
                 lineHeight = 16.sp
             )
+            if (failureReason.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Reason: $failureReason",
+                    color = C.red.copy(alpha = 0.92f),
+                    fontSize = 10.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 14.sp
+                )
+            }
         }
         Spacer(Modifier.width(10.dp))
         Column(horizontalAlignment = Alignment.End) {
@@ -5006,7 +5040,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
     var selectedHistoryTxId by rememberSaveable { mutableIntStateOf(-1) }
     var smsSearchContacts by remember { mutableStateOf<List<SavedContact>>(emptyList()) }
     var smsSearchLoading by remember { mutableStateOf(false) }
-    val fallbackResolvedClientName = remember(phone, allTxns.size) { resolveClientNameByPhone(ctx, phone) }
+    var fallbackResolvedClientName by remember { mutableStateOf("") }
     val enabledOffers by remember {
         derivedStateOf {
             offers.asSequence()
@@ -5085,6 +5119,20 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
         smsSearchLoading = true
         smsSearchContacts = withContext(Dispatchers.IO) { extractMpesaContacts(ctx, 180) }
         smsSearchLoading = false
+    }
+
+    LaunchedEffect(phone, allTxns.size) {
+        val base = resolveClientNameByPhone(ctx, phone)
+        if (base.isNotBlank()) {
+            fallbackResolvedClientName = base
+            return@LaunchedEffect
+        }
+        fallbackResolvedClientName = withContext(Dispatchers.IO) {
+            resolveClientNameFromRecentMpesaSms(ctx, phone)
+        }
+        if (fallbackResolvedClientName.isNotBlank()) {
+            upsertSavedContact(ctx, phone, fallbackResolvedClientName)
+        }
     }
 
     LaunchedEffect(offers) {

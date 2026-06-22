@@ -649,6 +649,9 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
     val title = tx.clientName.ifBlank {
         tx.description.ifBlank { "Transaction" }
     }
+    val failureReason = if (tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED) {
+        transactionFailureReason(tx)
+    } else ""
     val subtitle = buildList {
         tx.description
             .takeIf { it.isNotBlank() && !it.equals(title, ignoreCase = true) }
@@ -701,6 +704,17 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                     lineHeight = 16.sp
                 )
+                if (failureReason.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Reason: $failureReason",
+                        color = C.red.copy(alpha = 0.92f),
+                        fontSize = 10.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 14.sp
+                    )
+                }
             }
             Spacer(Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.End) {

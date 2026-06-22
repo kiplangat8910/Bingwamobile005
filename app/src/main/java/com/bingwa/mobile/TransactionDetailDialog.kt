@@ -41,6 +41,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -87,6 +89,8 @@ internal fun TransactionDetailDialog(
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val isFailed = tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED
+    val failureReason = if (isFailed) transactionFailureReason(tx) else ""
+    val suggestAlternative = shouldSuggestAlternativeNumber(tx)
     val statusColor = when (tx.statusEnum) {
         TransactionStatus.SUCCESS -> C.green
         TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
@@ -99,6 +103,8 @@ internal fun TransactionDetailDialog(
     }
 
     var retrying by remember { mutableStateOf(false) }
+    var altPhone by remember { mutableStateOf("") }
+    var altPhoneErr by remember { mutableStateOf<String?>(null) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -212,6 +218,92 @@ internal fun TransactionDetailDialog(
                                 transactionSource(tx),
                                 trailingChip = true
                             )
+                        }
+                    }
+
+                    if (failureReason.isNotBlank()) {
+                        TransactionDetailSection(
+                            title = "Failure Reason",
+                            contentPadding = PaddingValues(horizontal = 22.dp, vertical = 12.dp)
+                        ) {
+                            LastResponsePanel(text = failureReason)
+                        }
+                    }
+
+                    if (suggestAlternative) {
+                        TransactionDetailSection(
+                            title = "Alternative Number",
+                            contentPadding = PaddingValues(horizontal = 22.dp, vertical = 12.dp)
+                        ) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(18.dp),
+                                color = C.surface.copy(alpha = 0.92f),
+                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.65f))
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(
+                                        "This number looks like it already received this offer. Enter another number to buy for:",
+                                        color = C.t2,
+                                        fontSize = 12.sp,
+                                        lineHeight = 18.sp
+                                    )
+                                    OutlinedTextField(
+                                        value = altPhone,
+                                        onValueChange = { v ->
+                                            altPhone = v.filter(Char::isDigit).take(10)
+                                            altPhoneErr = null
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        placeholder = { Text("0712345678", color = C.t3) },
+                                        isError = altPhoneErr != null,
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = C.cardHi.copy(alpha = 0.92f),
+                                            unfocusedContainerColor = C.cardHi.copy(alpha = 0.92f),
+                                            focusedBorderColor = C.cyan.copy(alpha = 0.85f),
+                                            unfocusedBorderColor = C.border.copy(alpha = 0.9f),
+                                            focusedTextColor = C.t1,
+                                            unfocusedTextColor = C.t1,
+                                            cursorColor = C.cyan,
+                                            focusedPlaceholderColor = C.t3,
+                                            unfocusedPlaceholderColor = C.t3
+                                        )
+                                    )
+                                    altPhoneErr?.let { err ->
+                                        Text(err, color = C.red, fontSize = 11.sp)
+                                    }
+                                    Button(
+                                        onClick = {
+                                            val normalized = altPhone.trim()
+                                            altPhoneErr = when {
+                                                normalized.isBlank() -> "Alternative number required"
+                                                !normalized.matches(Regex("^0\\d{9}$")) -> "Must be 10 digits e.g. 0712345678"
+                                                SmsCommandHandler.normalizePhone(normalized) == SmsCommandHandler.normalizePhone(tx.phoneNumber) ->
+                                                    "Please enter a different number"
+                                                else -> null
+                                            }
+                                            if (altPhoneErr != null) return@Button
+                                            val result = dispatchAlternativeNumberNow(ctx, tx, normalized)
+                                            Toast.makeText(ctx, result.message, if (result.success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG).show()
+                                            if (result.success) {
+                                                altPhone = ""
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                                        shape = RoundedCornerShape(18.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = C.amber)
+                                    ) {
+                                        Text("Buy for alternative number", color = Color(0xFF10131A), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -684,10 +776,7 @@ private fun formatDuration(tx: Transaction): String {
         else -> 0L
     }
     if (durationMs <= 0L) return "Not recorded"
-    val seconds = durationMs / 1000L
-    val minutes = seconds / 60L
-    val remainder = seconds % 60L
-    return if (minutes > 0L) "${minutes}m ${remainder}s" else "${remainder}s"
+    return "${durationMs} ms"
 }
 
 private fun transactionSource(tx: Transaction): String = when (tx.source) {

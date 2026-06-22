@@ -1694,6 +1694,9 @@ private fun TransactionHistoryRow(
     val title = tx.clientName.ifBlank {
         tx.description.ifBlank { "Transaction #${tx.id}" }
     }
+    val failureReason = if (tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED) {
+        transactionFailureReason(tx)
+    } else ""
     val primaryDetail = tx.phoneNumber
         .takeIf { it.isNotBlank() }
         ?.let(::maskTransactionPhone)
@@ -1769,6 +1772,16 @@ private fun TransactionHistoryRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (failureReason.isNotBlank()) {
+                    Text(
+                        "Reason: $failureReason",
+                        color = C.red.copy(alpha = 0.92f),
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             Spacer(Modifier.width(12.dp))
             Column(
