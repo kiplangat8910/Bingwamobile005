@@ -106,6 +106,12 @@ internal fun TransactionDetailDialog(
     var altDispatching by remember { mutableStateOf(false) }
     val altSuggestions = remember(tx.id, tx.clientName, tx.phoneNumber) { suggestedAlternativeNumbers(ctx, tx) }
 
+    LaunchedEffect(isDailyLimitHold, altSuggestions) {
+        if (isDailyLimitHold && altPhone.isBlank() && altSuggestions.isNotEmpty()) {
+            altPhone = altSuggestions.first()
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = true)
