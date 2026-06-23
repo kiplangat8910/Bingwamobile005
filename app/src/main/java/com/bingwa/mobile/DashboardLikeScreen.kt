@@ -326,7 +326,7 @@ private fun BalanceOverviewCard(
                             overflow = TextOverflow.Clip
                         )
                         Text(
-                            unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited active" else "units",
+                            unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited active" else "tokens",
                             color = C.t2,
                             fontSize = 15.sp,
                             maxLines = 1,

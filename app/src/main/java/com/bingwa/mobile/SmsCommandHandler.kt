@@ -137,7 +137,7 @@ object SmsCommandHandler {
                 return true
             }
             TokenManager(context).addTokens(tokens)
-            sendOwnerNotification(context, "Tokens added", "$tokens token units were added by the admin.")
+            sendOwnerNotification(context, "Tokens added", "$tokens tokens were added by the admin.")
             return true
         }
 

@@ -965,7 +965,9 @@ private fun SectionHeader(title: String, subtitle: String, accent: Color) {
                 Spacer(Modifier.width(10.dp))
                 Text(title, color = C.t1, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
             }
-            Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 17.sp)
+            if (subtitle.isNotBlank()) {
+                Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 17.sp)
+            }
         }
     }
 }
@@ -3895,7 +3897,7 @@ private fun GithubOverviewCard(
                 GithubMetricTile(
                     title = if (unlimitedLabel != null) "Unlimited plan" else "Tokens",
                     value = unlimitedLabel ?: tokenBal.toString(),
-                    caption = unlimitedRemaining ?: "Available units",
+                    caption = unlimitedRemaining ?: "Available tokens",
                     accent = if (unlimitedLabel != null) C.green else C.amber,
                     modifier = Modifier.weight(1f)
                 )
@@ -6608,8 +6610,8 @@ fun TokensScreen() {
                 TokensHeroCard(balance = bal, activePlan = activePlan, remainingMs = remMs)
 
                 SectionHeader(
-                    title = "Buy Tokens",
-                    subtitle = "Choose a token pack with instant airtime conversion.",
+                    title = "TOP UP",
+                    subtitle = "",
                     accent = C.cyan
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -6619,8 +6621,8 @@ fun TokensScreen() {
                 }
 
                 SectionHeader(
-                    title = "Unlimited",
-                    subtitle = "Best for high-volume usage when you want time-based unlimited access.",
+                    title = "UNLIMITED",
+                    subtitle = "",
                     accent = C.blue
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -6636,14 +6638,14 @@ fun TokensScreen() {
 
     confirm?.let { amount ->
         val plan = UnlimitedManager.planForAmount(amount)
-        val units = if (plan == null) TokenManager.convertAmountToTokens(amount) else 0
+        val tokensToAdd = if (plan == null) TokenManager.convertAmountToTokens(amount) else 0
         AlertDialog(
             onDismissRequest = { confirm = null },
             title = { Text("Confirm Purchase", color = C.t1) },
             text = {
                 Text(
                     if (plan != null) "Use KSh $amount airtime to activate unlimited ${plan.label.lowercase()} access?"
-                    else "Use KSh $amount airtime to receive $units tokens?",
+                    else "Use KSh $amount airtime to receive $tokensToAdd tokens?",
                     color = C.t2
                 )
             },
@@ -6655,7 +6657,7 @@ fun TokensScreen() {
                             if (ok) {
                                 remMs = um.remainingMs()
                                 if (plan != null) Toast.makeText(ctx, "Unlimited ${plan.label} activated. ${formatRemainingTimeDetailed(remMs)}.", Toast.LENGTH_SHORT).show()
-                                else Toast.makeText(ctx, "Airtime used successfully. $units tokens were added.", Toast.LENGTH_SHORT).show()
+                                else Toast.makeText(ctx, "Airtime used successfully. $tokensToAdd tokens were added.", Toast.LENGTH_SHORT).show()
                             } else {
                                 Toast.makeText(ctx, info ?: "Token purchase failed.", Toast.LENGTH_LONG).show()
                             }
@@ -6674,45 +6676,32 @@ private data class TokenTopUp(val tokens: Int, val ksh: Int, val popular: Boolea
 
 @Composable
 private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
-    val accent = if (p.popular) C.cyan else C.green
-    val perShilling = maxOf(1, p.tokens / p.ksh)
+    val accent = C.cyan
     Surface(
-        color = C.card,
+        color = C.cardHi.copy(alpha = 0.94f),
         shape = RoundedCornerShape(22.dp),
-        border = BorderStroke(1.dp, if (p.popular) C.cyan.copy(alpha = 0.26f) else C.border.copy(alpha = 0.85f)),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.horizontalGradient(
-                        if (p.popular) {
-                            listOf(C.cyan.copy(alpha = 0.12f), C.card, C.surface.copy(alpha = 0.92f))
-                        } else {
-                            listOf(C.green.copy(alpha = 0.08f), C.card, C.surface.copy(alpha = 0.92f))
-                        }
-                    )
-                )
-                .padding(horizontal = 14.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Column(
                 Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                if (p.popular) {
                     Surface(
                         shape = RoundedCornerShape(999.dp),
-                        color = accent.copy(alpha = 0.14f),
+                        color = accent.copy(alpha = 0.12f),
                         border = BorderStroke(1.dp, accent.copy(alpha = 0.22f))
                     ) {
                         Text(
-                            if (p.popular) "BEST VALUE" else "INSTANT TOP-UP",
+                            "POPULAR",
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                             color = accent,
                             fontSize = 9.5.sp,
@@ -6720,34 +6709,42 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
                             letterSpacing = 0.8.sp
                         )
                     }
-                    Text("KSh ${p.ksh}", color = if (p.popular) C.cyan else C.t2, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
-                Text("${p.tokens} tokens", color = C.t1, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                Text(
-                    "Tokens never expire and are added immediately after purchase.",
-                    color = C.t2,
-                    fontSize = 11.5.sp,
-                    lineHeight = 15.sp
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    MiniTag("${perShilling} / KSh", accent)
-                    MiniTag("Pay as you go", C.blue)
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        p.tokens.toString(),
+                        color = C.t1,
+                        fontSize = 44.sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "tokens",
+                        color = C.t2,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                        maxLines = 1
+                    )
                 }
+                Text("Ksh ${p.ksh}", color = C.t2, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
 
-            Button(
+            OutlinedButton(
                 onClick = onBuy,
-                shape = RoundedCornerShape(15.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (p.popular) C.cyan else C.cardHi,
-                    contentColor = if (p.popular) C.bg else C.t1
-                ),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                modifier = Modifier.height(42.dp)
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f)),
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent, contentColor = C.t1),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier.height(44.dp)
             ) {
-                Icon(Icons.Outlined.Bolt, null, modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Buy now", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Buy", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
         }
     }
