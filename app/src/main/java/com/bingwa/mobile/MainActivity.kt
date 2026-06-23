@@ -6606,10 +6606,6 @@ fun TokensScreen() {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 TokensHeroCard(balance = bal, activePlan = activePlan, remainingMs = remMs)
-                TokenCatalogOverview(
-                    packs = packs,
-                    activePlan = activePlan != null
-                )
 
                 SectionHeader(
                     title = "Buy Tokens",
@@ -6675,106 +6671,6 @@ fun TokensScreen() {
 }
 
 private data class TokenTopUp(val tokens: Int, val ksh: Int, val popular: Boolean = false)
-
-@Composable
-private fun TokenCatalogOverview(packs: List<TokenTopUp>, activePlan: Boolean) {
-    val bestPack = packs.maxByOrNull { it.tokens }
-    val starterPack = packs.minByOrNull { it.ksh }
-    Surface(
-        color = C.cardHi.copy(alpha = 0.94f),
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f)),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            C.cyan.copy(alpha = 0.10f),
-                            C.cardHi.copy(alpha = 0.98f),
-                            C.surface.copy(alpha = 0.94f)
-                        )
-                    )
-                )
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("Purchase Overview", color = C.t1, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    Text(
-                        if (activePlan) "Buy extra tokens any time while unlimited is active." else "Pick the right token pack without leaving this screen.",
-                        color = C.t2,
-                        fontSize = 12.sp
-                    )
-                }
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = C.cyan.copy(alpha = 0.12f),
-                    border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.22f))
-                ) {
-                    Text(
-                        "${packs.size} packs",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        color = C.cyan,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TokenOverviewMetric(
-                    label = "Starter",
-                    value = starterPack?.let { "KSh ${it.ksh}" } ?: "-",
-                    detail = starterPack?.let { "${it.tokens} tokens" } ?: "No packs",
-                    accent = C.green,
-                    modifier = Modifier.weight(1f)
-                )
-                TokenOverviewMetric(
-                    label = "Best volume",
-                    value = bestPack?.tokens?.toString() ?: "-",
-                    detail = bestPack?.let { "KSh ${it.ksh}" } ?: "No packs",
-                    accent = C.cyan,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TokenOverviewMetric(
-    label: String,
-    value: String,
-    detail: String,
-    accent: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        color = C.surface.copy(alpha = 0.82f),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.20f))
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(label, color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-            Text(value, color = accent, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
-            Text(detail, color = C.t2, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
 
 @Composable
 private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
