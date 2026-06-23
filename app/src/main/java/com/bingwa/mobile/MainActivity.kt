@@ -6599,7 +6599,7 @@ fun TokensScreen() {
                 .size(280.dp)
                 .align(Alignment.TopEnd)
                 .offset(90.dp, 90.dp)
-                .background(Brush.radialGradient(listOf(C.amber.copy(alpha = 0.08f), Color.Transparent)), CircleShape)
+                .background(Brush.radialGradient(listOf(C.cyan.copy(alpha = 0.08f), Color.Transparent)), CircleShape)
         )
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             PageHeader("Tokens", if (activePlan != null) "View your active unlimited access and renew when needed" else "View token balance and buy only what you need")
@@ -6623,7 +6623,7 @@ fun TokensScreen() {
                 SectionHeader(
                     title = "UNLIMITED",
                     subtitle = "",
-                    accent = C.amber
+                    accent = C.cyan
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     UnlimitedManager.PLANS.forEach { plan ->
@@ -6639,7 +6639,7 @@ fun TokensScreen() {
     confirm?.let { amount ->
         val plan = UnlimitedManager.planForAmount(amount)
         val tokensToAdd = if (plan == null) TokenManager.convertAmountToTokens(amount) else 0
-        val confirmAccent = if (plan != null) C.amber else C.cyan
+        val confirmAccent = C.cyan
         AlertDialog(
             onDismissRequest = { confirm = null },
             title = { Text("Confirm Purchase", color = C.t1) },
@@ -6753,7 +6753,7 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
 
 @Composable
 private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
-    val accent = C.amber
+    val accent = C.cyan
     Surface(
         color = C.card,
         shape = RoundedCornerShape(20.dp),
