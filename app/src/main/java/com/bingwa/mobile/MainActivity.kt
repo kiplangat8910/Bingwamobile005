@@ -6679,20 +6679,20 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
     val accent = C.cyan
     Surface(
         color = C.cardHi.copy(alpha = 0.94f),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(18.dp),
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Column(
                 Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 if (p.popular) {
                     Surface(
@@ -6702,22 +6702,22 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
                     ) {
                         Text(
                             "POPULAR",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 2.dp),
                             color = accent,
-                            fontSize = 9.sp,
+                            fontSize = 8.5.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.8.sp
+                            letterSpacing = 0.6.sp
                         )
                     }
                 }
                 Row(
                     verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         p.tokens.toString(),
                         color = C.t1,
-                        fontSize = 34.sp,
+                        fontSize = 29.sp,
                         fontWeight = FontWeight.Black,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -6725,26 +6725,26 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
                     Text(
                         "tokens",
                         color = C.t2,
-                        fontSize = 15.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(bottom = 4.dp),
+                        modifier = Modifier.padding(bottom = 3.dp),
                         maxLines = 1
                     )
                 }
-                Text("Ksh ${p.ksh}", color = C.t2, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("Ksh ${p.ksh}", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
 
             OutlinedButton(
                 onClick = onBuy,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(15.dp),
                 border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f)),
                 colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent, contentColor = C.t1),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                modifier = Modifier.height(40.dp)
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.height(36.dp)
             ) {
-                Icon(Icons.Outlined.Add, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Buy", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Icon(Icons.Outlined.Add, null, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(5.dp))
+                Text("Buy", fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
         }
     }
