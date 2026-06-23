@@ -6639,6 +6639,7 @@ fun TokensScreen() {
     confirm?.let { amount ->
         val plan = UnlimitedManager.planForAmount(amount)
         val tokensToAdd = if (plan == null) TokenManager.convertAmountToTokens(amount) else 0
+        val confirmAccent = if (plan != null) C.amber else C.cyan
         AlertDialog(
             onDismissRequest = { confirm = null },
             title = { Text("Confirm Purchase", color = C.t1) },
@@ -6664,7 +6665,7 @@ fun TokensScreen() {
                         }
                     }
                 ) {
-                    Text("Confirm", color = C.cyan)
+                    Text("Confirm", color = confirmAccent)
                 }
             },
             dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel", color = C.t2) } }
