@@ -60,6 +60,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -1116,6 +1117,11 @@ private fun TokensHeroCard(
     remainingMs: Long
 ) {
     val accent = C.cyan
+    val totalSeconds = (remainingMs / 1_000L).coerceAtLeast(0L)
+    val days = totalSeconds / 86_400L
+    val hours = (totalSeconds % 86_400L) / 3_600L
+    val minutes = (totalSeconds % 3_600L) / 60L
+    val remainingLabel = if (activePlan != null) "${days}d ${hours}h ${minutes}m" else ""
     val heroAlignment = if (activePlan != null) Alignment.Start else Alignment.CenterHorizontally
     val detailTextAlign = if (activePlan != null) TextAlign.Start else TextAlign.Center
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -1174,10 +1180,6 @@ private fun TokensHeroCard(
             ) {
                 if (activePlan != null) {
                     val accentActive = C.green
-                    val totalSeconds = (remainingMs / 1_000L).coerceAtLeast(0L)
-                    val days = totalSeconds / 86_400L
-                    val hours = (totalSeconds % 86_400L) / 3_600L
-                    val minutes = (totalSeconds % 3_600L) / 60L
                     val remainingText = buildAnnotatedString {
                         append("${days}d ${hours}h ")
                         withStyle(SpanStyle(color = accentActive)) {
