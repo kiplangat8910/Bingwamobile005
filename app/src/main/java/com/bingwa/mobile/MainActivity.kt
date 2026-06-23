@@ -1118,7 +1118,7 @@ private fun TokensHeroCard(
     activePlan: UnlimitedManager.Plan?,
     remainingMs: Long
 ) {
-    val accent = C.cyan
+    val accent = C.amber
     val totalSeconds = (remainingMs / 1_000L).coerceAtLeast(0L)
     val days = totalSeconds / 86_400L
     val hours = (totalSeconds % 86_400L) / 3_600L
@@ -1157,25 +1157,25 @@ private fun TokensHeroCard(
         }
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = C.cardHi.copy(alpha = 0.94f),
-            shape = RoundedCornerShape(24.dp),
-            border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+            color = Color(0xFF14181A),
+            shape = RoundedCornerShape(28.dp),
+            border = BorderStroke(1.dp, accent.copy(alpha = 0.30f))
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        Brush.verticalGradient(
+                        Brush.linearGradient(
                             listOf(
-                                accent.copy(alpha = 0.12f),
-                                C.cardHi.copy(alpha = 0.98f),
-                                C.surface.copy(alpha = 0.96f)
+                                Color(0xFF21211C),
+                                Color(0xFF14181A),
+                                Color(0xFF0F1418)
                             )
                         )
                     )
                     .padding(
-                        horizontal = if (compact) 15.dp else 18.dp,
-                        vertical = if (compact) 16.dp else 18.dp
+                        horizontal = if (compact) 18.dp else 22.dp,
+                        vertical = if (compact) 18.dp else 22.dp
                     ),
                 horizontalAlignment = heroAlignment,
                 verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp)
@@ -1307,14 +1307,14 @@ private fun TokensHeroCard(
                     )
                     Text(
                         "AVAILABLE TOKENS",
-                        color = C.t3,
+                        color = accent,
                         fontSize = if (compact) 12.sp else 13.sp,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 3.sp,
+                        letterSpacing = 4.sp,
                         textAlign = detailTextAlign,
                         maxLines = 1
                     )
-                    Spacer(Modifier.height(if (compact) 10.dp else 12.dp))
+                    Spacer(Modifier.height(if (compact) 12.dp else 14.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -1324,7 +1324,7 @@ private fun TokensHeroCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Outlined.Bolt, null, tint = C.t3, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Outlined.Bolt, null, tint = accent, modifier = Modifier.size(16.dp))
                             Text(
                                 "1 token = 1 USSD call",
                                 color = C.t2,
@@ -1347,7 +1347,7 @@ private fun TokensHeroCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Outlined.Shield, null, tint = C.t3, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Outlined.Shield, null, tint = accent, modifier = Modifier.size(16.dp))
                             Text(
                                 "Never expire",
                                 color = C.t2,
@@ -6592,27 +6592,30 @@ fun TokensScreen() {
             Modifier
                 .size(300.dp)
                 .offset((-110).dp, 10.dp)
-                .background(Brush.radialGradient(listOf(C.cyan.copy(alpha = 0.10f), Color.Transparent)), CircleShape)
+                .background(Brush.radialGradient(listOf(C.amber.copy(alpha = 0.08f), Color.Transparent)), CircleShape)
         )
         Box(
             Modifier
                 .size(280.dp)
                 .align(Alignment.TopEnd)
                 .offset(90.dp, 90.dp)
-                .background(Brush.radialGradient(listOf(C.cyan.copy(alpha = 0.08f), Color.Transparent)), CircleShape)
+                .background(Brush.radialGradient(listOf(C.amber.copy(alpha = 0.07f), Color.Transparent)), CircleShape)
         )
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            PageHeader("Tokens", if (activePlan != null) "View your active unlimited access and renew when needed" else "View token balance and buy only what you need")
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .padding(top = 18.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)
+                    .widthIn(max = 430.dp)
+                    .align(Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 TokensHeroCard(balance = bal, activePlan = activePlan, remainingMs = remMs)
 
                 SectionHeader(
                     title = "TOP UP",
                     subtitle = "",
-                    accent = C.cyan
+                    accent = C.amber
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     packs.forEach { p ->
@@ -6623,7 +6626,7 @@ fun TokensScreen() {
                 SectionHeader(
                     title = "UNLIMITED",
                     subtitle = "",
-                    accent = C.cyan
+                    accent = C.amber
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     UnlimitedManager.PLANS.forEach { plan ->
@@ -6639,7 +6642,7 @@ fun TokensScreen() {
     confirm?.let { amount ->
         val plan = UnlimitedManager.planForAmount(amount)
         val tokensToAdd = if (plan == null) TokenManager.convertAmountToTokens(amount) else 0
-        val confirmAccent = C.cyan
+        val confirmAccent = C.amber
         AlertDialog(
             onDismissRequest = { confirm = null },
             title = { Text("Confirm Purchase", color = C.t1) },
@@ -6677,17 +6680,26 @@ private data class TokenTopUp(val tokens: Int, val ksh: Int, val popular: Boolea
 
 @Composable
 private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
-    val accent = C.cyan
+    val accent = C.amber
     Surface(
-        color = C.cardHi.copy(alpha = 0.94f),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
+        color = Color(0xFF14181A),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.30f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            Color(0xFF21211C),
+                            Color(0xFF14181A),
+                            Color(0xFF0F1418)
+                        )
+                    )
+                )
+                .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -6737,15 +6749,15 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
 
             OutlinedButton(
                 onClick = onBuy,
-                shape = RoundedCornerShape(15.dp),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f)),
-                colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent, contentColor = C.t1),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                modifier = Modifier.height(36.dp)
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, accent.copy(alpha = 0.55f)),
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent, contentColor = accent),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+                modifier = Modifier.height(46.dp)
             ) {
                 Icon(Icons.Outlined.Add, null, modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(5.dp))
-                Text("Buy", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Spacer(Modifier.width(8.dp))
+                Text("Buy", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
         }
     }
@@ -6753,22 +6765,26 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
 
 @Composable
 private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
-    val accent = C.cyan
+    val accent = C.amber
     Surface(
-        color = C.card,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f)),
+        color = Color(0xFF14181A),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.26f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    Brush.horizontalGradient(
-                        listOf(accent.copy(alpha = 0.10f), C.card, C.surface.copy(alpha = 0.92f))
+                    Brush.linearGradient(
+                        listOf(
+                            Color(0xFF21211C),
+                            Color(0xFF14181A),
+                            Color(0xFF0F1418)
+                        )
                     )
                 )
-                .padding(horizontal = 14.dp, vertical = 13.dp),
+                .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
@@ -6797,14 +6813,15 @@ private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
 
             Button(
                 onClick = onBuy,
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = C.bg),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                modifier = Modifier.height(38.dp)
+                shape = RoundedCornerShape(20.dp),
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent, contentColor = accent),
+                border = BorderStroke(1.dp, accent.copy(alpha = 0.55f)),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+                modifier = Modifier.height(46.dp)
             ) {
                 Icon(Icons.Outlined.Shield, null, modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Buy", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Spacer(Modifier.width(8.dp))
+                Text("Buy", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
         }
     }
