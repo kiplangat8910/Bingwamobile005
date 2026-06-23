@@ -57,7 +57,9 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -1114,7 +1116,6 @@ private fun TokensHeroCard(
     remainingMs: Long
 ) {
     val accent = C.cyan
-    val remainingLabel = formatRemainingTimeDetailed(remainingMs)
     val heroAlignment = if (activePlan != null) Alignment.Start else Alignment.CenterHorizontally
     val detailTextAlign = if (activePlan != null) TextAlign.Start else TextAlign.Center
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -1172,6 +1173,17 @@ private fun TokensHeroCard(
                 verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp)
             ) {
                 if (activePlan != null) {
+                    val accentActive = C.green
+                    val totalSeconds = (remainingMs / 1_000L).coerceAtLeast(0L)
+                    val days = totalSeconds / 86_400L
+                    val hours = (totalSeconds % 86_400L) / 3_600L
+                    val minutes = (totalSeconds % 3_600L) / 60L
+                    val remainingText = buildAnnotatedString {
+                        append("${days}d ${hours}h ")
+                        withStyle(SpanStyle(color = accentActive)) {
+                            append("${minutes}m")
+                        }
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1185,18 +1197,18 @@ private fun TokensHeroCard(
                                 modifier = Modifier
                                     .size(10.dp)
                                     .clip(CircleShape)
-                                    .background(accent)
+                                    .background(accentActive)
                             )
                             Text(
                                 "Unlimited active",
-                                color = accent,
+                                color = accentActive,
                                 fontSize = detailFontSize,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1
                             )
                         }
                         Text(
-                            activePlan.label,
+                            "Admin grant",
                             color = C.t2,
                             fontSize = detailFontSize,
                             fontWeight = FontWeight.Medium,
@@ -1214,8 +1226,7 @@ private fun TokensHeroCard(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text(
-                        remainingLabel,
-                        color = C.t1,
+                        remainingText,
                         fontSize = remainingFontSize,
                         fontWeight = FontWeight.ExtraBold,
                         lineHeight = remainingFontSize * 1.05f,
@@ -1240,13 +1251,18 @@ private fun TokensHeroCard(
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(
                                     Brush.horizontalGradient(
-                                        listOf(accent.copy(alpha = 0.90f), accent.copy(alpha = 0.55f))
+                                        listOf(accentActive.copy(alpha = 0.92f), accentActive.copy(alpha = 0.62f))
                                     )
                                 )
                         )
                     }
+                    val durationDays = (activePlan.durationMs / 86_400_000L).toInt().coerceAtLeast(0)
+                    val windowLabel = when {
+                        durationDays > 0 -> "${durationDays}-day"
+                        else -> "${(activePlan.durationMs / 3_600_000L).toInt().coerceAtLeast(1)}-hour"
+                    }
                     Text(
-                        "${(activeProgress * 100f).toInt()}% of your access window left",
+                        "${(activeProgress * 100f).toInt()}% of your $windowLabel window left",
                         color = C.t2,
                         fontSize = detailFontSize,
                         fontWeight = FontWeight.Medium,
@@ -1276,20 +1292,6 @@ private fun TokensHeroCard(
                         )
                     }
                 } else {
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = accent.copy(alpha = 0.10f),
-                        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
-                    ) {
-                        Text(
-                            "TOKEN BALANCE",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            color = accent,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.0.sp
-                        )
-                    }
                     Text(
                         balance.toString(),
                         fontSize = balanceValueFontSize,
@@ -1300,28 +1302,58 @@ private fun TokensHeroCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        "Never expire",
-                        color = C.t2,
-                        fontSize = detailFontSize,
-                        fontWeight = FontWeight.Medium,
+                        "AVAILABLE TOKENS",
+                        color = C.t3,
+                        fontSize = if (compact) 12.sp else 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 3.sp,
                         textAlign = detailTextAlign,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 1
                     )
-                    Column(
+                    Spacer(Modifier.height(if (compact) 10.dp else 12.dp))
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        PurchasePerkChip(
-                            icon = Icons.Outlined.Bolt,
-                            label = "1 token = 1 USSD call",
-                            accent = accent
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Outlined.Bolt, null, tint = C.t3, modifier = Modifier.size(16.dp))
+                            Text(
+                                "1 token = 1 USSD call",
+                                color = C.t2,
+                                fontSize = if (compact) 12.sp else 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp)
+                                .width(1.dp)
+                                .height(18.dp)
+                                .background(C.border.copy(alpha = 0.65f))
                         )
-                        PurchasePerkChip(
-                            icon = Icons.Outlined.Verified,
-                            label = "Never expire",
-                            accent = accent
-                        )
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Outlined.Shield, null, tint = C.t3, modifier = Modifier.size(16.dp))
+                            Text(
+                                "Never expire",
+                                color = C.t2,
+                                fontSize = if (compact) 12.sp else 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
