@@ -1081,6 +1081,7 @@ private fun PurchasePerkChip(icon: ImageVector, label: String, accent: Color) {
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
+                softWrap = false,
                 overflow = TextOverflow.Ellipsis
             )
         }
@@ -1112,7 +1113,7 @@ private fun TokensHeroCard(
     activePlan: UnlimitedManager.Plan?,
     remainingMs: Long
 ) {
-    val accent = if (activePlan != null) C.green else C.cyan
+    val accent = C.cyan
     val remainingLabel = formatRemainingTimeDetailed(remainingMs)
     val heroAlignment = if (activePlan != null) Alignment.Start else Alignment.CenterHorizontally
     val detailTextAlign = if (activePlan != null) TextAlign.Start else TextAlign.Center
@@ -1184,11 +1185,11 @@ private fun TokensHeroCard(
                                 modifier = Modifier
                                     .size(10.dp)
                                     .clip(CircleShape)
-                                    .background(C.green)
+                                    .background(accent)
                             )
                             Text(
                                 "Unlimited active",
-                                color = C.green,
+                                color = accent,
                                 fontSize = detailFontSize,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1
@@ -1239,7 +1240,7 @@ private fun TokensHeroCard(
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(
                                     Brush.horizontalGradient(
-                                        listOf(C.green.copy(alpha = 0.88f), C.cyan.copy(alpha = 0.78f))
+                                        listOf(accent.copy(alpha = 0.90f), accent.copy(alpha = 0.55f))
                                     )
                                 )
                         )
@@ -1299,7 +1300,7 @@ private fun TokensHeroCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        "Tokens never expire",
+                        "Never expire",
                         color = C.t2,
                         fontSize = detailFontSize,
                         fontWeight = FontWeight.Medium,
@@ -1314,12 +1315,12 @@ private fun TokensHeroCard(
                         PurchasePerkChip(
                             icon = Icons.Outlined.Bolt,
                             label = "1 token = 1 USSD call",
-                            accent = C.cyan
+                            accent = accent
                         )
                         PurchasePerkChip(
                             icon = Icons.Outlined.Verified,
-                            label = "Tokens never expire",
-                            accent = C.green
+                            label = "Never expire",
+                            accent = accent
                         )
                     }
                 }
