@@ -1770,41 +1770,42 @@ fun MiniTag(text: String, color: Color) {
 }
 
 @Composable
-fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+fun SettingsGroup(title: String, accent: Color = C.amber, content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .shadow(10.dp, RoundedCornerShape(28.dp), clip = false)
-            .clip(RoundedCornerShape(28.dp))
+            .shadow(14.dp, RoundedCornerShape(30.dp), clip = false)
+            .clip(RoundedCornerShape(30.dp))
             .background(
-                Brush.verticalGradient(
+                Brush.linearGradient(
                     listOf(
-                        C.cardHi.copy(alpha = 0.94f),
-                        C.card.copy(alpha = 0.97f)
+                        Color(0xFF21211C),
+                        Color(0xFF14181A),
+                        Color(0xFF0F1418)
                     )
                 )
             )
-            .border(1.dp, C.border.copy(alpha = 0.85f), RoundedCornerShape(28.dp))
+            .border(1.dp, accent.copy(alpha = 0.24f), RoundedCornerShape(30.dp))
     ) {
-        Column(Modifier.padding(horizontal = 18.dp, vertical = 15.dp)) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
             Text(
                 title.uppercase(),
-                color = C.t3,
-                fontSize = 11.sp,
+                color = accent,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.6.sp
+                letterSpacing = 2.6.sp
             )
         }
-        Divider(color = C.border.copy(alpha = 0.35f), thickness = 0.8.dp)
+        Divider(color = accent.copy(alpha = 0.18f), thickness = 0.8.dp)
         content()
     }
 }
 
 @Composable
-fun GroupDivider() = Divider(
-    color = C.border.copy(alpha = 0.35f),
-    thickness = 0.6.dp,
-    modifier = Modifier.padding(horizontal = 18.dp)
+fun GroupDivider(accent: Color = C.amber) = Divider(
+    color = accent.copy(alpha = 0.16f),
+    thickness = 0.8.dp,
+    modifier = Modifier.padding(horizontal = 20.dp)
 )
 
 @Composable
@@ -1832,35 +1833,34 @@ fun LinkRow(icon: ImageVector, title: String, sub: String, color: Color, onClick
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 15.dp),
-        verticalAlignment = Alignment.Top
+            .padding(horizontal = 20.dp, vertical = 18.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(color.copy(alpha = 0.12f))
-                .border(1.dp, color.copy(alpha = 0.18f), RoundedCornerShape(14.dp)),
+                .size(54.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color(0xFF1A1F21))
+                .border(1.dp, color.copy(alpha = 0.32f), RoundedCornerShape(18.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
+            Icon(icon, null, tint = color, modifier = Modifier.size(22.dp))
         }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 title,
                 color = C.t1,
-                fontSize = 15.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(Modifier.height(4.dp))
             Text(
                 sub,
                 color = C.t2,
-                fontSize = 12.sp,
-                lineHeight = 18.sp,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1868,10 +1868,9 @@ fun LinkRow(icon: ImageVector, title: String, sub: String, color: Color, onClick
         Icon(
             Icons.Filled.ChevronRight,
             null,
-            tint = C.t2,
+            tint = color,
             modifier = Modifier
-                .padding(top = 2.dp)
-                .size(18.dp)
+                .size(22.dp)
         )
     }
 }

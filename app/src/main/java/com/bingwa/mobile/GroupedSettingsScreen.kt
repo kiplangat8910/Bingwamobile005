@@ -24,13 +24,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.align
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -175,55 +178,73 @@ private fun SettingsHome(
     onOpenDiagnostics: () -> Unit
 ) {
     val ctx = LocalContext.current
-    Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
-        PageHeader("Settings", "Organized access to history, execution, automation, and support")
-        Column(
-            Modifier.padding(horizontal = UiDimens.ScreenPaddingHorizontal),
-            verticalArrangement = Arrangement.spacedBy(UiDimens.SpacingLg)
-        ) {
-            SettingsGroup("History & Offers") {
+    Box(Modifier.fillMaxSize().background(C.bg)) {
+        Box(
+            Modifier
+                .size(320.dp)
+                .offset((-120).dp, 30.dp)
+                .background(Brush.radialGradient(listOf(C.amber.copy(alpha = 0.08f), Color.Transparent)), CircleShape)
+        )
+        Box(
+            Modifier
+                .size(320.dp)
+                .align(Alignment.TopEnd)
+                .offset(110.dp, 130.dp)
+                .background(Brush.radialGradient(listOf(C.amber.copy(alpha = 0.06f), Color.Transparent)), CircleShape)
+        )
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            Column(
+                Modifier
+                    .statusBarsPadding()
+                    .padding(top = 18.dp, start = 16.dp, end = 16.dp, bottom = 24.dp)
+                    .widthIn(max = 430.dp)
+                    .align(Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                SettingsGroup("History & Offers", accent = C.amber) {
                 LinkRow(
                     Icons.Rounded.Schedule,
                     "Transaction History",
                     "Review payments, statuses, summaries, and cleanup controls",
-                    C.green,
+                    C.amber,
                     onOpenTransactions
                 )
-                GroupDivider()
-                LinkRow(Icons.Rounded.Tag, "Offers & USSD Codes", "Manage available bundles and execution codes", C.cyan, onOpenOffers)
-                GroupDivider()
-                LinkRow(Icons.Rounded.Contacts, "Contacts", "Keep saved customer names clean and easy to search", C.blue, onOpenContacts)
+                GroupDivider(C.amber)
+                LinkRow(Icons.Rounded.Tag, "Offers & USSD Codes", "Manage available bundles and execution codes", C.amber, onOpenOffers)
+                GroupDivider(C.amber)
+                LinkRow(Icons.Rounded.Contacts, "Contacts", "Keep saved customer names clean and easy to search", C.amber, onOpenContacts)
             }
 
-            SettingsGroup("Execution Setup") {
-                LinkRow(Icons.Rounded.SimCard, "SIM Settings", "Choose SIMs for USSD, customer notifications, and admin replies", C.cyan, onOpenSim)
-                GroupDivider()
-                LinkRow(Icons.Rounded.SyncAlt, "Relay (Two‑Phone Mode)", "Configure SMS or hotspot relay between two phones", C.blue, onOpenRelay)
-                GroupDivider()
-                LinkRow(Icons.Rounded.PhoneAndroid, "Remote Control", "Manage admin phone, prefix, PIN, and remote commands", C.purple, onOpenRemote)
+            SettingsGroup("Execution Setup", accent = C.amber) {
+                LinkRow(Icons.Rounded.SimCard, "SIM Settings", "Choose SIMs for USSD, customer notifications, and admin replies", C.amber, onOpenSim)
+                GroupDivider(C.amber)
+                LinkRow(Icons.Rounded.SyncAlt, "Relay (Two‑Phone Mode)", "Configure SMS or hotspot relay between two phones", C.amber, onOpenRelay)
+                GroupDivider(C.amber)
+                LinkRow(Icons.Rounded.PhoneAndroid, "Remote Control", "Manage admin phone, prefix, PIN, and remote commands", C.amber, onOpenRemote)
             }
 
-            SettingsGroup("Automation & Alerts") {
-                LinkRow(Icons.Rounded.SmartToy, "Automation Settings", "Control automation, retries, and auto-save behavior", C.cyan, onOpenAutomation)
-                GroupDivider()
-                LinkRow(Icons.Rounded.NotificationsActive, "Customer Notifications", "Edit success, pending, and failure templates", C.green, onOpenNotifications)
-                GroupDivider()
-                LinkRow(Icons.Rounded.Warning, "Admin Alerts", "Low airtime, low tokens, and low battery alerts", C.red, onOpenAlerts)
+            SettingsGroup("Automation & Alerts", accent = C.amber) {
+                LinkRow(Icons.Rounded.SmartToy, "Automation Settings", "Control automation, retries, and auto-save behavior", C.amber, onOpenAutomation)
+                GroupDivider(C.amber)
+                LinkRow(Icons.Rounded.NotificationsActive, "Customer Notifications", "Edit success, pending, and failure templates", C.amber, onOpenNotifications)
+                GroupDivider(C.amber)
+                LinkRow(Icons.Rounded.Warning, "Admin Alerts", "Low airtime, low tokens, and low battery alerts", C.amber, onOpenAlerts)
             }
 
-            SettingsGroup("Appearance & Support") {
-                LinkRow(Icons.Rounded.DarkMode, "Appearance", "Adjust theme and system colors", C.orange, onOpenAppearance)
-                GroupDivider()
-                LinkRow(Icons.Rounded.Info, "Setup Doctor", "Check permissions, compatibility, battery rules, and alarms", C.green, onOpenDiagnostics)
-                GroupDivider()
-                LinkRow(Icons.Rounded.AccessibilityNew, "Accessibility", "Open your phone Accessibility settings", C.cyan) {
+            SettingsGroup("Appearance & Support", accent = C.amber) {
+                LinkRow(Icons.Rounded.DarkMode, "Appearance", "Adjust theme and system colors", C.amber, onOpenAppearance)
+                GroupDivider(C.amber)
+                LinkRow(Icons.Rounded.Info, "Setup Doctor", "Check permissions, compatibility, battery rules, and alarms", C.amber, onOpenDiagnostics)
+                GroupDivider(C.amber)
+                LinkRow(Icons.Rounded.AccessibilityNew, "Accessibility", "Open your phone Accessibility settings", C.amber) {
                     runCatching {
                         ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
                 }
             }
+            }
+            Spacer(Modifier.height(22.dp))
         }
-        Spacer(Modifier.height(UiDimens.Spacing2xl))
     }
 }
 
