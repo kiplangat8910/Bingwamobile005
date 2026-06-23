@@ -6599,7 +6599,7 @@ fun TokensScreen() {
                 .size(280.dp)
                 .align(Alignment.TopEnd)
                 .offset(90.dp, 90.dp)
-                .background(Brush.radialGradient(listOf(C.blue.copy(alpha = 0.08f), Color.Transparent)), CircleShape)
+                .background(Brush.radialGradient(listOf(C.amber.copy(alpha = 0.08f), Color.Transparent)), CircleShape)
         )
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             PageHeader("Tokens", if (activePlan != null) "View your active unlimited access and renew when needed" else "View token balance and buy only what you need")
@@ -6623,7 +6623,7 @@ fun TokensScreen() {
                 SectionHeader(
                     title = "UNLIMITED",
                     subtitle = "",
-                    accent = C.blue
+                    accent = C.amber
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     UnlimitedManager.PLANS.forEach { plan ->
@@ -6752,10 +6752,11 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
 
 @Composable
 private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
+    val accent = C.amber
     Surface(
         color = C.card,
         shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, C.blue.copy(alpha = 0.18f)),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -6763,7 +6764,7 @@ private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
                 .fillMaxWidth()
                 .background(
                     Brush.horizontalGradient(
-                        listOf(C.blue.copy(alpha = 0.10f), C.card, C.surface.copy(alpha = 0.92f))
+                        listOf(accent.copy(alpha = 0.10f), C.card, C.surface.copy(alpha = 0.92f))
                     )
                 )
                 .padding(horizontal = 14.dp, vertical = 13.dp),
@@ -6775,21 +6776,28 @@ private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Unlimited", color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-                    Surface(shape = RoundedCornerShape(999.dp), color = C.blue.copy(alpha = 0.14f), border = BorderStroke(1.dp, C.blue.copy(alpha = 0.22f))) {
-                        Text(plan.label.uppercase(), modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = C.blue, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = accent.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, accent.copy(alpha = 0.22f))
+                    ) {
+                        Text(
+                            plan.label.uppercase(),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            color = accent,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp
+                        )
                     }
                 }
-                Text("KSh ${plan.ksh}", color = C.blue, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MiniTag("Heavy usage", C.green)
-                    MiniTag("Time-based access", C.blue)
-                }
+                Text("KSh ${plan.ksh}", color = accent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
 
             Button(
                 onClick = onBuy,
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = C.blue, contentColor = C.bg),
+                colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = C.bg),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 modifier = Modifier.height(38.dp)
             ) {
