@@ -6679,20 +6679,20 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
     val accent = C.cyan
     Surface(
         color = C.cardHi.copy(alpha = 0.94f),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Column(
                 Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 if (p.popular) {
                     Surface(
@@ -6702,9 +6702,9 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
                     ) {
                         Text(
                             "POPULAR",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                             color = accent,
-                            fontSize = 9.5.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.8.sp
                         )
@@ -6717,7 +6717,7 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
                     Text(
                         p.tokens.toString(),
                         color = C.t1,
-                        fontSize = 44.sp,
+                        fontSize = 34.sp,
                         fontWeight = FontWeight.Black,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -6725,26 +6725,26 @@ private fun TokenTopUpCard(p: TokenTopUp, onBuy: () -> Unit) {
                     Text(
                         "tokens",
                         color = C.t2,
-                        fontSize = 18.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(bottom = 6.dp),
+                        modifier = Modifier.padding(bottom = 4.dp),
                         maxLines = 1
                     )
                 }
-                Text("Ksh ${p.ksh}", color = C.t2, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text("Ksh ${p.ksh}", color = C.t2, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
 
             OutlinedButton(
                 onClick = onBuy,
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f)),
                 colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent, contentColor = C.t1),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                modifier = Modifier.height(44.dp)
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                modifier = Modifier.height(40.dp)
             ) {
-                Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Buy", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Icon(Icons.Outlined.Add, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Buy", fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         }
     }
