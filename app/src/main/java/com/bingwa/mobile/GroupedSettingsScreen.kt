@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.view.ViewGroup
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -12,6 +13,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.StartOffset
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -20,17 +27,21 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +49,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -84,9 +96,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -102,16 +116,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.core.content.ContextCompat
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.ResultPoint
+import com.journeyapps.barcodescanner.BarcodeCallback
+import com.journeyapps.barcodescanner.BarcodeResult
+import com.journeyapps.barcodescanner.BarcodeView
+import com.journeyapps.barcodescanner.DefaultDecoderFactory
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
 
 private sealed class SettingsDest {
@@ -328,6 +349,7 @@ private fun RelaySettings(onBack: () -> Unit) {
     var roleExp by remember { mutableStateOf(false) }
     var methodExp by remember { mutableStateOf(false) }
     var showConnectQr by remember { mutableStateOf(false) }
+    var showHotspotScanner by remember { mutableStateOf(false) }
     var connectQrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var connectQrSummary by remember { mutableStateOf("") }
 
@@ -352,13 +374,12 @@ private fun RelaySettings(onBack: () -> Unit) {
         }
     }
 
-    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
-        val raw = result.contents?.trim().orEmpty()
-        if (raw.isBlank()) return@rememberLauncherForActivityResult
+    fun importRelayHotspotQr(rawValue: String): Boolean {
+        val raw = rawValue.trim()
+        if (raw.isBlank()) return false
         val payload = RelayQrCodec.decode(raw)
         if (payload == null) {
-            Toast.makeText(ctx, "That QR code is not a relay hotspot code", Toast.LENGTH_SHORT).show()
-            return@rememberLauncherForActivityResult
+            return false
         }
 
         twoPhoneEnabled = true
@@ -373,6 +394,7 @@ private fun RelaySettings(onBack: () -> Unit) {
         persistRelaySettings()
         vib(ctx)
         Toast.makeText(ctx, "Relay hotspot settings imported from QR", Toast.LENGTH_SHORT).show()
+        return true
     }
 
     val openScanner = launch@{
@@ -380,17 +402,7 @@ private fun RelaySettings(onBack: () -> Unit) {
             Toast.makeText(ctx, "This phone does not have a usable camera for QR scanning", Toast.LENGTH_SHORT).show()
             return@launch
         }
-        val scanOptions = ScanOptions().apply {
-            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-            setPrompt("Scan the relay connect QR")
-            setBeepEnabled(false)
-            setOrientationLocked(false)
-        }
-        runCatching { scanLauncher.launch(scanOptions) }
-            .onFailure { error ->
-                Log.e("GroupedSettings", "Unable to launch QR scanner", error)
-                Toast.makeText(ctx, "Unable to open the QR scanner on this phone", Toast.LENGTH_SHORT).show()
-            }
+        showHotspotScanner = true
     }
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -423,6 +435,21 @@ private fun RelaySettings(onBack: () -> Unit) {
             },
             containerColor = C.cardHi,
             properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
+        )
+    }
+
+    if (showHotspotScanner) {
+        RelayHotspotScannerDialog(
+            onDismiss = { showHotspotScanner = false },
+            onQrDetected = { raw ->
+                val imported = importRelayHotspotQr(raw)
+                if (imported) {
+                    showHotspotScanner = false
+                } else {
+                    Toast.makeText(ctx, "That QR code is not a relay hotspot code", Toast.LENGTH_SHORT).show()
+                }
+                imported
+            }
         )
     }
 
@@ -642,6 +669,472 @@ private fun RelaySettings(onBack: () -> Unit) {
             }
         }
         Spacer(Modifier.height(22.dp))
+    }
+}
+
+@Composable
+private fun RelayHotspotScannerDialog(
+    onDismiss: () -> Unit,
+    onQrDetected: (String) -> Boolean
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
+    ) {
+        RelayHotspotScannerScreen(
+            onDismiss = onDismiss,
+            onQrDetected = onQrDetected
+        )
+    }
+}
+
+@Composable
+private fun RelayHotspotScannerScreen(
+    onDismiss: () -> Unit,
+    onQrDetected: (String) -> Boolean
+) {
+    var torchEnabled by remember { mutableStateOf(false) }
+    var waitingDots by remember { mutableIntStateOf(0) }
+    val onQrDetectedState by rememberUpdatedState(onQrDetected)
+    val terminalBg = Color(0xFF14181D)
+    val panel = Color(0xFF1B2027)
+    val panelAlt = Color(0xFF21272F)
+    val line = Color.White.copy(alpha = 0.07f)
+    val amber = Color(0xFFFFB454)
+    val amberDim = Color(0xFF8A6A3D)
+    val cyan = Color(0xFF74E6D8)
+    val ink = Color(0xFFE9E7E2)
+    val inkDim = Color(0xFF7D848C)
+
+    BackHandler(onBack = onDismiss)
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(500)
+            waitingDots = (waitingDots + 1) % 4
+        }
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color(0xFF0A0C0F)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 28.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .widthIn(max = 400.dp)
+                    .fillMaxHeight(0.94f)
+                    .clip(RoundedCornerShape(34.dp))
+                    .background(terminalBg)
+                    .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(34.dp))
+                    .padding(horizontal = 18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(top = 20.dp, bottom = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(panel)
+                            .border(1.dp, line, RoundedCornerShape(10.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.ArrowBack,
+                            contentDescription = "Go back",
+                            tint = ink,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Text(
+                        "LINK TERMINAL",
+                        color = ink,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(panel)
+                            .border(1.dp, line, RoundedCornerShape(20.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(cyan)
+                        )
+                        Text("AGT-042", color = inkDim, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(top = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    RelayScannerViewfinder(
+                        modifier = Modifier
+                            .fillMaxWidth(0.64f)
+                            .aspectRatio(1f),
+                        torchEnabled = torchEnabled,
+                        onQrDetected = onQrDetectedState
+                    )
+
+                    Spacer(Modifier.height(26.dp))
+                    Text(
+                        "Scan QR to link relay",
+                        color = ink,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "AWAITING_SIGNAL${".".repeat(waitingDots)}",
+                        color = cyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                Spacer(Modifier.height(34.dp))
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (torchEnabled) {
+                                Brush.radialGradient(listOf(amber, amberDim))
+                            } else {
+                                Brush.linearGradient(listOf(panelAlt, panel))
+                            }
+                        )
+                        .border(1.dp, if (torchEnabled) amber.copy(alpha = 0.5f) else line, CircleShape)
+                        .clickable { torchEnabled = !torchEnabled },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (torchEnabled) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .border(1.dp, amber.copy(alpha = 0.35f), CircleShape)
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.FlashOn,
+                        contentDescription = "Toggle flashlight",
+                        tint = if (torchEnabled) Color(0xFF1A1306) else inkDim,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    ">> QR::LINK_REQUEST · STATUS:AWAITING_ACK_",
+                    color = inkDim,
+                    fontSize = 11.sp
+                )
+                Spacer(Modifier.height(22.dp))
+                Row(
+                    modifier = Modifier.padding(bottom = 28.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    RelayScannerChip(
+                        label = "SECURE_LINK",
+                        dotColor = cyan,
+                        background = panel,
+                        borderColor = line,
+                        textColor = inkDim
+                    )
+                    RelayScannerChip(
+                        label = "HIGH_SPEED_MODE",
+                        dotColor = amber,
+                        background = panel,
+                        borderColor = line,
+                        textColor = inkDim
+                    )
+                }
+                Spacer(Modifier.height(12.dp).navigationBarsPadding())
+            }
+        }
+    }
+}
+
+@Composable
+private fun RelayScannerViewfinder(
+    modifier: Modifier = Modifier,
+    torchEnabled: Boolean,
+    onQrDetected: (String) -> Boolean
+) {
+    val transition = rememberInfiniteTransition(label = "relay_scanner")
+    val scanProgress by transition.animateFloat(
+        initialValue = 0.06f,
+        targetValue = 0.78f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2600, easing = LinearEasing)
+        ),
+        label = "relay_scan_beam"
+    )
+    val ringA by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2800, easing = LinearEasing)
+        ),
+        label = "relay_ring_a"
+    )
+    val ringB by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2800, easing = LinearEasing),
+            initialStartOffset = StartOffset(950)
+        ),
+        label = "relay_ring_b"
+    )
+    val ringC by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2800, easing = LinearEasing),
+            initialStartOffset = StartOffset(1900)
+        ),
+        label = "relay_ring_c"
+    )
+    val latestOnQrDetected by rememberUpdatedState(onQrDetected)
+    var barcodeView by remember { mutableStateOf<BarcodeView?>(null) }
+    var acceptedScan by remember { mutableStateOf(false) }
+    var lastRejectedScanAt by remember { mutableStateOf(0L) }
+
+    DisposableEffect(barcodeView) {
+        barcodeView?.resume()
+        onDispose {
+            barcodeView?.pause()
+        }
+    }
+
+    DisposableEffect(barcodeView, torchEnabled) {
+        barcodeView?.setTorch(torchEnabled)
+        onDispose { }
+    }
+
+    BoxWithConstraints(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color(0xFF0C0F12))
+    ) {
+        val cornerSize = maxWidth * 0.12f
+        AndroidView(
+            factory = { context ->
+                BarcodeView(context).apply {
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    decoderFactory = DefaultDecoderFactory(listOf(BarcodeFormat.QR_CODE))
+                    decodeContinuous(object : BarcodeCallback {
+                        override fun barcodeResult(result: BarcodeResult) {
+                            val raw = result.text?.trim().orEmpty()
+                            if (raw.isBlank() || acceptedScan) return
+                            val now = System.currentTimeMillis()
+                            if (now - lastRejectedScanAt < 1200L) return
+                            val accepted = latestOnQrDetected(raw)
+                            if (accepted) {
+                                acceptedScan = true
+                                pause()
+                            } else {
+                                lastRejectedScanAt = now
+                            }
+                        }
+
+                        override fun possibleResultPoints(resultPoints: List<ResultPoint>) = Unit
+                    })
+                    resume()
+                }.also { barcodeView = it }
+            },
+            update = { view ->
+                if (!acceptedScan) view.resume()
+                view.setTorch(torchEnabled)
+                barcodeView = view
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color(0xFF11151A).copy(alpha = 0.22f),
+                            Color(0xFF0C0F12).copy(alpha = 0.06f)
+                        )
+                    )
+                )
+        )
+
+        RelayScannerRing(progress = ringA)
+        RelayScannerRing(progress = ringB)
+        RelayScannerRing(progress = ringC)
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.88f)
+                .height(34.dp)
+                .align(Alignment.TopCenter)
+                .offset(y = maxHeight * scanProgress)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.Transparent,
+                            Color(0xFF74E6D8).copy(alpha = 0.45f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
+        RelayScannerCorner(
+            modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
+            size = cornerSize,
+            color = Color(0xFFFFB454),
+            top = true,
+            start = true
+        )
+        RelayScannerCorner(
+            modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
+            size = cornerSize,
+            color = Color(0xFFFFB454),
+            top = true,
+            start = false
+        )
+        RelayScannerCorner(
+            modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
+            size = cornerSize,
+            color = Color(0xFFFFB454),
+            top = false,
+            start = true
+        )
+        RelayScannerCorner(
+            modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp),
+            size = cornerSize,
+            color = Color(0xFFFFB454),
+            top = false,
+            start = false
+        )
+    }
+}
+
+@Composable
+private fun RelayScannerRing(progress: Float) {
+    val scale = 0.4f + (progress * 2.7f)
+    val alpha = (0.65f - (progress * 0.65f)).coerceIn(0f, 0.65f)
+    Box(
+        modifier = Modifier
+            .fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.3f * scale)
+                .aspectRatio(1f)
+                .clip(CircleShape)
+                .border(1.dp, Color(0xFF74E6D8).copy(alpha = alpha), CircleShape)
+        )
+    }
+}
+
+@Composable
+private fun RelayScannerCorner(
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp,
+    color: Color,
+    top: Boolean,
+    start: Boolean
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .border(
+                width = 3.dp,
+                color = color,
+                shape = RoundedCornerShape(
+                    topStart = if (top && start) 6.dp else 0.dp,
+                    topEnd = if (top && !start) 6.dp else 0.dp,
+                    bottomStart = if (!top && start) 6.dp else 0.dp,
+                    bottomEnd = if (!top && !start) 6.dp else 0.dp
+                )
+            )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Transparent)
+        )
+        val coverWidth = if (start) Modifier
+            .align(Alignment.CenterEnd)
+            .fillMaxHeight()
+            .width(6.dp) else Modifier
+            .align(Alignment.CenterStart)
+            .fillMaxHeight()
+            .width(6.dp)
+        Box(modifier = coverWidth.background(Color(0xFF0C0F12)))
+        val coverHeight = if (top) Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .height(6.dp) else Modifier
+            .align(Alignment.TopCenter)
+            .fillMaxWidth()
+            .height(6.dp)
+        Box(modifier = coverHeight.background(Color(0xFF0C0F12)))
+    }
+}
+
+@Composable
+private fun RelayScannerChip(
+    label: String,
+    dotColor: Color,
+    background: Color,
+    borderColor: Color,
+    textColor: Color
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(background)
+            .border(1.dp, borderColor, RoundedCornerShape(20.dp))
+            .padding(horizontal = 13.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(dotColor)
+        )
+        Text(label, color = textColor, fontSize = 10.sp, fontWeight = FontWeight.Medium)
     }
 }
 
