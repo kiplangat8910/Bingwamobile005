@@ -3401,17 +3401,17 @@ private fun HomeDispatchRow(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.Top
                 ) {
                     Row(
                         modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.Top
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(46.dp)
+                                .size(42.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFF0D1113))
                                 .border(1.dp, statusColor.copy(alpha = 0.18f), CircleShape),
@@ -3431,10 +3431,9 @@ private fun HomeDispatchRow(
                             Text(
                                 title,
                                 color = titleColor,
-                                fontSize = 15.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                lineHeight = 19.sp,
-                                maxLines = 2,
+                                maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
@@ -3454,7 +3453,7 @@ private fun HomeDispatchRow(
                         Text(
                             amountLabel,
                             color = Color(0xFFE8ECEE),
-                            fontSize = 16.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             maxLines = 1
