@@ -3358,6 +3358,12 @@ private fun HomeDispatchRow(
     onDelete: () -> Unit
 ) {
     val statusColor = transactionStatusColor(tx)
+    val titleColor = Color(0xFFF2F6F7)
+    val phoneColor = Color(0xFF8B979B)
+    val offerColor = Color(0xFF9FD8FF)
+    val timeColor = Color(0xFFC9D4DB)
+    val dividerColor = Color(0xFF11181B)
+    val metaDotColor = Color(0xFF647279)
     val title = tx.clientName.ifBlank { tx.description.ifBlank { "Recent automation" } }
     val phone = tx.phoneNumber.ifBlank { "Phone not available" }
     val serviceLabel = tx.description.ifBlank { "Offer not captured" }
@@ -3401,7 +3407,7 @@ private fun HomeDispatchRow(
                     Row(
                         modifier = Modifier.weight(1f),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.Top
                     ) {
                         Box(
                             modifier = Modifier
@@ -3424,15 +3430,16 @@ private fun HomeDispatchRow(
                         ) {
                             Text(
                                 title,
-                                color = Color(0xFFE8ECEE),
+                                color = titleColor,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
+                                lineHeight = 19.sp,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 phone,
-                                color = Color(0xFF667074),
+                                color = phoneColor,
                                 fontSize = 11.sp,
                                 fontFamily = FontFamily.Monospace,
                                 maxLines = 1,
@@ -3466,7 +3473,7 @@ private fun HomeDispatchRow(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(Color(0xFF11181B))
+                        .background(dividerColor)
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(
@@ -3485,14 +3492,16 @@ private fun HomeDispatchRow(
                             Icon(
                                 serviceIcon,
                                 null,
-                                tint = Color(0xFF667074),
+                                tint = offerColor,
                                 modifier = Modifier.size(15.dp)
                             )
                             Text(
                                 serviceLabel,
-                                color = Color(0xFF667074),
-                                fontSize = 11.sp,
-                                maxLines = 1,
+                                color = offerColor,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                lineHeight = 15.sp,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
@@ -3503,20 +3512,21 @@ private fun HomeDispatchRow(
                             Icon(
                                 Icons.Outlined.Schedule,
                                 null,
-                                tint = Color(0xFF667074),
+                                tint = timeColor,
                                 modifier = Modifier.size(15.dp)
                             )
                             Text(
                                 timeLabel,
-                                color = Color(0xFF7C868A),
-                                fontSize = 11.sp,
+                                color = timeColor,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Medium,
                                 fontFamily = FontFamily.Monospace,
                                 maxLines = 1
                             )
                             if (relativeLabel.isNotBlank()) {
                                 Text(
                                     "•",
-                                    color = Color(0xFF4F5A5F),
+                                    color = metaDotColor,
                                     fontSize = 11.sp
                                 )
                                 Text(
