@@ -91,6 +91,14 @@ object SmsCommandHandler {
                 }
                 return true
             }
+            if (p.isNotEmpty() && p[0].uppercase() == "BALANCESET") {
+                val encoded = p.getOrNull(1).orEmpty()
+                val display = RelayManager.decodeRelayText(encoded)?.trim().orEmpty()
+                if (display.isNotBlank()) {
+                    RelayManager.setMirroredPrimaryAirtime(context, display)
+                }
+                return true
+            }
         }
 
         executeCommand(context, replyTo, replySubId, content)

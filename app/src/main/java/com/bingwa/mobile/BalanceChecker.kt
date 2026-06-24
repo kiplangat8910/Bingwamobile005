@@ -52,6 +52,9 @@ class BalanceChecker : Service() {
                 val intVal = if (display.isNotEmpty()) parseBalanceInt(raw) else -1
                 currentBalance = intVal
                 currentBalanceStr = display
+                if (display.isNotEmpty()) {
+                    RelayManager.syncPrimaryAirtimeBalance(context, display)
+                }
 
                 Handler(Looper.getMainLooper()).post {
                     balanceCallback?.invoke(display)

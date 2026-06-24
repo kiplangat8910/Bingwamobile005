@@ -108,6 +108,19 @@ class HotspotRelayService : Service() {
                 writer.flush()
                 return
             }
+            if (parts.isNotEmpty() && parts[0].uppercase() == "BALANCESET") {
+                val encoded = parts.getOrNull(1).orEmpty()
+                val display = RelayManager.decodeRelayText(encoded)?.trim().orEmpty()
+                if (display.isBlank()) {
+                    writer.write("ERR bad-airtime\n")
+                    writer.flush()
+                    return
+                }
+                RelayManager.setMirroredPrimaryAirtime(applicationContext, display)
+                writer.write("OK BALANCE\n")
+                writer.flush()
+                return
+            }
             if (parts.size < 3 || parts[0].uppercase() != "BUYAMT") {
                 writer.write("ERR unsupported-cmd\n")
                 writer.flush()

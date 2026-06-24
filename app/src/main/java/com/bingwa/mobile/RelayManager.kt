@@ -27,12 +27,14 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.Base64
 
 object RelayManager {
     private const val TAG = "RelayManager"
     private const val HOTSPOT_PORT = 8765
     private const val PREFS_NAME = "app_settings"
     private const val KEY_LAST_GOOD_RELAY_IP = "relay_last_good_ip"
+    private const val KEY_RELAY_PRIMARY_AIRTIME = "relay_primary_airtime"
     private const val HOTSPOT_CONNECT_TIMEOUT_MS = 1_500
     private const val HOTSPOT_READ_TIMEOUT_MS = 1_800
     private val HOTSPOT_IP_FALLBACKS = listOf(
@@ -78,10 +80,13 @@ object RelayManager {
     )
     private val _configState = MutableStateFlow(defaultConfig)
     val configState: StateFlow<Config> = _configState.asStateFlow()
+    private val _mirroredPrimaryAirtime = MutableStateFlow("")
+    val mirroredPrimaryAirtime: StateFlow<String> = _mirroredPrimaryAirtime.asStateFlow()
 
     fun load(context: Context): Config {
         runCatching { observeConfig(context.applicationContext) }
             .onFailure { Log.e(TAG, "Unable to observe relay config", it) }
+        _mirroredPrimaryAirtime.value = getStoredMirroredPrimaryAirtime(context.applicationContext)
         return _configState.value
     }
 
@@ -106,8 +111,13 @@ object RelayManager {
                 ) {
                     _configState.value = readConfig(sharedPrefs)
                 }
+                if (key == null || key == KEY_RELAY_PRIMARY_AIRTIME) {
+                    _mirroredPrimaryAirtime.value =
+                        sharedPrefs.safeGetString(KEY_RELAY_PRIMARY_AIRTIME, "")?.trim().orEmpty()
+                }
             }
             _configState.value = readConfig(prefs)
+            _mirroredPrimaryAirtime.value = prefs.safeGetString(KEY_RELAY_PRIMARY_AIRTIME, "")?.trim().orEmpty()
             prefs.registerOnSharedPreferenceChangeListener(listener)
             observedPrefs = prefs
             prefsListener = listener
@@ -132,6 +142,26 @@ object RelayManager {
     fun isPrimary(context: Context): Boolean = load(context).let { it.enabled && it.role == "PRIMARY" }
 
     fun isRelay(context: Context): Boolean = load(context).let { it.enabled && it.role == "RELAY" }
+
+    fun getMirroredPrimaryAirtime(context: Context): String {
+        load(context)
+        return _mirroredPrimaryAirtime.value.ifBlank { getStoredMirroredPrimaryAirtime(context.applicationContext) }
+    }
+
+    fun setMirroredPrimaryAirtime(context: Context, airtimeDisplay: String) {
+        val clean = airtimeDisplay.trim()
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_RELAY_PRIMARY_AIRTIME, clean)
+            .apply()
+        _mirroredPrimaryAirtime.value = clean
+    }
+
+    fun encodeRelayText(value: String): String =
+        Base64.getUrlEncoder().withoutPadding().encodeToString(value.toByteArray(Charsets.UTF_8))
+
+    fun decodeRelayText(value: String): String? =
+        runCatching { String(Base64.getUrlDecoder().decode(value), Charsets.UTF_8) }.getOrNull()
 
     fun startRelayHotspotService(context: Context): Boolean =
         ServiceLauncher.startForegroundServiceSafely(
@@ -170,6 +200,7 @@ object RelayManager {
                     val newState = _hotspotState.value
                     if (newState == HotspotLinkState.CONNECTED && lastState != HotspotLinkState.CONNECTED) {
                         syncTokenBalance(appCtx, TokenManager(appCtx).getBalance())
+                        syncPrimaryAirtimeBalance(appCtx, BalanceChecker.currentBalanceStr)
                     }
                     lastState = newState
                     consecutiveFailures = if (ok) 0 else (consecutiveFailures + 1).coerceAtMost(4)
@@ -233,7 +264,7 @@ object RelayManager {
     fun forwardBuyAmount(context: Context, phone: String, amount: Int): Boolean {
         val cfg = load(context)
         if (!cfg.enabled || cfg.role != "PRIMARY") return false
-        if (cfg.pairedPhone.isBlank()) return false
+        if (cfg.method != "HOTSPOT" && cfg.pairedPhone.isBlank()) return false
         if (amount <= 0) return false
 
         return when (cfg.method) {
@@ -270,7 +301,7 @@ object RelayManager {
     fun syncTokenBalance(context: Context, tokenBalance: Int) {
         val cfg = load(context)
         if (!cfg.enabled || cfg.role != "PRIMARY") return
-        if (cfg.pairedPhone.isBlank()) return
+        if (cfg.method != "HOTSPOT" && cfg.pairedPhone.isBlank()) return
 
         when (cfg.method) {
             "HOTSPOT" -> {
@@ -293,6 +324,41 @@ object RelayManager {
                     }
                     append("TOKENSET ")
                     append(tokenBalance)
+                }
+                SmsCommandHandler.sendSms(context, cfg.pairedPhone, full)
+            }
+        }
+    }
+
+    fun syncPrimaryAirtimeBalance(context: Context, airtimeDisplay: String) {
+        val cfg = load(context)
+        val clean = airtimeDisplay.trim()
+        if (!cfg.enabled || cfg.role != "PRIMARY" || clean.isBlank()) return
+        if (cfg.method != "HOTSPOT" && cfg.pairedPhone.isBlank()) return
+
+        when (cfg.method) {
+            "HOTSPOT" -> {
+                val candidates = hotspotCandidates(context, cfg)
+                if (candidates.isEmpty()) return
+                val encoded = encodeRelayText(clean)
+                scope.launch {
+                    for (ip in candidates) {
+                        val ok = sendHotspotCommand(context, cfg, ip, "BALANCESET $encoded")?.startsWith("OK") == true
+                        if (ok) break
+                    }
+                }
+            }
+            else -> {
+                val encoded = encodeRelayText(clean)
+                val full = buildString {
+                    append(cfg.prefix)
+                    append(' ')
+                    if (cfg.pin.isNotBlank()) {
+                        append(cfg.pin)
+                        append(' ')
+                    }
+                    append("BALANCESET ")
+                    append(encoded)
                 }
                 SmsCommandHandler.sendSms(context, cfg.pairedPhone, full)
             }
@@ -333,6 +399,10 @@ object RelayManager {
     private fun getLastGoodRelayIp(context: Context): String =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(KEY_LAST_GOOD_RELAY_IP, "")?.trim().orEmpty()
+
+    private fun getStoredMirroredPrimaryAirtime(context: Context): String =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_RELAY_PRIMARY_AIRTIME, "")?.trim().orEmpty()
 
     private fun rememberGoodRelayIp(context: Context, ip: String) {
         if (ip.isBlank()) return

@@ -2160,6 +2160,7 @@ fun BingwaApp() {
     var remainingMs by remember { mutableLongStateOf(unlimitedManager.remainingMs()) }
     val txns = remember { mutableStateListOf<Transaction>() }
     val relayCfg by RelayManager.configState.collectAsState()
+    val mirroredPrimaryAirtime by RelayManager.mirroredPrimaryAirtime.collectAsState()
     val toggleRunning = {
         running = !running
         appPrefs.edit().putBoolean("automation_enabled", running).apply()
@@ -2246,17 +2247,22 @@ fun BingwaApp() {
         Box(Modifier.fillMaxSize().background(C.bg).padding(pad)) {
             AnimatedContent(targetState = screen, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) }, label = "screen") { s ->
                 val unlimitedLabel = unlimitedManager.getActivePlan()?.label?.takeIf { remainingMs > 0L }
+                val displayedAirBal =
+                    if (relayCfg.enabled && relayCfg.role == "RELAY") mirroredPrimaryAirtime.ifBlank { airBal }
+                    else airBal
                 when (s) {
                     Screen.Home     -> HomeScreenVolcanic(
                         tokenBal = tokenBal,
-                        airBal = airBal,
+                        airBal = displayedAirBal,
                         isRefreshing = isRefreshing,
                         txns = txns,
                         running = running,
                         unlimitedLabel = unlimitedLabel,
                         unlimitedRemaining = unlimitedLabel?.let { formatRemainingTimeHome(remainingMs) },
                         onRefresh = {
-                            if (!isRefreshing) {
+                            if (relayCfg.enabled && relayCfg.role == "RELAY") {
+                                airBal = mirroredPrimaryAirtime.ifBlank { airBal }
+                            } else if (!isRefreshing) {
                                 isRefreshing = true
                                 if (!requestBalanceCheckSafely(ctx)) isRefreshing = false
                             }
