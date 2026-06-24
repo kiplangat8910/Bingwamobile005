@@ -7833,21 +7833,64 @@ fun OffersScreen(onBack: () -> Unit) {
 fun OfferCard(number: Int, o: OfferItem, onEdit: () -> Unit, onToggle: () -> Unit, onDelete: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     val hasPendingSignature = o.pendingLearnedSignature.isNotEmpty() || o.pendingSignatureLearningCaptures.isNotEmpty()
+    val protectionLabel = when {
+        o.signatureDetectionEnabled && o.signatureAction == "ADJUST" -> "Guard + Adjust"
+        o.signatureDetectionEnabled -> "Guard + Stop"
+        else -> "Off"
+    }
     Box(
         Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(C.card)
-            .border(1.dp, if (o.enabled) C.border else C.border.copy(0.4f), RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        C.cardHi.copy(alpha = 0.98f),
+                        C.card,
+                        C.surface.copy(alpha = 0.96f)
+                    )
+                )
+            )
+            .border(1.dp, if (o.enabled) C.borderHi.copy(alpha = 0.9f) else C.border.copy(0.45f), RoundedCornerShape(24.dp))
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            if (o.enabled) C.cyan.copy(alpha = 0.12f) else C.w04,
+                            Color.Transparent
+                        ),
+                        center = Offset(120f, 0f),
+                        radius = 420f
+                    )
+                )
+        )
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Box(
-                    Modifier.size(42.dp).clip(RoundedCornerShape(12.dp))
-                        .background(if (o.enabled) C.cyanDim else C.w04)
-                        .border(1.dp, if (o.enabled) C.cyan.copy(0.16f) else C.border, RoundedCornerShape(12.dp)),
+                    Modifier
+                        .size(54.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    if (o.enabled) C.cyan.copy(alpha = 0.20f) else C.w08,
+                                    if (o.enabled) C.cyanDim else C.w04
+                                )
+                            )
+                        )
+                        .border(1.dp, if (o.enabled) C.cyan.copy(0.24f) else C.border, RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center
-                ) { Icon(Icons.Filled.Wifi, null, tint = if (o.enabled) C.cyan else C.t3, modifier = Modifier.size(18.dp)) }
-                Spacer(Modifier.width(12.dp))
+                ) {
+                    Icon(
+                        Icons.Filled.Wifi,
+                        null,
+                        tint = if (o.enabled) C.cyan else C.t3,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -7870,19 +7913,32 @@ fun OfferCard(number: Int, o: OfferItem, onEdit: () -> Unit, onToggle: () -> Uni
                         Text(
                             o.name,
                             color = if (o.enabled) C.t1 else C.t2,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp,
-                            maxLines = 1,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            lineHeight = 22.sp,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         MiniTag(if (o.enabled) "ACTIVE" else "DISABLED", if (o.enabled) C.green else C.red)
                         MiniTag(o.category.uppercase(), C.orange)
+                        MiniTag(o.targetDevice.uppercase(), C.blue)
                     }
                 }
                 Box {
-                    IconButton({ menu = true }, Modifier.size(32.dp)) { Icon(Icons.Filled.MoreVert, null, tint = C.t2, modifier = Modifier.size(16.dp)) }
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = C.w04,
+                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+                    ) {
+                        IconButton({ menu = true }, Modifier.size(36.dp)) {
+                            Icon(Icons.Filled.MoreVert, null, tint = C.t2, modifier = Modifier.size(17.dp))
+                        }
+                    }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
                         DropdownMenuItem(text = { Text("Edit", color = C.t1) }, leadingIcon = { Icon(Icons.Outlined.Edit, null, tint = C.t1) }, onClick = { menu = false; onEdit() })
                         DropdownMenuItem(text = { Text(if (o.enabled) "Disable" else "Enable", color = if (o.enabled) C.red else C.green) }, leadingIcon = { Icon(if (o.enabled) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, null, tint = if (o.enabled) C.red else C.green) }, onClick = { menu = false; onToggle() })
@@ -7891,29 +7947,31 @@ fun OfferCard(number: Int, o: OfferItem, onEdit: () -> Unit, onToggle: () -> Uni
                 }
             }
 
-            Divider(color = C.border)
+            Divider(color = C.border.copy(alpha = 0.7f))
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OfferInfoTile("Price", "KES ${o.price}", C.cyan, Modifier.weight(1f))
-                OfferInfoTile("Mode", o.executionMode, C.purple, Modifier.weight(1f))
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OfferInfoTile("Device", o.targetDevice, C.blue, Modifier.weight(1f))
-                OfferInfoTile(
-                    "Protection",
-                    when {
-                        o.signatureDetectionEnabled && o.signatureAction == "ADJUST" -> "Guard + Adjust"
-                        o.signatureDetectionEnabled -> "Guard + Stop"
-                        else -> "Off"
-                    },
-                    if (o.signatureDetectionEnabled) C.green else C.t3,
-                    Modifier.weight(1f)
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OfferInfoTile("Price", "KES ${o.price}", C.cyan, Icons.Outlined.Badge, Modifier.weight(1f))
+                    OfferInfoTile("Mode", o.executionMode, C.purple, Icons.Outlined.Tune, Modifier.weight(1f))
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OfferInfoTile("Device", o.targetDevice, C.blue, Icons.Outlined.PhoneAndroid, Modifier.weight(1f))
+                    OfferInfoTile(
+                        "Protection",
+                        protectionLabel,
+                        if (o.signatureDetectionEnabled) C.green else C.t3,
+                        if (o.signatureDetectionEnabled) Icons.Outlined.Shield else Icons.Outlined.Security,
+                        Modifier.weight(1f)
+                    )
+                }
             }
 
             OfferCodeBlock("USSD Code", o.ussdCode)
 
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 if (o.signatureDetectionEnabled) MiniTag("GUARD ON", C.green)
                 if (o.learnedSignature.isNotEmpty()) MiniTag("STEPS ${o.learnedSignature.size}", C.green)
                 if (o.signatureLearningCaptures.isNotEmpty()) MiniTag("POPUPS ${o.signatureLearningCaptures.size}", C.amber)
@@ -8024,16 +8082,47 @@ private fun SignatureApprovalDialog(
 }
 
 @Composable
-private fun OfferInfoTile(label: String, value: String, accent: Color, modifier: Modifier = Modifier) {
+private fun OfferInfoTile(
+    label: String,
+    value: String,
+    accent: Color,
+    icon: ImageVector,
+    modifier: Modifier = Modifier
+) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         color = accent.copy(alpha = 0.08f),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.20f))
     ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(label.uppercase(), color = C.t3, fontSize = 10.sp, letterSpacing = 1.sp)
-            Text(value, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 92.dp)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(accent.copy(alpha = 0.13f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, null, tint = accent, modifier = Modifier.size(15.dp))
+                }
+                Text(label.uppercase(), color = C.t3, fontSize = 10.sp, letterSpacing = 1.sp)
+            }
+            Text(
+                value,
+                color = C.t1,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 20.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -8042,14 +8131,50 @@ private fun OfferInfoTile(label: String, value: String, accent: Color, modifier:
 private fun OfferCodeBlock(label: String, value: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
         color = C.w04,
-        border = BorderStroke(1.dp, C.border)
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(label.uppercase(), color = C.t3, fontSize = 10.sp, letterSpacing = 1.sp)
-            Text(value, color = C.t1, fontSize = 13.sp, lineHeight = 18.sp)
-            Text("Use `pn` as the recipient number placeholder.", color = C.t3, fontSize = 10.sp)
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(30.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(C.cyan.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Outlined.Dialpad, null, tint = C.cyan, modifier = Modifier.size(16.dp))
+                    }
+                    Text(label.uppercase(), color = C.t3, fontSize = 10.sp, letterSpacing = 1.sp)
+                }
+                MiniTag("READY", C.cyan)
+            }
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = C.surface.copy(alpha = 0.42f),
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.65f))
+            ) {
+                SelectionContainer {
+                    Text(
+                        value,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+                        color = C.t1,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Info, null, tint = C.t3, modifier = Modifier.size(14.dp))
+                Text("Use `pn` as the recipient number placeholder.", color = C.t3, fontSize = 10.sp)
+            }
         }
     }
 }
@@ -8485,20 +8610,20 @@ fun OfferDialog(
                             if (compactPreview) {
                                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        OfferInfoTile("Price", if (price.isBlank()) "Not set" else "KES $price", C.cyan, Modifier.weight(1f))
-                                        OfferInfoTile("Mode", mode, C.purple, Modifier.weight(1f))
+                                        OfferInfoTile("Price", if (price.isBlank()) "Not set" else "KES $price", C.cyan, Icons.Outlined.Badge, Modifier.weight(1f))
+                                        OfferInfoTile("Mode", mode, C.purple, Icons.Outlined.Tune, Modifier.weight(1f))
                                     }
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        OfferInfoTile("Category", cat, C.orange, Modifier.weight(1f))
-                                        OfferInfoTile("Device", device, C.blue, Modifier.weight(1f))
+                                        OfferInfoTile("Category", cat, C.orange, Icons.Outlined.Article, Modifier.weight(1f))
+                                        OfferInfoTile("Device", device, C.blue, Icons.Outlined.PhoneAndroid, Modifier.weight(1f))
                                     }
                                 }
                             } else {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    OfferInfoTile("Price", if (price.isBlank()) "Not set" else "KES $price", C.cyan, Modifier.weight(1f))
-                                    OfferInfoTile("Mode", mode, C.purple, Modifier.weight(1f))
-                                    OfferInfoTile("Category", cat, C.orange, Modifier.weight(1f))
-                                    OfferInfoTile("Device", device, C.blue, Modifier.weight(1f))
+                                    OfferInfoTile("Price", if (price.isBlank()) "Not set" else "KES $price", C.cyan, Icons.Outlined.Badge, Modifier.weight(1f))
+                                    OfferInfoTile("Mode", mode, C.purple, Icons.Outlined.Tune, Modifier.weight(1f))
+                                    OfferInfoTile("Category", cat, C.orange, Icons.Outlined.Article, Modifier.weight(1f))
+                                    OfferInfoTile("Device", device, C.blue, Icons.Outlined.PhoneAndroid, Modifier.weight(1f))
                                 }
                             }
                             OfferCodeBlock("USSD Preview", if (code.isBlank()) "No code entered yet" else code)
