@@ -154,6 +154,7 @@ object RelayManager {
         val appCtx = context.applicationContext
         monitorJob = scope.launch {
             var consecutiveFailures = 0
+            var lastState: HotspotLinkState = _hotspotState.value
             while (isActive) {
                 try {
                     val cfg = load(appCtx)
@@ -166,6 +167,11 @@ object RelayManager {
                     _hotspotState.value = HotspotLinkState.CHECKING
                     val ok = pingHotspotRelay(appCtx, cfg)
                     _hotspotState.value = if (ok) HotspotLinkState.CONNECTED else HotspotLinkState.DISCONNECTED
+                    val newState = _hotspotState.value
+                    if (newState == HotspotLinkState.CONNECTED && lastState != HotspotLinkState.CONNECTED) {
+                        syncTokenBalance(appCtx, TokenManager(appCtx).getBalance())
+                    }
+                    lastState = newState
                     consecutiveFailures = if (ok) 0 else (consecutiveFailures + 1).coerceAtMost(4)
                     val waitMs = if (ok) {
                         6_000L
@@ -257,6 +263,38 @@ object RelayManager {
                 }
                 SmsCommandHandler.sendSms(context, cfg.pairedPhone, full)
                 true
+            }
+        }
+    }
+
+    fun syncTokenBalance(context: Context, tokenBalance: Int) {
+        val cfg = load(context)
+        if (!cfg.enabled || cfg.role != "PRIMARY") return
+        if (cfg.pairedPhone.isBlank()) return
+
+        when (cfg.method) {
+            "HOTSPOT" -> {
+                val candidates = hotspotCandidates(context, cfg)
+                if (candidates.isEmpty()) return
+                scope.launch {
+                    for (ip in candidates) {
+                        val ok = sendHotspotCommand(context, cfg, ip, "TOKENSET $tokenBalance")?.startsWith("OK") == true
+                        if (ok) break
+                    }
+                }
+            }
+            else -> {
+                val full = buildString {
+                    append(cfg.prefix)
+                    append(' ')
+                    if (cfg.pin.isNotBlank()) {
+                        append(cfg.pin)
+                        append(' ')
+                    }
+                    append("TOKENSET ")
+                    append(tokenBalance)
+                }
+                SmsCommandHandler.sendSms(context, cfg.pairedPhone, full)
             }
         }
     }

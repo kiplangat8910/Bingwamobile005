@@ -82,6 +82,17 @@ object SmsCommandHandler {
             }
         }
 
+        if (isPairedRelay) {
+            val p = content.split("\\s+".toRegex())
+            if (p.isNotEmpty() && p[0].uppercase() == "TOKENSET") {
+                val bal = p.getOrNull(1)?.toIntOrNull() ?: -1
+                if (bal >= 0) {
+                    TokenManager(context).setBalanceFromRelay(bal)
+                }
+                return true
+            }
+        }
+
         executeCommand(context, replyTo, replySubId, content)
         return true
     }

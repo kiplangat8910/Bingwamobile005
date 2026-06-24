@@ -96,6 +96,18 @@ class HotspotRelayService : Service() {
                 return
             }
             val parts = cmd.split("\\s+".toRegex())
+            if (parts.isNotEmpty() && parts[0].uppercase() == "TOKENSET") {
+                val bal = parts.getOrNull(1)?.toIntOrNull() ?: -1
+                if (bal < 0) {
+                    writer.write("ERR bad-balance\n")
+                    writer.flush()
+                    return
+                }
+                TokenManager(applicationContext).setBalanceFromRelay(bal)
+                writer.write("OK TOKENS\n")
+                writer.flush()
+                return
+            }
             if (parts.size < 3 || parts[0].uppercase() != "BUYAMT") {
                 writer.write("ERR unsupported-cmd\n")
                 writer.flush()

@@ -514,8 +514,8 @@ class MpesaReceiver : BroadcastReceiver() {
             val targetDevice = offer?.targetDevice ?: "PRIMARY"
             val finalCode = code?.replace("pn", phone, ignoreCase = true).orEmpty()
 
-            val tokenPrefs = context.getSharedPreferences("TokenStore", Context.MODE_PRIVATE)
-            val tokenBalance = tokenPrefs.getInt("balance", 0)
+            val tokenMgr = TokenManager(context)
+            val tokenBalance = tokenMgr.getBalance()
             val unlimited = UnlimitedManager(context).isActive()
             if (!unlimited && tokenBalance < 1) {
                 addTransaction(context, Transaction(
@@ -557,8 +557,7 @@ class MpesaReceiver : BroadcastReceiver() {
             }
 
             if (!unlimited) {
-                tokenPrefs.edit().putInt("balance", tokenBalance - 1).apply()
-                TokenManager.tokenBalanceListener?.invoke(tokenBalance - 1)
+                tokenMgr.spendTokens(1)
             }
 
             if (RelayManager.isPrimary(context) && targetDevice.uppercase() == "RELAY") {
@@ -567,8 +566,7 @@ class MpesaReceiver : BroadcastReceiver() {
                     notify(context, "Forwarded to Relay", "$label → $phone")
                 } else {
                     if (!unlimited) {
-                        tokenPrefs.edit().putInt("balance", tokenBalance).apply()
-                        TokenManager.tokenBalanceListener?.invoke(tokenBalance)
+                        tokenMgr.addTokens(1)
                     }
                     addTransaction(context, Transaction(
                         description = label,

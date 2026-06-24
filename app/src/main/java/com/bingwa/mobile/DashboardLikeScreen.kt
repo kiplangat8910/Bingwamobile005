@@ -131,6 +131,8 @@ private fun DashboardHeader(running: Boolean, automatedCount: Int, tokenBal: Int
             HeaderCountChip(text = "$automatedCount automated")
             HeaderCountChip(text = unlimitedLabel ?: "$tokenBal tokens")
         }
+        Spacer(Modifier.height(10.dp))
+        RelayStatusPill()
     }
 }
 

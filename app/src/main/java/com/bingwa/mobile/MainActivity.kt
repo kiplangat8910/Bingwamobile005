@@ -2559,41 +2559,6 @@ private fun AutomationControlCard(running: Boolean, onToggle: () -> Unit) {
     }
 }
 
-@Composable
-private fun RelayHotspotStatusChip() {
-    val ctx = LocalContext.current
-    LaunchedEffect(ctx) { RelayManager.load(ctx) }
-    val cfg by RelayManager.configState.collectAsState()
-    if (!cfg.enabled || cfg.role != "PRIMARY" || cfg.method != "HOTSPOT") return
-
-    val s by RelayManager.hotspotState.collectAsState()
-    if (s != RelayManager.HotspotLinkState.CONNECTED) return
-    val (label, color, icon) = Triple("RELAY CONNECTED", C.green, Icons.Rounded.Wifi)
-
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = C.surface.copy(alpha = 0.40f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.34f))
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 13.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(16.dp)
-                    .clip(CircleShape)
-                    .background(color.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, null, tint = color, modifier = Modifier.size(11.dp))
-            }
-            Text(label, color = color, fontWeight = FontWeight.ExtraBold, fontSize = 9.5.sp, letterSpacing = 0.8.sp)
-        }
-    }
-}
-
 // ─── Home Screen ──────────────────────────────────────────────────────────
 @Composable
 fun HomeScreenVolcanic(
@@ -2903,8 +2868,8 @@ private fun HomeHeroHeader(running: Boolean) {
                     )
                 }
             }
-            Spacer(Modifier.height(5.dp))
-            RelayHotspotStatusChip()
+            Spacer(Modifier.height(8.dp))
+            RelayStatusPill()
         }
     }
 }
@@ -3732,7 +3697,8 @@ private fun HomeDashboardHeader(running: Boolean) {
                 }
             }
 
-            RelayHotspotStatusChip()
+            Spacer(Modifier.height(8.dp))
+            RelayStatusPill()
         }
     }
 }
