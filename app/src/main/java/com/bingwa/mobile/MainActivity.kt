@@ -2610,6 +2610,7 @@ fun HomeScreenVolcanic(
         it.statusEnum == TransactionStatus.FAILED || it.statusEnum == TransactionStatus.CANCELLED
     }
     val completedCount = automatedTxns.count { it.statusEnum == TransactionStatus.SUCCESS }
+    val completionRate = if (sentCount > 0) (completedCount * 100 / sentCount) else 0
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
     val chromeAnim = rememberInfiniteTransition(label = "home_chrome")
@@ -2677,10 +2678,10 @@ fun HomeScreenVolcanic(
                             airBal = airBal.ifBlank { "0.00" },
                             tokenValue = if (unlimitedLabel != null) "Unlimited" else tokenBal.toString(),
                             tokenHint = unlimitedRemaining ?: "Never expire",
-                            sentCount = sentCount,
+                            completedCount = completedCount,
                             pendingCount = pendingCount,
                             failedCount = failedCount,
-                            completedCount = completedCount,
+                            rate = completionRate,
                             isRefreshing = isRefreshing,
                             spin = spin,
                             onRefresh = onRefresh
@@ -2896,10 +2897,10 @@ private fun HomeSplitBalanceCard(
     airBal: String,
     tokenValue: String,
     tokenHint: String,
-    sentCount: Int,
+    completedCount: Int,
     pendingCount: Int,
     failedCount: Int,
-    completedCount: Int,
+    rate: Int,
     isRefreshing: Boolean,
     spin: Float,
     onRefresh: () -> Unit
@@ -3068,10 +3069,10 @@ private fun HomeSplitBalanceCard(
                     .background(line)
             )
             HomeStatsRow(
-                sent = sentCount,
+                completed = completedCount,
                 pending = pendingCount,
                 failed = failedCount,
-                completed = completedCount,
+                rate = rate,
                 compact = compact,
                 spacing = statsSpacing,
                 sentAccent = mint,
@@ -4854,10 +4855,10 @@ fun VolcanicBalanceCard(
                     .background(Color.White.copy(alpha = 0.78f))
             )
             HomeStatsRow(
-                sent = sent,
+                completed = completed,
                 pending = pending,
                 failed = failed,
-                completed = completed,
+                rate = if (sent > 0) (completed * 100 / sent) else 0,
                 compact = true,
                 spacing = statSpacing,
                 sentAccent = sentAccent,
@@ -4901,10 +4902,10 @@ fun balanceCaptionFontSize(
 
 @Composable
 private fun HomeStatsRow(
-    sent: Int,
+    completed: Int,
     pending: Int,
     failed: Int,
-    completed: Int,
+    rate: Int,
     compact: Boolean,
     spacing: Dp,
     sentAccent: Color,
@@ -4918,8 +4919,8 @@ private fun HomeStatsRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         HomeStatusMetricCard(
-            label = "Sent",
-            value = sent.toString(),
+            label = "Completed",
+            value = completed.toString(),
             accent = sentAccent,
             compact = compact,
             modifier = Modifier.weight(1f)
@@ -4939,8 +4940,8 @@ private fun HomeStatsRow(
             modifier = Modifier.weight(1f)
         )
         HomeStatusMetricCard(
-            label = "Completed",
-            value = completed.toString(),
+            label = "Rate",
+            value = "$rate%",
             accent = completedAccent,
             compact = compact,
             modifier = Modifier.weight(1f)
@@ -5017,7 +5018,7 @@ private fun RateStatCard(rate: Int, accent: Color, compact: Boolean, modifier: M
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "COMPLETED",
+                "RATE",
                 color = C.t2,
                 fontSize = if (compact) 8.sp else 9.sp,
                 letterSpacing = 1.1.sp,
