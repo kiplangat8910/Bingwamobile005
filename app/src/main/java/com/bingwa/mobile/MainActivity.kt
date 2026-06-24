@@ -4917,9 +4917,10 @@ private fun HomeStatsRow(
         horizontalArrangement = Arrangement.spacedBy(spacing),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val rate = if (sent > 0) ((completed * 100f) / sent.toFloat()).toInt() else 0
         HomeStatusMetricCard(
-            label = "Sent",
-            value = sent.toString(),
+            label = "Completed",
+            value = completed.toString(),
             accent = sentAccent,
             compact = compact,
             modifier = Modifier.weight(1f)
@@ -4938,9 +4939,8 @@ private fun HomeStatsRow(
             compact = compact,
             modifier = Modifier.weight(1f)
         )
-        HomeStatusMetricCard(
-            label = "Completed",
-            value = completed.toString(),
+        RateStatCard(
+            rate = rate,
             accent = completedAccent,
             compact = compact,
             modifier = Modifier.weight(1f)
@@ -5017,7 +5017,7 @@ private fun RateStatCard(rate: Int, accent: Color, compact: Boolean, modifier: M
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "COMPLETED",
+                "RATE",
                 color = C.t2,
                 fontSize = if (compact) 8.sp else 9.sp,
                 letterSpacing = 1.1.sp,
