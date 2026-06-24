@@ -561,9 +561,11 @@ class MpesaReceiver : BroadcastReceiver() {
             }
 
             if (RelayManager.isPrimary(context) && targetDevice.uppercase() == "RELAY") {
+                val relayAlertId = DispatchHeadsUpNotifications.newAlertId()
+                DispatchHeadsUpNotifications.showDispatching(context, relayAlertId, label, phone)
                 val sent = RelayManager.forwardBuyAmount(context, phone, amount)
                 if (sent) {
-                    notify(context, "Forwarded to Relay", "$label → $phone")
+                    DispatchHeadsUpNotifications.showForwarded(context, relayAlertId, label, phone)
                 } else {
                     if (!unlimited) {
                         tokenMgr.addTokens(1)
@@ -583,7 +585,6 @@ class MpesaReceiver : BroadcastReceiver() {
                         showInRecent = true,
                         offerId = offer?.id ?: -1
                     ))
-                    notify(context, "Relay Error", "Could not forward $label to Relay phone. Please check Two‑Phone settings.")
                 }
                 return
             }
@@ -604,8 +605,6 @@ class MpesaReceiver : BroadcastReceiver() {
             ))
 
             context.startOfferAutomation(offer, phone, txId, finalCode, mode)
-
-            notify(context, "Bundle Dispatched", "$label → $phone")
 
         } catch (e: Exception) {
             Log.e(TAG, "handleDataSelling error", e)

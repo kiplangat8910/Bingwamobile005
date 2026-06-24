@@ -89,6 +89,7 @@ internal object TransactionStore {
         current.take(MAX_RECENT_TRANSACTIONS - 1).forEach(updated::add)
         save(context, updated)
         broadcastTransactionCreated(context, newId)
+        notifyDispatchStarted(context, created)
         return newId
     }
 
@@ -133,6 +134,7 @@ internal object TransactionStore {
         current.take(MAX_RECENT_TRANSACTIONS - 1).forEach(updated::add)
         save(context, updated)
         broadcastTransactionCreated(context, newId)
+        notifyInsertedTransaction(context, created)
         return newId
     }
 
@@ -168,7 +170,51 @@ internal object TransactionStore {
             executionDurationMs = executionDurationMs
         )
         save(context, current)
+        notifyDispatchOutcome(context, current[index])
         return true
+    }
+
+    private fun notifyDispatchStarted(context: Context, tx: Transaction) {
+        if (!shouldShowHeadsUp(tx)) return
+        DispatchHeadsUpNotifications.showDispatching(context, tx.id, tx.description, tx.phoneNumber)
+    }
+
+    private fun notifyInsertedTransaction(context: Context, tx: Transaction) {
+        if (!shouldShowHeadsUp(tx)) return
+        when (tx.statusEnum) {
+            TransactionStatus.PROCESSING,
+            TransactionStatus.PENDING,
+            TransactionStatus.RETRYING -> DispatchHeadsUpNotifications.showDispatching(context, tx.id, tx.description, tx.phoneNumber)
+            TransactionStatus.SUCCESS -> DispatchHeadsUpNotifications.showSuccess(context, tx.id, tx.description, tx.phoneNumber)
+            TransactionStatus.FAILED -> DispatchHeadsUpNotifications.showFailed(context, tx.id, tx.description, tx.phoneNumber)
+            TransactionStatus.CANCELLED -> DispatchHeadsUpNotifications.showCancelled(context, tx.id, tx.description, tx.phoneNumber)
+        }
+    }
+
+    private fun notifyDispatchOutcome(context: Context, tx: Transaction) {
+        if (!shouldShowHeadsUp(tx)) return
+        when {
+            tx.statusEnum == TransactionStatus.PROCESSING &&
+                tx.ussdResponse.contains("Forwarded to Relay", ignoreCase = true) ->
+                DispatchHeadsUpNotifications.showForwarded(context, tx.id, tx.description, tx.phoneNumber)
+            tx.statusEnum == TransactionStatus.SUCCESS ->
+                DispatchHeadsUpNotifications.showSuccess(context, tx.id, tx.description, tx.phoneNumber)
+            tx.statusEnum == TransactionStatus.FAILED ->
+                DispatchHeadsUpNotifications.showFailed(context, tx.id, tx.description, tx.phoneNumber)
+            tx.statusEnum == TransactionStatus.PENDING ->
+                DispatchHeadsUpNotifications.showPending(context, tx.id, tx.description, tx.phoneNumber)
+            tx.statusEnum == TransactionStatus.CANCELLED ->
+                DispatchHeadsUpNotifications.showCancelled(context, tx.id, tx.description, tx.phoneNumber)
+            else -> Unit
+        }
+    }
+
+    private fun shouldShowHeadsUp(tx: Transaction): Boolean {
+        if (tx.id < 0) return false
+        if (tx.phoneNumber.isBlank()) return false
+        return tx.source == TX_SOURCE_AUTOMATED ||
+            tx.source == TX_SOURCE_MANUAL ||
+            tx.source == TX_SOURCE_SMS_COMMAND
     }
 
     private fun rawJson(context: Context): String =
