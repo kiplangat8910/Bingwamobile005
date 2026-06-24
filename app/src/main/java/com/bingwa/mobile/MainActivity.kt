@@ -3416,68 +3416,63 @@ private fun HomeDispatchRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.Top
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF0D1113))
+                            .border(1.dp, statusColor.copy(alpha = 0.18f), CircleShape),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF0D1113))
-                                .border(1.dp, statusColor.copy(alpha = 0.18f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                avatarLabel,
-                                color = Color(0xFFB8C0C3),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                title,
-                                color = titleColor,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                phone,
-                                color = phoneColor,
-                                fontSize = 11.sp,
-                                fontFamily = FontFamily.Monospace,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        Text(
+                            avatarLabel,
+                            color = Color(0xFFB8C0C3),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                     Column(
-                        horizontalAlignment = Alignment.End,
+                        modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            amountLabel,
-                            color = Color(0xFFE8ECEE),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
+                            title,
+                            color = titleColor,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1
                         )
                         Text(
-                            transactionStatusLabel(tx),
-                            color = statusColor.copy(alpha = 0.96f),
+                            phone,
+                            color = phoneColor,
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
-                            maxLines = 1
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        amountLabel,
+                        color = Color(0xFFE8ECEE),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1
+                    )
+                    Text(
+                        transactionStatusLabel(tx),
+                        color = statusColor.copy(alpha = 0.96f),
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1
+                    )
                 }
                 Spacer(Modifier.height(14.dp))
                 Box(
@@ -5255,30 +5250,60 @@ fun VolcanicTxCard(tx: Transaction, onDelete: () -> Unit) {
                     .border(1.dp, statusColor.copy(alpha = 0.26f), RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) { Text(initials.ifBlank { "?" }, color = statusColor, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp) }
-            Column(Modifier.weight(1f)) {
-                Text(tx.clientName.ifBlank { "Unknown Customer" }, color = C.t1, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(tx.phoneNumber.ifBlank { "Phone not available" }, color = C.t2, fontSize = 11.sp)
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(tx.amount, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = if (tx.amount.startsWith("-")) C.orange else C.t1)
-                Spacer(Modifier.height(6.dp))
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = statusColor.copy(alpha = if (tx.status == TransactionStatus.PROCESSING.value) 0.10f + (processingAlpha * 0.08f) else 0.10f),
-                    border = BorderStroke(1.dp, statusColor.copy(alpha = if (tx.status == TransactionStatus.PROCESSING.value) 0.16f + (processingAlpha * 0.20f) else 0.2f))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    tx.clientName.ifBlank { "Unknown Customer" },
+                    color = C.t1,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 15.sp,
+                    maxLines = 1
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        if (tx.status == TransactionStatus.PROCESSING.value) {
-                            Box(Modifier.size(6.dp).clip(CircleShape).background(statusColor.copy(alpha = processingAlpha)))
-                        }
-                        Text(tx.status, color = statusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    }
+                    Text(
+                        tx.phoneNumber.ifBlank { "Phone not available" },
+                        color = C.t2,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        tx.amount,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (tx.amount.startsWith("-")) C.orange else C.t1,
+                        maxLines = 1
+                    )
                 }
             }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = statusColor.copy(alpha = if (tx.status == TransactionStatus.PROCESSING.value) 0.10f + (processingAlpha * 0.08f) else 0.10f),
+                border = BorderStroke(1.dp, statusColor.copy(alpha = if (tx.status == TransactionStatus.PROCESSING.value) 0.16f + (processingAlpha * 0.20f) else 0.2f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    if (tx.status == TransactionStatus.PROCESSING.value) {
+                        Box(Modifier.size(6.dp).clip(CircleShape).background(statusColor.copy(alpha = processingAlpha)))
+                    }
+                    Text(tx.status, color = statusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Text(tx.date, color = C.t3, fontSize = 10.sp, textAlign = TextAlign.End)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -5289,7 +5314,6 @@ fun VolcanicTxCard(tx: Transaction, onDelete: () -> Unit) {
                     Text(typeLabel, modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp), color = typeColor, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
-            Text(tx.date, color = C.t3, fontSize = 10.sp, textAlign = TextAlign.End)
         }
         AnimatedVisibility(visible = expanded) {
             Column(
