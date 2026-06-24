@@ -692,6 +692,16 @@ private fun formatRemainingTimeWithSuffix(ms: Long, suffix: String): String {
     return "${days}d ${hours}h ${minutes}m ${seconds}s $suffix"
 }
 
+private fun nextCountdownRefreshDelay(ms: Long): Long {
+    if (ms <= 0L) return 15_000L
+    val remainder = ms % 1_000L
+    return when {
+        remainder == 0L -> 1_000L
+        remainder <= 80L -> 120L
+        else -> (remainder + 40L).coerceAtMost(1_000L)
+    }
+}
+
 fun formatRemainingTimeHome(ms: Long): String = formatRemainingTimeWithSuffix(ms, "left")
 
 fun formatRemainingTimeDetailed(ms: Long): String = formatRemainingTimeWithSuffix(ms, "remaining")
@@ -1123,7 +1133,8 @@ private fun TokensHeroCard(
     val days = totalSeconds / 86_400L
     val hours = (totalSeconds % 86_400L) / 3_600L
     val minutes = (totalSeconds % 3_600L) / 60L
-    val remainingLabel = if (activePlan != null) "${days}d ${hours}h ${minutes}m" else ""
+    val seconds = totalSeconds % 60L
+    val remainingLabel = if (activePlan != null) "${days}d ${hours}h ${minutes}m ${seconds}s" else ""
     val heroAlignment = if (activePlan != null) Alignment.Start else Alignment.CenterHorizontally
     val detailTextAlign = if (activePlan != null) TextAlign.Start else TextAlign.Center
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -1183,9 +1194,9 @@ private fun TokensHeroCard(
                 if (activePlan != null) {
                     val accentActive = C.green
                     val remainingText = buildAnnotatedString {
-                        append("${days}d ${hours}h ")
+                        append("${days}d ${hours}h ${minutes}m ")
                         withStyle(SpanStyle(color = accentActive)) {
-                            append("${minutes}m")
+                            append("${seconds}s")
                         }
                     }
                     Row(
@@ -2179,7 +2190,7 @@ fun BingwaApp() {
     LaunchedEffect(Unit) {
         while (true) {
             remainingMs = unlimitedManager.remainingMs()
-            delay(if (remainingMs > 0L) 1_000L else 30_000L)
+            delay(if (remainingMs > 0L) nextCountdownRefreshDelay(remainingMs) else 30_000L)
         }
     }
 
@@ -6556,7 +6567,7 @@ fun TokensScreen() {
     LaunchedEffect(Unit) {
         while (true) {
             remMs = um.remainingMs()
-            delay(if (remMs > 0L) 1_000L else 15_000L)
+            delay(nextCountdownRefreshDelay(remMs))
         }
     }
     DisposableEffect(Unit) {
