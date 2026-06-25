@@ -1634,24 +1634,6 @@ private fun AutomationSettings(onBack: () -> Unit) {
                 AnimatedVisibility(visible = fallbackEnabled) {
                     Column {
                         GroupDivider()
-                        ToggleRow(
-                            Icons.Rounded.Error,
-                            "Trigger: Offer Not Found",
-                            "Use fallback when the saved USSD menu/signature is no longer available",
-                            fallbackTriggerOfferNotFound
-                        ) {
-                            fallbackTriggerOfferNotFound = it
-                        }
-                        GroupDivider()
-                        ToggleRow(
-                            Icons.Rounded.CheckCircle,
-                            "Trigger: Already Recommended",
-                            "Use fallback when the network says the number already got today's plan",
-                            fallbackTriggerDailyLimit
-                        ) {
-                            fallbackTriggerDailyLimit = it
-                        }
-                        GroupDivider()
                         Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                             Surface(shape = RoundedCornerShape(14.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
                                 Column(
@@ -1660,7 +1642,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                 ) {
                                     Text("How Fallback Works", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                     Text(
-                                        "${fallbackMappings.size} primary plan(s) configured. The app tries the primary plan first and only uses fallback after a failure (daily limit, rejected, insufficient airtime, etc).",
+                                        "${fallbackMappings.size} primary plan(s) configured. The app tries the primary plan first and only uses fallback when the selected rule matches.",
                                         color = C.t2,
                                         fontSize = 11.sp
                                     )
@@ -1670,13 +1652,14 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                             verticalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             Text("1. Try the primary plan first", color = C.t1, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                                            Text("2. If it fails, try the configured fallback plans in order", color = C.t2, fontSize = 11.sp)
-                                            Text("3. If none can be started, the original result is kept", color = C.t2, fontSize = 11.sp)
+                                            Text("2. Check the selected fallback rule", color = C.t2, fontSize = 11.sp)
+                                            Text("3. If it matches, try the configured fallback plans in order", color = C.t2, fontSize = 11.sp)
+                                            Text("4. If none can be started, the original result is kept", color = C.t2, fontSize = 11.sp)
                                         }
                                     }
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        "Fallback is a separate feature. It is not limited to 'already recommended' responses.",
+                                        "Selected rule: $fallbackRuleSummary.",
                                         color = C.t2,
                                         fontSize = 11.sp
                                     )
@@ -1686,14 +1669,21 @@ private fun AutomationSettings(onBack: () -> Unit) {
                         GroupDivider()
                         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                             Text("Fallback Rules", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                            Text("These rules apply to every primary plan that uses fallback", color = C.t2, fontSize = 11.sp)
+                            Text("Choose one rule for all primary plans that use fallback", color = C.t2, fontSize = 11.sp)
                             Spacer(Modifier.height(10.dp))
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                fallbackRuleOptions.forEach { option ->
+                                    FallbackRuleSelectorCard(
+                                        option = option,
+                                        selected = fallbackRuleMode == option.mode,
+                                        onClick = { fallbackRuleMode = option.mode }
+                                    )
+                                }
                                 Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
                                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text("Trigger", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                        Text("Selected Rule", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                                         Text(
-                                            "Fallback runs only after the selected primary plan fails.",
+                                            fallbackRuleDescription,
                                             color = C.t2,
                                             fontSize = 11.sp
                                         )
@@ -1753,6 +1743,11 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                         Text("EDIT", fontSize = 11.sp)
                                                     }
                                                 }
+                                                Text(
+                                                    "Rule: $fallbackRuleSummary.",
+                                                    color = C.t2,
+                                                    fontSize = 11.sp
+                                                )
                                                 Text(
                                                     "Eligibility: $fallbackMinPriceSummary.",
                                                     color = C.t2,
@@ -1960,11 +1955,17 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                             editorDirty = false
                                         }
                                         val edit = prefs.edit()
-                                        if (triggersDirty) {
-                                        edit.putBoolean("fallback_trigger_offer_not_found", fallbackTriggerOfferNotFound)
-                                            edit.putBoolean("fallback_trigger_daily_limit", fallbackTriggerDailyLimit)
-                                        fallbackTriggerOfferNotFoundSaved = fallbackTriggerOfferNotFound
-                                            fallbackTriggerDailyLimitSaved = fallbackTriggerDailyLimit
+                                        if (ruleDirty) {
+                                            edit.putString("daily_limit_fallback_rule_mode", fallbackRuleMode)
+                                            edit.putBoolean(
+                                                "fallback_trigger_offer_not_found",
+                                                DailyLimitPolicy.ruleIncludesOfferNotFound(fallbackRuleMode)
+                                            )
+                                            edit.putBoolean(
+                                                "fallback_trigger_daily_limit",
+                                                DailyLimitPolicy.ruleIncludesAlreadyRecommended(fallbackRuleMode)
+                                            )
+                                            fallbackRuleModeSaved = fallbackRuleMode
                                         }
                                         if (minPriceDirty) {
                                             edit.putInt("daily_limit_fallback_min_price", fallbackMinPriceValue)
