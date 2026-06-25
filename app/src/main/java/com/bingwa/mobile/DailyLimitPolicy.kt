@@ -5,12 +5,19 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Calendar
+
+data class DailyLimitFallbackMapping(
+    val primaryOfferId: Int,
+    val fallbackOfferIds: List<Int> = emptyList()
+)
 
 data class DailyLimitPolicyConfig(
     val mode: String = DailyLimitPolicy.MODE_QUEUE_TOMORROW,
     val fallbackEnabled: Boolean = false,
-    val fallbackOfferId: Int = -1,
+    val fallbackMappings: List<DailyLimitFallbackMapping> = emptyList(),
+    val legacyFallbackOfferId: Int = -1,
     val fallbackMinPrice: Int = 0,
     val repeatNoticeEnabled: Boolean = false
 )
@@ -23,30 +30,54 @@ data class DailyLimitReplyState(
 object DailyLimitPolicy {
     const val MODE_QUEUE_TOMORROW = "QUEUE_TOMORROW"
     const val MODE_NOTICE_ONLY = "NOTICE_ONLY"
+    private const val SETTINGS_PREFS = "app_settings"
+    private const val KEY_FALLBACK_ENABLED = "daily_limit_fallback_enabled"
+    private const val KEY_FALLBACK_OFFER_ID = "daily_limit_fallback_offer_id"
+    private const val KEY_FALLBACK_MAPPINGS = "daily_limit_fallback_mappings"
+    private const val KEY_FALLBACK_MIN_PRICE = "daily_limit_fallback_min_price"
     private const val REPLY_PREFS = "daily_limit_reply_state"
     private const val STAGE_MENU = "MENU"
     private const val STAGE_ALT_NUMBER = "ALT_NUMBER"
 
     fun load(context: Context): DailyLimitPolicyConfig {
-        val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
         return DailyLimitPolicyConfig(
-            mode = prefs.getString("daily_limit_mode", MODE_QUEUE_TOMORROW) ?: MODE_QUEUE_TOMORROW,
-            fallbackEnabled = prefs.getBoolean("daily_limit_fallback_enabled", false),
-            fallbackOfferId = prefs.getInt("daily_limit_fallback_offer_id", -1),
-            fallbackMinPrice = prefs.getInt("daily_limit_fallback_min_price", 0).coerceAtLeast(0),
-            repeatNoticeEnabled = prefs.getBoolean("daily_limit_repeat_notice_enabled", false)
+            mode = prefs.safeGetString("daily_limit_mode", MODE_QUEUE_TOMORROW) ?: MODE_QUEUE_TOMORROW,
+            fallbackEnabled = prefs.safeGetBoolean(KEY_FALLBACK_ENABLED, false),
+            fallbackMappings = parseFallbackMappings(prefs.safeGetString(KEY_FALLBACK_MAPPINGS, null)),
+            legacyFallbackOfferId = prefs.safeGetInt(KEY_FALLBACK_OFFER_ID, -1),
+            fallbackMinPrice = prefs.safeGetInt(KEY_FALLBACK_MIN_PRICE, 0).coerceAtLeast(0),
+            repeatNoticeEnabled = prefs.safeGetBoolean("daily_limit_repeat_notice_enabled", false)
         )
     }
 
+    fun saveFallbackMappings(context: Context, mappings: List<DailyLimitFallbackMapping>) {
+        val normalized = normalizeFallbackMappings(mappings)
+        context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_FALLBACK_MAPPINGS, serializeFallbackMappings(normalized))
+            .remove(KEY_FALLBACK_OFFER_ID)
+            .apply()
+    }
+
     fun resolveFallbackOffer(context: Context, originalOfferId: Int, originalPrice: Int): OfferItem? {
+        return resolveFallbackOffers(context, originalOfferId, originalPrice).firstOrNull()
+    }
+
+    fun resolveFallbackOffers(context: Context, originalOfferId: Int, originalPrice: Int): List<OfferItem> {
         val config = load(context)
-        if (!config.fallbackEnabled) return null
-        if (config.fallbackOfferId < 0) return null
-        if (originalPrice < config.fallbackMinPrice) return null
-        val fallback = OfferRepository.findById(context, config.fallbackOfferId) ?: return null
-        if (!fallback.enabled) return null
-        if (fallback.id == originalOfferId) return null
-        return fallback
+        if (!config.fallbackEnabled) return emptyList()
+        if (originalPrice < config.fallbackMinPrice) return emptyList()
+
+        val allOffers = OfferRepository.load(context)
+        val offerById = allOffers.associateBy { it.id }
+        return configuredFallbackIds(config, originalOfferId)
+            .asSequence()
+            .filter { it != originalOfferId }
+            .distinct()
+            .mapNotNull { offerById[it] }
+            .filter { it.enabled }
+            .toList()
     }
 
     fun findOpenDailyLimitTransaction(
@@ -250,6 +281,65 @@ object DailyLimitPolicy {
             .putInt("${normalizedPhone}_tx_id", txId)
             .putString("${normalizedPhone}_stage", stage)
             .apply()
+    }
+
+    private fun configuredFallbackIds(config: DailyLimitPolicyConfig, originalOfferId: Int): List<Int> {
+        val mappedIds = config.fallbackMappings
+            .firstOrNull { it.primaryOfferId == originalOfferId }
+            ?.fallbackOfferIds
+            .orEmpty()
+        if (mappedIds.isNotEmpty()) return mappedIds
+        return config.legacyFallbackOfferId.takeIf { it >= 0 }?.let(::listOf).orEmpty()
+    }
+
+    private fun parseFallbackMappings(raw: String?): List<DailyLimitFallbackMapping> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val primaryOfferId = obj.optInt("primaryOfferId", -1)
+                    if (primaryOfferId < 0) continue
+                    val fallbackIds = mutableListOf<Int>()
+                    val fallbackArray = obj.optJSONArray("fallbackOfferIds") ?: JSONArray()
+                    for (index in 0 until fallbackArray.length()) {
+                        val fallbackId = fallbackArray.optInt(index, -1)
+                        if (fallbackId >= 0 && fallbackId != primaryOfferId && fallbackId !in fallbackIds) {
+                            fallbackIds += fallbackId
+                        }
+                    }
+                    if (fallbackIds.isNotEmpty()) {
+                        add(DailyLimitFallbackMapping(primaryOfferId = primaryOfferId, fallbackOfferIds = fallbackIds))
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun serializeFallbackMappings(mappings: List<DailyLimitFallbackMapping>): String {
+        val arr = JSONArray()
+        normalizeFallbackMappings(mappings).forEach { mapping ->
+            arr.put(
+                JSONObject().apply {
+                    put("primaryOfferId", mapping.primaryOfferId)
+                    put("fallbackOfferIds", JSONArray(mapping.fallbackOfferIds))
+                }
+            )
+        }
+        return arr.toString()
+    }
+
+    private fun normalizeFallbackMappings(mappings: List<DailyLimitFallbackMapping>): List<DailyLimitFallbackMapping> {
+        return mappings.mapNotNull { mapping ->
+            val primaryOfferId = mapping.primaryOfferId.takeIf { it >= 0 } ?: return@mapNotNull null
+            val fallbackIds = mapping.fallbackOfferIds
+                .filter { it >= 0 && it != primaryOfferId }
+                .distinct()
+            if (fallbackIds.isEmpty()) null else DailyLimitFallbackMapping(primaryOfferId, fallbackIds)
+        }
     }
 }
 

@@ -1363,14 +1363,54 @@ private fun AutomationSettings(onBack: () -> Unit) {
     var autoRetry by remember { mutableStateOf(prefs.safeGetBoolean("auto_retry", false)) }
     var autoContacts by remember { mutableStateOf(prefs.safeGetBoolean("auto_save_contacts", true)) }
     val enabledOffers = remember { OfferRepository.load(ctx).filter { it.enabled } }
+    val dailyLimitConfig = remember { DailyLimitPolicy.load(ctx) }
+    val enabledOfferIds = remember(enabledOffers) { enabledOffers.map { it.id }.toSet() }
     var dailyLimitMode by remember { mutableStateOf(prefs.safeGetString("daily_limit_mode", DailyLimitPolicy.MODE_QUEUE_TOMORROW) ?: DailyLimitPolicy.MODE_QUEUE_TOMORROW) }
     var dailyLimitModeExp by remember { mutableStateOf(false) }
     var repeatNoticeEnabled by remember { mutableStateOf(prefs.safeGetBoolean("daily_limit_repeat_notice_enabled", false)) }
     var fallbackEnabled by remember { mutableStateOf(prefs.safeGetBoolean("daily_limit_fallback_enabled", false)) }
-    var fallbackOfferId by remember { mutableIntStateOf(prefs.safeGetInt("daily_limit_fallback_offer_id", -1)) }
-    var fallbackOfferExp by remember { mutableStateOf(false) }
+    val initialFallbackMappings = remember(enabledOffers) {
+        fun normalizeMappings(raw: List<DailyLimitFallbackMapping>): List<DailyLimitFallbackMapping> {
+            return raw.mapNotNull { mapping ->
+                val primaryOfferId = mapping.primaryOfferId.takeIf { it in enabledOfferIds } ?: return@mapNotNull null
+                val fallbackIds = mapping.fallbackOfferIds
+                    .filter { it in enabledOfferIds && it != primaryOfferId }
+                    .distinct()
+                if (fallbackIds.isEmpty()) null else DailyLimitFallbackMapping(primaryOfferId, fallbackIds)
+            }
+        }
+
+        val configuredMappings = normalizeMappings(dailyLimitConfig.fallbackMappings)
+        if (configuredMappings.isNotEmpty()) {
+            configuredMappings
+        } else {
+            val legacyFallbackId = dailyLimitConfig.legacyFallbackOfferId
+            if (legacyFallbackId in enabledOfferIds) {
+                enabledOffers
+                    .filter { it.id != legacyFallbackId }
+                    .map { DailyLimitFallbackMapping(primaryOfferId = it.id, fallbackOfferIds = listOf(legacyFallbackId)) }
+            } else {
+                emptyList()
+            }
+        }
+    }
+    var fallbackMappings by remember { mutableStateOf(initialFallbackMappings) }
+    var fallbackPrimaryOfferId by remember {
+        mutableIntStateOf(initialFallbackMappings.firstOrNull()?.primaryOfferId ?: enabledOffers.firstOrNull()?.id ?: -1)
+    }
+    var fallbackPrimaryExp by remember { mutableStateOf(false) }
     var fallbackMinPrice by remember { mutableStateOf(prefs.safeGetInt("daily_limit_fallback_min_price", 0).toString()) }
-    val selectedFallbackOffer = enabledOffers.firstOrNull { it.id == fallbackOfferId }
+    val selectedPrimaryOffer = enabledOffers.firstOrNull { it.id == fallbackPrimaryOfferId }
+    val selectedPrimaryFallbackIds = fallbackMappings
+        .firstOrNull { it.primaryOfferId == fallbackPrimaryOfferId }
+        ?.fallbackOfferIds
+        .orEmpty()
+    val selectedPrimaryFallbackOffers = selectedPrimaryFallbackIds.mapNotNull { fallbackId ->
+        enabledOffers.firstOrNull { it.id == fallbackId }
+    }
+    val availableFallbackOffers = enabledOffers.filter { offer ->
+        offer.id != fallbackPrimaryOfferId && offer.id !in selectedPrimaryFallbackIds
+    }
 
     fun saveDailyLimitMode(mode: String) {
         dailyLimitMode = mode
@@ -1390,6 +1430,36 @@ private fun AutomationSettings(onBack: () -> Unit) {
             edit.putString("daily_limit_mode", DailyLimitPolicy.MODE_NOTICE_ONLY)
         }
         edit.apply()
+    }
+
+    fun persistFallbackMappings(updated: List<DailyLimitFallbackMapping>) {
+        val normalized = updated.mapNotNull { mapping ->
+            val primaryOfferId = mapping.primaryOfferId.takeIf { it in enabledOfferIds } ?: return@mapNotNull null
+            val fallbackIds = mapping.fallbackOfferIds
+                .filter { it in enabledOfferIds && it != primaryOfferId }
+                .distinct()
+            if (fallbackIds.isEmpty()) null else DailyLimitFallbackMapping(primaryOfferId, fallbackIds)
+        }
+        fallbackMappings = normalized
+        DailyLimitPolicy.saveFallbackMappings(ctx, normalized)
+        if (fallbackPrimaryOfferId !in enabledOfferIds) {
+            fallbackPrimaryOfferId = normalized.firstOrNull()?.primaryOfferId ?: enabledOffers.firstOrNull()?.id ?: -1
+        }
+    }
+
+    fun updateFallbacksForPrimary(primaryOfferId: Int, transform: (List<Int>) -> List<Int>) {
+        if (primaryOfferId !in enabledOfferIds) return
+        val current = fallbackMappings.firstOrNull { it.primaryOfferId == primaryOfferId }?.fallbackOfferIds.orEmpty()
+        val updatedIds = transform(current)
+            .filter { it in enabledOfferIds && it != primaryOfferId }
+            .distinct()
+        val nextMappings = fallbackMappings
+            .filterNot { it.primaryOfferId == primaryOfferId }
+            .toMutableList()
+        if (updatedIds.isNotEmpty()) {
+            nextMappings += DailyLimitFallbackMapping(primaryOfferId = primaryOfferId, fallbackOfferIds = updatedIds)
+        }
+        persistFallbackMappings(nextMappings)
     }
 
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
@@ -1475,7 +1545,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                     }
                 }
                 GroupDivider()
-                ToggleRow(Icons.Rounded.Autorenew, "Use Fallback Offer", "If today's bundle is blocked, try another configured offer first", fallbackEnabled) {
+                ToggleRow(Icons.Rounded.Autorenew, "Use Fallback Plans", "If today's bundle is blocked, try another configured plan first", fallbackEnabled) {
                     fallbackEnabled = it
                     prefs.edit().putBoolean("daily_limit_fallback_enabled", it).apply()
                 }
@@ -1486,27 +1556,140 @@ private fun AutomationSettings(onBack: () -> Unit) {
                             SettingsRowIcon(Icons.Rounded.Tag)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
-                                Text("Fallback Offer", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                Text("Select the configured offer to try when the original one is limited, including unlimited offers", color = C.t2, fontSize = 11.sp)
+                                Text("Primary Offer", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Text("Choose the original offer, then assign one or more fallback plans for it", color = C.t2, fontSize = 11.sp)
                             }
                             Box {
-                                TextButton(onClick = { fallbackOfferExp = true }) {
-                                    Text(selectedFallbackOffer?.name ?: "SELECT", color = C.cyan, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                TextButton(onClick = { fallbackPrimaryExp = true }, enabled = enabledOffers.isNotEmpty()) {
+                                    Text(selectedPrimaryOffer?.name ?: "SELECT", color = C.cyan, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                                 DropdownMenu(
-                                    expanded = fallbackOfferExp,
-                                    onDismissRequest = { fallbackOfferExp = false },
+                                    expanded = fallbackPrimaryExp,
+                                    onDismissRequest = { fallbackPrimaryExp = false },
                                     modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))
                                 ) {
                                     enabledOffers.forEach { offer ->
                                         DropdownMenuItem(
-                                            text = { Text("${offer.name} • KES ${offer.price}", color = if (offer.id == fallbackOfferId) C.cyan else C.t1) },
+                                            text = { Text("${offer.name} • KES ${offer.price}", color = if (offer.id == fallbackPrimaryOfferId) C.cyan else C.t1) },
                                             onClick = {
-                                                fallbackOfferId = offer.id
-                                                prefs.edit().putInt("daily_limit_fallback_offer_id", offer.id).apply()
-                                                fallbackOfferExp = false
+                                                fallbackPrimaryOfferId = offer.id
+                                                fallbackPrimaryExp = false
                                             }
                                         )
+                                    }
+                                }
+                            }
+                        }
+                        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+                            Surface(shape = RoundedCornerShape(14.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
+                                Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                                    Text("Fallback Routing", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        "${fallbackMappings.size} primary offer(s) configured. The top fallback is tried first, then the system moves to the next eligible one.",
+                                        color = C.t2,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+                        if (selectedPrimaryOffer != null) {
+                            GroupDivider()
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                Text("Fallback Priority", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Text("Already Recommended requests use these plans in order for ${selectedPrimaryOffer.name}", color = C.t2, fontSize = 11.sp)
+                                Spacer(Modifier.height(10.dp))
+                                if (selectedPrimaryFallbackOffers.isEmpty()) {
+                                    Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
+                                        Text(
+                                            "No fallback plan configured for this offer yet. Add one or more bundles below.",
+                                            color = C.t2,
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.fillMaxWidth().padding(12.dp)
+                                        )
+                                    }
+                                } else {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        selectedPrimaryFallbackOffers.forEachIndexed { index, offer ->
+                                            Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
+                                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text("${index + 1}.", color = C.cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                                        Spacer(Modifier.width(8.dp))
+                                                        Column(Modifier.weight(1f)) {
+                                                            Text(offer.name, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                                            Text("${offer.category} • KES ${offer.price}", color = C.t2, fontSize = 11.sp)
+                                                        }
+                                                    }
+                                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                        TextButton(
+                                                            onClick = {
+                                                                updateFallbacksForPrimary(fallbackPrimaryOfferId) { ids ->
+                                                                    if (index <= 0) ids else ids.toMutableList().apply {
+                                                                        val moved = removeAt(index)
+                                                                        add(index - 1, moved)
+                                                                    }
+                                                                }
+                                                            },
+                                                            enabled = index > 0
+                                                        ) { Text("UP", fontSize = 11.sp) }
+                                                        TextButton(
+                                                            onClick = {
+                                                                updateFallbacksForPrimary(fallbackPrimaryOfferId) { ids ->
+                                                                    if (index >= ids.lastIndex) ids else ids.toMutableList().apply {
+                                                                        val moved = removeAt(index)
+                                                                        add(index + 1, moved)
+                                                                    }
+                                                                }
+                                                            },
+                                                            enabled = index < selectedPrimaryFallbackOffers.lastIndex
+                                                        ) { Text("DOWN", fontSize = 11.sp) }
+                                                        TextButton(
+                                                            onClick = {
+                                                                updateFallbacksForPrimary(fallbackPrimaryOfferId) { ids -> ids.filter { it != offer.id } }
+                                                            }
+                                                        ) { Text("REMOVE", fontSize = 11.sp) }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            GroupDivider()
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                Text("Available Fallback Plans", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Text("Add data, SMS, minutes, flex, or unlimited offers for this primary plan", color = C.t2, fontSize = 11.sp)
+                                Spacer(Modifier.height(10.dp))
+                                if (availableFallbackOffers.isEmpty()) {
+                                    Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
+                                        Text(
+                                            "All enabled offers are already in the fallback list for this primary plan.",
+                                            color = C.t2,
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.fillMaxWidth().padding(12.dp)
+                                        )
+                                    }
+                                } else {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        availableFallbackOffers.forEach { offer ->
+                                            Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
+                                                Row(
+                                                    Modifier.fillMaxWidth().padding(12.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Column(Modifier.weight(1f)) {
+                                                        Text(offer.name, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                                        Text("${offer.category} • KES ${offer.price}", color = C.t2, fontSize = 11.sp)
+                                                    }
+                                                    TextButton(
+                                                        onClick = {
+                                                            updateFallbacksForPrimary(fallbackPrimaryOfferId) { ids -> ids + offer.id }
+                                                        }
+                                                    ) { Text("ADD", fontSize = 11.sp) }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

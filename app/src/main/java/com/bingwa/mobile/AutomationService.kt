@@ -348,16 +348,21 @@ class AutomationService : Service() {
         val originalTx = loadTransactionById(this, request.txId)
         val originalOffer = request.offerId.takeIf { it >= 0 }?.let { OfferRepository.findById(this, it) }
         val originalPrice = originalOffer?.price ?: originalTx?.amountValue?.toInt() ?: 0
-        val fallbackOffer = DailyLimitPolicy.resolveFallbackOffer(
+        val fallbackOffers = DailyLimitPolicy.resolveFallbackOffers(
             context = this,
             originalOfferId = request.offerId,
             originalPrice = originalPrice
         )
 
-        if (fallbackOffer != null) {
+        fallbackOffers.forEachIndexed { index, fallbackOffer ->
             val fallbackStarted = startFallbackDispatch(request, fallbackOffer, originalTx)
             if (fallbackStarted) {
-                val note = "Original offer stopped because of the daily limit. Fallback offer started: ${fallbackOffer.name}."
+                val note = buildString {
+                    append("Original offer stopped because of the daily limit. Fallback offer started: ${fallbackOffer.name}.")
+                    if (index > 0) {
+                        append(" It was selected after earlier fallback plan(s) could not be started.")
+                    }
+                }
                 val message = "$response\n\n$note"
                 saveTransactionResponse(request.txId, "Cancelled", message)
                 sendBroadcastUpdate(request.txId, "Cancelled", message)
@@ -406,6 +411,7 @@ class AutomationService : Service() {
             RelayManager.forwardBuyAmount(this, request.phoneNumber, fallbackOffer.price)
         } else {
             val finalCode = UssdHelper.normalizeUssdCode(fallbackOffer.ussdCode, request.phoneNumber)
+            if (finalCode.isBlank()) return false
             val fallbackTxId = createPendingTransaction(
                 this,
                 fallbackOffer.name,
