@@ -1400,6 +1400,17 @@ private fun AutomationSettings(onBack: () -> Unit) {
     }
     var fallbackPrimaryExp by remember { mutableStateOf(false) }
     var fallbackMinPrice by remember { mutableStateOf(prefs.safeGetInt("daily_limit_fallback_min_price", 0).toString()) }
+    val fallbackMinPriceValue = fallbackMinPrice.toIntOrNull() ?: 0
+    val fallbackMinPriceSummary = if (fallbackMinPriceValue > 0) {
+        "Original amount must be KES $fallbackMinPriceValue or higher"
+    } else {
+        "Any original amount can use fallback"
+    }
+    val fallbackAfterListAction = if (dailyLimitMode == DailyLimitPolicy.MODE_NOTICE_ONLY) {
+        "Send notice only"
+    } else {
+        "Queue tomorrow"
+    }
     val selectedPrimaryOffer = enabledOffers.firstOrNull { it.id == fallbackPrimaryOfferId }
     val selectedPrimaryFallbackIds = fallbackMappings
         .firstOrNull { it.primaryOfferId == fallbackPrimaryOfferId }
@@ -1561,11 +1572,29 @@ private fun AutomationSettings(onBack: () -> Unit) {
                         GroupDivider()
                         Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                             Surface(shape = RoundedCornerShape(14.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
-                                Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                                    Text("Fallback Routing", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Column(
+                                    Modifier.fillMaxWidth().padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text("Fallback Workflow", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        "${fallbackMappings.size} primary plan(s) configured. Fallback starts only when the selected primary plan fails.",
+                                        color = C.t2,
+                                        fontSize = 11.sp
+                                    )
+                                    Surface(shape = RoundedCornerShape(12.dp), color = C.card.copy(alpha = 0.42f), border = BorderStroke(1.dp, C.border)) {
+                                        Column(
+                                            Modifier.fillMaxWidth().padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text("1. Try the primary plan first", color = C.t1, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                            Text("2. If it fails, try the configured fallback plans in order", color = C.t2, fontSize = 11.sp)
+                                            Text("3. If none succeeds, $fallbackAfterListAction", color = C.t2, fontSize = 11.sp)
+                                        }
+                                    }
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        "${fallbackMappings.size} primary plan(s) configured. The top fallback is tried first, then the system moves to the next eligible one.",
+                                        "Fallback is not limited to already recommended plans. Any configured primary plan can have its own fallback list.",
                                         color = C.t2,
                                         fontSize = 11.sp
                                     )
@@ -1574,27 +1603,39 @@ private fun AutomationSettings(onBack: () -> Unit) {
                         }
                         GroupDivider()
                         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            Text("Fallback Conditions", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                            Text("These rules apply to every configured fallback plan in this list", color = C.t2, fontSize = 11.sp)
+                            Text("Fallback Rules", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Text("These rules apply to every primary plan that uses fallback", color = C.t2, fontSize = 11.sp)
                             Spacer(Modifier.height(10.dp))
-                            Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
-                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text(
-                                        "Already Recommended handling: enabled",
-                                        color = C.t1,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        "Minimum original price: KES ${fallbackMinPrice.toIntOrNull() ?: 0}",
-                                        color = C.t2,
-                                        fontSize = 11.sp
-                                    )
-                                    Text(
-                                        "After fallback list ends: ${if (dailyLimitMode == DailyLimitPolicy.MODE_NOTICE_ONLY) "Send notice only" else "Queue tomorrow"}",
-                                        color = C.t2,
-                                        fontSize = 11.sp
-                                    )
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
+                                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Trigger", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                        Text(
+                                            "Fallback runs only after the selected primary plan fails.",
+                                            color = C.t2,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+                                Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
+                                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Eligibility", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                        Text(
+                                            fallbackMinPriceSummary,
+                                            color = C.t2,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+                                Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
+                                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("After All Fallbacks", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                        Text(
+                                            fallbackAfterListAction,
+                                            color = C.t2,
+                                            fontSize = 11.sp
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1631,7 +1672,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                     }
                                                 }
                                                 Text(
-                                                    "Condition: original amount must be KES ${fallbackMinPrice.toIntOrNull() ?: 0} or higher.",
+                                                    "Eligibility: $fallbackMinPriceSummary.",
                                                     color = C.t2,
                                                     fontSize = 11.sp
                                                 )
