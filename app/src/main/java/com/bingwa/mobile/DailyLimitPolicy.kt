@@ -16,13 +16,18 @@ data class DailyLimitFallbackMapping(
 data class DailyLimitPolicyConfig(
     val mode: String = DailyLimitPolicy.MODE_QUEUE_TOMORROW,
     val fallbackEnabled: Boolean = false,
-    val fallbackTriggerOfferNotFound: Boolean = true,
-    val fallbackTriggerDailyLimit: Boolean = true,
+    val fallbackRuleMode: String = DailyLimitPolicy.FALLBACK_RULE_BOTH,
     val fallbackMappings: List<DailyLimitFallbackMapping> = emptyList(),
     val legacyFallbackOfferId: Int = -1,
     val fallbackMinPrice: Int = 0,
     val repeatNoticeEnabled: Boolean = false
-)
+) {
+    val fallbackTriggerOfferNotFound: Boolean
+        get() = DailyLimitPolicy.ruleIncludesOfferNotFound(fallbackRuleMode)
+
+    val fallbackTriggerDailyLimit: Boolean
+        get() = DailyLimitPolicy.ruleIncludesAlreadyRecommended(fallbackRuleMode)
+}
 
 data class DailyLimitReplyState(
     val txId: Int,
@@ -32,8 +37,12 @@ data class DailyLimitReplyState(
 object DailyLimitPolicy {
     const val MODE_QUEUE_TOMORROW = "QUEUE_TOMORROW"
     const val MODE_NOTICE_ONLY = "NOTICE_ONLY"
+    const val FALLBACK_RULE_OFFER_NOT_FOUND = "OFFER_NOT_FOUND"
+    const val FALLBACK_RULE_ALREADY_RECOMMENDED = "ALREADY_RECOMMENDED"
+    const val FALLBACK_RULE_BOTH = "BOTH"
     private const val SETTINGS_PREFS = "app_settings"
     private const val KEY_FALLBACK_ENABLED = "daily_limit_fallback_enabled"
+    private const val KEY_FALLBACK_RULE_MODE = "daily_limit_fallback_rule_mode"
     private const val KEY_FALLBACK_TRIGGER_OFFER_NOT_FOUND = "fallback_trigger_offer_not_found"
     private const val KEY_FALLBACK_TRIGGER_FAILED_LEGACY = "fallback_trigger_failed"
     private const val KEY_FALLBACK_TRIGGER_DAILY_LIMIT = "fallback_trigger_daily_limit"
@@ -46,19 +55,66 @@ object DailyLimitPolicy {
 
     fun load(context: Context): DailyLimitPolicyConfig {
         val prefs = context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        val legacyOfferNotFound = prefs.safeGetBoolean(
+            KEY_FALLBACK_TRIGGER_OFFER_NOT_FOUND,
+            prefs.safeGetBoolean(KEY_FALLBACK_TRIGGER_FAILED_LEGACY, true)
+        )
+        val legacyDailyLimit = prefs.safeGetBoolean(KEY_FALLBACK_TRIGGER_DAILY_LIMIT, true)
         return DailyLimitPolicyConfig(
             mode = prefs.safeGetString("daily_limit_mode", MODE_QUEUE_TOMORROW) ?: MODE_QUEUE_TOMORROW,
             fallbackEnabled = prefs.safeGetBoolean(KEY_FALLBACK_ENABLED, false),
-            fallbackTriggerOfferNotFound = prefs.safeGetBoolean(
-                KEY_FALLBACK_TRIGGER_OFFER_NOT_FOUND,
-                prefs.safeGetBoolean(KEY_FALLBACK_TRIGGER_FAILED_LEGACY, true)
+            fallbackRuleMode = normalizeFallbackRule(
+                rawMode = prefs.safeGetString(KEY_FALLBACK_RULE_MODE, null),
+                legacyOfferNotFound = legacyOfferNotFound,
+                legacyDailyLimit = legacyDailyLimit
             ),
-            fallbackTriggerDailyLimit = prefs.safeGetBoolean(KEY_FALLBACK_TRIGGER_DAILY_LIMIT, true),
             fallbackMappings = parseFallbackMappings(prefs.safeGetString(KEY_FALLBACK_MAPPINGS, null)),
             legacyFallbackOfferId = prefs.safeGetInt(KEY_FALLBACK_OFFER_ID, -1),
             fallbackMinPrice = prefs.safeGetInt(KEY_FALLBACK_MIN_PRICE, 0).coerceAtLeast(0),
             repeatNoticeEnabled = prefs.safeGetBoolean("daily_limit_repeat_notice_enabled", false)
         )
+    }
+
+    fun normalizeFallbackRule(
+        rawMode: String?,
+        legacyOfferNotFound: Boolean = true,
+        legacyDailyLimit: Boolean = true
+    ): String {
+        return when (rawMode?.uppercase()) {
+            FALLBACK_RULE_OFFER_NOT_FOUND -> FALLBACK_RULE_OFFER_NOT_FOUND
+            FALLBACK_RULE_ALREADY_RECOMMENDED -> FALLBACK_RULE_ALREADY_RECOMMENDED
+            FALLBACK_RULE_BOTH -> FALLBACK_RULE_BOTH
+            else -> when {
+                legacyOfferNotFound && legacyDailyLimit -> FALLBACK_RULE_BOTH
+                legacyOfferNotFound -> FALLBACK_RULE_OFFER_NOT_FOUND
+                legacyDailyLimit -> FALLBACK_RULE_ALREADY_RECOMMENDED
+                else -> FALLBACK_RULE_BOTH
+            }
+        }
+    }
+
+    fun ruleIncludesOfferNotFound(ruleMode: String): Boolean {
+        return when (normalizeFallbackRule(ruleMode)) {
+            FALLBACK_RULE_OFFER_NOT_FOUND, FALLBACK_RULE_BOTH -> true
+            else -> false
+        }
+    }
+
+    fun ruleIncludesAlreadyRecommended(ruleMode: String): Boolean {
+        return when (normalizeFallbackRule(ruleMode)) {
+            FALLBACK_RULE_ALREADY_RECOMMENDED, FALLBACK_RULE_BOTH -> true
+            else -> false
+        }
+    }
+
+    fun saveFallbackRuleMode(context: Context, ruleMode: String) {
+        val normalizedRule = normalizeFallbackRule(ruleMode)
+        context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_FALLBACK_RULE_MODE, normalizedRule)
+            .putBoolean(KEY_FALLBACK_TRIGGER_OFFER_NOT_FOUND, ruleIncludesOfferNotFound(normalizedRule))
+            .putBoolean(KEY_FALLBACK_TRIGGER_DAILY_LIMIT, ruleIncludesAlreadyRecommended(normalizedRule))
+            .apply()
     }
 
     fun saveFallbackMappings(context: Context, mappings: List<DailyLimitFallbackMapping>) {

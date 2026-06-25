@@ -348,7 +348,7 @@ class AutomationService : Service() {
         }
 
         if (DailyLimitPolicy.isAlreadyRecommendedResponse(response)) {
-            if (config.fallbackTriggerDailyLimit) {
+            if (DailyLimitPolicy.ruleIncludesAlreadyRecommended(config.fallbackRuleMode)) {
                 val started = attemptFallback(
                     request = request,
                     originalTx = loadTransactionById(this, request.txId),
@@ -363,7 +363,7 @@ class AutomationService : Service() {
         }
 
         if (isOfferNotFoundFailure(response)) {
-            if (config.fallbackTriggerOfferNotFound) {
+            if (DailyLimitPolicy.ruleIncludesOfferNotFound(config.fallbackRuleMode)) {
                 val started = attemptFallback(
                     request = request,
                     originalTx = loadTransactionById(this, request.txId),
@@ -432,7 +432,7 @@ class AutomationService : Service() {
         val originalTx = loadTransactionById(this, request.txId)
         val originalOffer = request.offerId.takeIf { it >= 0 }?.let { OfferRepository.findById(this, it) }
         val originalPrice = originalOffer?.price ?: originalTx?.amountValue?.toInt() ?: 0
-        if (config.fallbackEnabled && config.fallbackTriggerDailyLimit) {
+        if (config.fallbackEnabled && DailyLimitPolicy.ruleIncludesAlreadyRecommended(config.fallbackRuleMode)) {
             val fallbackOffers = DailyLimitPolicy.resolveFallbackOffers(
                 context = this,
                 originalOfferId = request.offerId,

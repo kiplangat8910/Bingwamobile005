@@ -108,6 +108,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -149,6 +150,13 @@ private sealed class SettingsDest {
     data object Transactions : SettingsDest()
     data object Diagnostics : SettingsDest()
 }
+
+private data class FallbackRuleOption(
+    val mode: String,
+    val title: String,
+    val description: String,
+    val icon: ImageVector
+)
 
 @Composable
 fun GroupedSettingsScreen() {
@@ -1356,6 +1364,48 @@ private fun CustomerNotificationSettings(onBack: () -> Unit) {
 }
 
 @Composable
+private fun FallbackRuleSelectorCard(
+    option: FallbackRuleOption,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) C.cyan.copy(alpha = 0.14f) else C.w04,
+        border = BorderStroke(1.dp, if (selected) C.cyan else C.border)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = if (selected) C.cyan.copy(alpha = 0.18f) else C.cardHi
+            ) {
+                Box(Modifier.padding(8.dp), contentAlignment = Alignment.Center) {
+                    Icon(option.icon, null, tint = if (selected) C.cyan else C.t2, modifier = Modifier.size(18.dp))
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(option.title, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                Text(option.description, color = C.t2, fontSize = 11.sp)
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (selected) "SELECTED" else "CHOOSE",
+                color = if (selected) C.cyan else C.t3,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
 private fun AutomationSettings(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val prefs = ctx.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
@@ -1371,10 +1421,50 @@ private fun AutomationSettings(onBack: () -> Unit) {
     var fallbackEnabled by remember { mutableStateOf(prefs.safeGetBoolean("daily_limit_fallback_enabled", false)) }
     val initialFallbackTriggerOfferNotFound = remember { prefs.safeGetBoolean("fallback_trigger_offer_not_found", prefs.safeGetBoolean("fallback_trigger_failed", true)) }
     val initialFallbackTriggerDailyLimit = remember { prefs.safeGetBoolean("fallback_trigger_daily_limit", true) }
-    var fallbackTriggerOfferNotFoundSaved by remember { mutableStateOf(initialFallbackTriggerOfferNotFound) }
-    var fallbackTriggerDailyLimitSaved by remember { mutableStateOf(initialFallbackTriggerDailyLimit) }
-    var fallbackTriggerOfferNotFound by remember { mutableStateOf(initialFallbackTriggerOfferNotFound) }
-    var fallbackTriggerDailyLimit by remember { mutableStateOf(initialFallbackTriggerDailyLimit) }
+    val initialFallbackRuleMode = remember {
+        DailyLimitPolicy.normalizeFallbackRule(
+            rawMode = prefs.safeGetString("daily_limit_fallback_rule_mode", null),
+            legacyOfferNotFound = initialFallbackTriggerOfferNotFound,
+            legacyDailyLimit = initialFallbackTriggerDailyLimit
+        )
+    }
+    var fallbackRuleModeSaved by remember { mutableStateOf(initialFallbackRuleMode) }
+    var fallbackRuleMode by remember { mutableStateOf(initialFallbackRuleMode) }
+    val fallbackRuleOptions = remember {
+        listOf(
+            FallbackRuleOption(
+                mode = DailyLimitPolicy.FALLBACK_RULE_ALREADY_RECOMMENDED,
+                title = "Already Recommended",
+                description = "Use fallback only when the number has already received today's plan.",
+                icon = Icons.Rounded.CheckCircle
+            ),
+            FallbackRuleOption(
+                mode = DailyLimitPolicy.FALLBACK_RULE_OFFER_NOT_FOUND,
+                title = "Offer Not Found",
+                description = "Use fallback only when the saved USSD flow or signature is no longer available.",
+                icon = Icons.Rounded.Error
+            ),
+            FallbackRuleOption(
+                mode = DailyLimitPolicy.FALLBACK_RULE_BOTH,
+                title = "Both Rules",
+                description = "Use fallback for either daily-limit responses or offer-not-found failures.",
+                icon = Icons.Rounded.Autorenew
+            )
+        )
+    }
+    val fallbackRuleSummary = when (fallbackRuleMode) {
+        DailyLimitPolicy.FALLBACK_RULE_ALREADY_RECOMMENDED -> "Already recommended only"
+        DailyLimitPolicy.FALLBACK_RULE_OFFER_NOT_FOUND -> "Offer not found only"
+        else -> "Already recommended and offer not found"
+    }
+    val fallbackRuleDescription = when (fallbackRuleMode) {
+        DailyLimitPolicy.FALLBACK_RULE_ALREADY_RECOMMENDED ->
+            "Fallback starts only after the network says the number already got today's plan."
+        DailyLimitPolicy.FALLBACK_RULE_OFFER_NOT_FOUND ->
+            "Fallback starts only when the saved USSD menu, code, or signature can no longer be matched."
+        else ->
+            "Fallback starts when either the number already got today's plan or the offer path can no longer be found."
+    }
     val initialFallbackMappings = remember(enabledOffers) {
         fun normalizeMappings(raw: List<DailyLimitFallbackMapping>): List<DailyLimitFallbackMapping> {
             return raw.mapNotNull { mapping ->
@@ -1429,9 +1519,25 @@ private fun AutomationSettings(onBack: () -> Unit) {
     val selectedPrimaryFallbackOffers = editorFallbackIds.mapNotNull { fallbackId ->
         enabledOffers.firstOrNull { it.id == fallbackId }
     }
-    val availableFallbackOffers = enabledOffers.filter { offer ->
-        offer.id != fallbackPrimaryOfferId && offer.id !in editorFallbackIds
-    }
+    val availableFallbackOffers = enabledOffers
+        .filter { offer -> offer.id != fallbackPrimaryOfferId && offer.id !in editorFallbackIds }
+        .sortedWith(
+            compareBy<OfferItem>(
+                { offer ->
+                    val primaryCategory = selectedPrimaryOffer?.category?.trim().orEmpty()
+                    if (primaryCategory.isNotBlank() && offer.category.equals(primaryCategory, ignoreCase = true)) 0 else 1
+                },
+                { offer ->
+                    selectedPrimaryOffer?.let { primary ->
+                        if (offer.price <= primary.price) 0 else 1
+                    } ?: 0
+                },
+                { offer ->
+                    selectedPrimaryOffer?.let { primary -> (offer.price - primary.price).absoluteValue } ?: Int.MAX_VALUE
+                },
+                { offer -> offer.name.lowercase() }
+            )
+        )
     val configuredFallbackPlans = fallbackMappings.mapNotNull { mapping ->
         val primary = enabledOffers.firstOrNull { it.id == mapping.primaryOfferId } ?: return@mapNotNull null
         val fallbacks = mapping.fallbackOfferIds.mapNotNull { fallbackId ->
@@ -1439,9 +1545,9 @@ private fun AutomationSettings(onBack: () -> Unit) {
         }
         if (fallbacks.isEmpty()) null else primary to fallbacks
     }.sortedBy { it.first.name.lowercase() }
-    val triggersDirty = fallbackTriggerOfferNotFound != fallbackTriggerOfferNotFoundSaved || fallbackTriggerDailyLimit != fallbackTriggerDailyLimitSaved
+    val ruleDirty = fallbackRuleMode != fallbackRuleModeSaved
     val minPriceDirty = fallbackMinPriceValue != fallbackMinPriceSaved
-    val hasUnsavedFallbackChanges = triggersDirty || minPriceDirty || editorDirty
+    val hasUnsavedFallbackChanges = ruleDirty || minPriceDirty || editorDirty
 
     fun saveDailyLimitMode(mode: String) {
         dailyLimitMode = mode
