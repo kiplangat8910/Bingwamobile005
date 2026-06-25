@@ -1368,19 +1368,20 @@ private fun AutomationSettings(onBack: () -> Unit) {
     var dailyLimitMode by remember { mutableStateOf(prefs.safeGetString("daily_limit_mode", DailyLimitPolicy.MODE_QUEUE_TOMORROW) ?: DailyLimitPolicy.MODE_QUEUE_TOMORROW) }
     var dailyLimitModeExp by remember { mutableStateOf(false) }
     var repeatNoticeEnabled by remember { mutableStateOf(prefs.safeGetBoolean("daily_limit_repeat_notice_enabled", false)) }
-    var fallbackEnabled by remember { mutableStateOf(prefs.safeGetBoolean("daily_limit_fallback_enabled", false)) }
-    val initialFallbackMappings = remember(enabledOffers) {
-        fun normalizeMappings(raw: List<DailyLimitFallbackMapping>): List<DailyLimitFallbackMapping> {
-            return raw.mapNotNull { mapping ->
-                val primaryOfferId = mapping.primaryOfferId.takeIf { it in enabledOfferIds } ?: return@mapNotNull null
-                val fallbackIds = mapping.fallbackOfferIds
-                    .filter { it in enabledOfferIds && it != primaryOfferId }
-                    .distinct()
-                if (fallbackIds.isEmpty()) null else DailyLimitFallbackMapping(primaryOfferId, fallbackIds)
-            }
+    fun normalizeFallbackMappings(raw: List<DailyLimitFallbackMapping>): List<DailyLimitFallbackMapping> {
+        return raw.mapNotNull { mapping ->
+            val primaryOfferId = mapping.primaryOfferId.takeIf { it in enabledOfferIds } ?: return@mapNotNull null
+            val fallbackIds = mapping.fallbackOfferIds
+                .filter { it in enabledOfferIds && it != primaryOfferId }
+                .distinct()
+            if (fallbackIds.isEmpty()) null else DailyLimitFallbackMapping(primaryOfferId, fallbackIds)
         }
+    }
 
-        val configuredMappings = normalizeMappings(dailyLimitConfig.fallbackMappings)
+    var alreadyRecommendedFallbackEnabled by remember { mutableStateOf(prefs.safeGetBoolean("daily_limit_fallback_enabled", false)) }
+    var purchaseFailedFallbackEnabled by remember { mutableStateOf(prefs.safeGetBoolean("failed_fallback_enabled", false)) }
+    val initialAlreadyRecommendedMappings = remember(enabledOffers) {
+        val configuredMappings = normalizeFallbackMappings(dailyLimitConfig.fallbackMappings)
         if (configuredMappings.isNotEmpty()) {
             configuredMappings
         } else {
@@ -1394,12 +1395,35 @@ private fun AutomationSettings(onBack: () -> Unit) {
             }
         }
     }
-    var fallbackMappings by remember { mutableStateOf(initialFallbackMappings) }
+    val initialPurchaseFailedMappings = remember(enabledOffers) {
+        normalizeFallbackMappings(dailyLimitConfig.failedFallbackMappings)
+    }
+    var alreadyRecommendedFallbackMappings by remember { mutableStateOf(initialAlreadyRecommendedMappings) }
+    var purchaseFailedFallbackMappings by remember { mutableStateOf(initialPurchaseFailedMappings) }
+    var fallbackCategory by remember { mutableStateOf(DailyLimitPolicy.CATEGORY_ALREADY_RECOMMENDED) }
     var fallbackPrimaryOfferId by remember {
-        mutableIntStateOf(initialFallbackMappings.firstOrNull()?.primaryOfferId ?: enabledOffers.firstOrNull()?.id ?: -1)
+        mutableIntStateOf(
+            (initialAlreadyRecommendedMappings.firstOrNull()?.primaryOfferId
+                ?: initialPurchaseFailedMappings.firstOrNull()?.primaryOfferId)
+                ?: enabledOffers.firstOrNull()?.id
+                ?: -1
+        )
     }
     var fallbackPrimaryExp by remember { mutableStateOf(false) }
-    var fallbackMinPrice by remember { mutableStateOf(prefs.safeGetInt("daily_limit_fallback_min_price", 0).toString()) }
+    var alreadyRecommendedFallbackMinPrice by remember { mutableStateOf(prefs.safeGetInt("daily_limit_fallback_min_price", 0).toString()) }
+    var purchaseFailedFallbackMinPrice by remember { mutableStateOf(prefs.safeGetInt("failed_fallback_min_price", 0).toString()) }
+    val fallbackEnabled = when (fallbackCategory) {
+        DailyLimitPolicy.CATEGORY_PURCHASE_FAILED -> purchaseFailedFallbackEnabled
+        else -> alreadyRecommendedFallbackEnabled
+    }
+    val fallbackMappings = when (fallbackCategory) {
+        DailyLimitPolicy.CATEGORY_PURCHASE_FAILED -> purchaseFailedFallbackMappings
+        else -> alreadyRecommendedFallbackMappings
+    }
+    val fallbackMinPrice = when (fallbackCategory) {
+        DailyLimitPolicy.CATEGORY_PURCHASE_FAILED -> purchaseFailedFallbackMinPrice
+        else -> alreadyRecommendedFallbackMinPrice
+    }
     val selectedPrimaryOffer = enabledOffers.firstOrNull { it.id == fallbackPrimaryOfferId }
     val selectedPrimaryFallbackIds = fallbackMappings
         .firstOrNull { it.primaryOfferId == fallbackPrimaryOfferId }
@@ -1439,34 +1463,35 @@ private fun AutomationSettings(onBack: () -> Unit) {
         edit.apply()
     }
 
-    fun persistFallbackMappings(updated: List<DailyLimitFallbackMapping>) {
-        val normalized = updated.mapNotNull { mapping ->
-            val primaryOfferId = mapping.primaryOfferId.takeIf { it in enabledOfferIds } ?: return@mapNotNull null
-            val fallbackIds = mapping.fallbackOfferIds
-                .filter { it in enabledOfferIds && it != primaryOfferId }
-                .distinct()
-            if (fallbackIds.isEmpty()) null else DailyLimitFallbackMapping(primaryOfferId, fallbackIds)
+    fun persistFallbackMappings(category: String, updated: List<DailyLimitFallbackMapping>) {
+        val normalized = normalizeFallbackMappings(updated)
+        when (category) {
+            DailyLimitPolicy.CATEGORY_PURCHASE_FAILED -> purchaseFailedFallbackMappings = normalized
+            else -> alreadyRecommendedFallbackMappings = normalized
         }
-        fallbackMappings = normalized
-        DailyLimitPolicy.saveFallbackMappings(ctx, normalized)
+        DailyLimitPolicy.saveFallbackMappings(ctx, category, normalized)
         if (fallbackPrimaryOfferId !in enabledOfferIds) {
             fallbackPrimaryOfferId = normalized.firstOrNull()?.primaryOfferId ?: enabledOffers.firstOrNull()?.id ?: -1
         }
     }
 
-    fun updateFallbacksForPrimary(primaryOfferId: Int, transform: (List<Int>) -> List<Int>) {
+    fun updateFallbacksForPrimary(category: String, primaryOfferId: Int, transform: (List<Int>) -> List<Int>) {
         if (primaryOfferId !in enabledOfferIds) return
-        val current = fallbackMappings.firstOrNull { it.primaryOfferId == primaryOfferId }?.fallbackOfferIds.orEmpty()
+        val mappings = when (category) {
+            DailyLimitPolicy.CATEGORY_PURCHASE_FAILED -> purchaseFailedFallbackMappings
+            else -> alreadyRecommendedFallbackMappings
+        }
+        val current = mappings.firstOrNull { it.primaryOfferId == primaryOfferId }?.fallbackOfferIds.orEmpty()
         val updatedIds = transform(current)
             .filter { it in enabledOfferIds && it != primaryOfferId }
             .distinct()
-        val nextMappings = fallbackMappings
+        val nextMappings = mappings
             .filterNot { it.primaryOfferId == primaryOfferId }
             .toMutableList()
         if (updatedIds.isNotEmpty()) {
             nextMappings += DailyLimitFallbackMapping(primaryOfferId = primaryOfferId, fallbackOfferIds = updatedIds)
         }
-        persistFallbackMappings(nextMappings)
+        persistFallbackMappings(category, nextMappings)
     }
 
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
@@ -1552,11 +1577,66 @@ private fun AutomationSettings(onBack: () -> Unit) {
                     }
                 }
                 GroupDivider()
-                ToggleRow(Icons.Rounded.Autorenew, "Use Fallback Plans", "If today's plan is blocked, try another configured plan first", fallbackEnabled) {
-                    fallbackEnabled = it
-                    prefs.edit().putBoolean("daily_limit_fallback_enabled", it).apply()
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text("Fallback Plans", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text("Set different fallback rules for Already Recommended and Purchase Failed results", color = C.t2, fontSize = 11.sp)
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Surface(
+                            modifier = Modifier.weight(1f).clickable { fallbackCategory = DailyLimitPolicy.CATEGORY_ALREADY_RECOMMENDED },
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (fallbackCategory == DailyLimitPolicy.CATEGORY_ALREADY_RECOMMENDED) C.w08 else C.w04,
+                            border = BorderStroke(1.dp, if (fallbackCategory == DailyLimitPolicy.CATEGORY_ALREADY_RECOMMENDED) C.cyan else C.border)
+                        ) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Already Recommended", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "${alreadyRecommendedFallbackMappings.size} plan(s) configured • ${if (alreadyRecommendedFallbackEnabled) "ON" else "OFF"}",
+                                    color = C.t2,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        Surface(
+                            modifier = Modifier.weight(1f).clickable { fallbackCategory = DailyLimitPolicy.CATEGORY_PURCHASE_FAILED },
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (fallbackCategory == DailyLimitPolicy.CATEGORY_PURCHASE_FAILED) C.w08 else C.w04,
+                            border = BorderStroke(1.dp, if (fallbackCategory == DailyLimitPolicy.CATEGORY_PURCHASE_FAILED) C.cyan else C.border)
+                        ) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Purchase Failed", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "${purchaseFailedFallbackMappings.size} plan(s) configured • ${if (purchaseFailedFallbackEnabled) "ON" else "OFF"}",
+                                    color = C.t2,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
                 }
-                AnimatedVisibility(visible = fallbackEnabled) {
+                GroupDivider()
+                ToggleRow(
+                    Icons.Rounded.Autorenew,
+                    if (fallbackCategory == DailyLimitPolicy.CATEGORY_PURCHASE_FAILED) "Enable Purchase Failed Fallbacks" else "Enable Already Recommended Fallbacks",
+                    if (fallbackCategory == DailyLimitPolicy.CATEGORY_PURCHASE_FAILED) {
+                        "Use fallback plans when a purchase fails because of balance, network, or temporary availability issues"
+                    } else {
+                        "Use fallback plans when the same customer cannot receive the same plan again today"
+                    },
+                    fallbackEnabled
+                ) {
+                    when (fallbackCategory) {
+                        DailyLimitPolicy.CATEGORY_PURCHASE_FAILED -> {
+                            purchaseFailedFallbackEnabled = it
+                            prefs.edit().putBoolean("failed_fallback_enabled", it).apply()
+                        }
+                        else -> {
+                            alreadyRecommendedFallbackEnabled = it
+                            prefs.edit().putBoolean("daily_limit_fallback_enabled", it).apply()
+                        }
+                    }
+                }
+                AnimatedVisibility(visible = fallbackEnabled || configuredFallbackPlans.isNotEmpty()) {
                     Column {
                         GroupDivider()
                         Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -1565,7 +1645,10 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                     Text("Fallback Routing", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        "${fallbackMappings.size} primary plan(s) configured. The top fallback is tried first, then the system moves to the next eligible one.",
+                                        buildString {
+                                            append("${configuredFallbackPlans.size} primary plan(s) configured. ")
+                                            append("The top fallback is tried first, then the system moves to the next eligible one.")
+                                        },
                                         color = C.t2,
                                         fontSize = 11.sp
                                     )
@@ -1575,12 +1658,16 @@ private fun AutomationSettings(onBack: () -> Unit) {
                         GroupDivider()
                         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                             Text("Fallback Conditions", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                            Text("These rules apply to every configured fallback plan in this list", color = C.t2, fontSize = 11.sp)
+                            Text("These rules apply to every configured fallback plan in the selected category", color = C.t2, fontSize = 11.sp)
                             Spacer(Modifier.height(10.dp))
                             Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
                                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Text(
-                                        "Already Recommended handling: enabled",
+                                        if (fallbackCategory == DailyLimitPolicy.CATEGORY_PURCHASE_FAILED) {
+                                            "Purchase Failed handling: ${if (fallbackEnabled) "enabled" else "disabled"}"
+                                        } else {
+                                            "Already Recommended handling: ${if (fallbackEnabled) "enabled" else "disabled"}"
+                                        },
                                         color = C.t1,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium
@@ -1591,7 +1678,11 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                         fontSize = 11.sp
                                     )
                                     Text(
-                                        "After fallback list ends: ${if (dailyLimitMode == DailyLimitPolicy.MODE_NOTICE_ONLY) "Send notice only" else "Queue tomorrow"}",
+                                        if (fallbackCategory == DailyLimitPolicy.CATEGORY_PURCHASE_FAILED) {
+                                            "Applies to failed purchases, insufficient balance, network issues, and temporary unavailability."
+                                        } else {
+                                            "After fallback list ends: ${if (dailyLimitMode == DailyLimitPolicy.MODE_NOTICE_ONLY) "Send notice only" else "Queue tomorrow"}"
+                                        },
                                         color = C.t2,
                                         fontSize = 11.sp
                                     )
@@ -1601,12 +1692,20 @@ private fun AutomationSettings(onBack: () -> Unit) {
                         GroupDivider()
                         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                             Text("Configured Plans", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                            Text("Review every plan that already has fallback routing, plus its condition and priority order", color = C.t2, fontSize = 11.sp)
+                            Text(
+                                if (fallbackCategory == DailyLimitPolicy.CATEGORY_PURCHASE_FAILED) {
+                                    "Review plans that switch automatically when a purchase fails"
+                                } else {
+                                    "Review plans that switch automatically when the same plan was already used today"
+                                },
+                                color = C.t2,
+                                fontSize = 11.sp
+                            )
                             Spacer(Modifier.height(10.dp))
                             if (configuredFallbackPlans.isEmpty()) {
                                 Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
                                     Text(
-                                        "No plan fallback mappings saved yet. Choose a primary plan below to create the first one.",
+                                        "No fallback mappings saved for this category yet. Choose a primary plan below to create the first one.",
                                         color = C.t2,
                                         fontSize = 11.sp,
                                         modifier = Modifier.fillMaxWidth().padding(12.dp)
@@ -1631,7 +1730,11 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                     }
                                                 }
                                                 Text(
-                                                    "Condition: original amount must be KES ${fallbackMinPrice.toIntOrNull() ?: 0} or higher.",
+                                                    if (fallbackCategory == DailyLimitPolicy.CATEGORY_PURCHASE_FAILED) {
+                                                        "Trigger: purchase fails or service is temporarily unavailable. Minimum amount: KES ${fallbackMinPrice.toIntOrNull() ?: 0}."
+                                                    } else {
+                                                        "Trigger: plan was already recommended today. Minimum amount: KES ${fallbackMinPrice.toIntOrNull() ?: 0}."
+                                                    },
                                                     color = C.t2,
                                                     fontSize = 11.sp
                                                 )
@@ -1646,7 +1749,10 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                     }
                                                     TextButton(
                                                         onClick = {
-                                                            persistFallbackMappings(fallbackMappings.filterNot { it.primaryOfferId == primaryOffer.id })
+                                                            persistFallbackMappings(
+                                                                fallbackCategory,
+                                                                fallbackMappings.filterNot { it.primaryOfferId == primaryOffer.id }
+                                                            )
                                                         }
                                                     ) {
                                                         Text("REMOVE", fontSize = 11.sp)
@@ -1664,9 +1770,9 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                 Text("Plan Editor", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                 Text(
                                     if (selectedPrimaryFallbackOffers.isEmpty()) {
-                                        "Create a fallback plan for ${selectedPrimaryOffer.name}"
+                                        "Create a ${if (fallbackCategory == DailyLimitPolicy.CATEGORY_PURCHASE_FAILED) "Purchase Failed" else "Already Recommended"} fallback plan for ${selectedPrimaryOffer.name}"
                                     } else {
-                                        "Edit the fallback plan for ${selectedPrimaryOffer.name}"
+                                        "Edit the ${if (fallbackCategory == DailyLimitPolicy.CATEGORY_PURCHASE_FAILED) "Purchase Failed" else "Already Recommended"} fallback plan for ${selectedPrimaryOffer.name}"
                                     },
                                     color = C.t2,
                                     fontSize = 11.sp
@@ -1726,7 +1832,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                         TextButton(
                                                             onClick = {
-                                                                updateFallbacksForPrimary(fallbackPrimaryOfferId) { ids ->
+                                                                updateFallbacksForPrimary(fallbackCategory, fallbackPrimaryOfferId) { ids ->
                                                                     if (index <= 0) ids else ids.toMutableList().apply {
                                                                         val moved = removeAt(index)
                                                                         add(index - 1, moved)
@@ -1737,7 +1843,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                         ) { Text("UP", fontSize = 11.sp) }
                                                         TextButton(
                                                             onClick = {
-                                                                updateFallbacksForPrimary(fallbackPrimaryOfferId) { ids ->
+                                                                updateFallbacksForPrimary(fallbackCategory, fallbackPrimaryOfferId) { ids ->
                                                                     if (index >= ids.lastIndex) ids else ids.toMutableList().apply {
                                                                         val moved = removeAt(index)
                                                                         add(index + 1, moved)
@@ -1748,7 +1854,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                         ) { Text("DOWN", fontSize = 11.sp) }
                                                         TextButton(
                                                             onClick = {
-                                                                updateFallbacksForPrimary(fallbackPrimaryOfferId) { ids -> ids.filter { it != offer.id } }
+                                                                updateFallbacksForPrimary(fallbackCategory, fallbackPrimaryOfferId) { ids -> ids.filter { it != offer.id } }
                                                             }
                                                         ) { Text("REMOVE", fontSize = 11.sp) }
                                                     }
@@ -1761,7 +1867,15 @@ private fun AutomationSettings(onBack: () -> Unit) {
                             GroupDivider()
                             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                                 Text("Available Fallback Plans", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                Text("Add data, SMS, minutes, flex, or unlimited plans for this primary plan", color = C.t2, fontSize = 11.sp)
+                                Text(
+                                    if (fallbackCategory == DailyLimitPolicy.CATEGORY_PURCHASE_FAILED) {
+                                        "Add backup plans to try when the original purchase fails"
+                                    } else {
+                                        "Add alternative plans to try when the original plan was already used today"
+                                    },
+                                    color = C.t2,
+                                    fontSize = 11.sp
+                                )
                                 Spacer(Modifier.height(10.dp))
                                 if (availableFallbackOffers.isEmpty()) {
                                     Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
@@ -1786,7 +1900,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                     }
                                                     TextButton(
                                                         onClick = {
-                                                            updateFallbacksForPrimary(fallbackPrimaryOfferId) { ids -> ids + offer.id }
+                                                            updateFallbacksForPrimary(fallbackCategory, fallbackPrimaryOfferId) { ids -> ids + offer.id }
                                                         }
                                                     ) { Text("ADD", fontSize = 11.sp) }
                                                 }
@@ -1810,8 +1924,16 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                 value = fallbackMinPrice,
                                 onValueChange = {
                                     val filtered = it.filter(Char::isDigit)
-                                    fallbackMinPrice = filtered
-                                    prefs.edit().putInt("daily_limit_fallback_min_price", filtered.toIntOrNull() ?: 0).apply()
+                                    when (fallbackCategory) {
+                                        DailyLimitPolicy.CATEGORY_PURCHASE_FAILED -> {
+                                            purchaseFailedFallbackMinPrice = filtered
+                                            prefs.edit().putInt("failed_fallback_min_price", filtered.toIntOrNull() ?: 0).apply()
+                                        }
+                                        else -> {
+                                            alreadyRecommendedFallbackMinPrice = filtered
+                                            prefs.edit().putInt("daily_limit_fallback_min_price", filtered.toIntOrNull() ?: 0).apply()
+                                        }
+                                    }
                                 },
                                 placeholder = { Text("0 = any price", color = C.t3) },
                                 modifier = Modifier.fillMaxWidth(),

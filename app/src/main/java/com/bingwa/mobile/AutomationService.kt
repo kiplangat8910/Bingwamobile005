@@ -318,14 +318,22 @@ class AutomationService : Service() {
         // Broadcast update to UI
         sendBroadcastUpdate(request.txId, status, response)
 
-        // Admin alerts for failed transactions
-        if (status == "Failed") {
-            MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
-        }
-
         when (status) {
             "Pending" -> handleDailyLimitPending(request, response)
+            "Failed" -> {
+                val fallbackStarted = handlePurchaseFailedFallback(request, response, status)
+                if (!fallbackStarted) {
+                    MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
+                    clearMaintenanceRetryCount(request.txId)
+                }
+            }
             "UnderMaintenance" -> {
+                val fallbackStarted = handlePurchaseFailedFallback(request, response, status)
+                if (fallbackStarted) {
+                    clearMaintenanceRetryCount(request.txId)
+                    stopSelf()
+                    return
+                }
                 val retries = getMaintenanceRetryCount(request.txId)
                 if (retries < patternManager.getMaxMaintenanceRetries()) {
                     val nextRetryCount = retries + 1
@@ -358,7 +366,7 @@ class AutomationService : Service() {
             val fallbackStarted = startFallbackDispatch(request, fallbackOffer, originalTx)
             if (fallbackStarted) {
                 val note = buildString {
-                    append("Original offer stopped because of the daily limit. Fallback offer started: ${fallbackOffer.name}.")
+                    append("Original plan stopped because of the daily limit. Fallback plan started: ${fallbackOffer.name}.")
                     if (index > 0) {
                         append(" It was selected after earlier fallback plan(s) could not be started.")
                     }
@@ -369,7 +377,7 @@ class AutomationService : Service() {
                 OfferNotifications.notify(
                     this,
                     "Fallback Dispatched",
-                    "${request.offerName.ifBlank { "Original offer" }} hit the daily limit. ${fallbackOffer.name} was started for ${request.phoneNumber}."
+                    "${request.offerName.ifBlank { "Original plan" }} hit the daily limit. ${fallbackOffer.name} was started for ${request.phoneNumber}."
                 )
                 return
             }
@@ -394,12 +402,53 @@ class AutomationService : Service() {
             OfferNotifications.notify(
                 this,
                 "Daily Limit Notice",
-                "${request.phoneNumber} has already received today's offer. A notice was sent instead of auto-queueing."
+                "${request.phoneNumber} has already received today's plan. A notice was sent instead of auto-queueing."
             )
         } else {
             sendCustomerOutcomeSms(this, "pending", originalTx)
             scheduleRetryTomorrow(request)
         }
+    }
+
+    private fun handlePurchaseFailedFallback(
+        request: AutomationRequest,
+        response: String,
+        status: String
+    ): Boolean {
+        val originalTx = loadTransactionById(this, request.txId)
+        val originalOffer = request.offerId.takeIf { it >= 0 }?.let { OfferRepository.findById(this, it) }
+        val originalPrice = originalOffer?.price ?: originalTx?.amountValue?.toInt() ?: 0
+        val fallbackOffers = DailyLimitPolicy.resolvePurchaseFailedFallbackOffers(
+            context = this,
+            originalOfferId = request.offerId,
+            originalPrice = originalPrice,
+            status = status,
+            response = response
+        )
+        fallbackOffers.forEachIndexed { index, fallbackOffer ->
+            val fallbackStarted = startFallbackDispatch(request, fallbackOffer, originalTx)
+            if (fallbackStarted) {
+                val note = buildString {
+                    append("Original plan could not be completed. Fallback plan started: ${fallbackOffer.name}.")
+                    if (status.equals("UnderMaintenance", ignoreCase = true)) {
+                        append(" The original service response indicated a temporary outage or maintenance window.")
+                    }
+                    if (index > 0) {
+                        append(" It was selected after earlier fallback plan(s) could not be started.")
+                    }
+                }
+                val message = "$response\n\n$note"
+                saveTransactionResponse(request.txId, "Cancelled", message)
+                sendBroadcastUpdate(request.txId, "Cancelled", message)
+                OfferNotifications.notify(
+                    this,
+                    "Failure Fallback Dispatched",
+                    "${request.offerName.ifBlank { "Original plan" }} failed. ${fallbackOffer.name} was started for ${request.phoneNumber}."
+                )
+                return true
+            }
+        }
+        return false
     }
 
     private fun startFallbackDispatch(
