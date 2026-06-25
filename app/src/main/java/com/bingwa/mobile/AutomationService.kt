@@ -341,6 +341,12 @@ class AutomationService : Service() {
     }
 
     private fun handleFailedWithFallback(request: AutomationRequest, response: String) {
+        val config = DailyLimitPolicy.load(this)
+        if (!config.fallbackEnabled || !config.fallbackTriggerFailed) {
+            MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
+            return
+        }
+
         val originalTx = loadTransactionById(this, request.txId)
         val originalOffer = request.offerId.takeIf { it >= 0 }?.let { OfferRepository.findById(this, it) }
         val originalPrice = originalOffer?.price ?: originalTx?.amountValue?.toInt() ?: 0
@@ -375,37 +381,39 @@ class AutomationService : Service() {
     }
 
     private fun handleDailyLimitPending(request: AutomationRequest, response: String) {
+        val config = DailyLimitPolicy.load(this)
         val originalTx = loadTransactionById(this, request.txId)
         val originalOffer = request.offerId.takeIf { it >= 0 }?.let { OfferRepository.findById(this, it) }
         val originalPrice = originalOffer?.price ?: originalTx?.amountValue?.toInt() ?: 0
-        val fallbackOffers = DailyLimitPolicy.resolveFallbackOffers(
-            context = this,
-            originalOfferId = request.offerId,
-            originalPrice = originalPrice
-        )
+        if (config.fallbackEnabled && config.fallbackTriggerDailyLimit) {
+            val fallbackOffers = DailyLimitPolicy.resolveFallbackOffers(
+                context = this,
+                originalOfferId = request.offerId,
+                originalPrice = originalPrice
+            )
 
-        fallbackOffers.forEachIndexed { index, fallbackOffer ->
-            val fallbackStarted = startFallbackDispatch(request, fallbackOffer, originalTx)
-            if (fallbackStarted) {
-                val note = buildString {
-                    append("Original offer stopped because of the daily limit. Fallback offer started: ${fallbackOffer.name}.")
-                    if (index > 0) {
-                        append(" It was selected after earlier fallback plan(s) could not be started.")
+            fallbackOffers.forEachIndexed { index, fallbackOffer ->
+                val fallbackStarted = startFallbackDispatch(request, fallbackOffer, originalTx)
+                if (fallbackStarted) {
+                    val note = buildString {
+                        append("Original offer stopped because of the daily limit. Fallback offer started: ${fallbackOffer.name}.")
+                        if (index > 0) {
+                            append(" It was selected after earlier fallback plan(s) could not be started.")
+                        }
                     }
+                    val message = "$response\n\n$note"
+                    saveTransactionResponse(request.txId, "Cancelled", message)
+                    sendBroadcastUpdate(request.txId, "Cancelled", message)
+                    OfferNotifications.notify(
+                        this,
+                        "Fallback Dispatched",
+                        "${request.offerName.ifBlank { "Original offer" }} hit the daily limit. ${fallbackOffer.name} was started for ${request.phoneNumber}."
+                    )
+                    return
                 }
-                val message = "$response\n\n$note"
-                saveTransactionResponse(request.txId, "Cancelled", message)
-                sendBroadcastUpdate(request.txId, "Cancelled", message)
-                OfferNotifications.notify(
-                    this,
-                    "Fallback Dispatched",
-                    "${request.offerName.ifBlank { "Original offer" }} hit the daily limit. ${fallbackOffer.name} was started for ${request.phoneNumber}."
-                )
-                return
             }
         }
 
-        val config = DailyLimitPolicy.load(this)
         if (config.mode == DailyLimitPolicy.MODE_NOTICE_ONLY) {
             val note = if (config.repeatNoticeEnabled) {
                 "Reply 1 to send another number today, or reply 2 to confirm tomorrow morning dispatch."

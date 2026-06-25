@@ -1369,6 +1369,12 @@ private fun AutomationSettings(onBack: () -> Unit) {
     var dailyLimitModeExp by remember { mutableStateOf(false) }
     var repeatNoticeEnabled by remember { mutableStateOf(prefs.safeGetBoolean("daily_limit_repeat_notice_enabled", false)) }
     var fallbackEnabled by remember { mutableStateOf(prefs.safeGetBoolean("daily_limit_fallback_enabled", false)) }
+    val initialFallbackTriggerFailed = remember { prefs.safeGetBoolean("fallback_trigger_failed", true) }
+    val initialFallbackTriggerDailyLimit = remember { prefs.safeGetBoolean("fallback_trigger_daily_limit", true) }
+    var fallbackTriggerFailedSaved by remember { mutableStateOf(initialFallbackTriggerFailed) }
+    var fallbackTriggerDailyLimitSaved by remember { mutableStateOf(initialFallbackTriggerDailyLimit) }
+    var fallbackTriggerFailed by remember { mutableStateOf(initialFallbackTriggerFailed) }
+    var fallbackTriggerDailyLimit by remember { mutableStateOf(initialFallbackTriggerDailyLimit) }
     val initialFallbackMappings = remember(enabledOffers) {
         fun normalizeMappings(raw: List<DailyLimitFallbackMapping>): List<DailyLimitFallbackMapping> {
             return raw.mapNotNull { mapping ->
@@ -1399,8 +1405,10 @@ private fun AutomationSettings(onBack: () -> Unit) {
         mutableIntStateOf(initialFallbackMappings.firstOrNull()?.primaryOfferId ?: enabledOffers.firstOrNull()?.id ?: -1)
     }
     var fallbackPrimaryExp by remember { mutableStateOf(false) }
-    var fallbackMinPrice by remember { mutableStateOf(prefs.safeGetInt("daily_limit_fallback_min_price", 0).toString()) }
-    val fallbackMinPriceValue = fallbackMinPrice.toIntOrNull() ?: 0
+    val initialFallbackMinPrice = remember { prefs.safeGetInt("daily_limit_fallback_min_price", 0).coerceAtLeast(0) }
+    var fallbackMinPriceSaved by remember { mutableIntStateOf(initialFallbackMinPrice) }
+    var fallbackMinPriceDraft by remember { mutableStateOf(initialFallbackMinPrice.toString()) }
+    val fallbackMinPriceValue = fallbackMinPriceDraft.toIntOrNull() ?: 0
     val fallbackMinPriceSummary = if (fallbackMinPriceValue > 0) {
         "Original amount must be KES $fallbackMinPriceValue or higher"
     } else {
@@ -1411,11 +1419,18 @@ private fun AutomationSettings(onBack: () -> Unit) {
         .firstOrNull { it.primaryOfferId == fallbackPrimaryOfferId }
         ?.fallbackOfferIds
         .orEmpty()
-    val selectedPrimaryFallbackOffers = selectedPrimaryFallbackIds.mapNotNull { fallbackId ->
+    var editorFallbackIds by remember { mutableStateOf(selectedPrimaryFallbackIds) }
+    var editorDirty by remember { mutableStateOf(false) }
+    LaunchedEffect(fallbackPrimaryOfferId, fallbackMappings) {
+        if (!editorDirty) {
+            editorFallbackIds = selectedPrimaryFallbackIds
+        }
+    }
+    val selectedPrimaryFallbackOffers = editorFallbackIds.mapNotNull { fallbackId ->
         enabledOffers.firstOrNull { it.id == fallbackId }
     }
     val availableFallbackOffers = enabledOffers.filter { offer ->
-        offer.id != fallbackPrimaryOfferId && offer.id !in selectedPrimaryFallbackIds
+        offer.id != fallbackPrimaryOfferId && offer.id !in editorFallbackIds
     }
     val configuredFallbackPlans = fallbackMappings.mapNotNull { mapping ->
         val primary = enabledOffers.firstOrNull { it.id == mapping.primaryOfferId } ?: return@mapNotNull null
@@ -1424,6 +1439,9 @@ private fun AutomationSettings(onBack: () -> Unit) {
         }
         if (fallbacks.isEmpty()) null else primary to fallbacks
     }.sortedBy { it.first.name.lowercase() }
+    val triggersDirty = fallbackTriggerFailed != fallbackTriggerFailedSaved || fallbackTriggerDailyLimit != fallbackTriggerDailyLimitSaved
+    val minPriceDirty = fallbackMinPriceValue != fallbackMinPriceSaved
+    val hasUnsavedFallbackChanges = triggersDirty || minPriceDirty || editorDirty
 
     fun saveDailyLimitMode(mode: String) {
         dailyLimitMode = mode
@@ -1509,6 +1527,24 @@ private fun AutomationSettings(onBack: () -> Unit) {
                 }
                 AnimatedVisibility(visible = fallbackEnabled) {
                     Column {
+                        GroupDivider()
+                        ToggleRow(
+                            Icons.Rounded.Error,
+                            "Trigger: Failed",
+                            "Use fallback when USSD returns Failed",
+                            fallbackTriggerFailed
+                        ) {
+                            fallbackTriggerFailed = it
+                        }
+                        GroupDivider()
+                        ToggleRow(
+                            Icons.Rounded.CheckCircle,
+                            "Trigger: Already Recommended",
+                            "Use fallback when the network says the number already got today's plan",
+                            fallbackTriggerDailyLimit
+                        ) {
+                            fallbackTriggerDailyLimit = it
+                        }
                         GroupDivider()
                         Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                             Surface(shape = RoundedCornerShape(14.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
@@ -1607,7 +1643,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                             fontSize = 11.sp
                                                         )
                                                     }
-                                                    TextButton(onClick = { fallbackPrimaryOfferId = primaryOffer.id }) {
+                                                    TextButton(onClick = { editorDirty = false; fallbackPrimaryOfferId = primaryOffer.id }) {
                                                         Text("EDIT", fontSize = 11.sp)
                                                     }
                                                 }
@@ -1622,7 +1658,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                     fontSize = 11.sp
                                                 )
                                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    TextButton(onClick = { fallbackPrimaryOfferId = primaryOffer.id }) {
+                                                    TextButton(onClick = { editorDirty = false; fallbackPrimaryOfferId = primaryOffer.id }) {
                                                         Text("OPEN EDITOR", fontSize = 11.sp)
                                                     }
                                                     TextButton(
@@ -1673,6 +1709,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                 DropdownMenuItem(
                                                     text = { Text("${offer.name} • KES ${offer.price}", color = if (offer.id == fallbackPrimaryOfferId) C.cyan else C.t1) },
                                                     onClick = {
+                                                editorDirty = false
                                                         fallbackPrimaryOfferId = offer.id
                                                         fallbackPrimaryExp = false
                                                     }
@@ -1707,29 +1744,32 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                         TextButton(
                                                             onClick = {
-                                                                updateFallbacksForPrimary(fallbackPrimaryOfferId) { ids ->
-                                                                    if (index <= 0) ids else ids.toMutableList().apply {
+                                                                if (index > 0) {
+                                                                    editorFallbackIds = editorFallbackIds.toMutableList().apply {
                                                                         val moved = removeAt(index)
                                                                         add(index - 1, moved)
                                                                     }
+                                                                    editorDirty = true
                                                                 }
                                                             },
                                                             enabled = index > 0
                                                         ) { Text("UP", fontSize = 11.sp) }
                                                         TextButton(
                                                             onClick = {
-                                                                updateFallbacksForPrimary(fallbackPrimaryOfferId) { ids ->
-                                                                    if (index >= ids.lastIndex) ids else ids.toMutableList().apply {
+                                                                if (index < editorFallbackIds.lastIndex) {
+                                                                    editorFallbackIds = editorFallbackIds.toMutableList().apply {
                                                                         val moved = removeAt(index)
                                                                         add(index + 1, moved)
                                                                     }
+                                                                    editorDirty = true
                                                                 }
                                                             },
                                                             enabled = index < selectedPrimaryFallbackOffers.lastIndex
                                                         ) { Text("DOWN", fontSize = 11.sp) }
                                                         TextButton(
                                                             onClick = {
-                                                                updateFallbacksForPrimary(fallbackPrimaryOfferId) { ids -> ids.filter { it != offer.id } }
+                                                                editorFallbackIds = editorFallbackIds.filter { it != offer.id }
+                                                                editorDirty = true
                                                             }
                                                         ) { Text("REMOVE", fontSize = 11.sp) }
                                                     }
@@ -1767,7 +1807,10 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                     }
                                                     TextButton(
                                                         onClick = {
-                                                            updateFallbacksForPrimary(fallbackPrimaryOfferId) { ids -> ids + offer.id }
+                                                            editorFallbackIds = (editorFallbackIds + offer.id)
+                                                                .filter { it in enabledOfferIds && it != fallbackPrimaryOfferId }
+                                                                .distinct()
+                                                            editorDirty = true
                                                         }
                                                     ) { Text("ADD", fontSize = 11.sp) }
                                                 }
@@ -1788,11 +1831,10 @@ private fun AutomationSettings(onBack: () -> Unit) {
                             }
                             Spacer(Modifier.height(10.dp))
                             OutlinedTextField(
-                                value = fallbackMinPrice,
+                                value = fallbackMinPriceDraft,
                                 onValueChange = {
                                     val filtered = it.filter(Char::isDigit)
-                                    fallbackMinPrice = filtered
-                                    prefs.edit().putInt("daily_limit_fallback_min_price", filtered.toIntOrNull() ?: 0).apply()
+                                    fallbackMinPriceDraft = filtered
                                 },
                                 placeholder = { Text("0 = any price", color = C.t3) },
                                 modifier = Modifier.fillMaxWidth(),
@@ -1801,6 +1843,40 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                             )
+                        }
+                        if (hasUnsavedFallbackChanges) {
+                            GroupDivider()
+                            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+                                Button(
+                                    onClick = {
+                                        if (editorDirty) {
+                                            updateFallbacksForPrimary(fallbackPrimaryOfferId) { editorFallbackIds }
+                                            editorDirty = false
+                                        }
+                                        val edit = prefs.edit()
+                                        if (triggersDirty) {
+                                            edit.putBoolean("fallback_trigger_failed", fallbackTriggerFailed)
+                                            edit.putBoolean("fallback_trigger_daily_limit", fallbackTriggerDailyLimit)
+                                            fallbackTriggerFailedSaved = fallbackTriggerFailed
+                                            fallbackTriggerDailyLimitSaved = fallbackTriggerDailyLimit
+                                        }
+                                        if (minPriceDirty) {
+                                            edit.putInt("daily_limit_fallback_min_price", fallbackMinPriceValue)
+                                            fallbackMinPriceSaved = fallbackMinPriceValue
+                                        }
+                                        edit.apply()
+                                        vib(ctx)
+                                        Toast.makeText(ctx, "Fallback settings saved", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = C.cyan)
+                                ) {
+                                    Icon(Icons.Filled.Save, null, tint = C.bg, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Save Fallback Settings", color = C.bg, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
+                                }
+                            }
                         }
                     }
                 }

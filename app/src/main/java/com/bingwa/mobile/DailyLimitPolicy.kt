@@ -16,6 +16,8 @@ data class DailyLimitFallbackMapping(
 data class DailyLimitPolicyConfig(
     val mode: String = DailyLimitPolicy.MODE_QUEUE_TOMORROW,
     val fallbackEnabled: Boolean = false,
+    val fallbackTriggerFailed: Boolean = true,
+    val fallbackTriggerDailyLimit: Boolean = true,
     val fallbackMappings: List<DailyLimitFallbackMapping> = emptyList(),
     val legacyFallbackOfferId: Int = -1,
     val fallbackMinPrice: Int = 0,
@@ -32,6 +34,8 @@ object DailyLimitPolicy {
     const val MODE_NOTICE_ONLY = "NOTICE_ONLY"
     private const val SETTINGS_PREFS = "app_settings"
     private const val KEY_FALLBACK_ENABLED = "daily_limit_fallback_enabled"
+    private const val KEY_FALLBACK_TRIGGER_FAILED = "fallback_trigger_failed"
+    private const val KEY_FALLBACK_TRIGGER_DAILY_LIMIT = "fallback_trigger_daily_limit"
     private const val KEY_FALLBACK_OFFER_ID = "daily_limit_fallback_offer_id"
     private const val KEY_FALLBACK_MAPPINGS = "daily_limit_fallback_mappings"
     private const val KEY_FALLBACK_MIN_PRICE = "daily_limit_fallback_min_price"
@@ -44,6 +48,8 @@ object DailyLimitPolicy {
         return DailyLimitPolicyConfig(
             mode = prefs.safeGetString("daily_limit_mode", MODE_QUEUE_TOMORROW) ?: MODE_QUEUE_TOMORROW,
             fallbackEnabled = prefs.safeGetBoolean(KEY_FALLBACK_ENABLED, false),
+            fallbackTriggerFailed = prefs.safeGetBoolean(KEY_FALLBACK_TRIGGER_FAILED, true),
+            fallbackTriggerDailyLimit = prefs.safeGetBoolean(KEY_FALLBACK_TRIGGER_DAILY_LIMIT, true),
             fallbackMappings = parseFallbackMappings(prefs.safeGetString(KEY_FALLBACK_MAPPINGS, null)),
             legacyFallbackOfferId = prefs.safeGetInt(KEY_FALLBACK_OFFER_ID, -1),
             fallbackMinPrice = prefs.safeGetInt(KEY_FALLBACK_MIN_PRICE, 0).coerceAtLeast(0),
