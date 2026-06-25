@@ -1406,11 +1406,6 @@ private fun AutomationSettings(onBack: () -> Unit) {
     } else {
         "Any original amount can use fallback"
     }
-    val fallbackAfterListAction = if (dailyLimitMode == DailyLimitPolicy.MODE_NOTICE_ONLY) {
-        "Send notice only"
-    } else {
-        "Queue tomorrow"
-    }
     val selectedPrimaryOffer = enabledOffers.firstOrNull { it.id == fallbackPrimaryOfferId }
     val selectedPrimaryFallbackIds = fallbackMappings
         .firstOrNull { it.primaryOfferId == fallbackPrimaryOfferId }
@@ -1502,68 +1497,13 @@ private fun AutomationSettings(onBack: () -> Unit) {
                 }
             }
 
-            SettingsGroup("Daily Limit Handling") {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SettingsRowIcon(Icons.Rounded.Schedule)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("If number already got today's plan", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        Text("Choose one mode. Turning on repeat notice disables auto-queue tomorrow.", color = C.t2, fontSize = 11.sp)
-                    }
-                    Box {
-                        val label = if (dailyLimitMode == DailyLimitPolicy.MODE_NOTICE_ONLY) "NOTICE" else "QUEUE"
-                        TextButton(onClick = { dailyLimitModeExp = true }) { Text(label, color = C.cyan, fontSize = 12.sp) }
-                        DropdownMenu(
-                            expanded = dailyLimitModeExp,
-                            onDismissRequest = { dailyLimitModeExp = false },
-                            modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("QUEUE TOMORROW", color = if (dailyLimitMode == DailyLimitPolicy.MODE_QUEUE_TOMORROW) C.cyan else C.t1) },
-                                onClick = {
-                                    saveDailyLimitMode(DailyLimitPolicy.MODE_QUEUE_TOMORROW)
-                                    dailyLimitModeExp = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("NOTICE ONLY", color = if (dailyLimitMode == DailyLimitPolicy.MODE_NOTICE_ONLY) C.cyan else C.t1) },
-                                onClick = {
-                                    saveDailyLimitMode(DailyLimitPolicy.MODE_NOTICE_ONLY)
-                                    dailyLimitModeExp = false
-                                }
-                            )
-                        }
-                    }
-                }
-                GroupDivider()
+            SettingsGroup("Fallback Plans") {
                 ToggleRow(
-                    Icons.Rounded.Info,
-                    "Repeat Same-Number Notice",
-                    "If the same blocked number pays again today, send a notice instead of starting another dispatch",
-                    repeatNoticeEnabled
+                    Icons.Rounded.Autorenew,
+                    "Enable Fallback",
+                    "If a dispatch fails, try another configured plan in order",
+                    fallbackEnabled
                 ) {
-                    saveRepeatNotice(it)
-                }
-                AnimatedVisibility(visible = repeatNoticeEnabled) {
-                    Column {
-                        GroupDivider()
-                        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            Surface(shape = RoundedCornerShape(14.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
-                                Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                                    Text("Repeat Notice Active", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        "Same-number repeat payments are held and the customer is told to provide another number or confirm tomorrow morning dispatch. Auto-queue tomorrow is switched off while this stays enabled.",
-                                        color = C.t2,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                GroupDivider()
-                ToggleRow(Icons.Rounded.Autorenew, "Use Fallback Plans", "If today's plan is blocked, try another configured plan first", fallbackEnabled) {
                     fallbackEnabled = it
                     prefs.edit().putBoolean("daily_limit_fallback_enabled", it).apply()
                 }
@@ -1576,9 +1516,9 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                     Modifier.fillMaxWidth().padding(14.dp),
                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Text("Fallback Workflow", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("How Fallback Works", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                     Text(
-                                        "${fallbackMappings.size} primary plan(s) configured. Fallback starts only when the selected primary plan fails.",
+                                        "${fallbackMappings.size} primary plan(s) configured. The app tries the primary plan first and only uses fallback after a failure (daily limit, rejected, insufficient airtime, etc).",
                                         color = C.t2,
                                         fontSize = 11.sp
                                     )
@@ -1589,12 +1529,12 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                         ) {
                                             Text("1. Try the primary plan first", color = C.t1, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                             Text("2. If it fails, try the configured fallback plans in order", color = C.t2, fontSize = 11.sp)
-                                            Text("3. If none succeeds, $fallbackAfterListAction", color = C.t2, fontSize = 11.sp)
+                                            Text("3. If none can be started, the original result is kept", color = C.t2, fontSize = 11.sp)
                                         }
                                     }
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        "Fallback is not limited to already recommended plans. Any configured primary plan can have its own fallback list.",
+                                        "Fallback is a separate feature. It is not limited to 'already recommended' responses.",
                                         color = C.t2,
                                         fontSize = 11.sp
                                     )
@@ -1629,9 +1569,9 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                 }
                                 Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
                                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text("After All Fallbacks", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                        Text("Ordering", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                                         Text(
-                                            fallbackAfterListAction,
+                                            "The first plan in the list is tried first, then the next one.",
                                             color = C.t2,
                                             fontSize = 11.sp
                                         )
@@ -1861,6 +1801,68 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                             )
+                        }
+                    }
+                }
+            }
+
+            SettingsGroup("Daily Limit Handling") {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SettingsRowIcon(Icons.Rounded.Schedule)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("If number already got today's plan", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text("Choose one mode. Turning on repeat notice disables auto-queue tomorrow.", color = C.t2, fontSize = 11.sp)
+                    }
+                    Box {
+                        val label = if (dailyLimitMode == DailyLimitPolicy.MODE_NOTICE_ONLY) "NOTICE" else "QUEUE"
+                        TextButton(onClick = { dailyLimitModeExp = true }) { Text(label, color = C.cyan, fontSize = 12.sp) }
+                        DropdownMenu(
+                            expanded = dailyLimitModeExp,
+                            onDismissRequest = { dailyLimitModeExp = false },
+                            modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("QUEUE TOMORROW", color = if (dailyLimitMode == DailyLimitPolicy.MODE_QUEUE_TOMORROW) C.cyan else C.t1) },
+                                onClick = {
+                                    saveDailyLimitMode(DailyLimitPolicy.MODE_QUEUE_TOMORROW)
+                                    dailyLimitModeExp = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("NOTICE ONLY", color = if (dailyLimitMode == DailyLimitPolicy.MODE_NOTICE_ONLY) C.cyan else C.t1) },
+                                onClick = {
+                                    saveDailyLimitMode(DailyLimitPolicy.MODE_NOTICE_ONLY)
+                                    dailyLimitModeExp = false
+                                }
+                            )
+                        }
+                    }
+                }
+                GroupDivider()
+                ToggleRow(
+                    Icons.Rounded.Info,
+                    "Repeat Same-Number Notice",
+                    "If the same blocked number pays again today, send a notice instead of starting another dispatch",
+                    repeatNoticeEnabled
+                ) {
+                    saveRepeatNotice(it)
+                }
+                AnimatedVisibility(visible = repeatNoticeEnabled) {
+                    Column {
+                        GroupDivider()
+                        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            Surface(shape = RoundedCornerShape(14.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
+                                Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                                    Text("Repeat Notice Active", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        "Same-number repeat payments are held and the customer is told to provide another number or confirm tomorrow morning dispatch. Auto-queue tomorrow is switched off while this stays enabled.",
+                                        color = C.t2,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
                         }
                     }
                 }
