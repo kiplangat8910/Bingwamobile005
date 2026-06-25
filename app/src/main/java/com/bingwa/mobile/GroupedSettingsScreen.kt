@@ -1496,7 +1496,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                     SettingsRowIcon(Icons.Rounded.Schedule)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("If number already got today's offer", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text("If number already got today's plan", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                         Text("Choose one mode. Turning on repeat notice disables auto-queue tomorrow.", color = C.t2, fontSize = 11.sp)
                     }
                     Box {
@@ -1552,7 +1552,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                     }
                 }
                 GroupDivider()
-                ToggleRow(Icons.Rounded.Autorenew, "Use Fallback Plans", "If today's bundle is blocked, try another configured plan first", fallbackEnabled) {
+                ToggleRow(Icons.Rounded.Autorenew, "Use Fallback Plans", "If today's plan is blocked, try another configured plan first", fallbackEnabled) {
                     fallbackEnabled = it
                     prefs.edit().putBoolean("daily_limit_fallback_enabled", it).apply()
                 }
@@ -1565,7 +1565,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                     Text("Fallback Routing", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        "${fallbackMappings.size} primary offer(s) configured. The top fallback is tried first, then the system moves to the next eligible one.",
+                                        "${fallbackMappings.size} primary plan(s) configured. The top fallback is tried first, then the system moves to the next eligible one.",
                                         color = C.t2,
                                         fontSize = 11.sp
                                     )
@@ -1761,12 +1761,12 @@ private fun AutomationSettings(onBack: () -> Unit) {
                             GroupDivider()
                             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                                 Text("Available Fallback Plans", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                Text("Add data, SMS, minutes, flex, or unlimited offers for this primary plan", color = C.t2, fontSize = 11.sp)
+                                Text("Add data, SMS, minutes, flex, or unlimited plans for this primary plan", color = C.t2, fontSize = 11.sp)
                                 Spacer(Modifier.height(10.dp))
                                 if (availableFallbackOffers.isEmpty()) {
                                     Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
                                         Text(
-                                            "All enabled offers are already in the fallback list for this primary plan.",
+                                            "All enabled plans are already in the fallback list for this primary plan.",
                                             color = C.t2,
                                             fontSize = 11.sp,
                                             modifier = Modifier.fillMaxWidth().padding(12.dp)
