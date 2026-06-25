@@ -1417,16 +1417,16 @@ private fun FallbackStatusChip(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(999.dp),
-        color = tint.copy(alpha = 0.14f),
-        border = BorderStroke(1.dp, tint.copy(alpha = 0.30f))
+        color = tint.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.22f))
     ) {
         Row(
-            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(icon, null, tint = tint, modifier = Modifier.size(16.dp))
-            Text(label, color = C.t1, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Icon(icon, null, tint = tint, modifier = Modifier.size(14.dp))
+            Text(label, color = C.t1, fontSize = 10.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -1466,44 +1466,97 @@ private fun FallbackMappingCard(
     onEdit: () -> Unit,
     onRemove: () -> Unit
 ) {
+    val fallbackRouteSummary = fallbackOffers.joinToString("  •  ") { it.name }
     Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = C.cardHi.copy(alpha = 0.58f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.95f))
+        shape = RoundedCornerShape(24.dp),
+        color = C.cardHi.copy(alpha = 0.54f),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.75f))
     ) {
         Column(
-            Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            C.cyan.copy(alpha = 0.08f),
+                            C.cardHi.copy(alpha = 0.10f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(16.dp),
                     color = C.cyan.copy(alpha = 0.14f),
-                    border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.28f))
+                    border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.24f))
                 ) {
                     Box(
-                        Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        Modifier.size(44.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Rounded.Autorenew, null, tint = C.cyan, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Rounded.Autorenew, null, tint = C.cyan, modifier = Modifier.size(20.dp))
                     }
                 }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(primaryOffer.name, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = C.cyan.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.20f))
+                    ) {
+                        Text(
+                            "Fallback route",
+                            color = C.cyan,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                    Text(
+                        primaryOffer.name,
+                        color = C.t1,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Text("${primaryOffer.category} • KES ${primaryOffer.price}", color = C.t2, fontSize = 11.sp)
                 }
                 TextButton(onClick = onRemove) {
-                    Text("REMOVE", color = C.red, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Remove", color = C.red, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
-            FallbackInfoSurface(
-                title = "Fallback Order",
-                subtitle = fallbackOffers.joinToString("  ->  ") { it.name },
-                accent = C.cyan
-            )
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = C.w04,
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.62f))
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text("Runs next", color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        fallbackRouteSummary,
+                        color = C.t1,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 18.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "${fallbackOffers.size} plan(s) will be tried in order",
+                        color = C.t2,
+                        fontSize = 10.sp
+                    )
+                }
+            }
             Row(
                 Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1527,12 +1580,14 @@ private fun FallbackMappingCard(
             Button(
                 onClick = onEdit,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = C.cyan.copy(alpha = 0.16f),
+                    containerColor = C.cyan.copy(alpha = 0.18f),
                     contentColor = C.t1
                 )
             ) {
+                Icon(Icons.Rounded.AutoFixHigh, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
                 Text("Open Editor", fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
         }
