@@ -1369,11 +1369,11 @@ private fun AutomationSettings(onBack: () -> Unit) {
     var dailyLimitModeExp by remember { mutableStateOf(false) }
     var repeatNoticeEnabled by remember { mutableStateOf(prefs.safeGetBoolean("daily_limit_repeat_notice_enabled", false)) }
     var fallbackEnabled by remember { mutableStateOf(prefs.safeGetBoolean("daily_limit_fallback_enabled", false)) }
-    val initialFallbackTriggerFailed = remember { prefs.safeGetBoolean("fallback_trigger_failed", true) }
+    val initialFallbackTriggerOfferNotFound = remember { prefs.safeGetBoolean("fallback_trigger_offer_not_found", prefs.safeGetBoolean("fallback_trigger_failed", true)) }
     val initialFallbackTriggerDailyLimit = remember { prefs.safeGetBoolean("fallback_trigger_daily_limit", true) }
-    var fallbackTriggerFailedSaved by remember { mutableStateOf(initialFallbackTriggerFailed) }
+    var fallbackTriggerOfferNotFoundSaved by remember { mutableStateOf(initialFallbackTriggerOfferNotFound) }
     var fallbackTriggerDailyLimitSaved by remember { mutableStateOf(initialFallbackTriggerDailyLimit) }
-    var fallbackTriggerFailed by remember { mutableStateOf(initialFallbackTriggerFailed) }
+    var fallbackTriggerOfferNotFound by remember { mutableStateOf(initialFallbackTriggerOfferNotFound) }
     var fallbackTriggerDailyLimit by remember { mutableStateOf(initialFallbackTriggerDailyLimit) }
     val initialFallbackMappings = remember(enabledOffers) {
         fun normalizeMappings(raw: List<DailyLimitFallbackMapping>): List<DailyLimitFallbackMapping> {
@@ -1439,7 +1439,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
         }
         if (fallbacks.isEmpty()) null else primary to fallbacks
     }.sortedBy { it.first.name.lowercase() }
-    val triggersDirty = fallbackTriggerFailed != fallbackTriggerFailedSaved || fallbackTriggerDailyLimit != fallbackTriggerDailyLimitSaved
+    val triggersDirty = fallbackTriggerOfferNotFound != fallbackTriggerOfferNotFoundSaved || fallbackTriggerDailyLimit != fallbackTriggerDailyLimitSaved
     val minPriceDirty = fallbackMinPriceValue != fallbackMinPriceSaved
     val hasUnsavedFallbackChanges = triggersDirty || minPriceDirty || editorDirty
 
@@ -1530,11 +1530,11 @@ private fun AutomationSettings(onBack: () -> Unit) {
                         GroupDivider()
                         ToggleRow(
                             Icons.Rounded.Error,
-                            "Trigger: Failed",
-                            "Use fallback when USSD returns Failed",
-                            fallbackTriggerFailed
+                            "Trigger: Offer Not Found",
+                            "Use fallback when the saved USSD menu/signature is no longer available",
+                            fallbackTriggerOfferNotFound
                         ) {
-                            fallbackTriggerFailed = it
+                            fallbackTriggerOfferNotFound = it
                         }
                         GroupDivider()
                         ToggleRow(
@@ -1855,9 +1855,9 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                         }
                                         val edit = prefs.edit()
                                         if (triggersDirty) {
-                                            edit.putBoolean("fallback_trigger_failed", fallbackTriggerFailed)
+                                        edit.putBoolean("fallback_trigger_offer_not_found", fallbackTriggerOfferNotFound)
                                             edit.putBoolean("fallback_trigger_daily_limit", fallbackTriggerDailyLimit)
-                                            fallbackTriggerFailedSaved = fallbackTriggerFailed
+                                        fallbackTriggerOfferNotFoundSaved = fallbackTriggerOfferNotFound
                                             fallbackTriggerDailyLimitSaved = fallbackTriggerDailyLimit
                                         }
                                         if (minPriceDirty) {

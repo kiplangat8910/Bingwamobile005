@@ -342,14 +342,62 @@ class AutomationService : Service() {
 
     private fun handleFailedWithFallback(request: AutomationRequest, response: String) {
         val config = DailyLimitPolicy.load(this)
-        if (!config.fallbackEnabled || !config.fallbackTriggerFailed) {
+        if (!config.fallbackEnabled) {
             MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
             return
         }
 
-        val originalTx = loadTransactionById(this, request.txId)
+        if (DailyLimitPolicy.isAlreadyRecommendedResponse(response)) {
+            if (config.fallbackTriggerDailyLimit) {
+                val started = attemptFallback(
+                    request = request,
+                    originalTx = loadTransactionById(this, request.txId),
+                    response = response,
+                    reasonLabel = "daily limit"
+                )
+                if (!started) MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
+            } else {
+                MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
+            }
+            return
+        }
+
+        if (isOfferNotFoundFailure(response)) {
+            if (config.fallbackTriggerOfferNotFound) {
+                val started = attemptFallback(
+                    request = request,
+                    originalTx = loadTransactionById(this, request.txId),
+                    response = response,
+                    reasonLabel = "offer not found"
+                )
+                if (!started) MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
+            } else {
+                MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
+            }
+            return
+        }
+
+        MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
+    }
+
+    private fun isOfferNotFoundFailure(response: String): Boolean {
+        val lower = response.lowercase()
+        return lower.contains("ussd code change detected") ||
+            (lower.contains("detected changes in the ussd menu") && lower.contains("save & learn")) ||
+            (lower.contains("stopped the dispatch") && lower.contains("ussd menu")) ||
+            lower.contains("no dialer available") ||
+            lower.contains("could not be identified for saving")
+    }
+
+    private fun attemptFallback(
+        request: AutomationRequest,
+        originalTx: Transaction?,
+        response: String,
+        reasonLabel: String
+    ): Boolean {
+        val tx = originalTx
         val originalOffer = request.offerId.takeIf { it >= 0 }?.let { OfferRepository.findById(this, it) }
-        val originalPrice = originalOffer?.price ?: originalTx?.amountValue?.toInt() ?: 0
+        val originalPrice = originalOffer?.price ?: tx?.amountValue?.toInt() ?: 0
         val fallbackOffers = DailyLimitPolicy.resolveFallbackOffers(
             context = this,
             originalOfferId = request.offerId,
@@ -357,10 +405,10 @@ class AutomationService : Service() {
         )
 
         fallbackOffers.forEachIndexed { index, fallbackOffer ->
-            val fallbackStarted = startFallbackDispatch(request, fallbackOffer, originalTx)
+            val fallbackStarted = startFallbackDispatch(request, fallbackOffer, tx)
             if (fallbackStarted) {
                 val note = buildString {
-                    append("Original offer failed. Fallback offer started: ${fallbackOffer.name}.")
+                    append("Original offer stopped ($reasonLabel). Fallback offer started: ${fallbackOffer.name}.")
                     if (index > 0) {
                         append(" It was selected after earlier fallback plan(s) could not be started.")
                     }
@@ -371,13 +419,12 @@ class AutomationService : Service() {
                 OfferNotifications.notify(
                     this,
                     "Fallback Dispatched",
-                    "${request.offerName.ifBlank { "Original offer" }} failed. ${fallbackOffer.name} was started for ${request.phoneNumber}."
+                    "${request.offerName.ifBlank { "Original offer" }} stopped ($reasonLabel). ${fallbackOffer.name} was started for ${request.phoneNumber}."
                 )
-                return
+                return true
             }
         }
-
-        MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
+        return false
     }
 
     private fun handleDailyLimitPending(request: AutomationRequest, response: String) {
