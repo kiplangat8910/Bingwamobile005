@@ -1411,6 +1411,13 @@ private fun AutomationSettings(onBack: () -> Unit) {
     val availableFallbackOffers = enabledOffers.filter { offer ->
         offer.id != fallbackPrimaryOfferId && offer.id !in selectedPrimaryFallbackIds
     }
+    val configuredFallbackPlans = fallbackMappings.mapNotNull { mapping ->
+        val primary = enabledOffers.firstOrNull { it.id == mapping.primaryOfferId } ?: return@mapNotNull null
+        val fallbacks = mapping.fallbackOfferIds.mapNotNull { fallbackId ->
+            enabledOffers.firstOrNull { it.id == fallbackId }
+        }
+        if (fallbacks.isEmpty()) null else primary to fallbacks
+    }.sortedBy { it.first.name.lowercase() }
 
     fun saveDailyLimitMode(mode: String) {
         dailyLimitMode = mode
@@ -1552,34 +1559,6 @@ private fun AutomationSettings(onBack: () -> Unit) {
                 AnimatedVisibility(visible = fallbackEnabled) {
                     Column {
                         GroupDivider()
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
-                            SettingsRowIcon(Icons.Rounded.Tag)
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text("Primary Offer", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                Text("Choose the original offer, then assign one or more fallback plans for it", color = C.t2, fontSize = 11.sp)
-                            }
-                            Box {
-                                TextButton(onClick = { fallbackPrimaryExp = true }, enabled = enabledOffers.isNotEmpty()) {
-                                    Text(selectedPrimaryOffer?.name ?: "SELECT", color = C.cyan, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                                DropdownMenu(
-                                    expanded = fallbackPrimaryExp,
-                                    onDismissRequest = { fallbackPrimaryExp = false },
-                                    modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))
-                                ) {
-                                    enabledOffers.forEach { offer ->
-                                        DropdownMenuItem(
-                                            text = { Text("${offer.name} • KES ${offer.price}", color = if (offer.id == fallbackPrimaryOfferId) C.cyan else C.t1) },
-                                            onClick = {
-                                                fallbackPrimaryOfferId = offer.id
-                                                fallbackPrimaryExp = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
                         Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                             Surface(shape = RoundedCornerShape(14.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
                                 Column(Modifier.fillMaxWidth().padding(14.dp)) {
@@ -1593,16 +1572,139 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                 }
                             }
                         }
+                        GroupDivider()
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            Text("Fallback Conditions", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Text("These rules apply to every configured fallback plan in this list", color = C.t2, fontSize = 11.sp)
+                            Spacer(Modifier.height(10.dp))
+                            Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        "Already Recommended handling: enabled",
+                                        color = C.t1,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        "Minimum original price: KES ${fallbackMinPrice.toIntOrNull() ?: 0}",
+                                        color = C.t2,
+                                        fontSize = 11.sp
+                                    )
+                                    Text(
+                                        "After fallback list ends: ${if (dailyLimitMode == DailyLimitPolicy.MODE_NOTICE_ONLY) "Send notice only" else "Queue tomorrow"}",
+                                        color = C.t2,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+                        GroupDivider()
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            Text("Configured Plans", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Text("Review every plan that already has fallback routing, plus its condition and priority order", color = C.t2, fontSize = 11.sp)
+                            Spacer(Modifier.height(10.dp))
+                            if (configuredFallbackPlans.isEmpty()) {
+                                Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
+                                    Text(
+                                        "No plan fallback mappings saved yet. Choose a primary plan below to create the first one.",
+                                        color = C.t2,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.fillMaxWidth().padding(12.dp)
+                                    )
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    configuredFallbackPlans.forEach { (primaryOffer, fallbackOffers) ->
+                                        Surface(shape = RoundedCornerShape(14.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
+                                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Column(Modifier.weight(1f)) {
+                                                        Text(primaryOffer.name, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                                        Text(
+                                                            "${primaryOffer.category} • KES ${primaryOffer.price} • ${fallbackOffers.size} fallback plan(s)",
+                                                            color = C.t2,
+                                                            fontSize = 11.sp
+                                                        )
+                                                    }
+                                                    TextButton(onClick = { fallbackPrimaryOfferId = primaryOffer.id }) {
+                                                        Text("EDIT", fontSize = 11.sp)
+                                                    }
+                                                }
+                                                Text(
+                                                    "Condition: original amount must be KES ${fallbackMinPrice.toIntOrNull() ?: 0} or higher.",
+                                                    color = C.t2,
+                                                    fontSize = 11.sp
+                                                )
+                                                Text(
+                                                    "Fallback order: ${fallbackOffers.joinToString(" -> ") { it.name }}",
+                                                    color = C.t2,
+                                                    fontSize = 11.sp
+                                                )
+                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    TextButton(onClick = { fallbackPrimaryOfferId = primaryOffer.id }) {
+                                                        Text("OPEN EDITOR", fontSize = 11.sp)
+                                                    }
+                                                    TextButton(
+                                                        onClick = {
+                                                            persistFallbackMappings(fallbackMappings.filterNot { it.primaryOfferId == primaryOffer.id })
+                                                        }
+                                                    ) {
+                                                        Text("REMOVE", fontSize = 11.sp)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         if (selectedPrimaryOffer != null) {
                             GroupDivider()
                             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                                Text("Fallback Priority", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                Text("Already Recommended requests use these plans in order for ${selectedPrimaryOffer.name}", color = C.t2, fontSize = 11.sp)
+                                Text("Plan Editor", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Text(
+                                    if (selectedPrimaryFallbackOffers.isEmpty()) {
+                                        "Create a fallback plan for ${selectedPrimaryOffer.name}"
+                                    } else {
+                                        "Edit the fallback plan for ${selectedPrimaryOffer.name}"
+                                    },
+                                    color = C.t2,
+                                    fontSize = 11.sp
+                                )
+                                Spacer(Modifier.height(10.dp))
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    SettingsRowIcon(Icons.Rounded.Tag)
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Primary Plan", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                        Text("Select the plan you want to create or edit", color = C.t2, fontSize = 11.sp)
+                                    }
+                                    Box {
+                                        TextButton(onClick = { fallbackPrimaryExp = true }, enabled = enabledOffers.isNotEmpty()) {
+                                            Text(selectedPrimaryOffer.name, color = C.cyan, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                        DropdownMenu(
+                                            expanded = fallbackPrimaryExp,
+                                            onDismissRequest = { fallbackPrimaryExp = false },
+                                            modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))
+                                        ) {
+                                            enabledOffers.forEach { offer ->
+                                                DropdownMenuItem(
+                                                    text = { Text("${offer.name} • KES ${offer.price}", color = if (offer.id == fallbackPrimaryOfferId) C.cyan else C.t1) },
+                                                    onClick = {
+                                                        fallbackPrimaryOfferId = offer.id
+                                                        fallbackPrimaryExp = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                                 Spacer(Modifier.height(10.dp))
                                 if (selectedPrimaryFallbackOffers.isEmpty()) {
                                     Surface(shape = RoundedCornerShape(12.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
                                         Text(
-                                            "No fallback plan configured for this offer yet. Add one or more bundles below.",
+                                            "No fallback plan configured for this plan yet. Add one or more fallback plans below.",
                                             color = C.t2,
                                             fontSize = 11.sp,
                                             modifier = Modifier.fillMaxWidth().padding(12.dp)
