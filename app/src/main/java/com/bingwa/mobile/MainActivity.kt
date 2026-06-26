@@ -69,6 +69,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -8433,18 +8435,27 @@ private fun CompactDialogToggleCard(
 }
 
 @Composable
-private fun OfferDialogSection(title: String, subtitle: String? = null, content: @Composable ColumnScope.() -> Unit) {
+private fun OfferDialogSection(
+    title: String,
+    subtitle: String? = null,
+    accent: Color = C.amber,
+    content: @Composable ColumnScope.() -> Unit
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(22.dp),
         color = C.cardHi.copy(alpha = 0.92f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.20f))
     ) {
         Column(
             Modifier
                 .background(
                     Brush.verticalGradient(
-                        listOf(C.cardHi.copy(alpha = 0.98f), C.card.copy(alpha = 0.90f))
+                        listOf(
+                            accent.copy(alpha = 0.08f),
+                            C.cardHi.copy(alpha = 0.98f),
+                            C.card.copy(alpha = 0.90f)
+                        )
                     )
                 )
                 .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -8457,7 +8468,7 @@ private fun OfferDialogSection(title: String, subtitle: String? = null, content:
                         .width(4.dp)
                         .height(28.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(C.cyan)
+                        .background(accent)
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
@@ -8490,6 +8501,128 @@ private fun OfferStatusCard(enabled: Boolean, onCheckedChange: (Boolean) -> Unit
         uncheckedAccent = C.red,
         badgeText = badgeText
     )
+}
+
+@Composable
+private fun OfferDialogHeaderButton(
+    icon: ImageVector,
+    tint: Color = C.t1,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = C.w04,
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.90f))
+    ) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.size(42.dp)
+        ) {
+            Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun OfferPreviewMiniTile(
+    label: String,
+    value: String,
+    accent: Color,
+    icon: ImageVector,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        color = accent.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.20f))
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 88.dp)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(accent.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, null, tint = accent, modifier = Modifier.size(15.dp))
+                }
+                Text(label.uppercase(), color = C.t3, fontSize = 10.sp, letterSpacing = 0.8.sp)
+            }
+            Text(
+                value,
+                color = C.t1,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun OfferPreviewCodeStrip(code: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = C.w04,
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(30.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(C.amber.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Outlined.Dialpad, null, tint = C.amber, modifier = Modifier.size(16.dp))
+                    }
+                    Text("USSD PREVIEW", color = C.t3, fontSize = 10.sp, letterSpacing = 0.8.sp)
+                }
+                MiniTag("READY", C.amber)
+            }
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = C.surface.copy(alpha = 0.42f),
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.65f))
+            ) {
+                SelectionContainer {
+                    Text(
+                        code,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+                        color = C.t1,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Info, null, tint = C.t3, modifier = Modifier.size(14.dp))
+                Text("Use `pn` as the recipient number placeholder.", color = C.t3, fontSize = 10.sp)
+            }
+        }
+    }
 }
 
 @Composable
@@ -8528,7 +8661,7 @@ fun OfferDialog(
     val canSave = remember(name, price, code) {
         name.isNotBlank() && code.isNotBlank() && (price.toIntOrNull() ?: 0) > 0
     }
-    val maxDialogBodyHeight = (configuration.screenHeightDp.dp * 0.50f).coerceAtLeast(320.dp)
+    val dialogHeight = (configuration.screenHeightDp.dp * 0.92f).coerceAtLeast(620.dp)
 
     fun buildOffer(): OfferItem? {
         val p = price.toIntOrNull() ?: 0
@@ -8554,243 +8687,406 @@ fun OfferDialog(
         )
     }
 
-    AlertDialog(
-        containerColor = C.surface,
-        shape = RoundedCornerShape(28.dp),
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
-                    Text(
-                        if (existing != null) "BUNDLE SETTINGS" else "CREATE OFFER",
-                        color = C.cyan,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.1.sp
-                    )
-                    Text(
-                        if (existing != null) "Edit Bundle" else "New Bundle",
-                        color = C.t1,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 24.sp,
-                        lineHeight = 28.sp
-                    )
-                    Text(
-                        "Update pricing, routing, and automation behavior for this bundle.",
-                        color = C.t2,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp
-                    )
-                }
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Outlined.Close, null, tint = C.t2)
-                }
-            }
-        },
-        text = {
-            Column(
-                Modifier
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.40f))
+                .padding(horizontal = 12.dp, vertical = 18.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = maxDialogBodyHeight)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .widthIn(max = 760.dp)
+                    .heightIn(max = dialogHeight),
+                shape = RoundedCornerShape(30.dp),
+                color = C.surface,
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.90f))
             ) {
-                OfferDialogSection(
-                    title = "Bundle Status",
-                    subtitle = "Control whether this bundle is active and available for automation."
-                ) {
-                    OfferStatusCard(enabled = enabled, onCheckedChange = { enabled = it })
-                }
-
-                OfferDialogSection(
-                    title = "Bundle Details",
-                    subtitle = "Enter the bundle name, customer price, and USSD code."
-                ) {
-                    DialogField("Bundle Name", name, { name = it }, "e.g. 1GB Daily Bundle")
-                    DialogField("Price (KES)", price, { price = it }, "Amount customer pays", KeyboardType.Number)
-                    DialogField("USSD Code", code, { code = it }, "Use 'pn' as phone placeholder")
-                }
-
-                OfferDialogSection(
-                    title = "Execution Setup",
-                    subtitle = "Choose how the bundle runs and which device handles it."
-                ) {
-                    DialogDropdown("Mode", mode, listOf("SIMPLE", "ADVANCED"), modeExp, { modeExp = !modeExp }) { mode = it; modeExp = false }
-                    DialogDropdown("Category", cat, listOf("Data", "Minutes", "SMS", "Night", "Social"), catExp, { catExp = !catExp }) { cat = it; catExp = false }
-                    DialogDropdown("Execute On", device, listOf("PRIMARY", "RELAY"), devExp, { devExp = !devExp }) { device = it; devExp = false }
-                }
-
-                OfferDialogSection(
-                    title = "Bundle Preview",
-                    subtitle = "Quick summary of how this bundle will be stored."
-                ) {
-                    BoxWithConstraints(Modifier.fillMaxWidth()) {
-                        val compactPreview = maxWidth < 420.dp
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (compactPreview) {
-                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        OfferInfoTile("Price", if (price.isBlank()) "Not set" else "KES $price", C.cyan, Icons.Outlined.Badge, Modifier.weight(1f))
-                                        OfferInfoTile("Mode", mode, C.purple, Icons.Outlined.Tune, Modifier.weight(1f))
-                                    }
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        OfferInfoTile("Category", cat, C.orange, Icons.Outlined.Article, Modifier.weight(1f))
-                                        OfferInfoTile("Device", device, C.blue, Icons.Outlined.PhoneAndroid, Modifier.weight(1f))
-                                    }
-                                }
-                            } else {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    OfferInfoTile("Price", if (price.isBlank()) "Not set" else "KES $price", C.cyan, Icons.Outlined.Badge, Modifier.weight(1f))
-                                    OfferInfoTile("Mode", mode, C.purple, Icons.Outlined.Tune, Modifier.weight(1f))
-                                    OfferInfoTile("Category", cat, C.orange, Icons.Outlined.Article, Modifier.weight(1f))
-                                    OfferInfoTile("Device", device, C.blue, Icons.Outlined.PhoneAndroid, Modifier.weight(1f))
-                                }
-                            }
-                            OfferCodeBlock("USSD Preview", if (code.isBlank()) "No code entered yet" else code)
-                        }
-                    }
-                }
-
-                if (mode == "ADVANCED") {
-                    OfferDialogSection(
-                        title = "USSD Protection",
-                        subtitle = "Advanced mode can learn live menu labels and safely react when network menus change."
-                    ) {
-                        CompactDialogToggleCard(
-                            title = "Detect USSD code changes",
-                            description = if (signatureEnabled) {
-                                "Protection is on and this bundle can detect menu changes before executing."
-                            } else {
-                                "Turn this on to learn live menu labels and keep a reviewable step-by-step record."
-                            },
-                            checked = signatureEnabled,
-                            onCheckedChange = { signatureEnabled = it },
-                            icon = Icons.Outlined.Security,
-                            checkedAccent = C.green,
-                            uncheckedAccent = C.red,
-                            badgeText = if (signatureEnabled) "Guard on" else "Guard off"
-                        )
-                        if (signatureEnabled) {
-                            DialogDropdown(
-                                "When codes change",
-                                if (signatureAction == "ADJUST") "ADJUST" else "STOP",
-                                listOf("STOP", "ADJUST"),
-                                signatureExp,
-                                { signatureExp = !signatureExp }
-                            ) {
-                                signatureAction = it
-                                signatureExp = false
-                            }
-                            Text(
-                                if (signatureAction == "ADJUST")
-                                    "ADJUST only auto-fixes exact same-label moves. If the network changes wording, the app stops instead of guessing."
-                                else
-                                    "STOP is the recommended production setting. It prevents the app from choosing the wrong bundle when the menu looks different.",
-                                color = C.t2,
-                                fontSize = 11.sp,
-                                lineHeight = 16.sp
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    C.amber.copy(alpha = 0.06f),
+                                    C.cardHi.copy(alpha = 0.98f),
+                                    C.surface
+                                )
                             )
-                            if (hasPendingSignature) {
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = C.orangeDim,
-                                    border = BorderStroke(1.dp, C.orange.copy(alpha = 0.24f))
-                                ) {
-                                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text("Approval Needed", color = C.orange, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                        Text(
-                                            "A new learning run is waiting for approval. Review it before it replaces the saved signature.",
-                                            color = C.t2,
-                                            fontSize = 11.sp,
-                                            lineHeight = 16.sp
-                                        )
-                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            MiniTag("NEW STEPS ${pendingLearnedSteps.size}", C.orange)
-                                            MiniTag("NEW POPUPS ${pendingLearningCaptures.size}", C.amber)
+                        )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        OfferDialogHeaderButton(icon = Icons.Rounded.ArrowBack, onClick = onDismiss)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                if (existing != null) "BUNDLE SETTINGS" else "CREATE OFFER",
+                                color = C.amber,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.1.sp
+                            )
+                            Text(
+                                if (existing != null) "Edit Bundle" else "New Bundle",
+                                color = C.t1,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 24.sp,
+                                lineHeight = 28.sp
+                            )
+                            Text(
+                                "Update pricing, routing, and automation behavior for this bundle.",
+                                color = C.t2,
+                                fontSize = 12.sp,
+                                lineHeight = 18.sp
+                            )
+                        }
+                        OfferDialogHeaderButton(icon = Icons.Outlined.Close, tint = C.t2, onClick = onDismiss)
+                    }
+
+                    Divider(color = C.border.copy(alpha = 0.55f))
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        OfferDialogSection(
+                            title = "Bundle Status",
+                            subtitle = "Control whether this bundle is active and available for automation.",
+                            accent = C.amber
+                        ) {
+                            OfferStatusCard(enabled = enabled, onCheckedChange = { enabled = it })
+                        }
+
+                        OfferDialogSection(
+                            title = "Bundle Details",
+                            subtitle = "Enter the bundle name, customer price, and USSD code.",
+                            accent = C.amber
+                        ) {
+                            DialogField("Bundle Name", name, { name = it }, "e.g. 1GB Daily Bundle")
+                            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                                if (maxWidth < 520.dp) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        DialogField("Customer Price", price, { price = it }, "Amount customer pays", KeyboardType.Number)
+                                        DialogField("USSD Code", code, { code = it }, "Use 'pn' as phone placeholder")
+                                    }
+                                } else {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Box(Modifier.weight(0.42f)) {
+                                            DialogField("Customer Price", price, { price = it }, "Amount customer pays", KeyboardType.Number)
                                         }
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            OutlinedButton(
-                                                onClick = { existing?.let(onRelearnSignature) },
-                                                shape = RoundedCornerShape(14.dp),
-                                                border = BorderStroke(1.dp, C.amber.copy(alpha = 0.5f))
-                                            ) {
-                                                Text("Relearn", color = C.amber, fontWeight = FontWeight.Bold)
-                                            }
-                                            Button(
-                                                onClick = { existing?.let(onApprovePending) },
-                                                shape = RoundedCornerShape(14.dp),
-                                                colors = ButtonDefaults.buttonColors(containerColor = C.green)
-                                            ) {
-                                                Text("Approve", color = C.bg, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                        TextButton(
-                                            onClick = { showPendingSignatureDetails = true },
-                                            contentPadding = PaddingValues(0.dp)
-                                        ) {
-                                            Text("Review Pending Steps", color = C.cyan, fontWeight = FontWeight.SemiBold)
+                                        Box(Modifier.weight(0.58f)) {
+                                            DialogField("USSD Code", code, { code = it }, "Use 'pn' as phone placeholder")
                                         }
                                     }
                                 }
                             }
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(if (hasLearnedSignature) Modifier.clickable { showSignatureDetails = true } else Modifier),
-                                shape = RoundedCornerShape(16.dp),
-                                color = C.w04,
-                                border = BorderStroke(1.dp, C.border)
+                        }
+
+                        OfferDialogSection(
+                            title = "Execution Setup",
+                            subtitle = "Choose how the bundle runs and which device handles it.",
+                            accent = C.amber
+                        ) {
+                            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                                if (maxWidth < 560.dp) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        DialogDropdown("Mode", mode, listOf("SIMPLE", "ADVANCED"), modeExp, { modeExp = !modeExp }) { mode = it; modeExp = false }
+                                        DialogDropdown("Category", cat, listOf("Data", "Minutes", "SMS", "Night", "Social"), catExp, { catExp = !catExp }) { cat = it; catExp = false }
+                                        DialogDropdown("Execute On", device, listOf("PRIMARY", "RELAY"), devExp, { devExp = !devExp }) { device = it; devExp = false }
+                                    }
+                                } else {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Box(Modifier.weight(1f)) {
+                                            DialogDropdown("Mode", mode, listOf("SIMPLE", "ADVANCED"), modeExp, { modeExp = !modeExp }) { mode = it; modeExp = false }
+                                        }
+                                        Box(Modifier.weight(1f)) {
+                                            DialogDropdown("Category", cat, listOf("Data", "Minutes", "SMS", "Night", "Social"), catExp, { catExp = !catExp }) { cat = it; catExp = false }
+                                        }
+                                        Box(Modifier.weight(1f)) {
+                                            DialogDropdown("Execute On", device, listOf("PRIMARY", "RELAY"), devExp, { devExp = !devExp }) { device = it; devExp = false }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        OfferDialogSection(
+                            title = "Bundle Preview",
+                            subtitle = "Quick summary of how this bundle will be stored.",
+                            accent = C.amber
+                        ) {
+                            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                                val previewPrice = if (price.isBlank()) "Not set" else "KES $price"
+                                if (maxWidth < 520.dp) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            OfferPreviewMiniTile("Price", previewPrice, C.amber, Icons.Outlined.Badge, Modifier.weight(1f))
+                                            OfferPreviewMiniTile("Mode", mode, C.purple, Icons.Outlined.Tune, Modifier.weight(1f))
+                                        }
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            OfferPreviewMiniTile("Category", cat, C.orange, Icons.Outlined.Article, Modifier.weight(1f))
+                                            OfferPreviewMiniTile("Device", device, C.blue, Icons.Outlined.PhoneAndroid, Modifier.weight(1f))
+                                        }
+                                    }
+                                } else {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        OfferPreviewMiniTile("Price", previewPrice, C.amber, Icons.Outlined.Badge, Modifier.weight(1f))
+                                        OfferPreviewMiniTile("Mode", mode, C.purple, Icons.Outlined.Tune, Modifier.weight(1f))
+                                        OfferPreviewMiniTile("Category", cat, C.orange, Icons.Outlined.Article, Modifier.weight(1f))
+                                        OfferPreviewMiniTile("Device", device, C.blue, Icons.Outlined.PhoneAndroid, Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                            OfferPreviewCodeStrip(if (code.isBlank()) "No code entered yet" else code)
+                        }
+
+                        if (mode == "ADVANCED") {
+                            OfferDialogSection(
+                                title = "USSD Protection",
+                                subtitle = "Advanced mode can learn live menu labels and safely react when network menus change.",
+                                accent = if (signatureEnabled) C.red else C.amber
                             ) {
-                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Signature Learning", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                CompactDialogToggleCard(
+                                    title = "Detect USSD code changes",
+                                    description = if (signatureEnabled) {
+                                        "Monitor and adapt if the operator changes menu text or flow."
+                                    } else {
+                                        "Turn this on to learn live menu labels and keep a reviewable step-by-step record."
+                                    },
+                                    checked = signatureEnabled,
+                                    onCheckedChange = { signatureEnabled = it },
+                                    icon = Icons.Outlined.Security,
+                                    checkedAccent = C.red,
+                                    uncheckedAccent = C.red,
+                                    badgeText = if (signatureEnabled) "Guard on" else "Guard off"
+                                )
+                                if (signatureEnabled) {
+                                    DialogDropdown(
+                                        "When codes change",
+                                        if (signatureAction == "ADJUST") "ADJUST" else "STOP",
+                                        listOf("STOP", "ADJUST"),
+                                        signatureExp,
+                                        { signatureExp = !signatureExp }
+                                    ) {
+                                        signatureAction = it
+                                        signatureExp = false
+                                    }
                                     Text(
-                                        if (learnedSteps.isNotEmpty() || learningCaptures.isNotEmpty())
-                                            when {
-                                                learnedSteps.isNotEmpty() ->
-                                                    "Learned ${learnedSteps.size} menu step(s) and captured ${learningCaptures.size} popup(s) on ${formatSignatureLearnedAt(learnedAt)}."
-                                                else ->
-                                                    "Captured ${learningCaptures.size} popup(s) on ${formatSignatureLearnedAt(learnedAt)}."
-                                            }
+                                        if (signatureAction == "ADJUST")
+                                            "ADJUST only auto-fixes exact same-label moves. If the network changes wording, the app stops instead of guessing."
                                         else
-                                            "No signature learned yet. Save this offer, then use Save & Learn to scan the live USSD menus with test number 0700000000.",
+                                            "STOP is the recommended production setting. It prevents the app from choosing the wrong bundle when the menu looks different.",
                                         color = C.t2,
                                         fontSize = 11.sp,
                                         lineHeight = 16.sp
                                     )
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        MiniTag("STEPS ${learnedSteps.size}", C.green)
-                                        MiniTag("POPUPS ${learningCaptures.size}", C.amber)
-                                        MiniTag(if (signatureAction == "ADJUST") "AUTO ADJUST" else "STOP ONLY", if (signatureAction == "ADJUST") C.green else C.amber)
-                                    }
-                                    existing?.signatureLearningCaptures?.lastOrNull()?.let { capture ->
-                                        val preview = capture.popupText.replace(Regex("\\s+"), " ").trim().take(140)
-                                        if (preview.isNotBlank()) {
-                                            Text(
-                                                "Last popup: $preview",
-                                                color = C.t3,
-                                                fontSize = 10.sp,
-                                                lineHeight = 14.sp
-                                            )
-                                        }
-                                    }
-                                    if (hasLearnedSignature) {
-                                        Text(
-                                            "Tap to view every learned step, recorded text, and chosen option.",
-                                            color = C.cyan,
-                                            fontSize = 10.sp,
-                                            lineHeight = 14.sp
-                                        )
-                                        TextButton(
-                                            onClick = { showSignatureDetails = true },
-                                            contentPadding = PaddingValues(0.dp)
+                                    if (hasPendingSignature) {
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = C.orangeDim,
+                                            border = BorderStroke(1.dp, C.orange.copy(alpha = 0.24f))
                                         ) {
-                                            Text("View Learned Steps", color = C.cyan, fontWeight = FontWeight.SemiBold)
+                                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Text("Approval Needed", color = C.orange, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                                Text(
+                                                    "A new learning run is waiting for approval. Review it before it replaces the saved signature.",
+                                                    color = C.t2,
+                                                    fontSize = 11.sp,
+                                                    lineHeight = 16.sp
+                                                )
+                                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    MiniTag("NEW STEPS ${pendingLearnedSteps.size}", C.orange)
+                                                    MiniTag("NEW POPUPS ${pendingLearningCaptures.size}", C.amber)
+                                                }
+                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    OutlinedButton(
+                                                        onClick = { existing?.let(onRelearnSignature) },
+                                                        shape = RoundedCornerShape(14.dp),
+                                                        border = BorderStroke(1.dp, C.amber.copy(alpha = 0.5f))
+                                                    ) {
+                                                        Text("Relearn", color = C.amber, fontWeight = FontWeight.Bold)
+                                                    }
+                                                    Button(
+                                                        onClick = { existing?.let(onApprovePending) },
+                                                        shape = RoundedCornerShape(14.dp),
+                                                        colors = ButtonDefaults.buttonColors(containerColor = C.green)
+                                                    ) {
+                                                        Text("Approve", color = C.bg, fontWeight = FontWeight.Bold)
+                                                    }
+                                                }
+                                                TextButton(
+                                                    onClick = { showPendingSignatureDetails = true },
+                                                    contentPadding = PaddingValues(0.dp)
+                                                ) {
+                                                    Text("Review Pending Steps", color = C.cyan, fontWeight = FontWeight.SemiBold)
+                                                }
+                                            }
                                         }
+                                    }
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .then(if (hasLearnedSignature) Modifier.clickable { showSignatureDetails = true } else Modifier),
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = C.w04,
+                                        border = BorderStroke(1.dp, C.border)
+                                    ) {
+                                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text("Signature Learning", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                            Text(
+                                                if (learnedSteps.isNotEmpty() || learningCaptures.isNotEmpty())
+                                                    when {
+                                                        learnedSteps.isNotEmpty() ->
+                                                            "Learned ${learnedSteps.size} menu step(s) and captured ${learningCaptures.size} popup(s) on ${formatSignatureLearnedAt(learnedAt)}."
+                                                        else ->
+                                                            "Captured ${learningCaptures.size} popup(s) on ${formatSignatureLearnedAt(learnedAt)}."
+                                                    }
+                                                else
+                                                    "No signature learned yet. Save this offer, then use Save & Learn to scan the live USSD menus with test number 0700000000.",
+                                                color = C.t2,
+                                                fontSize = 11.sp,
+                                                lineHeight = 16.sp
+                                            )
+                                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                MiniTag("STEPS ${learnedSteps.size}", C.green)
+                                                MiniTag("POPUPS ${learningCaptures.size}", C.amber)
+                                                MiniTag(if (signatureAction == "ADJUST") "AUTO ADJUST" else "STOP ONLY", if (signatureAction == "ADJUST") C.green else C.amber)
+                                            }
+                                            existing?.signatureLearningCaptures?.lastOrNull()?.let { capture ->
+                                                val preview = capture.popupText.replace(Regex("\\s+"), " ").trim().take(140)
+                                                if (preview.isNotBlank()) {
+                                                    Text(
+                                                        "Last popup: $preview",
+                                                        color = C.t3,
+                                                        fontSize = 10.sp,
+                                                        lineHeight = 14.sp
+                                                    )
+                                                }
+                                            }
+                                            if (hasLearnedSignature) {
+                                                Text(
+                                                    "Tap to view every learned step, recorded text, and chosen option.",
+                                                    color = C.cyan,
+                                                    fontSize = 10.sp,
+                                                    lineHeight = 14.sp
+                                                )
+                                                TextButton(
+                                                    onClick = { showSignatureDetails = true },
+                                                    contentPadding = PaddingValues(0.dp)
+                                                ) {
+                                                    Text("View Learned Steps", color = C.cyan, fontWeight = FontWeight.SemiBold)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Divider(color = C.border.copy(alpha = 0.55f))
+
+                    val showSaveAndLearn = mode == "ADVANCED" && signatureEnabled
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 14.dp)
+                    ) {
+                        if (maxWidth < 420.dp) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    OutlinedButton(
+                                        onClick = onDismiss,
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(20.dp),
+                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
+                                        contentPadding = PaddingValues(vertical = 14.dp)
+                                    ) {
+                                        Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
+                                    }
+                                    Button(
+                                        onClick = { buildOffer()?.let(onSave) },
+                                        enabled = canSave,
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(24.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = C.amber),
+                                        contentPadding = PaddingValues(vertical = 14.dp)
+                                    ) {
+                                        Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    }
+                                }
+                                if (showSaveAndLearn) {
+                                    OutlinedButton(
+                                        onClick = { buildOffer()?.let(onSaveAndLearn) },
+                                        enabled = canSave,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(20.dp),
+                                        border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
+                                        contentPadding = PaddingValues(vertical = 12.dp)
+                                    ) {
+                                        Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
+                                        Spacer(Modifier.width(7.dp))
+                                        Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedButton(
+                                    onClick = onDismiss,
+                                    shape = RoundedCornerShape(20.dp),
+                                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
+                                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
+                                ) {
+                                    Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    if (showSaveAndLearn) {
+                                        OutlinedButton(
+                                            onClick = { buildOffer()?.let(onSaveAndLearn) },
+                                            enabled = canSave,
+                                            shape = RoundedCornerShape(20.dp),
+                                            border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
+                                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)
+                                        ) {
+                                            Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
+                                            Spacer(Modifier.width(7.dp))
+                                            Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        }
+                                    }
+                                    Button(
+                                        onClick = { buildOffer()?.let(onSave) },
+                                        enabled = canSave,
+                                        shape = RoundedCornerShape(24.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = C.amber),
+                                        contentPadding = PaddingValues(horizontal = 28.dp, vertical = 14.dp)
+                                    ) {
+                                        Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     }
                                 }
                             }
@@ -8798,97 +9094,8 @@ fun OfferDialog(
                     }
                 }
             }
-        },
-        confirmButton = {
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val compactActions = maxWidth < 360.dp
-                val showSaveAndLearn = mode == "ADVANCED" && signatureEnabled
-
-                if (compactActions && showSaveAndLearn) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        TextButton(
-                            onClick = onDismiss,
-                            shape = RoundedCornerShape(16.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(
-                                onClick = { buildOffer()?.let(onSaveAndLearn) },
-                                enabled = canSave,
-                                shape = RoundedCornerShape(16.dp),
-                                border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
-                            ) {
-                                Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
-                                Spacer(Modifier.width(7.dp))
-                                Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            }
-                            Button(
-                                onClick = { buildOffer()?.let(onSave) },
-                                enabled = canSave,
-                                shape = RoundedCornerShape(18.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
-                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
-                            ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(17.dp))
-                                    Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = onDismiss,
-                            shape = RoundedCornerShape(16.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (showSaveAndLearn) {
-                                OutlinedButton(
-                                    onClick = { buildOffer()?.let(onSaveAndLearn) },
-                                    enabled = canSave,
-                                    shape = RoundedCornerShape(16.dp),
-                                    border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
-                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
-                                ) {
-                                    Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
-                                    Spacer(Modifier.width(7.dp))
-                                    Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                }
-                            }
-                            Button(
-                                onClick = { buildOffer()?.let(onSave) },
-                                enabled = canSave,
-                                shape = RoundedCornerShape(18.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
-                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
-                            ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(17.dp))
-                                    Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        dismissButton = {}
-    )
+        }
+    }
 
     if (showSignatureDetails) {
         SignatureLearningDetailsDialog(
