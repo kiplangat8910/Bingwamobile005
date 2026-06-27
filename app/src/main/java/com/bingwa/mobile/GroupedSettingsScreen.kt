@@ -1739,7 +1739,8 @@ private fun FallbackMappingCard(
     fallbackOffers: List<OfferItem>,
     fallbackRuleSummary: String,
     fallbackUpdatedLabel: String,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
 ) {
     val firstFallback = fallbackOffers.firstOrNull()
     val fallbackNames = fallbackOffers.joinToString(separator = " -> ") { it.name }
@@ -1751,8 +1752,7 @@ private fun FallbackMappingCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 132.dp)
-            .clickable(onClick = onEdit),
+            .heightIn(min = 148.dp),
         shape = RoundedCornerShape(18.dp),
         color = C.surface.copy(alpha = 0.70f),
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
@@ -1877,7 +1877,40 @@ private fun FallbackMappingCard(
                 overflow = TextOverflow.Ellipsis
             )
             Text(fallbackUpdatedLabel, color = C.t3, fontSize = 10.sp)
-            Text("Tap to edit", color = C.amber, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = C.cyan.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.24f)),
+                    modifier = Modifier.clickable(onClick = onEdit)
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Rounded.AutoFixHigh, null, tint = C.cyan, modifier = Modifier.size(13.dp))
+                        Text("Edit", color = C.cyan, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = C.red.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, C.red.copy(alpha = 0.22f)),
+                    modifier = Modifier.clickable(onClick = onDelete)
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Rounded.DeleteSweep, null, tint = C.red, modifier = Modifier.size(13.dp))
+                        Text("Delete", color = C.red, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
         }
     }
 }
@@ -2064,8 +2097,8 @@ private fun FallbackSelectedPlanCard(
 ) {
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = C.w04,
-        border = BorderStroke(1.dp, if (index == 0) C.cyan.copy(alpha = 0.30f) else C.border)
+        color = C.surface.copy(alpha = 0.56f),
+        border = BorderStroke(1.dp, if (index == 0) C.cyan.copy(alpha = 0.30f) else C.border.copy(alpha = 0.82f))
     ) {
         Column(
             Modifier
@@ -2114,9 +2147,48 @@ private fun FallbackSelectedPlanCard(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onMoveUp, enabled = canMoveUp) { Text("UP", fontSize = 11.sp) }
-                TextButton(onClick = onMoveDown, enabled = canMoveDown) { Text("DOWN", fontSize = 11.sp) }
-                TextButton(onClick = onRemove) { Text("REMOVE", color = C.red, fontSize = 11.sp) }
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = if (canMoveUp) C.cardHi else C.w04,
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
+                    modifier = Modifier.clickable(enabled = canMoveUp, onClick = onMoveUp)
+                ) {
+                    Text(
+                        "UP",
+                        color = if (canMoveUp) C.t1 else C.t3,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = if (canMoveDown) C.cardHi else C.w04,
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
+                    modifier = Modifier.clickable(enabled = canMoveDown, onClick = onMoveDown)
+                ) {
+                    Text(
+                        "DOWN",
+                        color = if (canMoveDown) C.t1 else C.t3,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = C.red.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, C.red.copy(alpha = 0.22f)),
+                    modifier = Modifier.clickable(onClick = onRemove)
+                ) {
+                    Text(
+                        "REMOVE",
+                        color = C.red,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
             }
         }
     }
@@ -2129,8 +2201,8 @@ private fun FallbackAvailablePlanCard(
 ) {
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = C.w04,
-        border = BorderStroke(1.dp, C.border)
+        color = C.surface.copy(alpha = 0.56f),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
     ) {
         Row(
             Modifier
@@ -2306,6 +2378,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
     }
     var fallbackPrimaryExp by remember { mutableStateOf(false) }
     var fallbackAddPrimaryExp by remember { mutableStateOf(false) }
+    var fallbackDeleteConfirmOfferId by remember { mutableIntStateOf(-1) }
     var fallbackUpdatedAt by remember { mutableStateOf(prefs.safeGetLong("daily_limit_fallback_updated_at", 0L)) }
     val initialFallbackMinPrice = remember { prefs.safeGetInt("daily_limit_fallback_min_price", 0).coerceAtLeast(0) }
     var fallbackMinPriceSaved by remember { mutableIntStateOf(initialFallbackMinPrice) }
@@ -2423,12 +2496,52 @@ private fun AutomationSettings(onBack: () -> Unit) {
         persistFallbackMappings(nextMappings)
     }
 
+    fun deleteFallbackRoute(primaryOfferId: Int) {
+        val nextMappings = fallbackMappings.filterNot { it.primaryOfferId == primaryOfferId }
+        persistFallbackMappings(nextMappings)
+        if (fallbackPrimaryOfferId == primaryOfferId) {
+            fallbackPrimaryOfferId = nextMappings.firstOrNull()?.primaryOfferId
+                ?: unmappedPrimaryOffers.firstOrNull()?.id
+                ?: enabledOffers.firstOrNull()?.id
+                ?: -1
+        }
+        editorDirty = false
+    }
+
     fun beginEditingPrimary(primaryOfferId: Int) {
         editorDirty = false
         fallbackPrimaryOfferId = primaryOfferId
     }
 
+    val fallbackDeleteTarget = enabledOffers.firstOrNull { it.id == fallbackDeleteConfirmOfferId }
+
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
+        if (fallbackDeleteTarget != null) {
+            AlertDialog(
+                onDismissRequest = { fallbackDeleteConfirmOfferId = -1 },
+                containerColor = C.cardHi,
+                title = { Text("Delete fallback route?", color = C.t1) },
+                text = {
+                    Text(
+                        "Remove the saved fallback route for ${fallbackDeleteTarget.name}? You can create it again later.",
+                        color = C.t2
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            deleteFallbackRoute(fallbackDeleteTarget.id)
+                            fallbackDeleteConfirmOfferId = -1
+                        }
+                    ) { Text("Delete", color = C.red) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { fallbackDeleteConfirmOfferId = -1 }) {
+                        Text("Cancel", color = C.t2)
+                    }
+                }
+            )
+        }
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
             Column(
                 Modifier
@@ -2577,6 +2690,9 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                             fallbackUpdatedLabel = fallbackUpdatedLabel,
                                             onEdit = {
                                                 beginEditingPrimary(primaryOffer.id)
+                                            },
+                                            onDelete = {
+                                                fallbackDeleteConfirmOfferId = primaryOffer.id
                                             }
                                         )
                                     }
@@ -2680,6 +2796,28 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                     editorDirty = true
                                                 }
                                             )
+                                        }
+                                    }
+                                }
+                                if (editingExistingRoute) {
+                                    Spacer(Modifier.height(12.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = C.red.copy(alpha = 0.12f),
+                                        border = BorderStroke(1.dp, C.red.copy(alpha = 0.22f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { fallbackDeleteConfirmOfferId = selectedPrimaryOffer.id }
+                                    ) {
+                                        Row(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(Icons.Rounded.DeleteSweep, null, tint = C.red, modifier = Modifier.size(16.dp))
+                                            Text("Delete this route", color = C.red, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                                         }
                                     }
                                 }
