@@ -1434,16 +1434,16 @@ private fun FallbackStatusChip(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(999.dp),
-        color = tint.copy(alpha = 0.12f),
-        border = BorderStroke(1.dp, tint.copy(alpha = 0.22f))
+        color = tint.copy(alpha = 0.13f),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.24f))
     ) {
         Row(
-            Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(icon, null, tint = tint, modifier = Modifier.size(14.dp))
-            Text(label, color = C.t1, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+            Icon(icon, null, tint = tint, modifier = Modifier.size(16.dp))
+            Text(label, color = C.t1, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -1458,9 +1458,9 @@ private fun FallbackInfoSurface(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = C.card.copy(alpha = 0.52f),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.22f))
+        shape = RoundedCornerShape(22.dp),
+        color = C.card.copy(alpha = 0.60f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.30f))
     ) {
         Column(
             Modifier
@@ -1473,11 +1473,11 @@ private fun FallbackInfoSurface(
                         )
                     )
                 )
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = 16.dp, vertical = 15.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             content = {
-                Text(title, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
+                Text(title, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 18.sp)
                 content()
             }
         )
@@ -1493,7 +1493,7 @@ private fun FallbackChevronRowCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 62.dp),
+            .heightIn(min = 68.dp),
         shape = RoundedCornerShape(18.dp),
         color = C.w04,
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
@@ -1509,15 +1509,15 @@ private fun FallbackChevronRowCard(
                         )
                     )
                 )
-                .padding(horizontal = 14.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 15.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
+                Text(title, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 17.sp)
             }
-            Icon(Icons.Filled.ChevronRight, null, tint = C.t2, modifier = Modifier.size(18.dp))
+            Icon(Icons.Filled.ChevronRight, null, tint = C.t2, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -1534,8 +1534,8 @@ private fun FallbackSectionHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(title, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
+            Text(title, color = C.t1, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 18.sp)
         }
         if (action != null) action()
     }
@@ -1554,9 +1554,9 @@ private fun FallbackOverviewCard(
         "$fallbackRouteCount fallback routes mapped"
     }
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
         color = C.w04,
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.95f))
+        border = BorderStroke(1.dp, C.amber.copy(alpha = 0.36f))
     ) {
         Column(
             Modifier
@@ -1564,14 +1564,14 @@ private fun FallbackOverviewCard(
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            C.cyan.copy(alpha = 0.10f),
-                            C.amber.copy(alpha = 0.06f),
-                            Color.Transparent
+                            C.cardHi.copy(alpha = 0.95f),
+                            C.card.copy(alpha = 0.90f),
+                            C.surface.copy(alpha = 0.94f)
                         )
                     )
                 )
                 .padding(horizontal = 16.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Row(
                 Modifier.fillMaxWidth(),
@@ -1580,27 +1580,27 @@ private fun FallbackOverviewCard(
             ) {
                 Surface(
                     shape = RoundedCornerShape(18.dp),
-                    color = C.cardHi.copy(alpha = 0.96f),
-                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
+                    color = C.surface.copy(alpha = 0.96f),
+                    border = BorderStroke(1.dp, C.amber.copy(alpha = 0.16f))
                 ) {
-                    Box(Modifier.size(50.dp), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Autorenew, null, tint = C.t1, modifier = Modifier.size(22.dp))
+                    Box(Modifier.size(58.dp), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.Autorenew, null, tint = C.t1, modifier = Modifier.size(24.dp))
                     }
                 }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Enable Fallback", color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("Enable Fallback", color = C.t1, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     Text(
                         "If a dispatch fails, try another configured plan in order",
                         color = C.t2,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp
                     )
                 }
                 ToggleSwitch(checked = fallbackEnabled, onChange = onToggleChange)
             }
             Row(
                 Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 FallbackStatusChip(
                     icon = Icons.Rounded.CheckCircle,
@@ -1613,9 +1613,15 @@ private fun FallbackOverviewCard(
                     tint = C.amber
                 )
             }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(C.amber.copy(alpha = 0.12f))
+            )
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 FallbackInfoSurface(
                     title = "Current Rule",
@@ -1623,7 +1629,7 @@ private fun FallbackOverviewCard(
                     accent = C.green,
                     modifier = Modifier
                         .weight(1f)
-                        .heightIn(min = 150.dp)
+                        .heightIn(min = 168.dp)
                 )
                 FallbackInfoSurface(
                     title = "How It Works",
@@ -1631,7 +1637,7 @@ private fun FallbackOverviewCard(
                     accent = C.amber,
                     modifier = Modifier
                         .weight(1f)
-                        .heightIn(min = 150.dp)
+                        .heightIn(min = 168.dp)
                 )
             }
         }
@@ -1654,11 +1660,11 @@ private fun FallbackMappingCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 96.dp)
+            .heightIn(min = 104.dp)
             .clickable(onClick = onEdit),
         shape = RoundedCornerShape(24.dp),
-        color = C.cardHi.copy(alpha = 0.54f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.75f))
+        color = C.cardHi.copy(alpha = 0.58f),
+        border = BorderStroke(1.dp, C.amber.copy(alpha = 0.18f))
     ) {
         Column(
             Modifier
@@ -1672,7 +1678,7 @@ private fun FallbackMappingCard(
                         )
                     )
                 )
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 15.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
@@ -1701,7 +1707,7 @@ private fun FallbackMappingCard(
                         Text(
                             primaryOffer.name,
                             color = C.t1,
-                            fontSize = 15.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -1714,22 +1720,22 @@ private fun FallbackMappingCard(
                         ) {
                             Text(
                                 fallbackPlanLabel,
-                                color = C.blue,
+                                color = C.amber,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
                             )
                         }
                     }
                     Text(
                         "Fallback rule: $fallbackRuleSummary",
                         color = C.t2,
-                        fontSize = 11.sp
+                        fontSize = 12.sp
                     )
                     Text(
                         fallbackUpdatedLabel,
                         color = C.t3,
-                        fontSize = 10.sp
+                        fontSize = 11.sp
                     )
                 }
                 Icon(Icons.Filled.ChevronRight, null, tint = C.t2, modifier = Modifier.size(18.dp))
@@ -2201,7 +2207,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                         },
                                         shape = RoundedCornerShape(16.dp),
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = C.cyan.copy(alpha = 0.16f),
+                                            containerColor = C.amber.copy(alpha = 0.18f),
                                             contentColor = C.t1
                                         ),
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp),
