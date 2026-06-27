@@ -1742,6 +1742,7 @@ private fun FallbackMappingCard(
     onEdit: () -> Unit
 ) {
     val firstFallback = fallbackOffers.firstOrNull()
+    val fallbackNames = fallbackOffers.joinToString(separator = " -> ") { it.name }
     val fallbackPlanLabel = if (fallbackOffers.size == 1) {
         "1 stop"
     } else {
@@ -1867,7 +1868,16 @@ private fun FallbackMappingCard(
                 }
             }
             Text("Fallback rule: $fallbackRuleSummary", color = C.t2, fontSize = 11.sp)
+            Text(
+                "Route: $fallbackNames",
+                color = C.t2,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
             Text(fallbackUpdatedLabel, color = C.t3, fontSize = 10.sp)
+            Text("Tap to edit", color = C.amber, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -1876,6 +1886,7 @@ private fun FallbackMappingCard(
 private fun FallbackRouteEditorCard(
     primaryOffer: OfferItem,
     selectedFallbackOffers: List<OfferItem>,
+    editingExistingRoute: Boolean,
     onChangePrimary: () -> Unit
 ) {
     val firstFallback = selectedFallbackOffers.firstOrNull()
@@ -1895,12 +1906,37 @@ private fun FallbackRouteEditorCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("Map fallback route", color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Pick a primary plan, then add one or more fallback stops in order.",
+                        if (editingExistingRoute) "Edit fallback route" else "Create fallback route",
+                        color = C.t1,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        if (editingExistingRoute) {
+                            "Update this primary plan and reorder, add, or remove fallback stops."
+                        } else {
+                            "Pick a primary plan, then add one or more fallback stops in order."
+                        },
                         color = C.t2,
                         fontSize = 11.sp,
                         lineHeight = 17.sp
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = if (editingExistingRoute) C.cyan.copy(alpha = 0.14f) else C.amber.copy(alpha = 0.14f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (editingExistingRoute) C.cyan.copy(alpha = 0.24f) else C.amber.copy(alpha = 0.24f)
+                    )
+                ) {
+                    Text(
+                        if (editingExistingRoute) "EDITING" else "NEW ROUTE",
+                        color = if (editingExistingRoute) C.cyan else C.amber,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                     )
                 }
             }
@@ -2269,6 +2305,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
         mutableIntStateOf(initialFallbackMappings.firstOrNull()?.primaryOfferId ?: enabledOffers.firstOrNull()?.id ?: -1)
     }
     var fallbackPrimaryExp by remember { mutableStateOf(false) }
+    var fallbackAddPrimaryExp by remember { mutableStateOf(false) }
     var fallbackUpdatedAt by remember { mutableStateOf(prefs.safeGetLong("daily_limit_fallback_updated_at", 0L)) }
     val initialFallbackMinPrice = remember { prefs.safeGetInt("daily_limit_fallback_min_price", 0).coerceAtLeast(0) }
     var fallbackMinPriceSaved by remember { mutableIntStateOf(initialFallbackMinPrice) }
@@ -2320,7 +2357,11 @@ private fun AutomationSettings(onBack: () -> Unit) {
         }
         if (fallbacks.isEmpty()) null else primary to fallbacks
     }.sortedBy { it.first.name.lowercase() }
+    val mappedPrimaryOfferIds = remember(fallbackMappings) { fallbackMappings.map { it.primaryOfferId }.toSet() }
+    val unmappedPrimaryOffers = enabledOffers.filter { it.id !in mappedPrimaryOfferIds }
+    val editingExistingRoute = fallbackPrimaryOfferId in mappedPrimaryOfferIds
     val fallbackRouteCount = fallbackMappings.sumOf { it.fallbackOfferIds.size }
+    val fallbackPrimaryCount = configuredFallbackPlans.size
     val fallbackUpdatedLabel = if (fallbackUpdatedAt > 0L) {
         "Last updated: ${SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()).format(Date(fallbackUpdatedAt))}"
     } else {
@@ -2380,6 +2421,11 @@ private fun AutomationSettings(onBack: () -> Unit) {
             nextMappings += DailyLimitFallbackMapping(primaryOfferId = primaryOfferId, fallbackOfferIds = updatedIds)
         }
         persistFallbackMappings(nextMappings)
+    }
+
+    fun beginEditingPrimary(primaryOfferId: Int) {
+        editorDirty = false
+        fallbackPrimaryOfferId = primaryOfferId
     }
 
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
@@ -2467,27 +2513,54 @@ private fun AutomationSettings(onBack: () -> Unit) {
                         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) {
                             FallbackSectionHeader(
                                 title = "Mappings",
-                                subtitle = "Plans that already have fallback routing",
+                                subtitle = if (fallbackPrimaryCount == 0) {
+                                    "Plans that already have fallback routing"
+                                } else {
+                                    "$fallbackPrimaryCount primary plans currently have fallback routing"
+                                },
                                 action = {
-                                    Button(
-                                        onClick = {
-                                            editorDirty = false
-                                            fallbackPrimaryOfferId = fallbackPrimaryOfferId
-                                                .takeIf { it in enabledOfferIds }
-                                                ?: enabledOffers.firstOrNull()?.id
-                                                ?: -1
-                                        },
-                                        shape = RoundedCornerShape(16.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = C.amber.copy(alpha = 0.18f),
-                                            contentColor = C.t1
-                                        ),
-                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                                        enabled = enabledOffers.isNotEmpty()
-                                    ) {
-                                        Icon(Icons.Rounded.Add, null, modifier = Modifier.size(16.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Map", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Box {
+                                        Button(
+                                            onClick = {
+                                                when {
+                                                    unmappedPrimaryOffers.size == 1 -> beginEditingPrimary(unmappedPrimaryOffers.first().id)
+                                                    unmappedPrimaryOffers.isNotEmpty() -> fallbackAddPrimaryExp = true
+                                                    enabledOffers.isNotEmpty() -> beginEditingPrimary(
+                                                        fallbackPrimaryOfferId
+                                                            .takeIf { it in enabledOfferIds }
+                                                            ?: enabledOffers.first().id
+                                                    )
+                                                }
+                                            },
+                                            shape = RoundedCornerShape(16.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = C.amber.copy(alpha = 0.18f),
+                                                contentColor = C.t1
+                                            ),
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                                            enabled = enabledOffers.isNotEmpty()
+                                        ) {
+                                            Icon(Icons.Rounded.Add, null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(if (unmappedPrimaryOffers.isNotEmpty()) "New Route" else "Map", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        DropdownMenu(
+                                            expanded = fallbackAddPrimaryExp,
+                                            onDismissRequest = { fallbackAddPrimaryExp = false },
+                                            modifier = Modifier
+                                                .background(C.cardHi, RoundedCornerShape(12.dp))
+                                                .border(1.dp, C.border, RoundedCornerShape(12.dp))
+                                        ) {
+                                            unmappedPrimaryOffers.forEach { offer ->
+                                                DropdownMenuItem(
+                                                    text = { Text("${offer.name} • KES ${offer.price}", color = C.t1) },
+                                                    onClick = {
+                                                        beginEditingPrimary(offer.id)
+                                                        fallbackAddPrimaryExp = false
+                                                    }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             )
@@ -2503,12 +2576,15 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                             fallbackRuleSummary = fallbackRuleSummary,
                                             fallbackUpdatedLabel = fallbackUpdatedLabel,
                                             onEdit = {
-                                                editorDirty = false
-                                                fallbackPrimaryOfferId = primaryOffer.id
+                                                beginEditingPrimary(primaryOffer.id)
                                             }
                                         )
                                     }
                                 }
+                            }
+                            if (unmappedPrimaryOffers.isEmpty() && configuredFallbackPlans.isNotEmpty()) {
+                                Spacer(Modifier.height(10.dp))
+                                FallbackEmptyState("All enabled primary plans already have fallback routes. Tap any mapped route to edit it.")
                             }
                         }
                         if (selectedPrimaryOffer != null) {
@@ -2516,13 +2592,18 @@ private fun AutomationSettings(onBack: () -> Unit) {
                             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) {
                                 FallbackSectionHeader(
                                     title = "Map Fallback Plan",
-                                    subtitle = "Choose a primary plan, then add one or more fallback plans."
+                                    subtitle = if (editingExistingRoute) {
+                                        "Editing ${selectedPrimaryOffer.name}. You can update the fallback list or switch to another primary plan."
+                                    } else {
+                                        "Choose a primary plan, then add one or more fallback plans."
+                                    }
                                 )
                                 Spacer(Modifier.height(10.dp))
                                 Box {
                                     FallbackRouteEditorCard(
                                         primaryOffer = selectedPrimaryOffer,
                                         selectedFallbackOffers = selectedPrimaryFallbackOffers,
+                                        editingExistingRoute = editingExistingRoute,
                                         onChangePrimary = { fallbackPrimaryExp = true }
                                     )
                                     DropdownMenu(
@@ -2541,8 +2622,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                     )
                                                 },
                                                 onClick = {
-                                                    editorDirty = false
-                                                    fallbackPrimaryOfferId = offer.id
+                                                    beginEditingPrimary(offer.id)
                                                     fallbackPrimaryExp = false
                                                 }
                                             )
@@ -2592,7 +2672,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                     )
                                     Spacer(Modifier.height(8.dp))
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        availableFallbackOffers.take(6).forEach { offer ->
+                                        availableFallbackOffers.forEach { offer ->
                                             FallbackAvailablePlanCard(
                                                 offer = offer,
                                                 onAdd = {
@@ -2626,7 +2706,14 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                         ) {
                                             Icon(Icons.Filled.Save, null, modifier = Modifier.size(16.dp))
                                             Spacer(Modifier.width(8.dp))
-                                            Text("Save fallback setup", fontWeight = FontWeight.Bold)
+                                            Text(
+                                                if (editingExistingRoute) {
+                                                    "Save ${selectedPrimaryOffer.name}"
+                                                } else {
+                                                    "Save new route"
+                                                },
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
                                     }
                                 }
