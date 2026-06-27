@@ -1663,73 +1663,109 @@ private fun FallbackOverviewCard(
     } else {
         "$fallbackRouteCount fallback routes mapped"
     }
+    val overviewDescription = if (fallbackEnabled) {
+        "If today's bundle is blocked, try another configured offer first."
+    } else {
+        "If today's bundle is blocked, try another configured offer first"
+    }
     Column(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 18.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(if (fallbackEnabled) 16.dp else 0.dp)
     ) {
         Row(
             Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top,
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = C.cardHi.copy(alpha = 0.92f),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.84f))
+                shape = RoundedCornerShape(18.dp),
+                color = C.cardHi.copy(alpha = 0.42f),
+                border = BorderStroke(1.dp, C.amber.copy(alpha = 0.30f))
             ) {
-                Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Autorenew, null, tint = C.amber, modifier = Modifier.size(20.dp))
+                Box(Modifier.size(58.dp), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Autorenew, null, tint = C.t1, modifier = Modifier.size(24.dp))
                 }
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text("Enable fallback", color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Use Fallback Offer", color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    "If a dispatch fails, the relay tries the next mapped plan in order.",
+                    overviewDescription,
                     color = C.t2,
                     fontSize = 12.sp,
                     lineHeight = 18.sp
                 )
             }
-            ToggleSwitch(checked = fallbackEnabled, onChange = onToggleChange)
+            FallbackOverviewSwitch(checked = fallbackEnabled, onChange = onToggleChange)
         }
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            FallbackStatusChip(
-                icon = Icons.Rounded.CheckCircle,
-                label = if (fallbackEnabled) "Fallback active" else "Fallback disabled",
-                tint = if (fallbackEnabled) C.green else C.t3
-            )
-            FallbackStatusChip(
-                icon = Icons.Rounded.Autorenew,
-                label = routeSummary,
-                tint = C.amber
-            )
+        if (fallbackEnabled) {
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FallbackStatusChip(
+                    icon = Icons.Rounded.CheckCircle,
+                    label = "Fallback active",
+                    tint = C.green
+                )
+                FallbackStatusChip(
+                    icon = Icons.Rounded.Autorenew,
+                    label = routeSummary,
+                    tint = C.amber
+                )
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FallbackInfoSurface(
+                    title = "Current Rule",
+                    subtitle = fallbackRuleDescription,
+                    accent = C.cyan,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 138.dp)
+                )
+                FallbackInfoSurface(
+                    title = "Sequence",
+                    subtitle = "1. Try primary plan\n2. Check rule\n3. Run mapped fallbacks\n4. Keep original result if none start",
+                    accent = C.amber,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 138.dp)
+                )
+            }
         }
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            FallbackInfoSurface(
-                title = "Current Rule",
-                subtitle = fallbackRuleDescription,
-                accent = C.cyan,
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 138.dp)
+    }
+}
+
+@Composable
+private fun FallbackOverviewSwitch(
+    checked: Boolean,
+    onChange: (Boolean) -> Unit
+) {
+    val thumbOffset = if (checked) 29.dp else 4.dp
+    Box(
+        Modifier
+            .width(68.dp)
+            .height(36.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (checked) C.amber.copy(alpha = 0.94f) else C.surface.copy(alpha = 0.55f))
+            .border(
+                width = 1.dp,
+                color = if (checked) C.amber.copy(alpha = 0.38f) else C.amber.copy(alpha = 0.22f),
+                shape = RoundedCornerShape(999.dp)
             )
-            FallbackInfoSurface(
-                title = "Sequence",
-                subtitle = "1. Try primary plan\n2. Check rule\n3. Run mapped fallbacks\n4. Keep original result if none start",
-                accent = C.amber,
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 138.dp)
-            )
-        }
+            .clickable { onChange(!checked) }
+    ) {
+        Box(
+            Modifier
+                .offset(x = thumbOffset, y = 4.dp)
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(if (checked) C.bg else Color(0xFFE4E7EC))
+        )
     }
 }
 
