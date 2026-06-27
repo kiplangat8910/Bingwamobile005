@@ -1,5 +1,9 @@
 # Bingwa Mobile
 
+## Guides
+
+- User guide: `docs/USER_GUIDE.md`
+
 ## Requirements
 
 - JDK 17 (Android Gradle Plugin 8.x)
