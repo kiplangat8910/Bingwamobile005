@@ -161,6 +161,9 @@ private data class FallbackRuleOption(
     val icon: ImageVector
 )
 
+private val FallbackDesignScreenWidth = 392.dp
+private val FallbackDesignContentWidth = 360.dp
+
 @Composable
 fun GroupedSettingsScreen() {
     var dest by remember { mutableStateOf<SettingsDest>(SettingsDest.Home) }
@@ -1376,6 +1379,7 @@ private fun FallbackRuleSelectorCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 86.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(18.dp),
         color = if (selected) C.cyan.copy(alpha = 0.10f) else C.w04,
@@ -1487,7 +1491,9 @@ private fun FallbackChevronRowCard(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 62.dp),
         shape = RoundedCornerShape(18.dp),
         color = C.w04,
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
@@ -1564,8 +1570,8 @@ private fun FallbackOverviewCard(
                         )
                     )
                 )
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 16.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Row(
                 Modifier.fillMaxWidth(),
@@ -1577,8 +1583,8 @@ private fun FallbackOverviewCard(
                     color = C.cardHi.copy(alpha = 0.96f),
                     border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
                 ) {
-                    Box(Modifier.size(54.dp), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Autorenew, null, tint = C.t1, modifier = Modifier.size(24.dp))
+                    Box(Modifier.size(50.dp), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.Autorenew, null, tint = C.t1, modifier = Modifier.size(22.dp))
                     }
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1607,18 +1613,25 @@ private fun FallbackOverviewCard(
                     tint = C.amber
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 FallbackInfoSurface(
                     title = "Current Rule",
                     subtitle = fallbackRuleDescription,
                     accent = C.green,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 150.dp)
                 )
                 FallbackInfoSurface(
                     title = "How It Works",
                     subtitle = "1. Try the primary plan first\n2. Check the fallback rule\n3. Run the mapped fallback plans in order\n4. Keep the original result if none can start",
                     accent = C.amber,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 150.dp)
                 )
             }
         }
@@ -1641,6 +1654,7 @@ private fun FallbackMappingCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 96.dp)
             .clickable(onClick = onEdit),
         shape = RoundedCornerShape(24.dp),
         color = C.cardHi.copy(alpha = 0.54f),
@@ -1658,8 +1672,8 @@ private fun FallbackMappingCard(
                         )
                     )
                 )
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 Modifier.fillMaxWidth(),
@@ -2098,8 +2112,21 @@ private fun AutomationSettings(onBack: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
-        SettingsTopBar("Automation", "Background processing behavior", onBack)
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = FallbackDesignScreenWidth)
+            ) {
+                SettingsTopBar("Automation", "Background processing behavior", onBack)
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = FallbackDesignContentWidth)
+                        .align(Alignment.CenterHorizontally)
+                        .padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
             SettingsGroup("Automation") {
                 ToggleRow(Icons.Rounded.SmartToy, "Enable Automation", "Auto-run bundles on payment", autoEnabled) {
                     autoEnabled = it
@@ -2120,7 +2147,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
             }
 
             SettingsGroup("Fallback Plans") {
-                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
                     FallbackOverviewCard(
                         fallbackEnabled = fallbackEnabled,
                         onToggleChange = {
@@ -2134,7 +2161,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                 AnimatedVisibility(visible = fallbackEnabled) {
                     Column {
                         GroupDivider()
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) {
                             FallbackSectionHeader(
                                 title = "Fallback Rules",
                                 subtitle = "Choose the event that should trigger fallback for every mapped primary plan."
@@ -2159,7 +2186,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                             }
                         }
                         GroupDivider()
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) {
                             FallbackSectionHeader(
                                 title = "Mappings",
                                 subtitle = "Plans that already have fallback routing",
@@ -2208,7 +2235,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                         }
                         if (selectedPrimaryOffer != null) {
                             GroupDivider()
-                            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) {
                                 FallbackSectionHeader(
                                     title = "Map Fallback Plan",
                                     subtitle = "Choose a primary plan, then add one or more fallback plans."
@@ -2314,7 +2341,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                 }
                             }
                             GroupDivider()
-                            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) {
                                 FallbackSectionHeader(
                                     title = "Available Fallback Plans",
                                     subtitle = "Tap Add to include more backup plans for ${selectedPrimaryOffer.name}."
@@ -2340,7 +2367,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                             }
                         }
                         GroupDivider()
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) {
                             FallbackSectionHeader(
                                 title = "Amount Guardrail",
                                 subtitle = "Limit fallback to higher-value requests when needed."
@@ -2369,7 +2396,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                         }
                         if (hasUnsavedFallbackChanges) {
                             GroupDivider()
-                            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+                            Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp)) {
                                 Button(
                                     onClick = {
                                         if (editorDirty) {
@@ -2471,6 +2498,8 @@ private fun AutomationSettings(onBack: () -> Unit) {
                         }
                     }
                 }
+            }
+        }
             }
         }
         Spacer(Modifier.height(22.dp))
