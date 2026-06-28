@@ -3155,7 +3155,7 @@ private fun TransactionSettings(onBack: () -> Unit) {
         )
     }
     var history by remember {
-        mutableStateOf(TransactionStore.load(ctx).sortedByDescending { transactionHistoryTimestamp(it) })
+        mutableStateOf(historyVisibleTransactions(TransactionStore.load(ctx)))
     }
     var selectedTx by remember { mutableStateOf<Transaction?>(null) }
     val offers = remember { OfferRepository.load(ctx).filter { it.enabled } }
@@ -3202,14 +3202,22 @@ private fun TransactionSettings(onBack: () -> Unit) {
                         val tx = loadTransactionByIdFromPrefs(ctx, txId) ?: return
                         val idx = history.indexOfFirst { it.id == txId }
                         val updated = if (idx >= 0) {
-                            history.toMutableList().apply { this[idx] = tx }
-                        } else {
+                            history.toMutableList().apply {
+                                if (shouldShowInHistory(tx)) {
+                                    this[idx] = tx
+                                } else {
+                                    removeAt(idx)
+                                }
+                            }
+                        } else if (shouldShowInHistory(tx)) {
                             mutableListOf<Transaction>().apply {
                                 add(tx)
                                 addAll(history)
                             }
+                        } else {
+                            history
                         }
-                        history = updated.sortedByDescending { transactionHistoryTimestamp(it) }
+                        history = historyVisibleTransactions(updated)
                     }
                 }
             }
@@ -3709,7 +3717,7 @@ private fun TransactionHistoryRow(
             }
         }
     }
-    val amountPrefix = if (classification == TransactionHistoryFilter.FAILED || tx.source == TX_SOURCE_AIRTIME) "-" else "+"
+    val amountPrefix = transactionHistoryAmountPrefix(tx)
 
     Surface(
         color = Color(0xFF1C2123),
@@ -3961,6 +3969,16 @@ private fun transactionHistoryAmountValue(tx: Transaction): Double =
     tx.amountValue.takeIf { it > 0.0 }
         ?: Regex("""\d+(?:\.\d+)?""").find(tx.amount)?.value?.toDoubleOrNull()
         ?: 0.0
+
+private fun transactionHistoryAmountPrefix(tx: Transaction): String =
+    if (tx.source == TX_SOURCE_AIRTIME || tx.amount.trim().startsWith("-")) "-" else "+"
+
+private fun shouldShowInHistory(tx: Transaction): Boolean = tx.source != TX_SOURCE_AIRTIME
+
+private fun historyVisibleTransactions(transactions: List<Transaction>): List<Transaction> =
+    transactions
+        .filter(::shouldShowInHistory)
+        .sortedByDescending { transactionHistoryTimestamp(it) }
 
 private fun transactionHistoryCurrency(amount: Double): String {
     val rounded = amount.toLong().toDouble()

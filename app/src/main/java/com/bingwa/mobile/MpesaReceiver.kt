@@ -104,15 +104,6 @@ class MpesaReceiver : BroadcastReceiver() {
 
             val knownBal = BalanceChecker.currentBalance
             if (knownBal in 0 until amount) {
-                addTransaction(context, Transaction(
-                    description = "Token purchase (airtime)",
-                    amount = "-KSh $amount",
-                    amountValue = amount.toDouble(),
-                    date = getCurrentDate(),
-                    status = "Failed",
-                    source = TX_SOURCE_AIRTIME,
-                    showInRecent = false
-                ))
                 callback(false, "You have KSh $knownBal airtime, which is not enough to buy tokens worth KSh $amount.")
                 return
             }
@@ -122,15 +113,6 @@ class MpesaReceiver : BroadcastReceiver() {
                 != PackageManager.PERMISSION_GRANTED
             ) {
                 Toast.makeText(context, "Phone permission required", Toast.LENGTH_LONG).show()
-                addTransaction(context, Transaction(
-                    description = "Token purchase (airtime)",
-                    amount = "-KSh $amount",
-                    amountValue = amount.toDouble(),
-                    date = getCurrentDate(),
-                    status = "Failed",
-                    source = TX_SOURCE_AIRTIME,
-                    showInRecent = false
-                ))
                 callback(false, "Phone permission is required to dial USSD.")
                 return
             }
@@ -146,31 +128,12 @@ class MpesaReceiver : BroadcastReceiver() {
                         val tokensToAdd = TokenManager.convertAmountToTokens(amount)
                         tm.addTokens(tokensToAdd)
                     }
-                    addTransaction(context, Transaction(
-                        description = if (plan != null) "Airtime used for ${plan.label} unlimited" else "Airtime used for token purchase",
-                        amount = "-KSh $amount",
-                        amountValue = amount.toDouble(),
-                        date = getCurrentDate(),
-                        status = "Success",
-                        source = TX_SOURCE_AIRTIME,
-                        showInRecent = false
-                    ))
                     if (plan != null) {
                         notify(context, "Unlimited Activated", "${plan.label} unlimited activated using KSh $amount airtime")
                     } else {
                         val tokensToAdd = TokenManager.convertAmountToTokens(amount)
                         notify(context, "Tokens Added", "$tokensToAdd tokens added using KSh $amount airtime")
                     }
-                } else {
-                    addTransaction(context, Transaction(
-                        description = if (plan != null) "Airtime used for ${plan.label} unlimited" else "Airtime used for token purchase",
-                        amount = "-KSh $amount",
-                        amountValue = amount.toDouble(),
-                        date = getCurrentDate(),
-                        status = "Failed",
-                        source = TX_SOURCE_AIRTIME,
-                        showInRecent = false
-                    ))
                 }
                 callback(success, if (success) null else "Purchase failed. Please confirm you have enough airtime and try again.")
                 UssdNavigationService.tokenPurchaseCallback = null
