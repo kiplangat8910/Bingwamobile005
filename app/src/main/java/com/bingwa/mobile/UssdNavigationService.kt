@@ -90,6 +90,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 140L
         private const val ROOT_REACQUIRE_TIMEOUT_MS = 3_000L
         private const val DIALOG_DISMISS_SETTLE_MS = 240L
+        private const val UI_KEEP_VISIBLE_INTERVAL_MS = 1_500L
         // Some devices emit extra events on the same USSD dialog after we click "Send".
         // If we process those events immediately, we can inject the NEXT step into the PREVIOUS screen.
         private const val STEP_TRANSITION_GUARD_MS = 650L
@@ -234,6 +235,7 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingStepAdvanceFromKey: String = ""
     private var pendingStepAdvanceSinceElapsed: Long = 0L
     private var pendingStepAdvanceTimeoutRunnable: Runnable? = null
+    private var uiKeepVisibleRunnable: Runnable? = null
     private var waitingForRootSinceElapsed: Long = 0L
     private var windowManager: WindowManager? = null
     private var runningOverlayView: View? = null
@@ -410,8 +412,10 @@ class UssdNavigationService : AccessibilityService() {
                     hasSeenAdvancedPopup = true
                     updateRunningOverlay()
                     requestAppUiBehindPopup(force = true)
+                    startKeepingAppUiVisible()
                 } else if (windowChanged) {
                     requestAppUiBehindPopup()
+                    startKeepingAppUiVisible()
                 }
                 cancelStepTimeout()
                 lastFinalResponse = dialogText
@@ -1626,6 +1630,7 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun cleanupAdvanced() {
+        stopKeepingAppUiVisible()
         cancelStepTimeout()
         processStepRunnable?.let { handler.removeCallbacks(it) }
         processStepRunnable = null
@@ -1767,6 +1772,27 @@ class UssdNavigationService : AccessibilityService() {
         if (!force && now - lastUiReturnElapsed < 900L) return
         lastUiReturnElapsed = now
         UssdHelper.relaunchAppUi(this, delayMs = if (force) 60L else 120L)
+    }
+
+    private fun startKeepingAppUiVisible() {
+        uiKeepVisibleRunnable?.let { handler.removeCallbacks(it) }
+        val task = object : Runnable {
+            override fun run() {
+                if (!advancedActive || !advancedInProgress || !hasSeenAdvancedPopup) {
+                    uiKeepVisibleRunnable = null
+                    return
+                }
+                requestAppUiBehindPopup(force = true)
+                handler.postDelayed(this, UI_KEEP_VISIBLE_INTERVAL_MS)
+            }
+        }
+        uiKeepVisibleRunnable = task
+        handler.postDelayed(task, UI_KEEP_VISIBLE_INTERVAL_MS)
+    }
+
+    private fun stopKeepingAppUiVisible() {
+        uiKeepVisibleRunnable?.let { handler.removeCallbacks(it) }
+        uiKeepVisibleRunnable = null
     }
 
     private fun buildRunningOverlayView(): View {
