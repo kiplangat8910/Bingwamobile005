@@ -15,7 +15,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 
 object UssdHelper {
-    private const val RETURN_TO_APP_DELAY_MS = 300L
+    private val RETURN_TO_APP_DELAYS_MS = longArrayOf(0L, 180L, 420L, 900L)
 
     fun normalizeRecipientForUssdInput(phone: String): String {
         val digits = phone.trim().replace("+", "").replace(Regex("\\D+"), "")
@@ -131,7 +131,7 @@ object UssdHelper {
         return intent
     }
 
-    fun relaunchAppUi(context: Context, delayMs: Long = RETURN_TO_APP_DELAY_MS) {
+    fun relaunchAppUi(context: Context, delayMs: Long = RETURN_TO_APP_DELAYS_MS.first()) {
         val appIntent = Intent(context, MainActivity::class.java).apply {
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -140,14 +140,23 @@ object UssdHelper {
                     Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             )
         }
-        val action = Runnable {
-            runCatching { context.startActivity(appIntent) }
-                .onFailure { Log.w("UssdHelper", "Unable to relaunch app UI after USSD start", it) }
-        }
-        if (delayMs <= 0L) {
-            Handler(Looper.getMainLooper()).post(action)
-        } else {
-            Handler(Looper.getMainLooper()).postDelayed(action, delayMs)
+        val handler = Handler(Looper.getMainLooper())
+        val delays = buildList {
+            add(delayMs.coerceAtLeast(0L))
+            RETURN_TO_APP_DELAYS_MS.forEach { scheduled ->
+                if (scheduled > delayMs) add(scheduled)
+            }
+        }.distinct()
+        delays.forEach { scheduledDelay ->
+            val action = Runnable {
+                runCatching { context.startActivity(appIntent) }
+                    .onFailure { Log.w("UssdHelper", "Unable to relaunch app UI after USSD start", it) }
+            }
+            if (scheduledDelay <= 0L) {
+                handler.post(action)
+            } else {
+                handler.postDelayed(action, scheduledDelay)
+            }
         }
     }
 
