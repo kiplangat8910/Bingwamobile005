@@ -527,6 +527,15 @@ class UssdNavigationService : AccessibilityService() {
                 }
                 val shouldPreferTextInput = shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
                     (selectedMenuLabel == null && dialogSuggestsTextInput(lower))
+                if (inputField == null && shouldPreferTextInput && !dialogSuggestsTextInput(lower)) {
+                    val hasEditableField = captureTreeSnapshot(root).hasEditableField
+                    if (!hasEditableField) {
+                        isProcessing = false
+                        pendingProcessToken = SystemClock.elapsedRealtime()
+                        scheduleProcessStep(dialogChanged = false)
+                        return
+                    }
+                }
                 if (inputField != null || shouldPreferTextInput) {
                     val wroteValue = when {
                         inputField != null -> tryWriteValueToField(inputField, valueToEnter) || writeValueToField(valueToEnter)
