@@ -152,6 +152,7 @@ class AutomationService : Service() {
         UssdNavigationService.signatureLearningMode = request.signatureLearning
         UssdNavigationService.loadedSignatureSteps = offer?.learnedSignature ?: emptyList()
         UssdNavigationService.resetSignatureTracking()
+        UssdNavigationService.refreshRunningOverlay()
 
         try {
             val callIntent = UssdHelper.buildCallIntent(this, dialCode)
@@ -162,6 +163,7 @@ class AutomationService : Service() {
                 UssdNavigationService.advancedActive = false
                 UssdNavigationService.advancedInProgress = false
                 UssdNavigationService.onDispatchComplete = null
+                UssdNavigationService.refreshRunningOverlay()
                 processResponse(request, "No dialer available", forcedStatus = "Failed")
                 return
             }
@@ -170,6 +172,7 @@ class AutomationService : Service() {
             UssdNavigationService.advancedActive = false
             UssdNavigationService.advancedInProgress = false
             UssdNavigationService.onDispatchComplete = null
+            UssdNavigationService.refreshRunningOverlay()
             processResponse(request, "Dial error: ${e.message}", forcedStatus = "Failed")
             return
         }

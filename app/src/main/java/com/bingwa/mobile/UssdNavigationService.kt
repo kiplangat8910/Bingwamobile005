@@ -11,7 +11,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.Path
+import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
@@ -19,14 +21,23 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.view.Gravity
+import android.view.View
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
 import androidx.core.app.NotificationCompat
 class UssdNavigationService : AccessibilityService() {
 
     companion object {
         const val TAG = "UssdNavigation"
+        @Volatile
+        private var activeInstance: UssdNavigationService? = null
 
         var airtimeBalance          = "N/A"
         var balanceCallback         : ((String) -> Unit)?  = null
@@ -185,6 +196,12 @@ class UssdNavigationService : AccessibilityService() {
             signatureChangeDetected = false
             signatureAutoAdjusted = false
         }
+
+        fun refreshRunningOverlay() {
+            activeInstance?.handler?.post {
+                activeInstance?.updateRunningOverlay()
+            }
+        }
     }
 
     private val handler            = Handler(Looper.getMainLooper())
@@ -215,6 +232,7 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingStepAdvanceSinceElapsed: Long = 0L
     private var pendingStepAdvanceTimeoutRunnable: Runnable? = null
     private var waitingForRootSinceElapsed: Long = 0L
+    private var runningOverlayView: View? = null
 
     private enum class PendingPhase { NONE, WAIT_VERIFY, WAIT_SEND }
 
@@ -227,16 +245,19 @@ class UssdNavigationService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
+        activeInstance = this
         createNotificationChannel()
         startForegroundCompat(
             notificationId = NOTIFICATION_ID,
             notification = buildNotification(),
             foregroundServiceType = ForegroundServiceTypes.dataSync
         )
+        updateRunningOverlay()
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        activeInstance = this
         serviceInfo = AccessibilityServiceInfo().apply {
             eventTypes  = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
@@ -253,6 +274,7 @@ class UssdNavigationService : AccessibilityService() {
             // Keep event delivery immediate so we reduce local UI latency without relaxing verification.
             notificationTimeout = 0
         }
+        updateRunningOverlay()
     }
 
     override fun onInterrupt() { cleanupAdvanced(); clearCallbacks() }
@@ -260,6 +282,8 @@ class UssdNavigationService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         stopForegroundCompat()
+        hideRunningOverlay()
+        if (activeInstance === this) activeInstance = null
         cleanupAdvanced()
         clearCallbacks()
     }
@@ -269,6 +293,98 @@ class UssdNavigationService : AccessibilityService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
         else stopForeground(true)
     }
+
+    private fun shouldShowRunningOverlay(): Boolean =
+        advancedActive && advancedInProgress && advancedSteps.isNotEmpty()
+
+    private fun updateRunningOverlay() {
+        if (shouldShowRunningOverlay()) showRunningOverlay() else hideRunningOverlay()
+    }
+
+    private fun showRunningOverlay() {
+        if (runningOverlayView != null) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return
+        val windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
+
+        val root = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.parseColor("#33000000"))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        }
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(22), dp(18), dp(22), dp(18))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                cornerRadius = dp(18).toFloat()
+                setColor(Color.parseColor("#DE111111"))
+            }
+        }
+
+        val progress = ProgressBar(this).apply {
+            isIndeterminate = true
+        }
+        val progressParams = LinearLayout.LayoutParams(dp(28), dp(28)).apply {
+            marginEnd = dp(16)
+        }
+        card.addView(progress, progressParams)
+
+        val message = TextView(this).apply {
+            text = "USSD code running..."
+            setTextColor(Color.WHITE)
+            textSize = 18f
+        }
+        card.addView(
+            message,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        root.addView(
+            card,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+        )
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+        }
+
+        runCatching {
+            windowManager.addView(root, params)
+            runningOverlayView = root
+        }.onFailure {
+            Log.w(TAG, "Unable to show running overlay", it)
+        }
+    }
+
+    private fun hideRunningOverlay() {
+        val view = runningOverlayView ?: return
+        val windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
+        runCatching { windowManager.removeView(view) }
+        runningOverlayView = null
+    }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
@@ -857,6 +973,7 @@ class UssdNavigationService : AccessibilityService() {
         tokenPurchaseCallback?.invoke(false)
         closeCurrentUssdUi()
         advancedInProgress = false
+        updateRunningOverlay()
         cleanupAdvanced()
     }
 
@@ -865,6 +982,7 @@ class UssdNavigationService : AccessibilityService() {
         if (!signatureLearningMode) tokenPurchaseCallback?.invoke(true)
         closeCurrentUssdUi()
         advancedInProgress = false
+        updateRunningOverlay()
         cleanupAdvanced()
     }
 
@@ -1396,6 +1514,7 @@ class UssdNavigationService : AccessibilityService() {
         closeCurrentUssdUi()
         onDispatchComplete?.invoke(buildDispatchResult(finalText))
         advancedInProgress = false
+        updateRunningOverlay()
         cleanupAdvanced()
     }
 
@@ -1542,6 +1661,7 @@ class UssdNavigationService : AccessibilityService() {
         advancedOfferName   = ""
         advancedActive      = false
         advancedInProgress  = false
+        hideRunningOverlay()
         isProcessing        = false
         retryCount          = 0
         lastRedialElapsed   = 0L
