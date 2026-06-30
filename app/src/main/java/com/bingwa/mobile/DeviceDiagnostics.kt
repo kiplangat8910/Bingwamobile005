@@ -3,6 +3,7 @@ package com.bingwa.mobile
 import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -106,6 +107,7 @@ fun DeviceDiagnosticsScreen(onBack: () -> Unit) {
     val model = Build.MODEL
     val sdkLabel = "Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})"
     val passedCount = summary.passedChecks
+    val oemReliabilityLabel = remember(manufacturer) { oemReliabilitySettingsLabel(manufacturer) }
 
     val diagnostics = remember(
         summary,
@@ -167,9 +169,9 @@ fun DeviceDiagnosticsScreen(onBack: () -> Unit) {
             },
             healthy = batteryUnrestricted,
             iconTint = if (batteryUnrestricted) C.green else C.orange,
-            actionLabel = if (!batteryUnrestricted) "Open battery settings" else null,
+            actionLabel = if (!batteryUnrestricted) oemReliabilityLabel else null,
             action = if (!batteryUnrestricted) {
-                { openSettings(ctx, Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+                { openReliabilitySettings(ctx) }
             } else null
         ),
         DiagnosticItem(
@@ -317,6 +319,10 @@ fun DeviceDiagnosticsScreen(onBack: () -> Unit) {
                     openSettings(ctx, appDetailsIntent(ctx))
                 }
                 GroupDivider()
+                LinkRow(Icons.Rounded.PhoneAndroid, oemReliabilityLabel, "Open the background, auto-start, or battery screen that matters on this phone", C.orange) {
+                    openReliabilitySettings(ctx)
+                }
+                GroupDivider()
                 LinkRow(Icons.Rounded.Schedule, "Open Alarm Access", "Allow exact alarms for scheduled retries", C.purple) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         openSettings(ctx, Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${ctx.packageName}")))
@@ -415,6 +421,74 @@ private fun openSettings(context: Context, intent: Intent) {
         runCatching { context.startActivity(appDetailsIntent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
 }
+
+private fun openReliabilitySettings(context: Context) {
+    val intent = bestReliabilitySettingsIntent(context)
+        ?: Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+    openSettings(context, intent)
+}
+
+private fun oemReliabilitySettingsLabel(manufacturer: String): String {
+    val normalized = manufacturer.lowercase()
+    return when {
+        normalized.contains("tecno") || normalized.contains("infinix") || normalized.contains("itel") ->
+            "Open Auto-Start Manager"
+        normalized.contains("xiaomi") || normalized.contains("redmi") || normalized.contains("poco") ->
+            "Open Autostart"
+        normalized.contains("samsung") ->
+            "Open Device Care"
+        normalized.contains("oppo") || normalized.contains("realme") || normalized.contains("oneplus") ->
+            "Open Background Manager"
+        normalized.contains("vivo") || normalized.contains("iqoo") ->
+            "Open Background Startup"
+        normalized.contains("huawei") || normalized.contains("honor") ->
+            "Open Launch Manager"
+        else ->
+            "Open Battery Settings"
+    }
+}
+
+private fun bestReliabilitySettingsIntent(context: Context): Intent? {
+    val manufacturer = Build.MANUFACTURER.lowercase()
+    val candidates = when {
+        manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco") -> listOf(
+            componentIntent("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"),
+            componentIntent("com.miui.securitycenter", "com.miui.powercenter.PowerSettings")
+        )
+        manufacturer.contains("tecno") || manufacturer.contains("infinix") || manufacturer.contains("itel") -> listOf(
+            componentIntent("com.transsion.phonemaster", "com.transsion.phonemaster.activity.AutoStartActivity"),
+            componentIntent("com.transsion.phonemaster", "com.transsion.phonemaster.activity.PermissionControlActivity"),
+            componentIntent("com.itel.autobootmanager", "com.itel.autobootmanager.activity.AutoBootMgrActivity")
+        )
+        manufacturer.contains("samsung") -> listOf(
+            componentIntent("com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity"),
+            componentIntent("com.samsung.android.lool", "com.samsung.android.sm.ui.appmanagement.AppManagementActivity")
+        )
+        manufacturer.contains("oppo") || manufacturer.contains("realme") || manufacturer.contains("oneplus") -> listOf(
+            componentIntent("com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity"),
+            componentIntent("com.oplus.battery", "com.oplus.powermanager.fuelgaue.PowerConsumptionActivity"),
+            componentIntent("com.coloros.oppoguardelf", "com.coloros.powermanager.fuelgaue.PowerConsumptionActivity")
+        )
+        manufacturer.contains("vivo") || manufacturer.contains("iqoo") -> listOf(
+            componentIntent("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"),
+            componentIntent("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager")
+        )
+        manufacturer.contains("huawei") || manufacturer.contains("honor") -> listOf(
+            componentIntent("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"),
+            componentIntent("com.huawei.systemmanager", "com.huawei.systemmanager.optimize.process.ProtectActivity")
+        )
+        else -> emptyList()
+    }
+    return candidates.firstOrNull { intent ->
+        intent.resolveActivity(context.packageManager) != null
+    }
+}
+
+private fun componentIntent(packageName: String, className: String): Intent =
+    Intent().apply {
+        component = ComponentName(packageName, className)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
 
 private fun appDetailsIntent(context: Context): Intent =
     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
