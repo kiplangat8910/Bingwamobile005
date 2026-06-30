@@ -88,6 +88,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 140L
         private const val ROOT_REACQUIRE_TIMEOUT_MS = 3_000L
         private const val DIALOG_DISMISS_SETTLE_MS = 240L
+        private const val RUNNING_OVERLAY_SHOW_DELAY_MS = 450L
         // Some devices emit extra events on the same USSD dialog after we click "Send".
         // If we process those events immediately, we can inject the NEXT step into the PREVIOUS screen.
         private const val STEP_TRANSITION_GUARD_MS = 650L
@@ -233,6 +234,7 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingStepAdvanceTimeoutRunnable: Runnable? = null
     private var waitingForRootSinceElapsed: Long = 0L
     private var runningOverlayView: View? = null
+    private var runningOverlayShowRunnable: Runnable? = null
 
     private enum class PendingPhase { NONE, WAIT_VERIFY, WAIT_SEND }
 
@@ -298,7 +300,22 @@ class UssdNavigationService : AccessibilityService() {
         advancedActive && advancedInProgress && advancedSteps.isNotEmpty()
 
     private fun updateRunningOverlay() {
-        if (shouldShowRunningOverlay()) showRunningOverlay() else hideRunningOverlay()
+        if (shouldShowRunningOverlay()) scheduleRunningOverlay() else hideRunningOverlay()
+    }
+
+    private fun scheduleRunningOverlay() {
+        if (runningOverlayView != null || runningOverlayShowRunnable != null) return
+        val task = Runnable {
+            runningOverlayShowRunnable = null
+            if (shouldShowRunningOverlay()) showRunningOverlay()
+        }
+        runningOverlayShowRunnable = task
+        handler.postDelayed(task, RUNNING_OVERLAY_SHOW_DELAY_MS)
+    }
+
+    private fun cancelPendingRunningOverlay() {
+        runningOverlayShowRunnable?.let { handler.removeCallbacks(it) }
+        runningOverlayShowRunnable = null
     }
 
     private fun showRunningOverlay() {
@@ -308,36 +325,37 @@ class UssdNavigationService : AccessibilityService() {
 
         val root = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
             )
-            setBackgroundColor(Color.parseColor("#33000000"))
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            setPadding(dp(12), dp(12), dp(12), dp(12))
         }
 
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(22), dp(18), dp(22), dp(18))
+            setPadding(dp(18), dp(14), dp(18), dp(14))
             background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                cornerRadius = dp(18).toFloat()
-                setColor(Color.parseColor("#DE111111"))
+                cornerRadius = dp(22).toFloat()
+                setColor(Color.parseColor("#F0121212"))
+                setStroke(dp(1), Color.parseColor("#3328D17C"))
             }
         }
 
         val progress = ProgressBar(this).apply {
             isIndeterminate = true
         }
-        val progressParams = LinearLayout.LayoutParams(dp(28), dp(28)).apply {
-            marginEnd = dp(16)
+        val progressParams = LinearLayout.LayoutParams(dp(22), dp(22)).apply {
+            marginEnd = dp(12)
         }
         card.addView(progress, progressParams)
 
         val message = TextView(this).apply {
-            text = "USSD code running..."
+            text = "Running USSD..."
             setTextColor(Color.WHITE)
-            textSize = 18f
+            textSize = 15f
         }
         card.addView(
             message,
@@ -357,15 +375,17 @@ class UssdNavigationService : AccessibilityService() {
         )
 
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = dp(20)
         }
 
         runCatching {
@@ -377,6 +397,7 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun hideRunningOverlay() {
+        cancelPendingRunningOverlay()
         val view = runningOverlayView ?: return
         val windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
         runCatching { windowManager.removeView(view) }
