@@ -226,6 +226,8 @@ class UssdNavigationService : AccessibilityService() {
     private var lastMenuSignature: ParsedMenuSignature? = null
     private var lastScreenSignatureKey = ""
     private var pendingExpectedValue: String? = null
+    private var pendingExpectedStepIndex: Int = -1
+    private var pendingExpectedPromptGuardKey: String = ""
     private var pendingPhase: PendingPhase = PendingPhase.NONE
     private var pendingSinceElapsed: Long = 0L
     private var pendingAttempts: Int = 0
@@ -613,6 +615,14 @@ class UssdNavigationService : AccessibilityService() {
             }
             val valueToEnter = resolved.first
             val selectedMenuLabel = resolved.second
+            val promptGuardKey = buildPendingPromptGuardKey(
+                root = root,
+                stepIndex = currentStep,
+                rawStep = step,
+                expectedValue = valueToEnter,
+                dialogText = dialogText,
+                existingMenuSignature = menuSignature
+            )
 
             val inputField = findEditableFieldForStep(root, step, dialogText)
             try {
@@ -676,7 +686,7 @@ class UssdNavigationService : AccessibilityService() {
                         if (delay <= 0L) handler.post { verifyLearningFinalInputThenDismiss(valueToEnter, 0, 0) }
                         else handler.postDelayed({ verifyLearningFinalInputThenDismiss(valueToEnter, 0, 0) }, delay)
                     } else {
-                        startPendingAdvance(valueToEnter)
+                        startPendingAdvance(valueToEnter, currentStep, promptGuardKey)
                     }
                     return
                 }
@@ -1673,13 +1683,17 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun clearPendingAdvance() {
         pendingExpectedValue = null
+        pendingExpectedStepIndex = -1
+        pendingExpectedPromptGuardKey = ""
         pendingPhase = PendingPhase.NONE
         pendingSinceElapsed = 0L
         pendingAttempts = 0
     }
 
-    private fun startPendingAdvance(expectedValue: String) {
+    private fun startPendingAdvance(expectedValue: String, stepIndex: Int, promptGuardKey: String) {
         pendingExpectedValue = expectedValue
+        pendingExpectedStepIndex = stepIndex
+        pendingExpectedPromptGuardKey = promptGuardKey
         pendingPhase = PendingPhase.WAIT_VERIFY
         pendingSinceElapsed = SystemClock.elapsedRealtime()
         pendingAttempts = 0
@@ -1700,6 +1714,21 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun attemptPendingAdvance(root: AccessibilityNodeInfo) {
         val expected = pendingExpectedValue ?: run { clearPendingAdvance(); return }
+        val stepIndex = pendingExpectedStepIndex
+        if (stepIndex !in advancedSteps.indices || stepIndex != currentStep) {
+            clearPendingAdvance()
+            isProcessing = false
+            pendingProcessToken = SystemClock.elapsedRealtime()
+            scheduleProcessStep(dialogChanged = true)
+            return
+        }
+        if (!matchesPendingPromptGuard(root, stepIndex, expected)) {
+            clearPendingAdvance()
+            isProcessing = false
+            pendingProcessToken = SystemClock.elapsedRealtime()
+            scheduleProcessStep(dialogChanged = true)
+            return
+        }
         val elapsed = SystemClock.elapsedRealtime() - pendingSinceElapsed
         if (elapsed > PENDING_ADVANCE_TIMEOUT_MS) {
             clearPendingAdvance()
@@ -1794,6 +1823,68 @@ class UssdNavigationService : AccessibilityService() {
         uiKeepVisibleRunnable?.let { handler.removeCallbacks(it) }
         uiKeepVisibleRunnable = null
     }
+
+    private fun matchesPendingPromptGuard(
+        root: AccessibilityNodeInfo,
+        stepIndex: Int,
+        expectedValue: String
+    ): Boolean {
+        val step = advancedSteps.getOrNull(stepIndex) ?: return false
+        val currentDialogText = normalizeCollapsedText(extractAllText(root))
+        val currentGuard = buildPendingPromptGuardKey(
+            root = root,
+            stepIndex = stepIndex,
+            rawStep = step,
+            expectedValue = expectedValue,
+            dialogText = currentDialogText,
+            existingMenuSignature = parseMenuSignature(root, currentDialogText)
+        )
+        return currentGuard.isNotBlank() && currentGuard == pendingExpectedPromptGuardKey
+    }
+
+    private fun buildPendingPromptGuardKey(
+        root: AccessibilityNodeInfo,
+        stepIndex: Int,
+        rawStep: String,
+        expectedValue: String,
+        dialogText: String,
+        existingMenuSignature: ParsedMenuSignature? = null
+    ): String {
+        val windowPkg = root.packageName?.toString().orEmpty()
+        val cls = root.className?.toString().orEmpty()
+        val snapshot = captureTreeSnapshot(root)
+        val flags = "${snapshot.hasEditableField}|${snapshot.hasSendButton}|${snapshot.hasDismissButton}"
+        val menuSignature = existingMenuSignature ?: parseMenuSignature(snapshot)
+        val payload = if (rawStep.all(Char::isDigit) && menuSignature != null && menuSignature.options.isNotEmpty()) {
+            val optionEntries = menuSignature.options.entries.joinToString("|") { entry ->
+                "${entry.key}:${normalizeMenuText(entry.value)}"
+            }
+            "menu|${normalizeMenuText(menuSignature.title)}|$optionEntries"
+        } else {
+            val normalizedExpected = normalizePromptGuardToken(expectedValue)
+            val promptTokens = snapshot.textTokens
+                .asSequence()
+                .map(::normalizePromptGuardToken)
+                .filter { token -> token.isNotBlank() && token != normalizedExpected }
+                .filterNot { token -> token in SEND_BUTTON_LABELS || token in DISMISS_BUTTON_LABELS }
+                .distinct()
+                .take(8)
+                .toList()
+            val dialogHint = when {
+                rawStep == "INPUT_PHONE" -> "phone:${dialogSuggestsPhoneInput(dialogText.lowercase())}"
+                else -> "text:${dialogSuggestsTextInput(dialogText.lowercase())}"
+            }
+            "input|$dialogHint|${promptTokens.joinToString("|")}"
+        }
+        return "$stepIndex|$windowPkg|$cls|$flags|$payload"
+    }
+
+    private fun normalizePromptGuardToken(value: String): String =
+        value.lowercase()
+            .replace(Regex("""\b\d{3,}\b"""), "#")
+            .replace(NON_ALPHANUMERIC_REGEX, " ")
+            .replace(MULTI_SPACE_REGEX, " ")
+            .trim()
 
     private fun buildRunningOverlayView(): View {
         val container = LinearLayout(this).apply {
