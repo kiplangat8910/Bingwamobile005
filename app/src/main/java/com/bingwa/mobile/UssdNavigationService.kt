@@ -229,6 +229,10 @@ class UssdNavigationService : AccessibilityService() {
     private var lastStepActionKey: String = ""
     private var lastStepActionElapsed: Long = 0L
     private var pendingStepAdvanceFromKey: String = ""
+    private var pendingStepAdvanceFromWindowId: Int = -1
+    private var pendingStepAdvanceExpectedValue: String? = null
+    private var pendingStepAdvanceCandidateKey: String = ""
+    private var pendingStepAdvanceStableCount: Int = 0
     private var pendingStepAdvanceSinceElapsed: Long = 0L
     private var pendingStepAdvanceTimeoutRunnable: Runnable? = null
     private var waitingForRootSinceElapsed: Long = 0L
@@ -570,16 +574,29 @@ class UssdNavigationService : AccessibilityService() {
         windowPkg: String,
         root: AccessibilityNodeInfo,
         snapshot: UssdTreeSnapshot?,
-        dialogText: String
+        dialogText: String,
+        expectedValue: String? = null
     ): String {
         val cls = root.className?.toString().orEmpty()
-        val normalized = normalizeCollapsedText(dialogText)
+        val normalized = normalizeTransitionDialogText(dialogText, expectedValue)
         val flags = if (snapshot != null) {
             "${snapshot.hasEditableField}|${snapshot.hasSendButton}|${snapshot.hasDismissButton}"
         } else {
             ""
         }
-        return "$windowId|$windowPkg|$cls|$flags|$normalized"
+        val menuSignature = snapshot?.let(::parseMenuSignature) ?: parseMenuSignature(root, dialogText)
+        val menuKey = menuSignature?.let { menu ->
+            buildString {
+                append(normalizeMenuText(menu.title))
+                append("|")
+                append(
+                    menu.options.entries.joinToString(",") { entry ->
+                        "${entry.key}:${normalizeMenuText(entry.value)}"
+                    }
+                )
+            }
+        }.orEmpty()
+        return "$windowId|$windowPkg|$cls|$flags|$menuKey|$normalized"
     }
 
     private fun processStep() {
@@ -661,6 +678,19 @@ class UssdNavigationService : AccessibilityService() {
                 }
                 val shouldPreferTextInput = shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
                     (selectedMenuLabel == null && (dialogSuggestsTextInput(lower) || dialogAllowsPhoneInput))
+                if (shouldPreferTextInput &&
+                    menuSignature != null &&
+                    menuSignature.options.isNotEmpty() &&
+                    !dialogSuggestsTextInput(lower) &&
+                    !dialogAllowsPhoneInput
+                ) {
+                    // Some OEM USSD popups keep a stale input field visible while still showing a menu.
+                    // Do not inject free-form text until the prompt clearly asks for it.
+                    isProcessing = false
+                    pendingProcessToken = SystemClock.elapsedRealtime()
+                    scheduleProcessStep(dialogChanged = false)
+                    return
+                }
                 if (inputField == null && shouldPreferTextInput && !dialogSuggestsTextInput(lower) && !dialogAllowsPhoneInput) {
                     val hasEditableField = captureTreeSnapshot(root).hasEditableField
                     if (!hasEditableField) {
@@ -686,7 +716,7 @@ class UssdNavigationService : AccessibilityService() {
                         tryImmediateVerifiedSend(root, inputField, valueToEnter)
                     ) {
                         markStepAction(dialogText)
-                        startPendingStepAdvance(root, dialogText)
+                        startPendingStepAdvance(root, dialogText, valueToEnter)
                         return
                     }
                     // Fast path: stop polling loops. Set a pending phase and let the next accessibility
@@ -715,7 +745,7 @@ class UssdNavigationService : AccessibilityService() {
                 val clicked = try { performClick(menuBtn) } finally { menuBtn.recycle() }
                 if (clicked) {
                     markStepAction(dialogText)
-                    startPendingStepAdvance(root, dialogText)
+                    startPendingStepAdvance(root, dialogText, valueToEnter)
                     return
                 }
                 isProcessing = false
@@ -1067,6 +1097,29 @@ class UssdNavigationService : AccessibilityService() {
             .replace(NON_ALPHANUMERIC_REGEX, " ")
             .replace(MULTI_SPACE_REGEX, " ")
             .trim()
+
+    private fun normalizeTransitionDialogText(dialogText: String, expectedValue: String? = null): String {
+        var normalized = normalizeMenuText(dialogText)
+        val volatileValues = buildList {
+            expectedValue?.takeIf { it.isNotBlank() }?.let { add(it) }
+            pendingExpectedValue?.takeIf { it.isNotBlank() }?.let { add(it) }
+            lastInputWriteValue.takeIf { it.isNotBlank() }?.let { add(it) }
+            lastVerifiedInputValue.takeIf { it.isNotBlank() }?.let { add(it) }
+            advancedPhoneNumber.takeIf { it.isNotBlank() }?.let { add(it) }
+        }
+        volatileValues
+            .distinct()
+            .forEach { value ->
+                val candidate = normalizeMenuText(value)
+                if (candidate.isBlank()) return@forEach
+                val shouldStrip = candidate.any(Char::isLetter) ||
+                    candidate.length >= 4 ||
+                    candidate.count(Char::isDigit) >= 7
+                if (!shouldStrip) return@forEach
+                normalized = normalized.replace(candidate, " ").replace(MULTI_SPACE_REGEX, " ").trim()
+            }
+        return normalized
+    }
 
     private fun markStepAction(dialogText: String) {
         lastStepActionKey = normalizeMenuText(dialogText)
@@ -1454,14 +1507,14 @@ class UssdNavigationService : AccessibilityService() {
                 if (clicked) {
                     val text = extractAllText(root)
                     markStepAction(text)
-                    startPendingStepAdvance(root, text)
+                    startPendingStepAdvance(root, text, expectedValue)
                     return
                 }
                 else {
                     if (fieldText != null && triggerInputSubmit(root, expectedValue, fieldRef)) {
                         val text = extractAllText(root)
                         markStepAction(text)
-                        startPendingStepAdvance(root, text)
+                        startPendingStepAdvance(root, text, expectedValue)
                         return
                     }
                     handler.postDelayed(
@@ -1473,7 +1526,7 @@ class UssdNavigationService : AccessibilityService() {
                 if ((fieldText != null || skipFieldVerification) && triggerInputSubmit(root, expectedValue, fieldRef)) {
                     val text = extractAllText(root)
                     markStepAction(text)
-                    startPendingStepAdvance(root, text)
+                    startPendingStepAdvance(root, text, expectedValue)
                     return
                 }
                 // Avoid re-scanning/re-writing on every retry when we already know we injected this value recently.
@@ -1763,7 +1816,7 @@ class UssdNavigationService : AccessibilityService() {
                     clearPendingAdvance()
                     val text = extractAllText(root)
                     markStepAction(text)
-                    startPendingStepAdvance(root, text)
+                    startPendingStepAdvance(root, text, expected)
                 } else {
                     // Let the next event re-try, but avoid expensive work here.
                     isProcessing = false
@@ -1783,6 +1836,10 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun clearPendingStepAdvance() {
         pendingStepAdvanceFromKey = ""
+        pendingStepAdvanceFromWindowId = -1
+        pendingStepAdvanceExpectedValue = null
+        pendingStepAdvanceCandidateKey = ""
+        pendingStepAdvanceStableCount = 0
         pendingStepAdvanceSinceElapsed = 0L
         pendingStepAdvanceTimeoutRunnable?.let { handler.removeCallbacks(it) }
         pendingStepAdvanceTimeoutRunnable = null
@@ -1815,16 +1872,19 @@ class UssdNavigationService : AccessibilityService() {
         waitingForRootSinceElapsed = 0L
     }
 
-    private fun startPendingStepAdvance(root: AccessibilityNodeInfo, dialogText: String) {
+    private fun startPendingStepAdvance(root: AccessibilityNodeInfo, dialogText: String, expectedValue: String? = null) {
         clearPendingStepAdvance()
         pendingStepAdvanceSinceElapsed = SystemClock.elapsedRealtime()
+        pendingStepAdvanceFromWindowId = lastWindowId
+        pendingStepAdvanceExpectedValue = expectedValue
         val snapshot = captureTreeSnapshot(root)
         pendingStepAdvanceFromKey = buildTransitionSignatureKey(
             windowId = lastWindowId,
             windowPkg = root.packageName?.toString().orEmpty(),
             root = root,
             snapshot = snapshot,
-            dialogText = dialogText
+            dialogText = dialogText,
+            expectedValue = expectedValue
         )
         pendingStepAdvanceTimeoutRunnable = Runnable {
             if (pendingStepAdvanceFromKey.isBlank()) return@Runnable
@@ -1857,9 +1917,19 @@ class UssdNavigationService : AccessibilityService() {
             windowPkg = windowPkg,
             root = root,
             snapshot = snapshot,
-            dialogText = dialogText
+            dialogText = dialogText,
+            expectedValue = pendingStepAdvanceExpectedValue
         )
         if (currentKey == fromKey) return true
+        if (windowId == pendingStepAdvanceFromWindowId) {
+            if (pendingStepAdvanceCandidateKey != currentKey) {
+                pendingStepAdvanceCandidateKey = currentKey
+                pendingStepAdvanceStableCount = 1
+                return true
+            }
+            pendingStepAdvanceStableCount++
+            if (pendingStepAdvanceStableCount < 2) return true
+        }
         clearPendingStepAdvance()
         advanceStep()
         pendingProcessToken = SystemClock.elapsedRealtime()
