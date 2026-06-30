@@ -5624,6 +5624,9 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
         derivedStateOf { buildManualSearchEntries(ctx, allTxns.toList(), smsSearchContacts) }
     }
     val normalizedPhone = remember(phone) { SmsCommandHandler.normalizePhone(phone) }
+    val normalizedDispatchPhone = remember(normalizedPhone) {
+        normalizedPhone.takeIf { it.matches(Regex("^0\\d{9}$")) }.orEmpty()
+    }
     val phoneMatches by remember(phone, manualDirectory) {
         derivedStateOf { autoMatchManualEntries(phone, manualDirectory) }
     }
@@ -5631,8 +5634,8 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
         phoneMatches.firstOrNull { SmsCommandHandler.normalizePhone(it.phone) == normalizedPhone }
     }
     val resolvedClientName = exactPhoneMatch?.name?.takeIf { it.isNotBlank() } ?: fallbackResolvedClientName
-    val dispatchReady = remember(phone, selOffer) {
-        phone.matches(Regex("^[0-9]{10}$")) && selOffer != null
+    val dispatchReady = remember(normalizedDispatchPhone, selOffer) {
+        normalizedDispatchPhone.isNotBlank() && selOffer != null
     }
     val manualHistory = allTxns.filter { it.source == TX_SOURCE_MANUAL }.sortedByDescending { it.timestamp }
     val selectedHistoryTx = manualHistory.firstOrNull { it.id == selectedHistoryTxId }
@@ -5716,27 +5719,29 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
         "relayed" -> "Forwarded to Relay phone for execution"
         else -> null
     }
-    val commandPhone = if (phone.length == 10) phone else "0712345678"
-    val commandCode = selOffer?.ussdCode?.replace("pn", commandPhone, true) ?: "*544*1*1#"
+    val commandPhone = normalizedDispatchPhone.ifBlank { "0712345678" }
+    val commandCode = selOffer?.ussdCode
+        ?.let { UssdHelper.normalizeUssdCode(it, commandPhone) }
+        ?: "*544*1*1#"
     val executeManualRun = {
         val selectedOffer = selOffer
         phoneErr = when {
             phone.isBlank() -> "Phone number required"
-            !phone.matches(Regex("^[0-9]{10}$")) -> "Must be exactly 10 digits"
+            normalizedDispatchPhone.isBlank() -> "Must be exactly 10 digits"
             selectedOffer == null -> "Choose an offer"
             else -> null
         }
         if (phoneErr == null && selectedOffer != null) {
             vib(ctx, 70L)
-            upsertSavedContact(ctx, phone, resolvedClientName)
+            upsertSavedContact(ctx, normalizedDispatchPhone, resolvedClientName)
             if (RelayManager.shouldRelayOffer(ctx, selectedOffer)) {
                 bannerState = "pending"
-                val finalCode = selectedOffer.ussdCode.replace("pn", phone, true)
+                val finalCode = UssdHelper.normalizeUssdCode(selectedOffer.ussdCode, normalizedDispatchPhone)
                 val txId = createPendingTransaction(
                     ctx,
                     selectedOffer.name,
                     "KSh ${selectedOffer.price}",
-                    phone,
+                    normalizedDispatchPhone,
                     finalCode,
                     clientName = resolvedClientName,
                     status = TransactionStatus.PROCESSING.value,
@@ -5748,7 +5753,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                 saveTransactionOutcome(ctx, txId, TransactionStatus.PROCESSING.value, "Forwarded to Relay phone for execution.")
                 broadcastTransactionUpdated(ctx, txId)
 
-                val sent = RelayManager.forwardBuyAmount(ctx, phone, selectedOffer.price)
+                val sent = RelayManager.forwardBuyAmount(ctx, normalizedDispatchPhone, selectedOffer.price)
                 if (sent) {
                     bannerState = "relayed"
                 } else {
@@ -5758,12 +5763,12 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                 }
             } else {
                 bannerState = "pending"
-                val finalCode = selectedOffer.ussdCode.replace("pn", phone, true)
+                val finalCode = UssdHelper.normalizeUssdCode(selectedOffer.ussdCode, normalizedDispatchPhone)
                 val txId = createPendingTransaction(
                     ctx,
                     selectedOffer.name,
                     "KSh ${selectedOffer.price}",
-                    phone,
+                    normalizedDispatchPhone,
                     finalCode,
                     clientName = resolvedClientName,
                     source = TX_SOURCE_MANUAL,
@@ -5771,7 +5776,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                     offerId = selectedOffer.id
                 )
                 pendingTxId = txId
-                ctx.startOfferAutomation(selectedOffer, phone, txId, finalCode, mode)
+                ctx.startOfferAutomation(selectedOffer, normalizedDispatchPhone, txId, finalCode, mode)
             }
         }
     }
@@ -7533,7 +7538,7 @@ fun SettingsScreen() {
                         Column { Text("Admin Phone", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium); Text("Number that can send remote commands", color = C.t2, fontSize = 11.sp) }
                     }
                     Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(value = adminPhone, onValueChange = { adminPhone = it.trim() }, placeholder = { Text("e.g. 0712345678", color = C.t3) }, leadingIcon = { Icon(Icons.Rounded.Phone, null, tint = C.t2) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+                    OutlinedTextField(value = adminPhone, onValueChange = { adminPhone = it.filter(Char::isDigit).take(12) }, placeholder = { Text("e.g. 0712345678", color = C.t3) }, leadingIcon = { Icon(Icons.Rounded.Phone, null, tint = C.t2) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
                 }
                 GroupDivider()
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
@@ -7574,7 +7579,14 @@ fun SettingsScreen() {
                 GroupDivider()
                 Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
                     Button(
-                        onClick = { prefs.edit().putString("admin_phone", adminPhone.trim()).putString("sms_prefix", adminPrefix.trim().uppercase()).putString("sms_pin", adminPin.trim()).apply(); vib(ctx); Toast.makeText(ctx, "Admin settings saved", Toast.LENGTH_SHORT).show() },
+                        onClick = {
+                            val normalizedAdminPhone = SmsCommandHandler.normalizePhone(adminPhone)
+                            if (adminPhone.isNotBlank() && !normalizedAdminPhone.matches(Regex("^0\\d{9}$"))) {
+                                Toast.makeText(ctx, "Enter a valid admin phone number like 0712345678", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            prefs.edit().putString("admin_phone", normalizedAdminPhone).putString("sms_prefix", adminPrefix.trim().uppercase()).putString("sms_pin", adminPin.trim()).apply(); vib(ctx); Toast.makeText(ctx, "Admin settings saved", Toast.LENGTH_SHORT).show()
+                        },
                         modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = C.cyan)
                     ) {
                         Icon(Icons.Filled.Save, null, tint = C.bg, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp))

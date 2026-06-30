@@ -1219,7 +1219,7 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = adminPhone,
-                        onValueChange = { adminPhone = it.trim() },
+                        onValueChange = { adminPhone = it.filter(Char::isDigit).take(12) },
                         placeholder = { Text("e.g. 0712345678", color = C.t3) },
                         leadingIcon = { Icon(Icons.Rounded.Phone, null, tint = C.t2) },
                         modifier = Modifier.fillMaxWidth(),
@@ -1275,8 +1275,13 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
                 Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
                     Button(
                         onClick = {
+                            val normalizedAdminPhone = SmsCommandHandler.normalizePhone(adminPhone)
+                            if (adminPhone.isNotBlank() && !normalizedAdminPhone.matches(Regex("^0\\d{9}$"))) {
+                                Toast.makeText(ctx, "Enter a valid admin phone number like 0712345678", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
                             prefs.edit()
-                                .putString("admin_phone", adminPhone.trim())
+                                .putString("admin_phone", normalizedAdminPhone)
                                 .putString("sms_prefix", adminPrefix.trim().uppercase())
                                 .putString("sms_pin", adminPin.trim())
                                 .apply()

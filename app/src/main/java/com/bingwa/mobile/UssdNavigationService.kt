@@ -137,6 +137,12 @@ class UssdNavigationService : AccessibilityService() {
             "enter", "input", "reply", "phone", "number", "amount", "pin", "account", "mobile", "recipient",
             "text", "answer", "value", "type here", "write here"
         )
+        private val PHONE_PROMPT_HINTS = listOf(
+            "phone", "number", "mobile", "recipient", "receiver", "customer", "msisdn", "line"
+        )
+        private val PHONE_CONFLICT_HINTS = listOf(
+            "amount", "pin", "account", "voucher", "token", "meter", "units", "otp"
+        )
         private val DISMISS_BUTTON_LABELS = listOf(
             "ok", "cancel", "close", "dismiss", "back", "no", "exit", "annuler", "fermer",
             "non", "إلغاء", "خروج"
@@ -185,8 +191,10 @@ class UssdNavigationService : AccessibilityService() {
     private var lastFinalResponse  = ""
     private var lastInputWriteValue = ""
     private var lastInputWriteElapsed = 0L
+    private var lastInputWriteContextKey = ""
     private var lastVerifiedInputValue = ""
     private var lastVerifiedInputElapsed = 0L
+    private var lastVerifiedInputContextKey = ""
     private var pendingProcessToken = 0L
     private var lastWindowPkg = ""
     private var lastWindowId = -1
@@ -477,8 +485,18 @@ class UssdNavigationService : AccessibilityService() {
 
             val inputField = findEditableField(root)
             try {
-                if (step == "INPUT_PHONE" && inputField == null && !dialogSuggestsTextInput(lower)) {
-                    // Wait for the correct prompt/dialog instead of blindly injecting the phone number.
+                val shouldPreferTextInput = shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
+                    (selectedMenuLabel == null && dialogSuggestsTextInput(lower))
+                if (shouldPreferTextInput && !isSafeTextEntryContext(
+                        step = step,
+                        expectedValue = valueToEnter,
+                        selectedMenuLabel = selectedMenuLabel,
+                        dialogText = dialogText,
+                        menuSignature = menuSignature,
+                        inputField = inputField
+                    )
+                ) {
+                    // Wait for the correct prompt/dialog instead of injecting the value into the wrong step.
                     isProcessing = false
                     pendingProcessToken = SystemClock.elapsedRealtime()
                     scheduleProcessStep(dialogChanged = false)
@@ -494,17 +512,16 @@ class UssdNavigationService : AccessibilityService() {
                         return
                     }
                 }
-                val shouldPreferTextInput = shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
-                    (selectedMenuLabel == null && dialogSuggestsTextInput(lower))
                 if (inputField != null || shouldPreferTextInput) {
                     val wroteValue = when {
-                        inputField != null -> tryWriteValueToField(inputField, valueToEnter) || writeValueToField(valueToEnter)
+                        inputField != null -> tryWriteValueToField(inputField, valueToEnter, dialogText) || writeValueToField(valueToEnter)
                         else -> writeValueToField(valueToEnter)
                     }
                     val inlineVerified = verifyExpectedInputFromRoot(
                         root = root,
                         expectedValue = valueToEnter,
-                        existingField = inputField
+                        existingField = inputField,
+                        dialogText = dialogText
                     )
                     if (!isFinalSignatureLearningStep(currentStep) &&
                         wroteValue &&
@@ -1062,7 +1079,8 @@ class UssdNavigationService : AccessibilityService() {
             root.recycle()
             return false
         }
-        val lower = normalizeCollapsedText(extractAllText(root)).lowercase()
+        val dialogText = normalizeCollapsedText(extractAllText(root))
+        val lower = dialogText.lowercase()
         if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) {
             root.recycle()
             return false
@@ -1070,9 +1088,22 @@ class UssdNavigationService : AccessibilityService() {
         val fields = mutableListOf<AccessibilityNodeInfo>()
         try {
             collectTextEntryCandidates(root, fields)
+            val rawStep = advancedSteps.getOrNull(currentStep).orEmpty()
+            val menuSignature = parseMenuSignature(root, dialogText)
+            val selectedMenuLabel = menuSignature?.options?.get(rawStep)
+            val bestField = fields.maxByOrNull { scoreTextEntryCandidate(it) }
+            if (!isSafeTextEntryContext(
+                    step = rawStep,
+                    expectedValue = value,
+                    selectedMenuLabel = selectedMenuLabel,
+                    dialogText = dialogText,
+                    menuSignature = menuSignature,
+                    inputField = bestField
+                )
+            ) return false
             if (fields.isEmpty()) return false
             fields.sortByDescending { scoreTextEntryCandidate(it) }
-            return fields.any { field -> tryWriteValueToField(field, value) }
+            return fields.any { field -> tryWriteValueToField(field, value, dialogText) }
         } finally {
             fields.forEach { it.recycle() }
             root.recycle()
@@ -1094,19 +1125,21 @@ class UssdNavigationService : AccessibilityService() {
         var fieldText : String? = null
         var fieldRef  : AccessibilityNodeInfo? = null
         var verified = false
+        var dialogText = ""
         try {
+            dialogText = normalizeCollapsedText(extractAllText(root))
             fieldRef  = findEditableField(root)
             if (fieldRef != null) {
                 fieldText = readFieldText(fieldRef)
-                verified = verifyExpectedInputFromRoot(root, expected, fieldRef)
+                verified = verifyExpectedInputFromRoot(root, expected, fieldRef, dialogText)
             }
         } finally { fieldRef?.recycle(); root.recycle() }
 
         if (fieldText == null) {
             val newCount = noFieldCount + 1
-            if (hasRecentVerifiedInput(expected) && newCount >= 2) {
+            if (hasRecentVerifiedInput(expected, dialogText) && newCount >= 2) {
                 handler.post { clickSendButton(expected, 0, skipFieldVerification = true) }
-            } else if (newCount >= NO_FIELD_PATIENCE && hasRecentVerifiedInput(expected)) {
+            } else if (newCount >= NO_FIELD_PATIENCE && hasRecentVerifiedInput(expected, dialogText)) {
                 handler.post { clickSendButton(expected, 0) }
             }
             else handler.postDelayed(
@@ -1115,12 +1148,12 @@ class UssdNavigationService : AccessibilityService() {
             )
             return
         }
-        if (verified || isVerifiedFieldValue(fieldText, expected)) {
-            rememberVerifiedInput(expected)
+        if (verified || isVerifiedFieldValue(fieldText, expected, dialogText)) {
+            rememberVerifiedInput(expected, dialogText)
             handler.post { clickSendButton(expected, 0, skipFieldVerification = true) }
         } else {
             // Avoid expensive re-writes if we very recently injected the same value.
-            if (!hasRecentExpectedInput(expected)) {
+            if (!hasRecentExpectedInput(expected, dialogText)) {
                 writeValueToField(expected)
             }
             handler.postDelayed(
@@ -1151,11 +1184,13 @@ class UssdNavigationService : AccessibilityService() {
         var fieldText: String? = null
         var fieldRef: AccessibilityNodeInfo? = null
         var verified = false
+        var dialogText = ""
         try {
+            dialogText = normalizeCollapsedText(extractAllText(root))
             fieldRef = findEditableField(root)
             if (fieldRef != null) {
                 fieldText = readFieldText(fieldRef)
-                verified = verifyExpectedInputFromRoot(root, expected, fieldRef)
+                verified = verifyExpectedInputFromRoot(root, expected, fieldRef, dialogText)
             }
         } finally {
             fieldRef?.recycle()
@@ -1165,7 +1200,7 @@ class UssdNavigationService : AccessibilityService() {
         when {
             fieldText == null -> {
                 val newCount = noFieldCount + 1
-                if (hasRecentVerifiedInput(expected) && newCount >= 1) {
+                if (hasRecentVerifiedInput(expected, dialogText) && newCount >= 1) {
                     handler.post { finishLearningWithoutFinalSubmission() }
                 } else if (newCount >= NO_FIELD_PATIENCE) {
                     isProcessing = false
@@ -1177,12 +1212,12 @@ class UssdNavigationService : AccessibilityService() {
                     )
                 }
             }
-            verified || isVerifiedFieldValue(fieldText, expected) -> {
-                rememberVerifiedInput(expected)
+            verified || isVerifiedFieldValue(fieldText, expected, dialogText) -> {
+                rememberVerifiedInput(expected, dialogText)
                 handler.post { finishLearningWithoutFinalSubmission() }
             }
             else -> {
-                if (!hasRecentExpectedInput(expected)) {
+                if (!hasRecentExpectedInput(expected, dialogText)) {
                     writeValueToField(expected)
                 }
                 handler.postDelayed(
@@ -1198,19 +1233,21 @@ class UssdNavigationService : AccessibilityService() {
         var fieldText: String? = null
         var fieldRef : AccessibilityNodeInfo? = null
         var verified = false
+        var dialogText = ""
         val root = getUssdRoot()
         if (root != null) {
             try {
+                dialogText = normalizeCollapsedText(extractAllText(root))
                 fieldRef  = findEditableField(root)
                 if (fieldRef != null) {
                     fieldText = readFieldText(fieldRef)
-                    verified = verifyExpectedInputFromRoot(root, expected, fieldRef)
+                    verified = verifyExpectedInputFromRoot(root, expected, fieldRef, dialogText)
                 }
             } finally { fieldRef?.recycle(); root.recycle() }
         }
         when {
             fieldText == null -> {
-                if (hasRecentVerifiedInput(expected)) {
+                if (hasRecentVerifiedInput(expected, dialogText)) {
                     handler.post { clickSendButton(expected, 0, skipFieldVerification = true) }
                 }
                 else handler.postDelayed(
@@ -1218,8 +1255,8 @@ class UssdNavigationService : AccessibilityService() {
                     verificationPollDelay(expected, 1)
                 )
             }
-            verified || isVerifiedFieldValue(fieldText, expected) -> {
-                rememberVerifiedInput(expected)
+            verified || isVerifiedFieldValue(fieldText, expected, dialogText) -> {
+                rememberVerifiedInput(expected, dialogText)
                 handler.post { clickSendButton(expected, 0, skipFieldVerification = true) }
             }
             else -> {
@@ -1237,7 +1274,7 @@ class UssdNavigationService : AccessibilityService() {
         if (attempt >= MAX_SEND_ATTEMPTS) {
             isProcessing = false; handler.post { dismissErrorAndRestart() }; return
         }
-        if (skipFieldVerification && !hasRecentVerifiedInput(expectedValue)) {
+        if (skipFieldVerification && !hasRecentVerifiedInput(expectedValue, lastFinalResponse)) {
             handler.post { verifyThenSend(expectedValue, 0) }
             return
         }
@@ -1251,6 +1288,7 @@ class UssdNavigationService : AccessibilityService() {
         var fieldText: String? = null
         var fieldRef : AccessibilityNodeInfo? = null
         var sendBtn  : AccessibilityNodeInfo? = null
+        val dialogText = normalizeCollapsedText(extractAllText(root))
         try {
             if (!skipFieldVerification) {
                 fieldRef = findEditableField(root)
@@ -1258,13 +1296,13 @@ class UssdNavigationService : AccessibilityService() {
                     fieldText = readFieldText(fieldRef)
                 }
                 if (fieldText != null &&
-                    !isVerifiedFieldValue(fieldText, expectedValue)
+                    !isVerifiedFieldValue(fieldText, expectedValue, dialogText)
                 ) {
                     handler.post { verifyThenSend(expectedValue, 0) }
                     return
                 }
-                if (fieldText != null && isVerifiedFieldValue(fieldText, expectedValue)) {
-                    rememberVerifiedInput(expectedValue)
+                if (fieldText != null && isVerifiedFieldValue(fieldText, expectedValue, dialogText)) {
+                    rememberVerifiedInput(expectedValue, dialogText)
                 }
             }
             sendBtn = findBestSendActionButton(root)
@@ -1296,7 +1334,7 @@ class UssdNavigationService : AccessibilityService() {
                     return
                 }
                 // Avoid re-scanning/re-writing on every retry when we already know we injected this value recently.
-                if (!hasRecentExpectedInput(expectedValue) && attempt < 2) {
+                if (!hasRecentExpectedInput(expectedValue, dialogText) && attempt < 2) {
                     writeValueToField(expectedValue)
                 }
                 handler.postDelayed(
@@ -1517,15 +1555,17 @@ class UssdNavigationService : AccessibilityService() {
         when (pendingPhase) {
             PendingPhase.WAIT_VERIFY -> {
                 val field = findEditableField(root)
+                val dialogText = normalizeCollapsedText(extractAllText(root))
                 val verified = try {
                     if (field != null) {
                         verifyExpectedInputFromRoot(
                             root = root,
                             expectedValue = expected,
-                            existingField = field
+                            existingField = field,
+                            dialogText = dialogText
                         )
                     } else {
-                        hasRecentVerifiedInput(expected)
+                        hasRecentVerifiedInput(expected, dialogText)
                     }
                 } finally {
                     runCatching { field?.recycle() }
@@ -1538,7 +1578,7 @@ class UssdNavigationService : AccessibilityService() {
                 }
 
                 // One corrective write, then wait for the next event.
-                if (pendingAttempts == 0 && !hasRecentExpectedInput(expected)) {
+                if (pendingAttempts == 0 && !hasRecentExpectedInput(expected, dialogText)) {
                     pendingAttempts++
                     writeValueToField(expected)
                 }
@@ -1964,13 +2004,14 @@ class UssdNavigationService : AccessibilityService() {
         existingField: AccessibilityNodeInfo?
     ): Boolean {
         val field = existingField ?: findEditableField(root) ?: return false
+        val dialogText = normalizeCollapsedText(extractAllText(root))
         return try {
             val currentValue = readFieldText(field)?.trim().orEmpty()
             if (currentValue.isNotEmpty() &&
-                !isVerifiedFieldValue(currentValue, expectedValue)
+                !isVerifiedFieldValue(currentValue, expectedValue, dialogText)
             ) return false
-            if (currentValue.isNotEmpty() && isVerifiedFieldValue(currentValue, expectedValue)) {
-                rememberVerifiedInput(expectedValue)
+            if (currentValue.isNotEmpty() && isVerifiedFieldValue(currentValue, expectedValue, dialogText)) {
+                rememberVerifiedInput(expectedValue, dialogText)
             }
             performImeAction(field)
         } finally {
@@ -1983,11 +2024,13 @@ class UssdNavigationService : AccessibilityService() {
         field: AccessibilityNodeInfo?,
         expectedValue: String
     ): Boolean {
+        val dialogText = normalizeCollapsedText(extractAllText(root))
         val verified = verifyExpectedInputFromRoot(
             root = root,
             expectedValue = expectedValue,
-            existingField = field
-        ) || hasRecentVerifiedInput(expectedValue)
+            existingField = field,
+            dialogText = dialogText
+        ) || hasRecentVerifiedInput(expectedValue, dialogText)
         if (!verified) return false
         val fieldText = field?.let(::readFieldText)
         val sendBtn = findBestSendActionButton(root)
@@ -2000,8 +2043,21 @@ class UssdNavigationService : AccessibilityService() {
         } finally {
             sendBtn?.recycle()
         }
-        val canSubmitFromField = fieldText != null || hasRecentVerifiedInput(expectedValue)
+        val canSubmitFromField = fieldText != null || hasRecentVerifiedInput(expectedValue, dialogText)
         return canSubmitFromField && triggerInputSubmit(root, expectedValue, field)
+    }
+
+    private fun nodeMatchesAnyHint(node: AccessibilityNodeInfo?, hints: List<String>): Boolean {
+        if (node == null) return false
+        val values = buildList {
+            add(normalizeActionLabel(node.text?.toString()))
+            add(normalizeActionLabel(node.contentDescription?.toString()))
+            add(normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null }))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                add(normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null }))
+            }
+        }.filter { it.isNotBlank() }
+        return hints.any { hint -> values.any { it.contains(hint) } }
     }
 
     private fun performImeAction(node: AccessibilityNodeInfo): Boolean {
@@ -2075,8 +2131,39 @@ class UssdNavigationService : AccessibilityService() {
             allTextLower.contains("amount") ||
             allTextLower.contains("pin") ||
             allTextLower.contains("phone") ||
+            allTextLower.contains("mobile") ||
+            allTextLower.contains("recipient") ||
             allTextLower.contains("number") ||
+            allTextLower.contains("account") ||
+            allTextLower.contains("customer") ||
             allTextLower.contains("code")
+
+    private fun isSafeTextEntryContext(
+        step: String,
+        expectedValue: String,
+        selectedMenuLabel: String?,
+        dialogText: String,
+        menuSignature: ParsedMenuSignature?,
+        inputField: AccessibilityNodeInfo?
+    ): Boolean {
+        val lower = dialogText.lowercase()
+        val hasEditableField = inputField != null
+        val hasMenuOptions = menuSignature?.options?.isNotEmpty() == true
+        val promptLooksWritable = dialogSuggestsTextInput(lower) || nodeMatchesAnyHint(inputField, INPUT_FIELD_HINTS)
+        if (!hasEditableField && !promptLooksWritable) return false
+        if (hasMenuOptions && !hasEditableField && expectedValue.all(Char::isDigit) && expectedValue.length >= 4) {
+            return false
+        }
+        if (step == "INPUT_PHONE") {
+            val hasPhonePrompt = PHONE_PROMPT_HINTS.any { lower.contains(it) } ||
+                nodeMatchesAnyHint(inputField, PHONE_PROMPT_HINTS)
+            val hasConflictingPrompt = PHONE_CONFLICT_HINTS.any { lower.contains(it) } ||
+                nodeMatchesAnyHint(inputField, PHONE_CONFLICT_HINTS)
+            if (hasConflictingPrompt && !hasPhonePrompt) return false
+            if (!hasPhonePrompt && hasMenuOptions && selectedMenuLabel == null && !hasEditableField) return false
+        }
+        return true
+    }
 
     private fun isTextEntryNode(node: AccessibilityNodeInfo): Boolean {
         val className = node.className?.toString().orEmpty()
@@ -2189,50 +2276,70 @@ class UssdNavigationService : AccessibilityService() {
         return false
     }
 
-    private fun rememberInputWrite(value: String) {
+    private fun rememberInputWrite(value: String, dialogText: String? = null) {
         lastInputWriteValue = normalizeInputValue(value)
         lastInputWriteElapsed = SystemClock.elapsedRealtime()
+        lastInputWriteContextKey = buildInputContextKey(dialogText)
     }
 
     private fun clearInputWriteMarker() {
         lastInputWriteValue = ""
         lastInputWriteElapsed = 0L
+        lastInputWriteContextKey = ""
         lastVerifiedInputValue = ""
         lastVerifiedInputElapsed = 0L
+        lastVerifiedInputContextKey = ""
     }
 
-    private fun hasRecentExpectedInput(expectedValue: String): Boolean {
+    private fun hasRecentExpectedInput(expectedValue: String, dialogText: String? = null): Boolean {
         val expected = normalizeInputValue(expectedValue)
         if (expected.isBlank()) return false
         if (lastInputWriteValue != expected) return false
+        val contextKey = buildInputContextKey(dialogText)
+        if (contextKey.isNotBlank() &&
+            lastInputWriteContextKey.isNotBlank() &&
+            lastInputWriteContextKey != contextKey
+        ) return false
         return SystemClock.elapsedRealtime() - lastInputWriteElapsed <= RECENT_INPUT_GRACE_MS
     }
 
-    private fun rememberVerifiedInput(value: String) {
+    private fun rememberVerifiedInput(value: String, dialogText: String? = null) {
         val normalized = normalizeInputValue(value)
         if (normalized.isBlank()) return
         lastVerifiedInputValue = normalized
         lastVerifiedInputElapsed = SystemClock.elapsedRealtime()
+        lastVerifiedInputContextKey = buildInputContextKey(dialogText)
     }
 
-    private fun hasRecentVerifiedInput(expectedValue: String): Boolean {
+    private fun hasRecentVerifiedInput(expectedValue: String, dialogText: String? = null): Boolean {
         val expected = normalizeInputValue(expectedValue)
         if (expected.isBlank()) return false
         if (lastVerifiedInputValue != expected) return false
+        val contextKey = buildInputContextKey(dialogText)
+        if (contextKey.isNotBlank() &&
+            lastVerifiedInputContextKey.isNotBlank() &&
+            lastVerifiedInputContextKey != contextKey
+        ) return false
         return SystemClock.elapsedRealtime() - lastVerifiedInputElapsed <= RECENT_VERIFIED_INPUT_GRACE_MS
     }
 
-    private fun shouldTrustRecentWrite(fieldText: String?, expectedValue: String): Boolean {
-        val actual = fieldText?.trim().orEmpty()
-        if (actual.isBlank()) return hasRecentExpectedInput(expectedValue)
-        return hasRecentExpectedInput(expectedValue) && isLikelyPromptText(actual)
+    private fun buildInputContextKey(dialogText: String?): String {
+        val normalizedDialog = normalizeMenuText(dialogText.orEmpty())
+        if (normalizedDialog.isBlank()) return ""
+        return "$currentStep|$normalizedDialog"
     }
 
-    private fun isVerifiedFieldValue(fieldText: String?, expectedValue: String): Boolean {
+    private fun shouldTrustRecentWrite(fieldText: String?, expectedValue: String, dialogText: String? = null): Boolean {
+        val actual = fieldText?.trim().orEmpty()
+        if (actual.isBlank()) return hasRecentExpectedInput(expectedValue, dialogText)
+        return false
+    }
+
+    private fun isVerifiedFieldValue(fieldText: String?, expectedValue: String, dialogText: String? = null): Boolean {
         val actual = fieldText?.trim().orEmpty()
         return when {
             matchesExpectedInput(actual, expectedValue) -> true
-            actual.isNotBlank() && shouldTrustRecentWrite(actual, expectedValue) -> true
+            shouldTrustRecentWrite(actual, expectedValue, dialogText) -> true
             else -> false
         }
     }
@@ -2240,18 +2347,20 @@ class UssdNavigationService : AccessibilityService() {
     private fun verifyExpectedInputFromRoot(
         root: AccessibilityNodeInfo,
         expectedValue: String,
-        existingField: AccessibilityNodeInfo? = null
+        existingField: AccessibilityNodeInfo? = null,
+        dialogText: String? = null
     ): Boolean {
-        if (existingField != null && isVerifiedFieldValue(readFieldText(existingField), expectedValue)) {
-            rememberVerifiedInput(expectedValue)
+        val activeDialogText = dialogText ?: normalizeCollapsedText(extractAllText(root))
+        if (existingField != null && isVerifiedFieldValue(readFieldText(existingField), expectedValue, activeDialogText)) {
+            rememberVerifiedInput(expectedValue, activeDialogText)
             return true
         }
         var rescannedField: AccessibilityNodeInfo? = null
         return try {
             rescannedField = findEditableField(root)
             val verified = rescannedField != null &&
-                isVerifiedFieldValue(readFieldText(rescannedField), expectedValue)
-            if (verified) rememberVerifiedInput(expectedValue)
+                isVerifiedFieldValue(readFieldText(rescannedField), expectedValue, activeDialogText)
+            if (verified) rememberVerifiedInput(expectedValue, activeDialogText)
             verified
         } finally {
             if (rescannedField !== existingField) {
@@ -2276,12 +2385,12 @@ class UssdNavigationService : AccessibilityService() {
         return null
     }
 
-    private fun tryWriteValueToField(field: AccessibilityNodeInfo, value: String): Boolean {
+    private fun tryWriteValueToField(field: AccessibilityNodeInfo, value: String, dialogText: String? = null): Boolean {
         val targets = obtainInputTargets(field)
         try {
             targets.forEach { target ->
                 if (writeValueUsingStrategies(target, value)) {
-                    rememberInputWrite(value)
+                    rememberInputWrite(value, dialogText)
                     return true
                 }
             }
