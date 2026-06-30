@@ -526,7 +526,9 @@ class UssdNavigationService : AccessibilityService() {
         val primary = rootInActiveWindow
         if (primary != null) {
             val pkg = primary.packageName?.toString() ?: ""
-            if (pkg !in BLOCKED_PACKAGES && isPotentialUssdPackage(pkg)) return primary
+            if (pkg !in BLOCKED_PACKAGES && (isPotentialUssdPackage(pkg) || shouldAllowAndroidDialogRoot(primary, pkg))) {
+                return primary
+            }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             val visibleWindows = try { windows } catch (_: Exception) { return primary }
@@ -540,7 +542,7 @@ class UssdNavigationService : AccessibilityService() {
                     root.recycle()
                     continue
                 }
-                if (isPotentialUssdPackage(pkg)) {
+                if (isPotentialUssdPackage(pkg) || shouldAllowAndroidDialogRoot(root, pkg)) {
                     primary?.recycle()
                     return root
                 }
@@ -548,6 +550,21 @@ class UssdNavigationService : AccessibilityService() {
             }
         }
         return primary
+    }
+
+    private fun shouldAllowAndroidDialogRoot(root: AccessibilityNodeInfo, pkg: String): Boolean {
+        if (!(pkg.isBlank() || pkg == "android")) return false
+        if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null) return false
+        if (!hasDialogLayout(root)) return false
+        val dialogText = normalizeCollapsedText(extractAllText(root))
+        if (dialogText.isBlank()) return false
+        val lower = dialogText.lowercase()
+        if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return false
+        val hasAction = hasSendOrOkButton(root) || hasDismissButton(root) || hasEditableField(root)
+        if (!hasAction) return false
+        val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(lower)
+        val hasUssdLanguage = USSD_HINTS.any { lower.contains(it) } || errorKeywords.any { lower.contains(it) }
+        return hasUssdLanguage || menuLike
     }
 
     private data class ParsedMenuSignature(
