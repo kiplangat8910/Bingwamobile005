@@ -73,6 +73,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val TAP_GESTURE_DURATION_MS = 40L
         private const val REDIAL_COOLDOWN_MS     = 700L
         private const val PENDING_ADVANCE_TIMEOUT_MS = 4_000L
+        private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 3_500L
         // Some devices emit extra events on the same USSD dialog after we click "Send".
         // If we process those events immediately, we can inject the NEXT step into the PREVIOUS screen.
         private const val STEP_TRANSITION_GUARD_MS = 650L
@@ -201,6 +202,9 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingAttempts: Int = 0
     private var lastStepActionKey: String = ""
     private var lastStepActionElapsed: Long = 0L
+    private var pendingStepAdvanceFromKey: String = ""
+    private var pendingStepAdvanceSinceElapsed: Long = 0L
+    private var pendingStepAdvanceTimeoutRunnable: Runnable? = null
 
     private enum class PendingPhase { NONE, WAIT_VERIFY, WAIT_SEND }
 
@@ -328,6 +332,15 @@ class UssdNavigationService : AccessibilityService() {
                     }
                     return
                 }
+                if (pendingStepAdvanceFromKey.isNotBlank() &&
+                    handlePendingStepAdvance(
+                        windowId = windowId,
+                        windowPkg = windowPkg,
+                        root = root,
+                        snapshot = snapshot,
+                        dialogText = dialogText
+                    )
+                ) return
                 val dialogChanged = windowChanged || dialogText != lastDialogText
                 lastDialogText = dialogText
                 if (!isProcessing) {
@@ -426,8 +439,26 @@ class UssdNavigationService : AccessibilityService() {
         return "$stepIndex|$windowId|$windowPkg|$cls|$flags|$normalized"
     }
 
+    private fun buildTransitionSignatureKey(
+        windowId: Int,
+        windowPkg: String,
+        root: AccessibilityNodeInfo,
+        snapshot: UssdTreeSnapshot?,
+        dialogText: String
+    ): String {
+        val cls = root.className?.toString().orEmpty()
+        val normalized = normalizeCollapsedText(dialogText)
+        val flags = if (snapshot != null) {
+            "${snapshot.hasEditableField}|${snapshot.hasSendButton}|${snapshot.hasDismissButton}"
+        } else {
+            ""
+        }
+        return "$windowId|$windowPkg|$cls|$flags|$normalized"
+    }
+
     private fun processStep() {
         if (!advancedActive) { isProcessing = false; return }
+        if (pendingStepAdvanceFromKey.isNotBlank()) { isProcessing = false; return }
         val root = getUssdRoot() ?: run {
             isProcessing = false
             handler.postDelayed({ restartFromBeginning() }, 700)
@@ -512,7 +543,7 @@ class UssdNavigationService : AccessibilityService() {
                         tryImmediateVerifiedSend(root, inputField, valueToEnter)
                     ) {
                         markStepAction(dialogText)
-                        advanceStep()
+                        startPendingStepAdvance(root, dialogText)
                         return
                     }
                     // Fast path: stop polling loops. Set a pending phase and let the next accessibility
@@ -541,7 +572,7 @@ class UssdNavigationService : AccessibilityService() {
                 val clicked = try { performClick(menuBtn) } finally { menuBtn.recycle() }
                 if (clicked) {
                     markStepAction(dialogText)
-                    advanceStep()
+                    startPendingStepAdvance(root, dialogText)
                     return
                 }
                 isProcessing = false
@@ -1234,6 +1265,7 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun clickSendButton(expectedValue: String, attempt: Int, skipFieldVerification: Boolean = false) {
         if (!advancedActive) { isProcessing = false; return }
+        if (pendingStepAdvanceFromKey.isNotBlank()) { isProcessing = false; return }
         if (attempt >= MAX_SEND_ATTEMPTS) {
             isProcessing = false; handler.post { dismissErrorAndRestart() }; return
         }
@@ -1275,13 +1307,16 @@ class UssdNavigationService : AccessibilityService() {
                 val clicked = performClick(sendBtn)
                 sendBtn.recycle(); sendBtn = null
                 if (clicked) {
-                    markStepAction(extractAllText(root))
-                    advanceStep()
+                    val text = extractAllText(root)
+                    markStepAction(text)
+                    startPendingStepAdvance(root, text)
+                    return
                 }
                 else {
                     if (fieldText != null && triggerInputSubmit(root, expectedValue, fieldRef)) {
-                        markStepAction(extractAllText(root))
-                        advanceStep()
+                        val text = extractAllText(root)
+                        markStepAction(text)
+                        startPendingStepAdvance(root, text)
                         return
                     }
                     handler.postDelayed(
@@ -1291,8 +1326,9 @@ class UssdNavigationService : AccessibilityService() {
                 }
             } else {
                 if ((fieldText != null || skipFieldVerification) && triggerInputSubmit(root, expectedValue, fieldRef)) {
-                    markStepAction(extractAllText(root))
-                    advanceStep()
+                    val text = extractAllText(root)
+                    markStepAction(text)
+                    startPendingStepAdvance(root, text)
                     return
                 }
                 // Avoid re-scanning/re-writing on every retry when we already know we injected this value recently.
@@ -1317,6 +1353,7 @@ class UssdNavigationService : AccessibilityService() {
         lastDialogText = ""
         lastScreenSignatureKey = ""
         clearPendingAdvance()
+        clearPendingStepAdvance()
         clearInputWriteMarker()
         startStepTimeout()
     }
@@ -1335,6 +1372,7 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun dismissErrorAndRestart() {
+        clearPendingStepAdvance()
         dismissCurrentDialog()
         handler.postDelayed({
             performGlobalAction(GLOBAL_ACTION_BACK)
@@ -1375,6 +1413,7 @@ class UssdNavigationService : AccessibilityService() {
         lastStepActionKey = ""
         lastStepActionElapsed = 0L
         clearPendingAdvance()
+        clearPendingStepAdvance()
         pendingProcessToken = 0L
         clearInputWriteMarker()
         redialAdvancedIfNeeded()
@@ -1471,6 +1510,7 @@ class UssdNavigationService : AccessibilityService() {
         lastStepActionKey = ""
         lastStepActionElapsed = 0L
         clearPendingAdvance()
+        clearPendingStepAdvance()
         clearInputWriteMarker()
         onDispatchComplete  = null
         tokenPurchaseCallback = null
@@ -1549,8 +1589,9 @@ class UssdNavigationService : AccessibilityService() {
                 val sent = tryImmediateVerifiedSend(root, field = null, expectedValue = expected)
                 if (sent) {
                     clearPendingAdvance()
-                    markStepAction(extractAllText(root))
-                    advanceStep()
+                    val text = extractAllText(root)
+                    markStepAction(text)
+                    startPendingStepAdvance(root, text)
                 } else {
                     // Let the next event re-try, but avoid expensive work here.
                     isProcessing = false
@@ -1566,6 +1607,65 @@ class UssdNavigationService : AccessibilityService() {
         tokenPurchaseCallback = null
         balanceCallback     = null
         onDispatchComplete  = null
+    }
+
+    private fun clearPendingStepAdvance() {
+        pendingStepAdvanceFromKey = ""
+        pendingStepAdvanceSinceElapsed = 0L
+        pendingStepAdvanceTimeoutRunnable?.let { handler.removeCallbacks(it) }
+        pendingStepAdvanceTimeoutRunnable = null
+    }
+
+    private fun startPendingStepAdvance(root: AccessibilityNodeInfo, dialogText: String) {
+        clearPendingStepAdvance()
+        pendingStepAdvanceSinceElapsed = SystemClock.elapsedRealtime()
+        val snapshot = captureTreeSnapshot(root)
+        pendingStepAdvanceFromKey = buildTransitionSignatureKey(
+            windowId = lastWindowId,
+            windowPkg = root.packageName?.toString().orEmpty(),
+            root = root,
+            snapshot = snapshot,
+            dialogText = dialogText
+        )
+        pendingStepAdvanceTimeoutRunnable = Runnable {
+            if (pendingStepAdvanceFromKey.isBlank()) return@Runnable
+            clearPendingStepAdvance()
+            isProcessing = false
+            dismissErrorAndRestart()
+        }
+        handler.postDelayed(pendingStepAdvanceTimeoutRunnable!!, PENDING_STEP_ADVANCE_TIMEOUT_MS)
+        isProcessing = false
+    }
+
+    private fun handlePendingStepAdvance(
+        windowId: Int,
+        windowPkg: String,
+        root: AccessibilityNodeInfo,
+        snapshot: UssdTreeSnapshot?,
+        dialogText: String
+    ): Boolean {
+        val fromKey = pendingStepAdvanceFromKey
+        if (fromKey.isBlank()) return false
+        val elapsed = SystemClock.elapsedRealtime() - pendingStepAdvanceSinceElapsed
+        if (elapsed > PENDING_STEP_ADVANCE_TIMEOUT_MS) {
+            clearPendingStepAdvance()
+            isProcessing = false
+            dismissErrorAndRestart()
+            return true
+        }
+        val currentKey = buildTransitionSignatureKey(
+            windowId = windowId,
+            windowPkg = windowPkg,
+            root = root,
+            snapshot = snapshot,
+            dialogText = dialogText
+        )
+        if (currentKey == fromKey) return true
+        clearPendingStepAdvance()
+        advanceStep()
+        pendingProcessToken = SystemClock.elapsedRealtime()
+        scheduleProcessStep(dialogChanged = true)
+        return true
     }
 
     private inline fun safeFind(root: AccessibilityNodeInfo, finder: (AccessibilityNodeInfo) -> AccessibilityNodeInfo?): AccessibilityNodeInfo? =
