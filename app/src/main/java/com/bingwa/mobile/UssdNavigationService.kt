@@ -142,6 +142,12 @@ class UssdNavigationService : AccessibilityService() {
             "button2", "negativebutton", "negative_button", "btn_cancel", "btn_dismiss",
             "btn_negative", "left_button"
         )
+        private val NON_USSD_DIALOG_HINTS = listOf(
+            "choose sim", "select sim", "sim 1", "sim 2", "sim1", "sim2", "default sim",
+            "complete action", "use by default", "just once", "always",
+            "allow", "deny", "permission", "grant", "not now",
+            "isn't responding", "is not responding", "stopped", "keeps stopping", "close app"
+        )
         private val EDITABLE_CLASS_HINTS = listOf(
             "EditText", "TextInputEditText", "AutoCompleteTextView",
             "MultiAutoCompleteTextView", "ExtractEditText",
@@ -179,6 +185,7 @@ class UssdNavigationService : AccessibilityService() {
     private var lastVerifiedInputElapsed = 0L
     private var pendingProcessToken = 0L
     private var lastWindowPkg = ""
+    private var lastWindowId = -1
     private var lastRelevantEventElapsed = 0L
     private var hasSeenAdvancedPopup = false
     private var lastMenuSignatureKey = ""
@@ -248,6 +255,9 @@ class UssdNavigationService : AccessibilityService() {
         ) return
         val pkg = event.packageName?.toString() ?: ""
         if (pkg in BLOCKED_PACKAGES) return
+        val windowId = event.windowId
+        val windowChanged = windowId != lastWindowId
+        lastWindowId = windowId
 
         val root = getUssdRoot() ?: return
         try {
@@ -270,6 +280,7 @@ class UssdNavigationService : AccessibilityService() {
             val dialogText = snapshot?.dialogText ?: normalizeCollapsedText(eventDialogText)
             if (dialogText.isBlank()) return
             val lower = dialogText.lowercase()
+            if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return
             val looksLikeDialog = when {
                 snapshot != null -> looksLikeUssdDialog(
                     root = root,
@@ -297,7 +308,7 @@ class UssdNavigationService : AccessibilityService() {
                     }
                     return
                 }
-                val dialogChanged = dialogText != lastDialogText
+                val dialogChanged = windowChanged || dialogText != lastDialogText
                 lastDialogText = dialogText
                 if (!isProcessing) {
                     // If we already wrote an input and are waiting to verify/send, handle that immediately
@@ -306,7 +317,14 @@ class UssdNavigationService : AccessibilityService() {
                         attemptPendingAdvance(root)
                         return
                     }
-                    val screenKey = "${currentStep}|${normalizeCollapsedText(dialogText)}"
+                    val screenKey = buildScreenSignatureKey(
+                        stepIndex = currentStep,
+                        windowId = windowId,
+                        windowPkg = windowPkg,
+                        root = root,
+                        snapshot = snapshot,
+                        dialogText = dialogText
+                    )
                     if (!dialogChanged && screenKey == lastScreenSignatureKey) return
                     lastScreenSignatureKey = screenKey
                     pendingProcessToken = SystemClock.elapsedRealtime()
@@ -333,6 +351,11 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun looksLikeUssdDialogFast(allTextLower: String, windowPackageName: String): Boolean {
+        if (windowPackageName == "android" || windowPackageName.isBlank()) {
+            if (!advancedActive) return false
+            return USSD_HINTS.any { allTextLower.contains(it) } ||
+                errorKeywords.any { allTextLower.contains(it) }
+        }
         val likelyUssdPackage = isPotentialUssdPackage(windowPackageName)
         if (!likelyUssdPackage && !advancedActive) return false
         val hasUssdLanguage = USSD_HINTS.any { allTextLower.contains(it) } ||
@@ -356,13 +379,32 @@ class UssdNavigationService : AccessibilityService() {
         val hasSendButton = snapshot.hasSendButton
         val hasDismissButton = snapshot.hasDismissButton
         val hasMenuOptions = parseMenuSignature(snapshot) != null
-        val likelyUssdPackage = isPotentialUssdPackage(windowPackageName)
+        val likelyUssdPackage = isPotentialUssdPackage(windowPackageName) ||
+            ((windowPackageName == "android" || windowPackageName.isBlank()) && (hasUssdLanguage || hasMenuOptions))
         val hasDialogLayout = hasDialogLayout(root, snapshot)
         return (hasEditField && (hasSendButton || hasUssdLanguage || hasMenuOptions))
                 || ((hasSendButton || hasDismissButton) && (hasUssdLanguage || hasMenuOptions))
                 || (hasMenuOptions && hasUssdLanguage)
                 || (hasDialogLayout && likelyUssdPackage && (hasEditField || hasSendButton || hasDismissButton))
                 || (advancedActive && likelyUssdPackage && (hasEditField || hasSendButton || hasDismissButton || hasMenuOptions))
+    }
+
+    private fun buildScreenSignatureKey(
+        stepIndex: Int,
+        windowId: Int,
+        windowPkg: String,
+        root: AccessibilityNodeInfo,
+        snapshot: UssdTreeSnapshot?,
+        dialogText: String
+    ): String {
+        val cls = root.className?.toString().orEmpty()
+        val normalized = normalizeCollapsedText(dialogText)
+        val flags = if (snapshot != null) {
+            "${snapshot.hasEditableField}|${snapshot.hasSendButton}|${snapshot.hasDismissButton}"
+        } else {
+            ""
+        }
+        return "$stepIndex|$windowId|$windowPkg|$cls|$flags|$normalized"
     }
 
     private fun processStep() {
@@ -373,6 +415,21 @@ class UssdNavigationService : AccessibilityService() {
             return
         }
         try {
+            val windowPkg = root.packageName?.toString() ?: ""
+            val freshDialogText = normalizeCollapsedText(extractAllText(root))
+            val dialogText = freshDialogText.ifBlank { lastFinalResponse }
+            val lower = dialogText.lowercase()
+            if (dialogText.isNotBlank()) {
+                lastFinalResponse = dialogText
+            }
+            if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) {
+                isProcessing = false
+                return
+            }
+            if (!looksLikeUssdDialogFast(allTextLower = lower, windowPackageName = windowPkg)) {
+                isProcessing = false
+                return
+            }
             if (currentStep >= advancedSteps.size) {
                 val finalText = lastFinalResponse
                 Log.d(TAG, "All steps complete, finalText='$finalText'")
@@ -381,9 +438,9 @@ class UssdNavigationService : AccessibilityService() {
             }
 
             val step = advancedSteps[currentStep]
-            val menuSignature = parseMenuSignature(root, lastFinalResponse)
+            val menuSignature = parseMenuSignature(root, dialogText)
             if (step != "INPUT_PHONE") {
-                captureSignatureStepIfNeeded(currentStep, step, menuSignature, lastFinalResponse)
+                captureSignatureStepIfNeeded(currentStep, step, menuSignature, dialogText)
             }
             val resolved = resolveStepInput(currentStep, step, menuSignature)
             if (!advancedActive) {
@@ -395,7 +452,8 @@ class UssdNavigationService : AccessibilityService() {
 
             val inputField = findEditableField(root)
             try {
-                val shouldPreferTextInput = shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel)
+                val shouldPreferTextInput = shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
+                    (selectedMenuLabel == null && dialogSuggestsTextInput(lower))
                 if (inputField != null || shouldPreferTextInput) {
                     val wroteValue = when {
                         inputField != null -> tryWriteValueToField(inputField, valueToEnter) || writeValueToField(valueToEnter)
@@ -891,7 +949,12 @@ class UssdNavigationService : AccessibilityService() {
     private fun writeValueToField(value: String): Boolean {
         val root = getUssdRoot() ?: return false
         val windowPkg = root.packageName?.toString() ?: ""
-        if (windowPkg.isNotEmpty() && !isPotentialUssdPackage(windowPkg)) {
+        if (windowPkg.isNotEmpty() && windowPkg != "android" && !isPotentialUssdPackage(windowPkg)) {
+            root.recycle()
+            return false
+        }
+        val lower = normalizeCollapsedText(extractAllText(root)).lowercase()
+        if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) {
             root.recycle()
             return false
         }
@@ -1390,7 +1453,7 @@ class UssdNavigationService : AccessibilityService() {
         try { finder(root) } catch (_: Exception) { null }
 
     private fun isPotentialUssdPackage(pkg: String): Boolean {
-        if (pkg.isBlank() || pkg == "android") return true
+        if (pkg.isBlank() || pkg == "android") return false
         if (pkg in USSD_PACKAGES) return true
         val lower = pkg.lowercase()
         return USSD_PACKAGE_HINTS.any { lower.contains(it) }
@@ -1885,6 +1948,16 @@ class UssdNavigationService : AccessibilityService() {
         if (valueToEnter.length >= 4) return true
         return selectedMenuLabel == null && valueToEnter.length > 1
     }
+
+    private fun dialogSuggestsTextInput(allTextLower: String): Boolean =
+        allTextLower.contains("enter") ||
+            allTextLower.contains("input") ||
+            allTextLower.contains("reply") ||
+            allTextLower.contains("amount") ||
+            allTextLower.contains("pin") ||
+            allTextLower.contains("phone") ||
+            allTextLower.contains("number") ||
+            allTextLower.contains("code")
 
     private fun isTextEntryNode(node: AccessibilityNodeInfo): Boolean {
         val className = node.className?.toString().orEmpty()
