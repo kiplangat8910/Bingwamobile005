@@ -230,6 +230,7 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingAttempts: Int = 0
     private var lastStepActionKey: String = ""
     private var lastStepActionElapsed: Long = 0L
+    private var lastUiReturnElapsed: Long = 0L
     private var pendingStepAdvanceFromKey: String = ""
     private var pendingStepAdvanceSinceElapsed: Long = 0L
     private var pendingStepAdvanceTimeoutRunnable: Runnable? = null
@@ -408,6 +409,9 @@ class UssdNavigationService : AccessibilityService() {
                 if (!hasSeenAdvancedPopup) {
                     hasSeenAdvancedPopup = true
                     updateRunningOverlay()
+                    requestAppUiBehindPopup(force = true)
+                } else if (windowChanged) {
+                    requestAppUiBehindPopup()
                 }
                 cancelStepTimeout()
                 lastFinalResponse = dialogText
@@ -1468,6 +1472,7 @@ class UssdNavigationService : AccessibilityService() {
         clearPendingAdvance()
         clearPendingStepAdvance()
         clearInputWriteMarker()
+        requestAppUiBehindPopup()
         updateRunningOverlay()
         startStepTimeout()
     }
@@ -1548,11 +1553,13 @@ class UssdNavigationService : AccessibilityService() {
         lastScreenSignatureKey = ""
         lastStepActionKey = ""
         lastStepActionElapsed = 0L
+        lastUiReturnElapsed = 0L
         clearRootRecoveryState()
         clearPendingAdvance()
         clearPendingStepAdvance()
         pendingProcessToken = 0L
         clearInputWriteMarker()
+        requestAppUiBehindPopup(force = true)
         updateRunningOverlay()
         redialAdvancedIfNeeded()
         startStepTimeout()
@@ -1753,6 +1760,14 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun shouldShowRunningOverlay(): Boolean =
         advancedInProgress || (advancedActive && advancedSteps.isNotEmpty())
+
+    private fun requestAppUiBehindPopup(force: Boolean = false) {
+        if (!advancedActive && !advancedInProgress) return
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastUiReturnElapsed < 900L) return
+        lastUiReturnElapsed = now
+        UssdHelper.relaunchAppUi(this, delayMs = if (force) 60L else 120L)
+    }
 
     private fun buildRunningOverlayView(): View {
         val container = LinearLayout(this).apply {
