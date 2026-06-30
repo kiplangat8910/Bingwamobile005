@@ -262,7 +262,9 @@ class UssdNavigationService : AccessibilityService() {
             event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED
         ) return
         val pkg = event.packageName?.toString() ?: ""
-        if (pkg in BLOCKED_PACKAGES) return
+        val allowSystemUi = pkg == "com.android.systemui" &&
+                (advancedActive || balanceCallback != null || tokenPurchaseCallback != null || signatureLearningMode)
+        if (pkg in BLOCKED_PACKAGES && !allowSystemUi) return
         val windowId = event.windowId
         val windowChanged = windowId != lastWindowId
         lastWindowId = windowId
@@ -270,7 +272,8 @@ class UssdNavigationService : AccessibilityService() {
         val root = getUssdRoot() ?: return
         try {
             val windowPkg = root.packageName?.toString() ?: ""
-            if (windowPkg in BLOCKED_PACKAGES) return
+            val allowBlockedWindow = windowPkg == "com.android.systemui" && shouldAllowSystemUiDialogRoot(root, windowPkg)
+            if (windowPkg in BLOCKED_PACKAGES && !allowBlockedWindow) return
             lastWindowPkg = windowPkg
 
             val eventDialogText = extractDialogTextFromEvent(event)
@@ -359,19 +362,18 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun looksLikeUssdDialogFast(allTextLower: String, windowPackageName: String): Boolean {
+        val hasUssdLanguage = USSD_HINTS.any { allTextLower.contains(it) } ||
+            errorKeywords.any { allTextLower.contains(it) }
+        val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(allTextLower)
         if (windowPackageName == "android" || windowPackageName.isBlank()) {
             if (!advancedActive) return false
-            return USSD_HINTS.any { allTextLower.contains(it) } ||
-                errorKeywords.any { allTextLower.contains(it) }
+            return hasUssdLanguage || menuLike
         }
         val likelyUssdPackage = isPotentialUssdPackage(windowPackageName)
         if (!likelyUssdPackage && !advancedActive) return false
-        val hasUssdLanguage = USSD_HINTS.any { allTextLower.contains(it) } ||
-            errorKeywords.any { allTextLower.contains(it) }
         if (advancedActive) {
-            if (!likelyUssdPackage) return false
             if (hasSeenAdvancedPopup) return true
-            return hasUssdLanguage || allTextLower.any(Char::isDigit)
+            return hasUssdLanguage || menuLike
         }
         return likelyUssdPackage && hasUssdLanguage
     }
@@ -531,10 +533,17 @@ class UssdNavigationService : AccessibilityService() {
         signatureLearningMode && stepIndex == advancedSteps.lastIndex
 
     private fun getUssdRoot(): AccessibilityNodeInfo? {
+        val allowSystemWindows = advancedActive || balanceCallback != null || tokenPurchaseCallback != null || signatureLearningMode
         val primary = rootInActiveWindow
         if (primary != null) {
             val pkg = primary.packageName?.toString() ?: ""
-            if (pkg !in BLOCKED_PACKAGES && (isPotentialUssdPackage(pkg) || shouldAllowAndroidDialogRoot(primary, pkg))) {
+            val allowBlocked = pkg !in BLOCKED_PACKAGES || shouldAllowSystemUiDialogRoot(primary, pkg)
+            if (
+                allowBlocked &&
+                (isPotentialUssdPackage(pkg) ||
+                        shouldAllowAndroidDialogRoot(primary, pkg) ||
+                        shouldAllowSystemUiDialogRoot(primary, pkg))
+            ) {
                 return primary
             }
             primary.recycle()
@@ -542,22 +551,44 @@ class UssdNavigationService : AccessibilityService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             val visibleWindows = try { windows } catch (_: Exception) { return null }
             for (window in visibleWindows) {
-                if (window.type == AccessibilityWindowInfo.TYPE_SYSTEM ||
-                    window.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY
-                ) continue
+                if (!allowSystemWindows) {
+                    if (window.type == AccessibilityWindowInfo.TYPE_SYSTEM ||
+                        window.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY
+                    ) continue
+                }
                 val root = try { window.root } catch (_: Exception) { null } ?: continue
                 val pkg = root.packageName?.toString() ?: ""
-                if (pkg in BLOCKED_PACKAGES) {
+                val allowBlocked = pkg !in BLOCKED_PACKAGES || shouldAllowSystemUiDialogRoot(root, pkg)
+                if (!allowBlocked) {
                     root.recycle()
                     continue
                 }
-                if (isPotentialUssdPackage(pkg) || shouldAllowAndroidDialogRoot(root, pkg)) {
+                if (
+                    isPotentialUssdPackage(pkg) ||
+                    shouldAllowAndroidDialogRoot(root, pkg) ||
+                    shouldAllowSystemUiDialogRoot(root, pkg)
+                ) {
                     return root
                 }
                 root.recycle()
             }
         }
         return null
+    }
+
+    private fun shouldAllowSystemUiDialogRoot(root: AccessibilityNodeInfo, pkg: String): Boolean {
+        if (pkg != "com.android.systemui") return false
+        if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null && !signatureLearningMode) return false
+        if (!hasDialogLayout(root)) return false
+        val dialogText = normalizeCollapsedText(extractAllText(root))
+        if (dialogText.isBlank()) return false
+        val lower = dialogText.lowercase()
+        if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return false
+        val hasAction = hasSendOrOkButton(root) || hasDismissButton(root) || hasEditableField(root)
+        if (!hasAction) return false
+        val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(lower)
+        val hasUssdLanguage = USSD_HINTS.any { lower.contains(it) } || errorKeywords.any { lower.contains(it) }
+        return hasUssdLanguage || menuLike
     }
 
     private fun shouldAllowAndroidDialogRoot(root: AccessibilityNodeInfo, pkg: String): Boolean {

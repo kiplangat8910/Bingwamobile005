@@ -55,11 +55,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -1839,6 +1841,50 @@ fun ToggleRow(icon: ImageVector, title: String, sub: String, checked: Boolean, o
 }
 
 @Composable
+private fun AutoFitSingleLineText(
+    text: String,
+    color: Color,
+    fontWeight: FontWeight,
+    maxFontSize: TextUnit,
+    minFontSize: TextUnit,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(modifier = modifier) {
+        val textMeasurer = rememberTextMeasurer()
+        val maxWidthPx = with(LocalDensity.current) { maxWidth.roundToPx() }.coerceAtLeast(0)
+        val fontSize = remember(text, maxWidthPx) {
+            var size = maxFontSize
+            while (size.value > minFontSize.value) {
+                val layout = textMeasurer.measure(
+                    text = AnnotatedString(text),
+                    style = TextStyle(
+                        color = color,
+                        fontSize = size,
+                        fontWeight = fontWeight
+                    ),
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
+                    constraints = Constraints(maxWidth = maxWidthPx)
+                )
+                if (!layout.didOverflowWidth) break
+                size = (size.value - 1f).sp
+            }
+            size
+        }
+        Text(
+            text,
+            color = color,
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip
+        )
+    }
+}
+
+@Composable
 fun LinkRow(icon: ImageVector, title: String, sub: String, color: Color, onClick: () -> Unit) {
     Row(
         Modifier
@@ -1859,13 +1905,12 @@ fun LinkRow(icon: ImageVector, title: String, sub: String, color: Color, onClick
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                title,
+            AutoFitSingleLineText(
+                text = title,
                 color = C.t1,
-                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                maxFontSize = 18.sp,
+                minFontSize = 14.sp
             )
             Text(
                 sub,

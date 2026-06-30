@@ -309,7 +309,21 @@ fun SettingsTopBar(title: String, subtitle: String, onBack: () -> Unit) {
                 }
             }
             Column(Modifier.padding(start = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, color = C.t1, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                val titleFontSize = when {
+                    title.length >= 28 -> 16.sp
+                    title.length >= 24 -> 18.sp
+                    title.length >= 20 -> 20.sp
+                    else -> 22.sp
+                }
+                Text(
+                    title,
+                    color = C.t1,
+                    fontSize = titleFontSize,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip
+                )
                 if (subtitle.isNotBlank()) {
                     Text(subtitle, color = C.t2, fontSize = 12.sp, lineHeight = 17.sp)
                 }
@@ -1713,27 +1727,6 @@ private fun FallbackOverviewCard(
                     icon = Icons.Rounded.Autorenew,
                     label = routeSummary,
                     tint = C.amber
-                )
-            }
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                FallbackInfoSurface(
-                    title = "Current Rule",
-                    subtitle = fallbackRuleDescription,
-                    accent = C.cyan,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 138.dp)
-                )
-                FallbackInfoSurface(
-                    title = "Sequence",
-                    subtitle = "1. Try primary plan\n2. Check rule\n3. Run mapped fallbacks\n4. Keep original result if none start",
-                    accent = C.amber,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 138.dp)
                 )
             }
         }
