@@ -74,6 +74,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val REDIAL_COOLDOWN_MS     = 700L
         private const val PENDING_ADVANCE_TIMEOUT_MS = 4_000L
         private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 3_500L
+        private const val DIALOG_DISMISS_SETTLE_MS = 240L
         // Some devices emit extra events on the same USSD dialog after we click "Send".
         // If we process those events immediately, we can inject the NEXT step into the PREVIOUS screen.
         private const val STEP_TRANSITION_GUARD_MS = 650L
@@ -844,7 +845,7 @@ class UssdNavigationService : AccessibilityService() {
         lastFinalResponse = message
         onDispatchComplete?.invoke(buildDispatchResult(message))
         tokenPurchaseCallback?.invoke(false)
-        performGlobalAction(GLOBAL_ACTION_BACK)
+        closeCurrentUssdUi()
         advancedInProgress = false
         cleanupAdvanced()
     }
@@ -852,7 +853,7 @@ class UssdNavigationService : AccessibilityService() {
     private fun finishAdvancedDispatch(finalText: String) {
         onDispatchComplete?.invoke(buildDispatchResult(finalText))
         if (!signatureLearningMode) tokenPurchaseCallback?.invoke(true)
-        performGlobalAction(GLOBAL_ACTION_BACK)
+        closeCurrentUssdUi()
         advancedInProgress = false
         cleanupAdvanced()
     }
@@ -1381,7 +1382,7 @@ class UssdNavigationService : AccessibilityService() {
         currentStep = advancedSteps.size
         isProcessing = false
         clearInputWriteMarker()
-        if (!dismissCurrentDialog()) performGlobalAction(GLOBAL_ACTION_BACK)
+        closeCurrentUssdUi()
         onDispatchComplete?.invoke(buildDispatchResult(finalText))
         advancedInProgress = false
         cleanupAdvanced()
@@ -1389,11 +1390,9 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun dismissErrorAndRestart() {
         clearPendingStepAdvance()
-        dismissCurrentDialog()
-        handler.postDelayed({
-            performGlobalAction(GLOBAL_ACTION_BACK)
-            restartFromBeginning()
-        }, 600)
+        val dismissed = closeCurrentUssdUi()
+        val delay = if (dismissed) DIALOG_DISMISS_SETTLE_MS else 0L
+        handler.postDelayed({ restartFromBeginning() }, delay)
     }
 
     private fun dismissCurrentDialog(): Boolean {
@@ -1409,6 +1408,29 @@ class UssdNavigationService : AccessibilityService() {
             }
         }
         return false
+    }
+
+    private fun closeCurrentUssdUi(): Boolean {
+        if (dismissCurrentDialog()) return true
+        val root = getUssdRoot() ?: return false
+        return try {
+            val pkg = root.packageName?.toString().orEmpty()
+            val dialogText = normalizeCollapsedText(extractAllText(root))
+            val lower = dialogText.lowercase()
+            val looksLikeVisibleUssd = dialogText.isNotBlank() &&
+                !NON_USSD_DIALOG_HINTS.any { lower.contains(it) } &&
+                (
+                    looksLikeUssdDialogFast(allTextLower = lower, windowPackageName = pkg) ||
+                        hasDialogLayout(root) ||
+                        hasEditableField(root) ||
+                        hasSendOrOkButton(root) ||
+                        hasDismissButton(root)
+                    )
+            if (!looksLikeVisibleUssd) return false
+            performGlobalAction(GLOBAL_ACTION_BACK)
+        } finally {
+            root.recycle()
+        }
     }
 
     private fun restartFromBeginning() {
@@ -1453,10 +1475,10 @@ class UssdNavigationService : AccessibilityService() {
             when {
                 lower.contains("you have transferred") ||
                 (lower.contains("transfer") && lower.contains("successful")) -> {
-                    cb(true); performGlobalAction(GLOBAL_ACTION_BACK); clearCallbacks(); return
+                    cb(true); closeCurrentUssdUi(); clearCallbacks(); return
                 }
                 lower.contains("insufficient") || lower.contains("failed") || lower.contains("cancelled") -> {
-                    cb(false); performGlobalAction(GLOBAL_ACTION_BACK); clearCallbacks(); return
+                    cb(false); closeCurrentUssdUi(); clearCallbacks(); return
                 }
                 else -> {}
             }
@@ -1473,7 +1495,7 @@ class UssdNavigationService : AccessibilityService() {
                 BalanceChecker.currentBalance    = intVal
                 BalanceChecker.currentBalanceStr = display
                 BalanceChecker.balanceCallback?.invoke(display)
-                performGlobalAction(GLOBAL_ACTION_BACK)
+                closeCurrentUssdUi()
                 clearCallbacks()
             }
         }
@@ -1482,8 +1504,9 @@ class UssdNavigationService : AccessibilityService() {
     private fun startStepTimeout() {
         cancelStepTimeout()
         val timeout = Runnable {
-            performGlobalAction(GLOBAL_ACTION_BACK)
-            handler.postDelayed({ restartFromBeginning() }, 500)
+            val dismissed = closeCurrentUssdUi()
+            val delay = if (dismissed) DIALOG_DISMISS_SETTLE_MS else 0L
+            handler.postDelayed({ restartFromBeginning() }, delay)
         }
         stepTimeoutRunnable = timeout
         handler.postDelayed(timeout, STEP_TIMEOUT_MS)
