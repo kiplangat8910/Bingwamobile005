@@ -271,7 +271,7 @@ private fun SettingsHome(
             }
 
             SettingsGroup("Appearance & Support", accent = C.amber) {
-                LinkRow(Icons.Rounded.DarkMode, "Appearance", "Adjust theme and system colors", C.amber, onOpenAppearance)
+                LinkRow(Icons.Rounded.Palette, "Appearance", "Choose between premium app color styles", C.amber, onOpenAppearance)
                 GroupDivider(C.amber)
                 LinkRow(Icons.Rounded.Info, "Setup Doctor", "Check permissions, compatibility, battery rules, and alarms", C.amber, onOpenDiagnostics)
                 GroupDivider(C.amber)
@@ -2986,39 +2986,43 @@ private fun AutomationSettings(onBack: () -> Unit) {
 private fun AppearanceSettings(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val prefs = ctx.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-    var themeMode by remember { mutableStateOf((prefs.safeGetString("theme_mode", AppTheme.mode.name) ?: AppTheme.mode.name).uppercase()) }
-    var themeExp by remember { mutableStateOf(false) }
-    var themeAccent by remember { mutableStateOf(themeAccentFromName(prefs.safeGetString("theme_accent", AppTheme.accent.name))) }
-    var accentExp by remember { mutableStateOf(false) }
-    var useDynamicColors by remember { mutableStateOf(prefs.safeGetBoolean("use_dynamic_colors", AppTheme.useDynamicColors)) }
-    val dynSupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+    var appearancePreset by remember {
+        mutableStateOf(
+            appearancePresetFromName(
+                prefs.safeGetString("theme_appearance", AppTheme.appearance.name)
+            )
+        )
+    }
+    var appearanceExp by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
-        SettingsTopBar("Appearance", "Theme and system colors", onBack)
+        SettingsTopBar("Appearance", "Choose the app color style", onBack)
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SettingsGroup("Appearance") {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SettingsRowIcon(Icons.Rounded.DarkMode)
+                    SettingsRowIcon(Icons.Rounded.Palette)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Theme", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        Text("System, Dark, or Light", color = C.t2, fontSize = 11.sp)
+                        Text("Appearance", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text("Pick one of three full UI color combinations", color = C.t2, fontSize = 11.sp)
                     }
                     Box {
-                        TextButton(onClick = { themeExp = true }) { Text(themeMode, color = C.cyan, fontSize = 12.sp) }
+                        TextButton(onClick = { appearanceExp = true }) {
+                            Text(appearancePresetLabel(appearancePreset), color = C.cyan, fontSize = 12.sp)
+                        }
                         DropdownMenu(
-                            expanded = themeExp,
-                            onDismissRequest = { themeExp = false },
+                            expanded = appearanceExp,
+                            onDismissRequest = { appearanceExp = false },
                             modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))
                         ) {
-                            listOf("SYSTEM", "DARK", "LIGHT").forEach { opt ->
+                            appearancePresetOptions().forEach { opt ->
                                 DropdownMenuItem(
-                                    text = { Text(opt, color = if (opt == themeMode) C.cyan else C.t1) },
+                                    text = { Text(opt.label, color = if (opt == appearancePreset) C.cyan else C.t1) },
                                     onClick = {
-                                        themeMode = opt
-                                        prefs.edit().putString("theme_mode", opt).apply()
-                                        AppTheme.mode = runCatching { ThemeMode.valueOf(opt) }.getOrDefault(ThemeMode.SYSTEM)
-                                        themeExp = false
+                                        appearancePreset = opt
+                                        prefs.edit().putString("theme_appearance", opt.name).apply()
+                                        AppTheme.appearance = opt
+                                        appearanceExp = false
                                     }
                                 )
                             }
@@ -3030,41 +3034,82 @@ private fun AppearanceSettings(onBack: () -> Unit) {
                     SettingsRowIcon(Icons.Rounded.Palette)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Main UI Color", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        Text("Choose the dominant app color when system colors are off", color = C.t2, fontSize = 11.sp)
+                        Text("Current Style", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text(appearancePreset.description, color = C.t2, fontSize = 11.sp)
                     }
-                    Box {
-                        TextButton(onClick = { accentExp = true }) { Text(themeAccentLabel(themeAccent), color = C.cyan, fontSize = 12.sp) }
-                        DropdownMenu(
-                            expanded = accentExp,
-                            onDismissRequest = { accentExp = false },
-                            modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))
-                        ) {
-                            themeAccentOptions().forEach { opt ->
-                                DropdownMenuItem(
-                                    text = { Text(themeAccentLabel(opt), color = if (opt == themeAccent) C.cyan else C.t1) },
-                                    onClick = {
-                                        themeAccent = opt
-                                        prefs.edit().putString("theme_accent", opt.name).apply()
-                                        AppTheme.accent = opt
-                                        accentExp = false
-                                    }
-                                )
-                            }
-                        }
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = C.cyanDim,
+                        border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.24f))
+                    ) {
+                        Text(
+                            appearancePresetLabel(appearancePreset),
+                            color = C.cyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                        )
                     }
                 }
                 GroupDivider()
-                ToggleRow(
-                    Icons.Rounded.Palette,
-                    "Use System Colors",
-                    if (dynSupported) "Uses your phone colors (Android 12+)" else "Requires Android 12+",
-                    checked = useDynamicColors && dynSupported
-                ) {
-                    val v = it && dynSupported
-                    useDynamicColors = v
-                    prefs.edit().putBoolean("use_dynamic_colors", v).apply()
-                    AppTheme.useDynamicColors = v
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Preview", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = C.card,
+                            border = BorderStroke(1.dp, C.border)
+                        ) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Surface(shape = RoundedCornerShape(10.dp), color = C.cyanDim) {
+                                    Text(
+                                        "Primary",
+                                        color = C.cyan,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                                Surface(shape = RoundedCornerShape(10.dp), color = C.purpleDim) {
+                                    Text(
+                                        "Secondary",
+                                        color = C.purple,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = C.cardHi,
+                            border = BorderStroke(1.dp, C.borderHi.copy(alpha = 0.8f))
+                        ) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Surface(shape = RoundedCornerShape(10.dp), color = C.greenDim) {
+                                    Text(
+                                        "Success",
+                                        color = C.green,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                                Surface(shape = RoundedCornerShape(10.dp), color = C.amberDim) {
+                                    Text(
+                                        "Highlight",
+                                        color = C.amber,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -161,22 +161,16 @@ private fun SafeStartupRoot() {
     val ctx = LocalContext.current
     val view = LocalView.current
     val startupResult = runCatching {
-        val mode = AppTheme.mode
-        val accent = AppTheme.accent
-        val dark = when (mode) {
-            ThemeMode.SYSTEM -> isSystemInDarkTheme()
-            ThemeMode.DARK -> true
-            ThemeMode.LIGHT -> false
-        }
-        val scheme = buildAppColorScheme(accent, dark)
+        val appearance = AppTheme.appearance
+        val scheme = buildAppColorScheme(appearance)
 
-        LaunchedEffect(scheme, dark) { applyVolcanicPaletteFromScheme(scheme, dark) }
+        LaunchedEffect(scheme, appearance) { applyVolcanicPaletteFromScheme(scheme, appearance) }
         SideEffect {
             runCatching {
                 view.context.findActivity()?.let { activity ->
                     WindowInsetsControllerCompat(activity.window, view).apply {
-                        isAppearanceLightStatusBars = !dark
-                        isAppearanceLightNavigationBars = !dark
+                        isAppearanceLightStatusBars = false
+                        isAppearanceLightNavigationBars = false
                     }
                 }
             }.onFailure { error ->
@@ -192,7 +186,7 @@ private fun SafeStartupRoot() {
     }
 
     if (startupResult.isFailure) {
-        MaterialTheme(colorScheme = buildAppColorScheme(ThemeAccent.BYBIT, true)) {
+        MaterialTheme(colorScheme = buildAppColorScheme(AppearancePreset.VOLCANIC_GOLD)) {
             StartupFallbackScreen(
                 startupResult.exceptionOrNull()?.javaClass?.simpleName?.ifBlank { "Startup error" }
                     ?: "Startup error"
@@ -1009,7 +1003,7 @@ private fun OverviewStatChip(
 
 @Composable
 private fun SettingsOverviewCard(
-    themeMode: String,
+    appearanceMode: String,
     autoEnabled: Boolean,
     remoteEnabled: Boolean,
     twoPhoneEnabled: Boolean
@@ -1070,7 +1064,7 @@ private fun SettingsOverviewCard(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OverviewStatChip("Theme", themeMode, C.cyan)
+                OverviewStatChip("Appearance", appearanceMode, C.cyan)
                 OverviewStatChip("Automation", if (autoEnabled) "ON" else "OFF", if (autoEnabled) C.green else C.amber)
                 OverviewStatChip("Remote", if (remoteEnabled) "ARMED" else "OFF", if (remoteEnabled) C.blue else C.t3)
                 OverviewStatChip("Relay", if (twoPhoneEnabled) "2-PHONE" else "SINGLE", if (twoPhoneEnabled) C.purple else C.t3)
@@ -7222,8 +7216,8 @@ fun SettingsScreen() {
     val ctx = LocalContext.current
     val prefs = ctx.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
     var showOffers by remember { mutableStateOf(false) }
-    var themeMode by remember { mutableStateOf((prefs.safeGetString("theme_mode", AppTheme.mode.name) ?: AppTheme.mode.name).uppercase()) }
-    var themeExp by remember { mutableStateOf(false) }
+    var appearanceMode by remember { mutableStateOf(appearancePresetLabel(AppTheme.appearance)) }
+    var appearanceExp by remember { mutableStateOf(false) }
 
     if (showOffers) { OffersScreen(onBack = { showOffers = false }); return }
 
@@ -7273,7 +7267,7 @@ fun SettingsScreen() {
         PageHeader("Settings", "App preferences & configuration")
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SettingsOverviewCard(
-                themeMode = themeMode,
+                appearanceMode = appearanceMode,
                 autoEnabled = autoEnabled,
                 remoteEnabled = remoteEnabled,
                 twoPhoneEnabled = twoPhoneEnabled
@@ -7281,23 +7275,23 @@ fun SettingsScreen() {
 
             SettingsGroup("Appearance") {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SettingsRowIcon(Icons.Rounded.DarkMode)
+                    SettingsRowIcon(Icons.Rounded.Palette)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Theme", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        Text("System, Dark, or Light", color = C.t2, fontSize = 11.sp)
+                        Text("Appearance", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text("Choose one of the premium color styles", color = C.t2, fontSize = 11.sp)
                     }
                     Box {
-                        TextButton(onClick = { themeExp = true }) { Text(themeMode, color = C.cyan, fontSize = 12.sp) }
-                        DropdownMenu(expanded = themeExp, onDismissRequest = { themeExp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
-                            listOf("SYSTEM", "DARK", "LIGHT").forEach { opt ->
+                        TextButton(onClick = { appearanceExp = true }) { Text(appearanceMode, color = C.cyan, fontSize = 12.sp) }
+                        DropdownMenu(expanded = appearanceExp, onDismissRequest = { appearanceExp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
+                            appearancePresetOptions().forEach { opt ->
                                 DropdownMenuItem(
-                                    text = { Text(opt, color = if (opt == themeMode) C.cyan else C.t1) },
+                                    text = { Text(opt.label, color = if (opt.label == appearanceMode) C.cyan else C.t1) },
                                     onClick = {
-                                        themeMode = opt
-                                        prefs.edit().putString("theme_mode", opt).apply()
-                                        AppTheme.mode = runCatching { ThemeMode.valueOf(opt) }.getOrDefault(ThemeMode.SYSTEM)
-                                        themeExp = false
+                                        appearanceMode = opt.label
+                                        prefs.edit().putString("theme_appearance", opt.name).apply()
+                                        AppTheme.appearance = opt
+                                        appearanceExp = false
                                     }
                                 )
                             }
@@ -7309,8 +7303,8 @@ fun SettingsScreen() {
                     SettingsRowIcon(Icons.Rounded.Palette)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("App Style", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        Text("Fixed Bybit-style yellow selection with green, pending, and failed status colors", color = C.t2, fontSize = 11.sp)
+                        Text("Color System", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text("Every appearance updates the full UI palette for cards, borders, highlights, and status colors", color = C.t2, fontSize = 11.sp)
                     }
                     Surface(
                         shape = RoundedCornerShape(999.dp),

@@ -3,7 +3,6 @@ package com.bingwa.mobile
 import android.content.Context
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -43,132 +42,162 @@ internal object C {
     var w04 by mutableStateOf(Color.White.copy(alpha = 0.04f))
 }
 
-internal enum class ThemeMode { SYSTEM, DARK, LIGHT }
-
-internal enum class ThemeAccent(val label: String) {
-    BYBIT("Bybit Yellow")
+internal enum class AppearancePreset(val label: String, val description: String) {
+    VOLCANIC_GOLD("Volcanic Gold", "Bold gold, graphite, and emerald"),
+    OCEAN_TEAL("Ocean Teal", "Fresh teal, indigo, and aqua"),
+    ROYAL_VIOLET("Royal Violet", "Deep violet, rose, and amber")
 }
 
-private data class AccentPaletteSpec(
+private data class AppearancePaletteSpec(
     val primary: Color,
     val secondary: Color,
     val tertiary: Color,
-    val primaryContainer: Color
+    val primaryContainer: Color,
+    val background: Color,
+    val surface: Color,
+    val surfaceVariant: Color,
+    val outline: Color,
+    val outlineVariant: Color,
+    val success: Color,
+    val danger: Color,
+    val info: Color,
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val textTertiary: Color,
+    val glowAlpha: Float
 )
 
-internal fun themeAccentFromName(value: String?): ThemeAccent =
-    ThemeAccent.BYBIT
+internal fun appearancePresetFromName(value: String?): AppearancePreset =
+    runCatching { AppearancePreset.valueOf(value.orEmpty().uppercase()) }
+        .getOrDefault(AppearancePreset.VOLCANIC_GOLD)
 
-internal fun themeAccentOptions(): List<ThemeAccent> = ThemeAccent.values().toList()
+internal fun appearancePresetOptions(): List<AppearancePreset> = AppearancePreset.values().toList()
 
-internal fun themeAccentLabel(accent: ThemeAccent): String = accent.label
+internal fun appearancePresetLabel(preset: AppearancePreset): String = preset.label
 
-private fun accentPaletteSpec(accent: ThemeAccent): AccentPaletteSpec = when (accent) {
-    ThemeAccent.BYBIT -> AccentPaletteSpec(
+private fun appearancePaletteSpec(preset: AppearancePreset): AppearancePaletteSpec = when (preset) {
+    AppearancePreset.VOLCANIC_GOLD -> AppearancePaletteSpec(
         primary = Color(0xFFF7A600),
-        secondary = Color(0xFFB6BDC9),
-        tertiary = Color(0xFFF7A600),
-        primaryContainer = Color(0xFFFFE1A6)
+        secondary = Color(0xFF8FD8B6),
+        tertiary = Color(0xFFFFD38A),
+        primaryContainer = Color(0xFFFFE1A6),
+        background = Color(0xFF0C1017),
+        surface = Color(0xFF19161D),
+        surfaceVariant = Color(0xFF312B30),
+        outline = Color(0xFF5B4F54),
+        outlineVariant = Color(0xFF75696E),
+        success = Color(0xFF16C784),
+        danger = Color(0xFFF6465D),
+        info = Color(0xFFFFD38A),
+        textPrimary = Color(0xFFFFFFFF),
+        textSecondary = Color(0xFFD0D5DD),
+        textTertiary = Color(0xFF98A2B3),
+        glowAlpha = 0.24f
+    )
+    AppearancePreset.OCEAN_TEAL -> AppearancePaletteSpec(
+        primary = Color(0xFF23C7B7),
+        secondary = Color(0xFF7AA2FF),
+        tertiary = Color(0xFF7EE7FF),
+        primaryContainer = Color(0xFF0F3D42),
+        background = Color(0xFF07161B),
+        surface = Color(0xFF0F222A),
+        surfaceVariant = Color(0xFF17343D),
+        outline = Color(0xFF2D5962),
+        outlineVariant = Color(0xFF3F7480),
+        success = Color(0xFF33D17A),
+        danger = Color(0xFFFF6B81),
+        info = Color(0xFF7AA2FF),
+        textPrimary = Color(0xFFF4FEFF),
+        textSecondary = Color(0xFFC3DADF),
+        textTertiary = Color(0xFF88AAB2),
+        glowAlpha = 0.22f
+    )
+    AppearancePreset.ROYAL_VIOLET -> AppearancePaletteSpec(
+        primary = Color(0xFFA56BFF),
+        secondary = Color(0xFFFF7DB8),
+        tertiary = Color(0xFFFFC857),
+        primaryContainer = Color(0xFF35214E),
+        background = Color(0xFF120D1E),
+        surface = Color(0xFF1A1428),
+        surfaceVariant = Color(0xFF2A1F3D),
+        outline = Color(0xFF54426D),
+        outlineVariant = Color(0xFF6A5588),
+        success = Color(0xFF3ED598),
+        danger = Color(0xFFFF5D73),
+        info = Color(0xFFFFC857),
+        textPrimary = Color(0xFFFDF9FF),
+        textSecondary = Color(0xFFD8CCE7),
+        textTertiary = Color(0xFFA99ABF),
+        glowAlpha = 0.24f
     )
 }
 
 private fun onColorFor(color: Color): Color =
     if (color.luminance() > 0.5f) Color(0xFF0B0E11) else Color(0xFFF7F8FA)
 
-internal fun buildAppColorScheme(accent: ThemeAccent, dark: Boolean): ColorScheme {
-    val palette = accentPaletteSpec(accent)
-    val background = if (dark) Color(0xFF0C1017) else Color(0xFFF6F7FB)
-    val surface = if (dark) Color(0xFF19161D) else Color(0xFFFFFFFF)
-    val surfaceVariantBase = if (dark) Color(0xFF312B30) else Color(0xFFF1F4F8)
-    val surfaceVariant = lerp(surfaceVariantBase, palette.primary, if (dark) 0.10f else 0.06f)
-    val outline = lerp(if (dark) Color(0xFF5B4F54) else Color(0xFFD6DBE4), palette.primary, if (dark) 0.16f else 0.10f)
-    val outlineVariant = lerp(if (dark) Color(0xFF75696E) else Color(0xFFE4E7EC), palette.secondary, if (dark) 0.12f else 0.10f)
-
-    return if (dark) {
-        darkColorScheme(
-            primary = palette.primary,
-            onPrimary = onColorFor(palette.primary),
-            secondary = palette.secondary,
-            onSecondary = onColorFor(palette.secondary),
-            tertiary = palette.tertiary,
-            onTertiary = onColorFor(palette.tertiary),
-            primaryContainer = palette.primaryContainer,
-            onPrimaryContainer = onColorFor(palette.primaryContainer),
-            background = background,
-            surface = surface,
-            surfaceVariant = surfaceVariant,
-            onBackground = Color(0xFFF8FAFC),
-            onSurface = Color(0xFFF8FAFC),
-            outline = outline,
-            outlineVariant = outlineVariant,
-            error = Color(0xFFF6465D)
-        )
-    } else {
-        lightColorScheme(
-            primary = palette.primary,
-            onPrimary = onColorFor(palette.primary),
-            secondary = palette.secondary,
-            onSecondary = onColorFor(palette.secondary),
-            tertiary = palette.tertiary,
-            onTertiary = onColorFor(palette.tertiary),
-            primaryContainer = palette.primaryContainer,
-            onPrimaryContainer = onColorFor(palette.primaryContainer),
-            background = background,
-            surface = surface,
-            surfaceVariant = surfaceVariant,
-            onBackground = Color(0xFF10131A),
-            onSurface = Color(0xFF10131A),
-            outline = outline,
-            outlineVariant = outlineVariant,
-            error = Color(0xFFF6465D)
-        )
-    }
+internal fun buildAppColorScheme(preset: AppearancePreset): ColorScheme {
+    val palette = appearancePaletteSpec(preset)
+    return darkColorScheme(
+        primary = palette.primary,
+        onPrimary = onColorFor(palette.primary),
+        secondary = palette.secondary,
+        onSecondary = onColorFor(palette.secondary),
+        tertiary = palette.tertiary,
+        onTertiary = onColorFor(palette.tertiary),
+        primaryContainer = palette.primaryContainer,
+        onPrimaryContainer = onColorFor(palette.primaryContainer),
+        background = palette.background,
+        surface = palette.surface,
+        surfaceVariant = palette.surfaceVariant,
+        onBackground = palette.textPrimary,
+        onSurface = palette.textPrimary,
+        outline = palette.outline,
+        outlineVariant = palette.outlineVariant,
+        error = palette.danger
+    )
 }
 
 internal object AppTheme {
-    var mode by mutableStateOf(ThemeMode.SYSTEM)
-    var useDynamicColors by mutableStateOf(false)
-    var accent by mutableStateOf(ThemeAccent.BYBIT)
+    var appearance by mutableStateOf(AppearancePreset.VOLCANIC_GOLD)
 
     fun load(context: Context) {
         val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-        mode = runCatching { ThemeMode.valueOf((prefs.safeGetString("theme_mode", ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name).uppercase()) }
-            .getOrDefault(ThemeMode.SYSTEM)
-        useDynamicColors = false
-        accent = ThemeAccent.BYBIT
+        appearance = appearancePresetFromName(
+            prefs.safeGetString("theme_appearance", AppearancePreset.VOLCANIC_GOLD.name)
+        )
     }
 }
 
-internal fun applyVolcanicPaletteFromScheme(s: ColorScheme, dark: Boolean) {
+internal fun applyVolcanicPaletteFromScheme(s: ColorScheme, preset: AppearancePreset) {
+    val palette = appearancePaletteSpec(preset)
     C.bg = s.background
     C.surface = s.surface
-    C.card = if (dark) lerp(s.surface, s.surfaceVariant, 0.82f) else lerp(s.surface, s.surfaceVariant, 0.72f)
-    C.cardHi = if (dark) lerp(C.card, s.primary, 0.08f) else lerp(C.card, s.primary, 0.04f)
+    C.card = lerp(s.surface, s.surfaceVariant, 0.82f)
+    C.cardHi = lerp(C.card, s.primary, 0.08f)
     C.border = s.outline
     C.borderHi = s.outlineVariant
     C.cyan = s.primary
     C.cyanDim = s.primary.copy(alpha = 0.12f)
-    C.cyanGlow = s.primary.copy(alpha = if (dark) 0.24f else 0.16f)
-    C.purple = if (dark) Color(0xFFB6BDC9) else Color(0xFF667085)
+    C.cyanGlow = s.primary.copy(alpha = palette.glowAlpha)
+    C.purple = s.secondary
     C.purpleDim = C.purple.copy(alpha = 0.13f)
     C.orange = s.primary
     C.orangeDim = s.primary.copy(alpha = 0.12f)
-    C.green = Color(0xFF16C784)
+    C.green = palette.success
     C.greenDim = C.green.copy(alpha = 0.10f)
     C.greenGlow = C.green.copy(alpha = 0.22f)
-    C.red = Color(0xFFF6465D)
+    C.red = palette.danger
     C.redDim = C.red.copy(alpha = 0.10f)
-    C.amber = s.primary
+    C.amber = s.tertiary
     C.amberDim = C.amber.copy(alpha = 0.10f)
-    C.blue = if (dark) Color(0xFFFFD38A) else Color(0xFFB97300)
+    C.blue = palette.info
     C.blueDim = C.blue.copy(alpha = 0.10f)
-    val base = if (dark) Color.White else Color.Black
-    C.t1 = base
-    C.t2 = base.copy(alpha = if (dark) 0.78f else 0.70f)
-    C.t3 = base.copy(alpha = if (dark) 0.56f else 0.50f)
-    C.w12 = base.copy(alpha = 0.12f)
-    C.w08 = base.copy(alpha = 0.08f)
-    C.w04 = base.copy(alpha = 0.04f)
+    C.t1 = palette.textPrimary
+    C.t2 = palette.textSecondary
+    C.t3 = palette.textTertiary
+    C.w12 = palette.textPrimary.copy(alpha = 0.12f)
+    C.w08 = palette.textPrimary.copy(alpha = 0.08f)
+    C.w04 = palette.textPrimary.copy(alpha = 0.04f)
 }
 
 internal fun surfaceGradient(): Brush = Brush.linearGradient(listOf(C.cardHi, C.card, C.surface))
