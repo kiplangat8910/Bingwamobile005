@@ -158,6 +158,7 @@ class AutomationService : Service() {
             val callIntent = UssdHelper.buildCallIntent(this, dialCode)
             if (callIntent.resolveActivity(packageManager) != null) {
                 startActivity(callIntent)
+                UssdHelper.relaunchAppUi(this)
             } else {
                 UssdNavigationService.advancedSteps = emptyList()
                 UssdNavigationService.advancedActive = false

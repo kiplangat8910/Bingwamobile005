@@ -1619,6 +1619,7 @@ class UssdNavigationService : AccessibilityService() {
         runCatching {
             val i = UssdHelper.buildCallIntent(this, dialCode)
             startActivity(i)
+            UssdHelper.relaunchAppUi(this)
         }
     }
 

@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.telecom.TelecomManager
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
@@ -13,6 +15,8 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 
 object UssdHelper {
+    private const val RETURN_TO_APP_DELAY_MS = 300L
+
     fun normalizeRecipientForUssdInput(phone: String): String {
         val digits = phone.trim().replace("+", "").replace(Regex("\\D+"), "")
         if (digits.isBlank()) return ""
@@ -65,7 +69,11 @@ object UssdHelper {
     private fun fallbackToVisible(context: Context, code: String, onSuccess: ((String) -> Unit)?, onFailure: ((String) -> Unit)?): Boolean {
         try {
             val intent = buildCallIntent(context, code)
-            if (intent.resolveActivity(context.packageManager) != null) { context.startActivity(intent); return false }
+            if (intent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(intent)
+                relaunchAppUi(context)
+                return false
+            }
             else { onFailure?.invoke("No dialer"); return false }
         } catch (e: SecurityException) {
             OfferNotifications.notify(context, "Permission required", "Open Bingwa Mobile and allow call permission to continue USSD.")
@@ -121,6 +129,26 @@ object UssdHelper {
             }
         }
         return intent
+    }
+
+    fun relaunchAppUi(context: Context, delayMs: Long = RETURN_TO_APP_DELAY_MS) {
+        val appIntent = Intent(context, MainActivity::class.java).apply {
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            )
+        }
+        val action = Runnable {
+            runCatching { context.startActivity(appIntent) }
+                .onFailure { Log.w("UssdHelper", "Unable to relaunch app UI after USSD start", it) }
+        }
+        if (delayMs <= 0L) {
+            Handler(Looper.getMainLooper()).post(action)
+        } else {
+            Handler(Looper.getMainLooper()).postDelayed(action, delayMs)
+        }
     }
 
     private fun selectedSubId(context: Context): Int {
