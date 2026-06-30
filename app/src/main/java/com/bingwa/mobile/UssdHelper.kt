@@ -15,7 +15,9 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 
 object UssdHelper {
-    private val RETURN_TO_APP_DELAYS_MS = longArrayOf(0L, 180L, 420L, 900L)
+    // Some OEM dialers keep reclaiming focus for a short time after the initial call launch.
+    // A few later retries help restore the app UI on slower or customized Android builds.
+    private val RETURN_TO_APP_DELAYS_MS = longArrayOf(0L, 180L, 420L, 900L, 1_600L, 2_600L)
 
     fun normalizeRecipientForUssdInput(phone: String): String {
         val digits = phone.trim().replace("+", "").replace(Regex("\\D+"), "")

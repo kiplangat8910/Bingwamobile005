@@ -11,17 +11,28 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.Path
+import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.TypedValue
 import android.util.Log
+import android.view.Gravity
+import android.view.View
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
 import androidx.core.app.NotificationCompat
 class UssdNavigationService : AccessibilityService() {
 
@@ -188,7 +199,11 @@ class UssdNavigationService : AccessibilityService() {
             signatureAutoAdjusted = false
         }
 
-        fun refreshRunningOverlay() = Unit
+        fun refreshRunningOverlay() {
+            activeInstance?.let { instance ->
+                instance.handler.post { instance.updateRunningOverlay() }
+            }
+        }
     }
 
     private val handler            = Handler(Looper.getMainLooper())
@@ -219,6 +234,10 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingStepAdvanceSinceElapsed: Long = 0L
     private var pendingStepAdvanceTimeoutRunnable: Runnable? = null
     private var waitingForRootSinceElapsed: Long = 0L
+    private var windowManager: WindowManager? = null
+    private var runningOverlayView: View? = null
+    private var runningOverlayStatusText: TextView? = null
+    private var runningOverlayDetailText: TextView? = null
     private enum class PendingPhase { NONE, WAIT_VERIFY, WAIT_SEND }
 
     private val errorKeywords = listOf(
@@ -231,12 +250,14 @@ class UssdNavigationService : AccessibilityService() {
     override fun onCreate() {
         super.onCreate()
         activeInstance = this
+        windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
         createNotificationChannel()
         startForegroundCompat(
             notificationId = NOTIFICATION_ID,
             notification = buildNotification(),
             foregroundServiceType = ForegroundServiceTypes.dataSync
         )
+        updateRunningOverlay()
     }
 
     override fun onServiceConnected() {
@@ -276,9 +297,58 @@ class UssdNavigationService : AccessibilityService() {
         else stopForeground(true)
     }
 
-    private fun updateRunningOverlay() = Unit
+    private fun updateRunningOverlay() {
+        if (!shouldShowRunningOverlay()) {
+            hideRunningOverlay()
+            return
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return
+        val wm = windowManager ?: return
+        val overlay = runningOverlayView ?: run {
+            val view = buildRunningOverlayView()
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                y = dp(18)
+            }
+            val added = runCatching {
+                wm.addView(view, params)
+                true
+            }.getOrElse {
+                Log.w(TAG, "Unable to show running overlay", it)
+                false
+            }
+            if (!added) {
+                clearRunningOverlayReferences()
+                return
+            }
+            view
+        }
+        runningOverlayStatusText?.text = buildRunningOverlayStatusText()
+        runningOverlayDetailText?.text = buildRunningOverlayDetailText()
+        overlay.visibility = View.VISIBLE
+    }
 
-    private fun hideRunningOverlay() = Unit
+    private fun hideRunningOverlay() {
+        val wm = windowManager ?: return
+        val overlay = runningOverlayView ?: return
+        runCatching { wm.removeView(overlay) }
+            .onFailure { Log.w(TAG, "Unable to remove running overlay", it) }
+        clearRunningOverlayReferences()
+    }
+
+    private fun clearRunningOverlayReferences() {
+        runningOverlayView = null
+        runningOverlayStatusText = null
+        runningOverlayDetailText = null
+    }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
@@ -335,7 +405,10 @@ class UssdNavigationService : AccessibilityService() {
             lastRelevantEventElapsed = SystemClock.elapsedRealtime()
 
             if (advancedActive && advancedSteps.isNotEmpty()) {
-                hasSeenAdvancedPopup = true
+                if (!hasSeenAdvancedPopup) {
+                    hasSeenAdvancedPopup = true
+                    updateRunningOverlay()
+                }
                 cancelStepTimeout()
                 lastFinalResponse = dialogText
                 capturePopupTranscript(dialogText)
@@ -1395,6 +1468,7 @@ class UssdNavigationService : AccessibilityService() {
         clearPendingAdvance()
         clearPendingStepAdvance()
         clearInputWriteMarker()
+        updateRunningOverlay()
         startStepTimeout()
     }
 
@@ -1479,6 +1553,7 @@ class UssdNavigationService : AccessibilityService() {
         clearPendingStepAdvance()
         pendingProcessToken = 0L
         clearInputWriteMarker()
+        updateRunningOverlay()
         redialAdvancedIfNeeded()
         startStepTimeout()
     }
@@ -1675,6 +1750,103 @@ class UssdNavigationService : AccessibilityService() {
         balanceCallback     = null
         onDispatchComplete  = null
     }
+
+    private fun shouldShowRunningOverlay(): Boolean =
+        advancedInProgress || (advancedActive && advancedSteps.isNotEmpty())
+
+    private fun buildRunningOverlayView(): View {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val paddingH = dp(14)
+            val paddingV = dp(10)
+            setPadding(paddingH, paddingV, paddingH, paddingV)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(16).toFloat()
+                setColor(Color.parseColor("#E61A1A1A"))
+                setStroke(dp(1), Color.parseColor("#3329B6F6"))
+            }
+            elevation = dp(8).toFloat()
+        }
+
+        val status = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            setTypeface(typeface, Typeface.BOLD)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+        }
+        val detail = TextView(this).apply {
+            setTextColor(Color.parseColor("#FFD7E3F4"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setLineSpacing(0f, 1.05f)
+        }
+        val progress = ProgressBar(this).apply {
+            isIndeterminate = true
+            alpha = 0.9f
+        }
+
+        container.addView(
+            status,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+        container.addView(
+            detail,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(4) }
+        )
+        container.addView(
+            progress,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.END
+                topMargin = dp(6)
+            }
+        )
+
+        runningOverlayView = container
+        runningOverlayStatusText = status
+        runningOverlayDetailText = detail
+        return container
+    }
+
+    private fun buildRunningOverlayStatusText(): String = when {
+        retryCount > 0 -> "Bingwa Mobile USSD retrying"
+        !hasSeenAdvancedPopup -> "Bingwa Mobile opening USSD"
+        currentStep >= advancedSteps.size -> "Bingwa Mobile finishing USSD"
+        else -> "Bingwa Mobile USSD running"
+    }
+
+    private fun buildRunningOverlayDetailText(): String {
+        val detailParts = mutableListOf<String>()
+        advancedOfferName.takeIf { it.isNotBlank() }?.let { detailParts += it }
+        when {
+            advancedSteps.isEmpty() -> detailParts += "Waiting for the network menu"
+            currentStep >= advancedSteps.size -> detailParts += "Finalizing network response"
+            advancedSteps.getOrNull(currentStep) == "INPUT_PHONE" -> {
+                val progress = "Step ${currentStep + 1} of ${advancedSteps.size}"
+                detailParts += "$progress, entering phone number"
+            }
+            else -> detailParts += "Step ${currentStep + 1} of ${advancedSteps.size}"
+        }
+        if (retryCount > 0) {
+            detailParts += "Retry $retryCount of $MAX_RETRIES"
+        }
+        return detailParts.joinToString("  |  ")
+            .ifBlank { "USSD session is still active while Bingwa stays visible here" }
+    }
+
+    private fun dp(value: Int): Int =
+        TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            value.toFloat(),
+            resources.displayMetrics
+        ).toInt()
 
     private fun clearPendingStepAdvance() {
         pendingStepAdvanceFromKey = ""
