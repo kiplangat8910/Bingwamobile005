@@ -138,6 +138,12 @@ class UssdNavigationService : AccessibilityService() {
             "enter", "input", "reply", "phone", "number", "amount", "pin", "account", "mobile", "recipient",
             "text", "answer", "value", "type here", "write here"
         )
+        private val PHONE_INPUT_HINTS = listOf(
+            "phone", "phone number", "number", "mobile", "mobile number", "recipient", "recipient number",
+            "customer", "customer number", "subscriber", "subscriber number", "beneficiary",
+            "beneficiary number", "msisdn", "tel", "telephone", "contact", "line number",
+            "enter phone", "enter number", "enter mobile", "enter recipient", "enter customer"
+        )
         private val DISMISS_BUTTON_LABELS = listOf(
             "ok", "cancel", "close", "dismiss", "back", "no", "exit", "annuler", "fermer",
             "non", "إلغاء", "خروج"
@@ -506,9 +512,10 @@ class UssdNavigationService : AccessibilityService() {
             val valueToEnter = resolved.first
             val selectedMenuLabel = resolved.second
 
-            val inputField = findEditableField(root)
+            val inputField = findEditableFieldForStep(root, step, dialogText)
             try {
-                if (step == "INPUT_PHONE" && inputField == null && !dialogSuggestsTextInput(lower)) {
+                val dialogAllowsPhoneInput = step == "INPUT_PHONE" && dialogSuggestsPhoneInput(lower)
+                if (step == "INPUT_PHONE" && inputField == null && !dialogAllowsPhoneInput) {
                     // Wait for the correct prompt/dialog instead of blindly injecting the phone number.
                     isProcessing = false
                     pendingProcessToken = SystemClock.elapsedRealtime()
@@ -526,8 +533,8 @@ class UssdNavigationService : AccessibilityService() {
                     }
                 }
                 val shouldPreferTextInput = shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
-                    (selectedMenuLabel == null && dialogSuggestsTextInput(lower))
-                if (inputField == null && shouldPreferTextInput && !dialogSuggestsTextInput(lower)) {
+                    (selectedMenuLabel == null && (dialogSuggestsTextInput(lower) || dialogAllowsPhoneInput))
+                if (inputField == null && shouldPreferTextInput && !dialogSuggestsTextInput(lower) && !dialogAllowsPhoneInput) {
                     val hasEditableField = captureTreeSnapshot(root).hasEditableField
                     if (!hasEditableField) {
                         isProcessing = false
@@ -1744,6 +1751,19 @@ class UssdNavigationService : AccessibilityService() {
             best
         }
 
+    private fun findEditableFieldForStep(
+        node: AccessibilityNodeInfo,
+        step: String,
+        dialogText: String
+    ): AccessibilityNodeInfo? =
+        mutableListOf<AccessibilityNodeInfo>().let { candidates ->
+            collectTextEntryCandidates(node, candidates)
+            val best = candidates.maxByOrNull { scoreTextEntryCandidateForStep(it, step, dialogText) }
+                ?.let { AccessibilityNodeInfo.obtain(it) }
+            candidates.forEach { it.recycle() }
+            best
+        }
+
     private fun collectTextEntryCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>) {
         try {
             if (isTextEntryNode(node) || isLooseInputCandidate(node)) into += AccessibilityNodeInfo.obtain(node)
@@ -1785,6 +1805,31 @@ class UssdNavigationService : AccessibilityService() {
             score += bounds.bottom / 24
             score += bounds.right / 36
         }
+        return score
+    }
+
+    private fun scoreTextEntryCandidateForStep(
+        node: AccessibilityNodeInfo,
+        step: String,
+        dialogText: String
+    ): Int {
+        var score = scoreTextEntryCandidate(node)
+        if (step != "INPUT_PHONE") return score
+
+        val lowerDialog = dialogText.lowercase()
+        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
+        } else {
+            ""
+        }
+        val combined = listOf(viewId, label, desc, hint).joinToString(" ")
+        if (PHONE_INPUT_HINTS.any { combined.contains(it) }) score += 260
+        if (combined.contains("phone") || combined.contains("mobile") || combined.contains("msisdn")) score += 180
+        if (combined.contains("recipient") || combined.contains("customer") || combined.contains("subscriber")) score += 140
+        if (dialogSuggestsPhoneInput(lowerDialog) && INPUT_VIEW_ID_HINTS.any { viewId.contains(it) }) score += 90
         return score
     }
 
@@ -2187,6 +2232,11 @@ class UssdNavigationService : AccessibilityService() {
             allTextLower.contains("number") ||
             allTextLower.contains("code")
 
+    private fun dialogSuggestsPhoneInput(allTextLower: String): Boolean =
+        PHONE_INPUT_HINTS.any { allTextLower.contains(it) } ||
+            (allTextLower.contains("254") && (allTextLower.contains("phone") || allTextLower.contains("mobile"))) ||
+            (allTextLower.contains("07") && (allTextLower.contains("phone") || allTextLower.contains("number")))
+
     private fun isTextEntryNode(node: AccessibilityNodeInfo): Boolean {
         val className = node.className?.toString().orEmpty()
         val label = normalizeActionLabel(node.text?.toString())
@@ -2277,6 +2327,12 @@ class UssdNavigationService : AccessibilityService() {
             .replace(MULTI_SPACE_REGEX, "")
             .trim()
 
+    private fun normalizePhoneComparable(value: String?): String {
+        val digits = value.orEmpty().replace(Regex("\\D+"), "")
+        if (digits.length < 9) return ""
+        return UssdHelper.normalizeRecipientForUssdInput(digits).replace(Regex("\\D+"), "")
+    }
+
     private fun normalizeCollapsedText(value: String?): String =
         value.orEmpty()
             .replace(MULTI_SPACE_REGEX, " ")
@@ -2286,7 +2342,16 @@ class UssdNavigationService : AccessibilityService() {
         val actual = normalizeInputValue(actualValue)
         val expected = normalizeInputValue(expectedValue)
         if (actual.isBlank() || expected.isBlank()) return false
-        return actual == expected || actual.endsWith(expected)
+        if (actual == expected || actual.endsWith(expected) || expected.endsWith(actual)) return true
+
+        val actualPhone = normalizePhoneComparable(actualValue)
+        val expectedPhone = normalizePhoneComparable(expectedValue)
+        if (actualPhone.isNotBlank() && expectedPhone.isNotBlank()) {
+            return actualPhone == expectedPhone ||
+                actualPhone.endsWith(expectedPhone) ||
+                expectedPhone.endsWith(actualPhone)
+        }
+        return false
     }
 
     private fun isLikelyPromptText(value: String): Boolean {
