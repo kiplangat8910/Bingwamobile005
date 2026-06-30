@@ -73,6 +73,9 @@ class UssdNavigationService : AccessibilityService() {
         private const val TAP_GESTURE_DURATION_MS = 40L
         private const val REDIAL_COOLDOWN_MS     = 700L
         private const val PENDING_ADVANCE_TIMEOUT_MS = 4_000L
+        // Some devices emit extra events on the same USSD dialog after we click "Send".
+        // If we process those events immediately, we can inject the NEXT step into the PREVIOUS screen.
+        private const val STEP_TRANSITION_GUARD_MS = 650L
         private const val CHANNEL_ID             = "bingwa_ussd"
         private const val NOTIFICATION_ID        = 2001
         private val MULTI_SPACE_REGEX = Regex("\\s+")
@@ -95,7 +98,8 @@ class UssdNavigationService : AccessibilityService() {
         )
         private val USSD_PACKAGE_HINTS = listOf(
             "phone", "dialer", "telecom", "incall", "callui", "telephony", "ussd",
-            "miui", "coloros", "heytap", "oplus", "honor", "transsion", "vivo", "realme"
+            "miui", "coloros", "heytap", "oplus", "honor", "transsion", "vivo", "realme",
+            "samsung", "huawei", "infinix", "tecno", "itel", "mediatek", "sprd"
         )
         private val BLOCKED_PACKAGES = setOf(
             "com.bingwa.mobile", "com.android.systemui", "com.android.launcher",
@@ -195,6 +199,8 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingPhase: PendingPhase = PendingPhase.NONE
     private var pendingSinceElapsed: Long = 0L
     private var pendingAttempts: Int = 0
+    private var lastStepActionKey: String = ""
+    private var lastStepActionElapsed: Long = 0L
 
     private enum class PendingPhase { NONE, WAIT_VERIFY, WAIT_SEND }
 
@@ -310,6 +316,9 @@ class UssdNavigationService : AccessibilityService() {
                 lastFinalResponse = dialogText
                 capturePopupTranscript(dialogText)
                 if (signatureLearningMode) captureLearningDialog(root, dialogText)
+
+                // Prevent "next-step" injections on the same dialog right after we click Send/OK.
+                if (shouldWaitForStepTransition(dialogText, windowChanged)) return
 
                 if (errorKeywords.any { lower.contains(it) }) {
                     if (signatureLearningMode && currentStep >= advancedSteps.size) {
@@ -429,6 +438,12 @@ class UssdNavigationService : AccessibilityService() {
             val freshDialogText = normalizeCollapsedText(extractAllText(root))
             val dialogText = freshDialogText.ifBlank { lastFinalResponse }
             val lower = dialogText.lowercase()
+            if (shouldWaitForStepTransition(dialogText, windowChanged = false)) {
+                isProcessing = false
+                pendingProcessToken = SystemClock.elapsedRealtime()
+                scheduleProcessStep(dialogChanged = false)
+                return
+            }
             if (dialogText.isNotBlank()) {
                 lastFinalResponse = dialogText
             }
@@ -462,6 +477,23 @@ class UssdNavigationService : AccessibilityService() {
 
             val inputField = findEditableField(root)
             try {
+                if (step == "INPUT_PHONE" && inputField == null && !dialogSuggestsTextInput(lower)) {
+                    // Wait for the correct prompt/dialog instead of blindly injecting the phone number.
+                    isProcessing = false
+                    pendingProcessToken = SystemClock.elapsedRealtime()
+                    scheduleProcessStep(dialogChanged = false)
+                    return
+                }
+                if (step.all(Char::isDigit) && menuSignature != null && menuSignature.options.isNotEmpty()) {
+                    // If the current screen is a menu, ensure our selection exists on THIS menu.
+                    // This prevents "next step" inputs from being applied to the previous screen.
+                    if (!menuSignature.options.containsKey(valueToEnter)) {
+                        isProcessing = false
+                        pendingProcessToken = SystemClock.elapsedRealtime()
+                        scheduleProcessStep(dialogChanged = false)
+                        return
+                    }
+                }
                 val shouldPreferTextInput = shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
                     (selectedMenuLabel == null && dialogSuggestsTextInput(lower))
                 if (inputField != null || shouldPreferTextInput) {
@@ -479,6 +511,7 @@ class UssdNavigationService : AccessibilityService() {
                         inlineVerified &&
                         tryImmediateVerifiedSend(root, inputField, valueToEnter)
                     ) {
+                        markStepAction(dialogText)
                         advanceStep()
                         return
                     }
@@ -507,6 +540,7 @@ class UssdNavigationService : AccessibilityService() {
             if (menuBtn != null) {
                 val clicked = try { performClick(menuBtn) } finally { menuBtn.recycle() }
                 if (clicked) {
+                    markStepAction(dialogText)
                     advanceStep()
                     return
                 }
@@ -857,6 +891,25 @@ class UssdNavigationService : AccessibilityService() {
             .replace(NON_ALPHANUMERIC_REGEX, " ")
             .replace(MULTI_SPACE_REGEX, " ")
             .trim()
+
+    private fun markStepAction(dialogText: String) {
+        lastStepActionKey = normalizeMenuText(dialogText)
+        lastStepActionElapsed = SystemClock.elapsedRealtime()
+    }
+
+    private fun shouldWaitForStepTransition(dialogText: String, windowChanged: Boolean): Boolean {
+        val key = normalizeMenuText(dialogText)
+        if (lastStepActionKey.isBlank() || key.isBlank()) return false
+        if (key != lastStepActionKey) {
+            // Screen changed; clear the guard and proceed normally.
+            lastStepActionKey = ""
+            lastStepActionElapsed = 0L
+            return false
+        }
+        if (windowChanged) return false
+        val elapsed = SystemClock.elapsedRealtime() - lastStepActionElapsed
+        return elapsed in 0..STEP_TRANSITION_GUARD_MS
+    }
 
     private fun parseMenuSignature(snapshot: UssdTreeSnapshot): ParsedMenuSignature? {
         val cacheKey = snapshot.normalizedDialogText
@@ -1221,9 +1274,13 @@ class UssdNavigationService : AccessibilityService() {
             if (sendBtn != null) {
                 val clicked = performClick(sendBtn)
                 sendBtn.recycle(); sendBtn = null
-                if (clicked) advanceStep()
+                if (clicked) {
+                    markStepAction(extractAllText(root))
+                    advanceStep()
+                }
                 else {
                     if (fieldText != null && triggerInputSubmit(root, expectedValue, fieldRef)) {
+                        markStepAction(extractAllText(root))
                         advanceStep()
                         return
                     }
@@ -1234,6 +1291,7 @@ class UssdNavigationService : AccessibilityService() {
                 }
             } else {
                 if ((fieldText != null || skipFieldVerification) && triggerInputSubmit(root, expectedValue, fieldRef)) {
+                    markStepAction(extractAllText(root))
                     advanceStep()
                     return
                 }
@@ -1314,6 +1372,8 @@ class UssdNavigationService : AccessibilityService() {
         hasSeenAdvancedPopup = false
         lastDialogText = ""
         lastScreenSignatureKey = ""
+        lastStepActionKey = ""
+        lastStepActionElapsed = 0L
         clearPendingAdvance()
         pendingProcessToken = 0L
         clearInputWriteMarker()
@@ -1408,6 +1468,8 @@ class UssdNavigationService : AccessibilityService() {
         lastMenuSignatureKey = ""
         lastMenuSignature = null
         lastScreenSignatureKey = ""
+        lastStepActionKey = ""
+        lastStepActionElapsed = 0L
         clearPendingAdvance()
         clearInputWriteMarker()
         onDispatchComplete  = null
@@ -1487,6 +1549,7 @@ class UssdNavigationService : AccessibilityService() {
                 val sent = tryImmediateVerifiedSend(root, field = null, expectedValue = expected)
                 if (sent) {
                     clearPendingAdvance()
+                    markStepAction(extractAllText(root))
                     advanceStep()
                 } else {
                     // Let the next event re-try, but avoid expensive work here.
