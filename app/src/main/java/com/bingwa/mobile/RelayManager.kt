@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.wifi.WifiManager
+import android.util.Base64
 import android.util.Log
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
@@ -27,7 +28,6 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.util.Base64
 
 object RelayManager {
     private const val TAG = "RelayManager"
@@ -158,10 +158,15 @@ object RelayManager {
     }
 
     fun encodeRelayText(value: String): String =
-        Base64.getUrlEncoder().withoutPadding().encodeToString(value.toByteArray(Charsets.UTF_8))
+        Base64.encodeToString(
+            value.toByteArray(Charsets.UTF_8),
+            Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+        )
 
     fun decodeRelayText(value: String): String? =
-        runCatching { String(Base64.getUrlDecoder().decode(value), Charsets.UTF_8) }.getOrNull()
+        runCatching {
+            String(Base64.decode(value, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP), Charsets.UTF_8)
+        }.getOrNull()
 
     fun startRelayHotspotService(context: Context): Boolean =
         ServiceLauncher.startForegroundServiceSafely(

@@ -220,6 +220,7 @@ class UssdNavigationService : AccessibilityService() {
         serviceInfo = AccessibilityServiceInfo().apply {
             eventTypes  = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                AccessibilityEvent.TYPE_WINDOWS_CHANGED or
                 AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
                 AccessibilityEvent.TYPE_VIEW_FOCUSED or
                 AccessibilityEvent.TYPE_VIEW_CLICKED or
@@ -238,9 +239,15 @@ class UssdNavigationService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        stopForeground(true)
+        stopForegroundCompat()
         cleanupAdvanced()
         clearCallbacks()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun stopForegroundCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+        else stopForeground(true)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -248,6 +255,7 @@ class UssdNavigationService : AccessibilityService() {
         if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null) return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            event.eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_VIEW_FOCUSED &&
             event.eventType != AccessibilityEvent.TYPE_VIEW_CLICKED &&
@@ -529,9 +537,10 @@ class UssdNavigationService : AccessibilityService() {
             if (pkg !in BLOCKED_PACKAGES && (isPotentialUssdPackage(pkg) || shouldAllowAndroidDialogRoot(primary, pkg))) {
                 return primary
             }
+            primary.recycle()
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            val visibleWindows = try { windows } catch (_: Exception) { return primary }
+            val visibleWindows = try { windows } catch (_: Exception) { return null }
             for (window in visibleWindows) {
                 if (window.type == AccessibilityWindowInfo.TYPE_SYSTEM ||
                     window.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY
@@ -543,13 +552,12 @@ class UssdNavigationService : AccessibilityService() {
                     continue
                 }
                 if (isPotentialUssdPackage(pkg) || shouldAllowAndroidDialogRoot(root, pkg)) {
-                    primary?.recycle()
                     return root
                 }
                 root.recycle()
             }
         }
-        return primary
+        return null
     }
 
     private fun shouldAllowAndroidDialogRoot(root: AccessibilityNodeInfo, pkg: String): Boolean {
@@ -2396,9 +2404,11 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun buildNotification(): Notification {
+        val piFlags = PendingIntent.FLAG_UPDATE_CURRENT or
+            (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
         val pi = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            piFlags
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Bingwa Mobile")

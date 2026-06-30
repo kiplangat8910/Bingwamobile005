@@ -1,13 +1,16 @@
 package com.bingwa.mobile
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.telecom.TelecomManager
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 
 object UssdHelper {
     fun normalizeRecipientForUssdInput(phone: String): String {
@@ -64,13 +67,24 @@ object UssdHelper {
             val intent = buildCallIntent(context, code)
             if (intent.resolveActivity(context.packageManager) != null) { context.startActivity(intent); return false }
             else { onFailure?.invoke("No dialer"); return false }
-        } catch (e: Exception) { onFailure?.invoke(e.message ?: "Error"); return false }
+        } catch (e: SecurityException) {
+            OfferNotifications.notify(context, "Permission required", "Open Bingwa Mobile and allow call permission to continue USSD.")
+            onFailure?.invoke(e.message ?: "SecurityException")
+            return false
+        } catch (e: Exception) {
+            OfferNotifications.notify(context, "Open app to continue", "Tap to complete USSD request.")
+            onFailure?.invoke(e.message ?: "Error")
+            return false
+        }
     }
 
     fun buildCallIntent(context: Context, ussdCode: String): Intent {
         val code = normalizeUssdCode(ussdCode)
         val uri = Uri.parse("tel:" + Uri.encode(code))
-        val intent = Intent(Intent.ACTION_CALL).apply { data = uri; addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+        val canCall = ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) ==
+            PackageManager.PERMISSION_GRANTED
+        val action = if (canCall) Intent.ACTION_CALL else Intent.ACTION_DIAL
+        val intent = Intent(action).apply { data = uri; addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
         val subId = selectedSubId(context)
         if (subId != -1) {
             intent.putExtra("android.telephony.extra.SUBSCRIPTION_ID", subId)
@@ -110,7 +124,12 @@ object UssdHelper {
     }
 
     private fun selectedSubId(context: Context): Int {
-        return context.getSharedPreferences("app_settings", Context.MODE_PRIVATE).safeGetInt("selected_sim_id", -1)
+        val raw = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE).safeGetInt("selected_sim_id", -1)
+        if (raw == -1) return -1
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return -1
+        val sm = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager ?: return -1
+        val active = runCatching { sm.activeSubscriptionInfoList }.getOrNull().orEmpty()
+        return if (active.any { it.subscriptionId == raw }) raw else -1
     }
 
     private fun selectedTelephonyManager(context: Context): TelephonyManager? {
