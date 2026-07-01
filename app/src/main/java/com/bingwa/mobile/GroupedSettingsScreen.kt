@@ -62,7 +62,7 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowDropDown
-import androidx.compose.material.icons.rounded.AccessibilityNew
+import androidx.compose.material.icons.rounded.Accessibility
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Autorenew
@@ -77,7 +77,6 @@ import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Phone
@@ -86,12 +85,10 @@ import androidx.compose.material.icons.rounded.Router
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SimCard
-import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.Sms
-import androidx.compose.material.icons.rounded.SyncAlt
 import androidx.compose.material.icons.rounded.Tag
 import androidx.compose.material.icons.rounded.Warning
-import androidx.compose.material.icons.rounded.WifiTethering
+import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -259,15 +256,15 @@ private fun SettingsHome(
             SettingsGroup("Execution Setup", accent = C.amber) {
                 LinkRow(Icons.Rounded.SimCard, "SIM Settings", "Choose SIMs for USSD, customer notifications, and admin replies", C.amber, onOpenSim)
                 GroupDivider(C.amber)
-                LinkRow(Icons.Rounded.SyncAlt, "Relay (Two‑Phone Mode)", "Configure SMS or hotspot relay between two phones", C.amber, onOpenRelay)
+                LinkRow(Icons.Rounded.Devices, "Relay (Two‑Phone Mode)", "Configure SMS or hotspot relay between two phones", C.amber, onOpenRelay)
                 GroupDivider(C.amber)
                 LinkRow(Icons.Rounded.PhoneAndroid, "Remote Control", "Manage admin phone, prefix, PIN, and remote commands", C.amber, onOpenRemote)
             }
 
             SettingsGroup("Automation & Alerts", accent = C.amber) {
-                LinkRow(Icons.Rounded.SmartToy, "Automation Settings", "Control automation, retries, and auto-save behavior", C.amber, onOpenAutomation)
+                LinkRow(Icons.Rounded.Autorenew, "Automation Settings", "Control automation, retries, and auto-save behavior", C.amber, onOpenAutomation)
                 GroupDivider(C.amber)
-                LinkRow(Icons.Rounded.NotificationsActive, "Customer Notifications", "Edit success, pending, and failure templates", C.amber, onOpenNotifications)
+                LinkRow(Icons.Rounded.Sms, "Customer Notifications", "Edit success, pending, and failure templates", C.amber, onOpenNotifications)
                 GroupDivider(C.amber)
                 LinkRow(Icons.Rounded.Warning, "Admin Alerts", "Low airtime, low tokens, and low battery alerts", C.amber, onOpenAlerts)
             }
@@ -277,7 +274,7 @@ private fun SettingsHome(
                 GroupDivider(C.amber)
                 LinkRow(Icons.Rounded.Info, "Setup Doctor", "Check permissions, compatibility, battery rules, and alarms", C.amber, onOpenDiagnostics)
                 GroupDivider(C.amber)
-                LinkRow(Icons.Rounded.AccessibilityNew, "Accessibility", "Open your phone Accessibility settings", C.amber) {
+                LinkRow(Icons.Rounded.Accessibility, "Accessibility", "Open your phone Accessibility settings", C.amber) {
                     runCatching {
                         ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
@@ -494,7 +491,7 @@ private fun RelaySettings(onBack: () -> Unit) {
         SettingsTopBar("Relay (Two‑Phone Mode)", "SMS or hotspot relay between phones", onBack)
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SettingsGroup("Two‑Phone Mode") {
-                ToggleRow(Icons.Rounded.SyncAlt, "Enable Two‑Phone Mode", "Forward selected offers to the Relay phone", twoPhoneEnabled) {
+                ToggleRow(Icons.Rounded.Devices, "Enable Two‑Phone Mode", "Forward selected offers to the Relay phone", twoPhoneEnabled) {
                     twoPhoneEnabled = it
                     prefs.edit().putBoolean("two_phone_enabled", it).apply()
                     if (!it) RelayManager.stopRelayHotspotService(ctx)
@@ -575,7 +572,7 @@ private fun RelaySettings(onBack: () -> Unit) {
                                 GroupDivider()
                                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        SettingsRowIcon(Icons.Rounded.WifiTethering); Spacer(Modifier.width(12.dp))
+                                        SettingsRowIcon(Icons.Rounded.Wifi); Spacer(Modifier.width(12.dp))
                                         Column {
                                             Text("Relay Hotspot IP", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                             Text("IP address of the RELAY phone on the hotspot network", color = C.t2, fontSize = 11.sp)
@@ -2072,7 +2069,7 @@ private fun FallbackMappingCard(
                         border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
                     ) {
                         Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Rounded.SyncAlt, null, tint = C.t2, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Rounded.Devices, null, tint = C.t2, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
@@ -2264,7 +2261,7 @@ private fun FallbackRouteEditorCard(
                         border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
                     ) {
                         Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Rounded.SyncAlt, null, tint = C.t2, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Rounded.Devices, null, tint = C.t2, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
@@ -3102,7 +3099,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                     }
 
                     SettingsGroup("Automation") {
-                        ToggleRow(Icons.Rounded.SmartToy, "Enable Automation", "Auto-run bundles on payment", autoEnabled) {
+                        ToggleRow(Icons.Rounded.Autorenew, "Enable Automation", "Auto-run bundles on payment", autoEnabled) {
                             autoEnabled = it
                             prefs.edit().putBoolean("automation_enabled", it).apply()
                             if (!it) ctx.stopService(android.content.Intent(ctx, BalanceChecker::class.java))

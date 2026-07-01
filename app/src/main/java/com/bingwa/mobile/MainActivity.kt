@@ -1548,7 +1548,7 @@ private fun ManualHeroCard(
                         .border(1.dp, statusColor.copy(alpha = 0.24f), RoundedCornerShape(18.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Outlined.AutoMode, null, tint = statusColor, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Outlined.Tune, null, tint = statusColor, modifier = Modifier.size(20.dp))
                 }
             }
             Row(
@@ -6330,7 +6330,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                                     )
                                     ManualModeToggleButton(
                                         label = "ADVANCED",
-                                        icon = Icons.Outlined.AutoMode,
+                                        icon = Icons.Outlined.Tune,
                                         active = mode == "ADVANCED",
                                         onClick = { mode = "ADVANCED" },
                                         modifier = Modifier.weight(1f)
@@ -7521,7 +7521,7 @@ fun SettingsScreen() {
             }
 
             SettingsGroup("Automation") {
-                ToggleRow(Icons.Rounded.SmartToy, "Enable Automation", "Auto-run bundles on payment", autoEnabled) { autoEnabled = it; prefs.edit().putBoolean("automation_enabled", it).apply() }
+                ToggleRow(Icons.Outlined.Bolt, "Enable Automation", "Auto-run bundles on payment", autoEnabled) { autoEnabled = it; prefs.edit().putBoolean("automation_enabled", it).apply() }
                 GroupDivider()
                 ToggleRow(Icons.Rounded.Autorenew, "Auto-Retry on Failure", "Retry failed USSD up to 3 times", autoRetry) { autoRetry = it; prefs.edit().putBoolean("auto_retry", it).apply() }
                 GroupDivider()
@@ -7534,11 +7534,11 @@ fun SettingsScreen() {
             }
 
             SettingsGroup("Bundle Offers") {
-                LinkRow(Icons.Rounded.DataObject, "Manage Offers & USSD Codes", "Add, edit, remove bundles", C.cyan) { showOffers = true }
+                LinkRow(Icons.Outlined.Code, "Manage Offers & USSD Codes", "Add, edit, remove bundles", C.cyan) { showOffers = true }
             }
 
             SettingsGroup("Two-Phone Mode") {
-                ToggleRow(Icons.Rounded.SyncAlt, "Enable Two‑Phone Mode", "Forward selected offers to the Relay phone", twoPhoneEnabled) {
+                ToggleRow(Icons.Rounded.Devices, "Enable Two‑Phone Mode", "Forward selected offers to the Relay phone", twoPhoneEnabled) {
                     twoPhoneEnabled = it
                     prefs.edit().putBoolean("two_phone_enabled", it).apply()
                     if (!it) RelayManager.stopRelayHotspotService(ctx)
@@ -7619,7 +7619,7 @@ fun SettingsScreen() {
                                 GroupDivider()
                                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        SettingsRowIcon(Icons.Rounded.WifiTethering); Spacer(Modifier.width(12.dp))
+                                        SettingsRowIcon(Icons.Rounded.Wifi); Spacer(Modifier.width(12.dp))
                                         Column {
                                             Text("Relay Hotspot IP", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                             Text("IP address of the RELAY phone on the hotspot network", color = C.t2, fontSize = 11.sp)

@@ -32,11 +32,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AccessibilityNew
+import androidx.compose.material.icons.rounded.Accessibility
 import androidx.compose.material.icons.rounded.Autorenew
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SimCard
@@ -311,11 +310,11 @@ fun DeviceDiagnosticsScreen(onBack: () -> Unit) {
         }
         item {
             SettingsGroup("Quick Actions") {
-                LinkRow(Icons.Rounded.AccessibilityNew, "Open Accessibility", "Turn on Bingwa automation service", C.cyan) {
+                LinkRow(Icons.Rounded.Accessibility, "Open Accessibility", "Turn on Bingwa automation service", C.cyan) {
                     openSettings(ctx, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 }
                 GroupDivider()
-                LinkRow(Icons.Rounded.NotificationsActive, "Open App Settings", "Manage permissions and app behavior", C.blue) {
+                LinkRow(Icons.Rounded.Info, "Open App Settings", "Manage permissions and app behavior", C.blue) {
                     openSettings(ctx, appDetailsIntent(ctx))
                 }
                 GroupDivider()
