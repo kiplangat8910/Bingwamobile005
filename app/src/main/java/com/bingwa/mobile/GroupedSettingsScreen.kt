@@ -1192,7 +1192,12 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
         normalizeAdminCommandPrefix(adminPrefix)
     }
     val savedPrefix = normalizedPrefix.ifBlank { "BINGWA" }
-    val pinHint = remember(adminPin) { adminPin.trim().takeIf { it.isNotEmpty() }?.let(::maskPin).orEmpty() }
+    val pinHint = remember(adminPin) {
+        adminPin.trim()
+            .takeIf { it.isNotEmpty() }
+            ?.let(::maskRemoteAdminPin)
+            .orEmpty()
+    }
     val phoneError = remoteEnabled && normalizedAdminPhone.isBlank()
     val phoneFormatError = normalizedAdminPhone.isNotBlank() && !isRemoteAdminPhoneValid(normalizedAdminPhone)
     val pinError = adminPin.isNotBlank() && adminPin.length !in 4..6
@@ -1455,6 +1460,13 @@ private data class RemoteCommandItem(
 
 private fun normalizeAdminCommandPrefix(value: String): String =
     value.uppercase().filter { it.isLetterOrDigit() }.take(12)
+
+private fun maskRemoteAdminPin(pin: String): String {
+    val trimmed = pin.trim()
+    if (trimmed.isEmpty()) return ""
+    if (trimmed.length <= 2) return "*".repeat(trimmed.length)
+    return "*".repeat(trimmed.length - 2) + trimmed.takeLast(2)
+}
 
 private fun isRemoteAdminPhoneValid(phone: String): Boolean =
     phone.matches(Regex("^0\\d{9}$"))
