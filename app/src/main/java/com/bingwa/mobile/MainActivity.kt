@@ -65,6 +65,9 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.TextRange
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -2098,6 +2101,90 @@ fun DialogField(label: String, value: String, onChange: (String) -> Unit, hint: 
         if (hint.isNotBlank()) {
             Text(hint, color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
         }
+    }
+}
+
+private fun insertIntoTextFieldValue(value: TextFieldValue, insertion: String): TextFieldValue {
+    val start = value.selection.start.coerceAtLeast(0)
+    val end = value.selection.end.coerceAtLeast(0)
+    val safeStart = start.coerceAtMost(value.text.length)
+    val safeEnd = end.coerceAtMost(value.text.length)
+    val replacementStart = minOf(safeStart, safeEnd)
+    val replacementEnd = maxOf(safeStart, safeEnd)
+    val updated = buildString(value.text.length + insertion.length) {
+        append(value.text.substring(0, replacementStart))
+        append(insertion)
+        append(value.text.substring(replacementEnd))
+    }
+    val cursor = replacementStart + insertion.length
+    return TextFieldValue(
+        text = updated,
+        selection = TextRange(cursor)
+    )
+}
+
+@Composable
+private fun UssdCodeDialogField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("USSD Code", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            placeholder = { Text("Use 'pn' as phone placeholder", color = C.t3) },
+            colors = dialogFieldColors(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Ascii,
+                capitalization = KeyboardCapitalization.None,
+                autoCorrect = false
+            ),
+            singleLine = true,
+            textStyle = LocalTextStyle.current.copy(
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = FontFamily.Monospace
+            )
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AssistChip(
+                onClick = { onValueChange(insertIntoTextFieldValue(value, "pn")) },
+                label = { Text("Insert pn") },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = C.cyan.copy(alpha = 0.12f),
+                    labelColor = C.cyan
+                )
+            )
+            AssistChip(
+                onClick = { onValueChange(insertIntoTextFieldValue(value, "*")) },
+                label = { Text("Insert *") },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = C.cardHi,
+                    labelColor = C.t1
+                )
+            )
+            AssistChip(
+                onClick = { onValueChange(insertIntoTextFieldValue(value, "#")) },
+                label = { Text("Insert #") },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = C.cardHi,
+                    labelColor = C.t1
+                )
+            )
+        }
+        Text(
+            "Tap a chip to insert the value at the current cursor position for faster and more accurate USSD entry.",
+            color = C.t3,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+            modifier = Modifier.padding(start = 4.dp)
+        )
     }
 }
 
@@ -8564,7 +8651,10 @@ fun OfferDialog(
 ) {
     val configuration = LocalConfiguration.current
     var name by remember { mutableStateOf(existing?.name ?: "") }
-    var code by remember { mutableStateOf(existing?.ussdCode ?: "") }
+    var codeField by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(existing?.ussdCode ?: ""))
+    }
+    val code = codeField.text
     var price by remember { mutableStateOf(existing?.price?.toString() ?: "") }
     var mode by remember { mutableStateOf(existing?.executionMode ?: "ADVANCED") }
     var cat by remember { mutableStateOf(existing?.category ?: "Data") }
@@ -8673,7 +8763,10 @@ fun OfferDialog(
                 ) {
                     DialogField("Bundle Name", name, { name = it }, "e.g. 1GB Daily Bundle")
                     DialogField("Price (KES)", price, { price = it }, "Amount customer pays", KeyboardType.Number)
-                    DialogField("USSD Code", code, { code = it }, "Use 'pn' as phone placeholder")
+                    UssdCodeDialogField(
+                        value = codeField,
+                        onValueChange = { codeField = it }
+                    )
                 }
 
                 OfferDialogSection(
