@@ -199,7 +199,7 @@ class MpesaReceiver : BroadcastReceiver() {
         private fun notify(context: Context, title: String, msg: String) {
             try {
                 val nm = context.getSystemService(Context.NOTIFICATION_SERVICE)
-                        as android.app.NotificationManager
+                        as? android.app.NotificationManager ?: return
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     nm.createNotificationChannel(
                         android.app.NotificationChannel(
@@ -240,9 +240,10 @@ class MpesaReceiver : BroadcastReceiver() {
                 val format = intent.getStringExtra("format")
                 val fallback = pdus.mapNotNull { pdu ->
                     runCatching {
+                        val bytes = pdu as? ByteArray ?: return@runCatching null
                         @Suppress("DEPRECATION")
-                        if (format != null) SmsMessage.createFromPdu(pdu as ByteArray, format)
-                        else SmsMessage.createFromPdu(pdu as ByteArray)
+                        if (format != null) SmsMessage.createFromPdu(bytes, format)
+                        else SmsMessage.createFromPdu(bytes)
                     }.getOrNull()
                 }
                 if (fallback.isEmpty()) return@launch

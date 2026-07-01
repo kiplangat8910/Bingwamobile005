@@ -38,11 +38,10 @@ class AutomationService : Service() {
         val signatureLearning: Boolean
     )
 
-    private lateinit var patternManager: UssdResponsePatternManager
+    private val patternManager by lazy { UssdResponsePatternManager(this) }
 
     override fun onCreate() {
         super.onCreate()
-        patternManager = UssdResponsePatternManager(this)
         createNotificationChannel()
         startForegroundCompat(
             notificationId = NOTIFICATION_ID,

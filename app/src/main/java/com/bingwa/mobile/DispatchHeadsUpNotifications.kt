@@ -88,7 +88,7 @@ object DispatchHeadsUpNotifications {
     ) {
         if (!canPostNotifications(context) || notificationId < 0) return
         val appContext = context.applicationContext
-        val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {

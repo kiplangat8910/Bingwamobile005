@@ -3995,7 +3995,8 @@ private fun transactionHistoryDateLabel(tx: Transaction): String {
     if (timestamp <= 0L) return tx.date.substringBefore(" ").ifBlank { "Earlier" }
     val now = Calendar.getInstance()
     val item = Calendar.getInstance().apply { timeInMillis = timestamp }
-    val yesterday = (now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1) }
+    val yesterday = (now.clone() as? Calendar ?: Calendar.getInstance().apply { timeInMillis = now.timeInMillis })
+        .apply { add(Calendar.DAY_OF_YEAR, -1) }
     return when {
         sameDay(item, now) -> "Today"
         sameDay(item, yesterday) -> "Yesterday · ${SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(timestamp))}"

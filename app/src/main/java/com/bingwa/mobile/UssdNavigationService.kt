@@ -2038,13 +2038,14 @@ class UssdNavigationService : AccessibilityService() {
             snapshot = snapshot,
             dialogText = dialogText
         )
-        pendingStepAdvanceTimeoutRunnable = Runnable {
+        val timeoutTask = Runnable {
             if (pendingStepAdvanceFromKey.isBlank()) return@Runnable
             clearPendingStepAdvance()
             isProcessing = false
             dismissErrorAndRestart()
         }
-        handler.postDelayed(pendingStepAdvanceTimeoutRunnable!!, PENDING_STEP_ADVANCE_TIMEOUT_MS)
+        pendingStepAdvanceTimeoutRunnable = timeoutTask
+        handler.postDelayed(timeoutTask, PENDING_STEP_ADVANCE_TIMEOUT_MS)
         isProcessing = false
     }
 

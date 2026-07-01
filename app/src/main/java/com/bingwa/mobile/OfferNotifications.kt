@@ -13,7 +13,7 @@ object OfferNotifications {
 
     fun notify(context: Context, title: String, message: String) {
         runCatching {
-            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return@runCatching
             val piFlags = PendingIntent.FLAG_UPDATE_CURRENT or
                 (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
             val openAppIntent = PendingIntent.getActivity(

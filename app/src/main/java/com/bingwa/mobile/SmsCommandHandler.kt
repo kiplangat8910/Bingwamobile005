@@ -257,7 +257,7 @@ object SmsCommandHandler {
 
     private fun sendOwnerNotification(context: Context, title: String, msg: String) {
         try {
-            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 nm.createNotificationChannel(
                     NotificationChannel(

@@ -21,7 +21,6 @@ class UnderMaintenanceRetryReceiver : BroadcastReceiver() {
 
     companion object {
         fun schedule(context: Context) {
-            val alarm = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val pi = PendingIntent.getBroadcast(context, 0,
                 Intent(context, UnderMaintenanceRetryReceiver::class.java),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
@@ -36,7 +35,7 @@ class UnderMaintenanceRetryReceiver : BroadcastReceiver() {
         }
 
         fun cancel(context: Context) {
-            val alarm = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val alarm = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
             val pi = PendingIntent.getBroadcast(context, 0,
                 Intent(context, UnderMaintenanceRetryReceiver::class.java),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
