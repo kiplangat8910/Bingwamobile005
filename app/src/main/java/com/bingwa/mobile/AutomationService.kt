@@ -153,6 +153,7 @@ class AutomationService : Service() {
         UssdNavigationService.signatureLearningMode = request.signatureLearning
         UssdNavigationService.loadedSignatureSteps = offer?.learnedSignature ?: emptyList()
         UssdNavigationService.resetSignatureTracking()
+        UssdNavigationService.beginAdvancedSessionMonitoring()
         UssdNavigationService.refreshRunningOverlay()
 
         try {

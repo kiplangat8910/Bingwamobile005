@@ -96,6 +96,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val ROOT_REACQUIRE_TIMEOUT_MS = 3_000L
         private const val DIALOG_DISMISS_SETTLE_MS = 240L
         private const val UI_KEEP_VISIBLE_INTERVAL_MS = 1_500L
+        private const val STARTUP_UI_KEEP_VISIBLE_MS = 12_000L
         // Some devices emit extra events on the same USSD dialog after we click "Send".
         // If we process those events immediately, we can inject the NEXT step into the PREVIOUS screen.
         private const val STEP_TRANSITION_GUARD_MS = 650L
@@ -218,6 +219,12 @@ class UssdNavigationService : AccessibilityService() {
             }
         }
 
+        fun beginAdvancedSessionMonitoring() {
+            activeInstance?.let { instance ->
+                instance.handler.post { instance.handleAdvancedSessionArmed() }
+            }
+        }
+
         fun armForegroundUi(timeoutMs: Long = 120_000L) {
             foregroundUiActive = true
             foregroundUiUntilElapsed = SystemClock.elapsedRealtime() + timeoutMs
@@ -284,6 +291,33 @@ class UssdNavigationService : AccessibilityService() {
         "busy", "sim error", "not available", "service unavailable", "temporary error",
         "session expired", "not registered"
     )
+
+    private fun handleAdvancedSessionArmed() {
+        if (!advancedActive || advancedSteps.isEmpty()) return
+        hasSeenAdvancedPopup = false
+        hasSeenForegroundPopup = false
+        isProcessing = false
+        lastDialogText = ""
+        lastFinalResponse = ""
+        lastWindowPkg = ""
+        lastWindowId = -1
+        lastMenuSignatureKey = ""
+        lastMenuSignature = null
+        lastScreenSignatureKey = ""
+        lastStepActionKey = ""
+        lastStepActionElapsed = 0L
+        lastRelevantEventElapsed = SystemClock.elapsedRealtime()
+        pendingProcessToken = lastRelevantEventElapsed
+        lastUiReturnElapsed = 0L
+        clearRootRecoveryState()
+        clearPendingAdvance()
+        clearPendingStepAdvance()
+        clearInputWriteMarker()
+        requestAppUiBehindPopup(force = true)
+        startKeepingAppUiVisible()
+        updateRunningOverlay()
+        startStepTimeout()
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -777,7 +811,7 @@ class UssdNavigationService : AccessibilityService() {
         signatureLearningMode && stepIndex == advancedSteps.lastIndex
 
     private fun getUssdRoot(): AccessibilityNodeInfo? {
-        val allowSystemWindows = advancedActive || balanceCallback != null || tokenPurchaseCallback != null || signatureLearningMode
+        val allowSystemWindows = advancedActive || balanceCallback != null || tokenPurchaseCallback != null || signatureLearningMode || isForegroundUiActive()
         val primary = rootInActiveWindow
         if (primary != null) {
             val pkg = primary.packageName?.toString() ?: ""
@@ -822,7 +856,7 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun shouldAllowSystemUiDialogRoot(root: AccessibilityNodeInfo, pkg: String): Boolean {
         if (pkg != "com.android.systemui") return false
-        if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null && !signatureLearningMode) return false
+        if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null && !signatureLearningMode && !isForegroundUiActive()) return false
         if (!hasDialogLayout(root)) return false
         val dialogText = normalizeCollapsedText(extractAllText(root))
         if (dialogText.isBlank()) return false
@@ -837,7 +871,7 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun shouldAllowAndroidDialogRoot(root: AccessibilityNodeInfo, pkg: String): Boolean {
         if (!(pkg.isBlank() || pkg == "android")) return false
-        if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null) return false
+        if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null && !isForegroundUiActive()) return false
         if (!hasDialogLayout(root)) return false
         val dialogText = normalizeCollapsedText(extractAllText(root))
         if (dialogText.isBlank()) return false
@@ -1614,11 +1648,14 @@ class UssdNavigationService : AccessibilityService() {
         currentStep    = 0
         isProcessing   = false
         hasSeenAdvancedPopup = false
+        hasSeenForegroundPopup = false
         lastDialogText = ""
         lastScreenSignatureKey = ""
         lastStepActionKey = ""
         lastStepActionElapsed = 0L
         lastUiReturnElapsed = 0L
+        lastWindowId = -1
+        lastWindowPkg = ""
         clearRootRecoveryState()
         clearPendingAdvance()
         clearPendingStepAdvance()
@@ -1716,13 +1753,16 @@ class UssdNavigationService : AccessibilityService() {
         lastFinalResponse   = ""
         pendingProcessToken = 0L
         lastWindowPkg       = ""
+        lastWindowId        = -1
         lastRelevantEventElapsed = 0L
         hasSeenAdvancedPopup = false
+        hasSeenForegroundPopup = false
         lastMenuSignatureKey = ""
         lastMenuSignature = null
         lastScreenSignatureKey = ""
         lastStepActionKey = ""
         lastStepActionElapsed = 0L
+        lastUiReturnElapsed = 0L
         clearRootRecoveryState()
         clearPendingAdvance()
         clearPendingStepAdvance()
@@ -1882,7 +1922,12 @@ class UssdNavigationService : AccessibilityService() {
                     hasSeenForegroundPopup = false
                     updateRunningOverlay()
                 }
-                if (!shouldKeepAppUiVisible() || !hasSeenUssdPopup() || !hasRecentUssdUiEvent()) {
+                val startupWindowActive = advancedActive &&
+                    !hasSeenUssdPopup() &&
+                    (SystemClock.elapsedRealtime() - lastRelevantEventElapsed) <= STARTUP_UI_KEEP_VISIBLE_MS
+                val canKeepVisible = shouldKeepAppUiVisible() &&
+                    (startupWindowActive || (hasSeenUssdPopup() && hasRecentUssdUiEvent()))
+                if (!canKeepVisible) {
                     uiKeepVisibleRunnable = null
                     return
                 }
