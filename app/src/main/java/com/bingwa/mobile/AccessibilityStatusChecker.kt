@@ -17,7 +17,7 @@ object AccessibilityStatusChecker {
             ?.any { info ->
                 val serviceInfo = info.resolveInfo?.serviceInfo
                 serviceInfo?.packageName == context.packageName &&
-                    serviceInfo.name == UssdNavigationService::class.java.name
+                    serviceInfo?.name == UssdNavigationService::class.java.name
             } == true
         if (enabledByManager) {
             true
