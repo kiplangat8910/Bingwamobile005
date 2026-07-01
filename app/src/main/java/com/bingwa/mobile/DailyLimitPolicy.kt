@@ -321,7 +321,8 @@ object DailyLimitPolicy {
             phoneNumber = alternativePhone,
             txId = txId,
             finalCode = finalCode,
-            mode = offer?.executionMode ?: "ADVANCED"
+            mode = offer?.executionMode ?: "ADVANCED",
+            returnToAppAggressively = false
         )
         val offerLabel = offer?.name ?: originalTx.description
         return AlternativeDispatchResult(

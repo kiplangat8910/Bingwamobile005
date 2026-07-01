@@ -568,7 +568,14 @@ class MpesaReceiver : BroadcastReceiver() {
                 offerId = offer?.id ?: -1
             ))
 
-            context.startOfferAutomation(offer, phone, txId, finalCode, mode)
+            context.startOfferAutomation(
+                offer,
+                phone,
+                txId,
+                finalCode,
+                mode,
+                returnToAppAggressively = false
+            )
 
         } catch (e: Exception) {
             Log.e(TAG, "handleDataSelling error", e)

@@ -455,7 +455,14 @@ object RelayManager {
             showInRecent = false,
             offerId = offer.id
         )
-        context.startOfferAutomation(offer, phone, txId, finalCode, offer.executionMode)
+        context.startOfferAutomation(
+            offer,
+            phone,
+            txId,
+            finalCode,
+            offer.executionMode,
+            returnToAppAggressively = false
+        )
         if (resultDestPhone != null) RelayResultTracker.trackAndReply(context, txId, resultDestPhone)
         return txId
     }
