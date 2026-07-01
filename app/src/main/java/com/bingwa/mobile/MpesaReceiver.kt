@@ -336,7 +336,7 @@ class MpesaReceiver : BroadcastReceiver() {
                     scheduleRetryTomorrowForTransaction(context, pendingTx, offer)
                     val note = buildString {
                         append(pendingTx.ussdResponse.ifBlank { "Daily-limit confirmation received." })
-                        append("\n\nCustomer replied with 2 and confirmed dispatch for tomorrow morning.")
+                        append("\n\nScheduled for tomorrow morning dispatch after customer confirmation.")
                     }
                     saveTransactionOutcome(context, pendingTx.id, "Pending", note)
                     DailyLimitPolicy.clearReplyState(context, senderPhone)

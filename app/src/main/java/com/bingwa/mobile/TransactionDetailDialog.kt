@@ -88,17 +88,20 @@ internal fun TransactionDetailDialog(
 ) {
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val isScheduled = isTransactionScheduled(tx)
     val isFailed = tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED
     val isDailyLimitHold = DailyLimitPolicy.isDailyLimitHold(tx)
-    val statusColor = when (tx.statusEnum) {
-        TransactionStatus.SUCCESS -> C.green
-        TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
+    val statusColor = when {
+        isScheduled -> C.cyan
+        tx.statusEnum == TransactionStatus.SUCCESS -> C.green
+        tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED -> C.red
         else -> C.amber
     }
-    val statusLabel = when (tx.statusEnum) {
-        TransactionStatus.SUCCESS -> "Completed"
-        TransactionStatus.FAILED, TransactionStatus.CANCELLED -> "Failed"
-        TransactionStatus.PROCESSING, TransactionStatus.PENDING, TransactionStatus.RETRYING -> "In Progress"
+    val statusLabel = when {
+        isScheduled -> "Scheduled"
+        tx.statusEnum == TransactionStatus.SUCCESS -> "Completed"
+        tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED -> "Failed"
+        else -> "In Progress"
     }
 
     var retrying by remember { mutableStateOf(false) }
@@ -742,6 +745,7 @@ private fun formatTimestamp(ts: Long): String {
 
 private fun formatCompletedAt(tx: Transaction): String {
     if (tx.completedAt > 0L) return formatTimestamp(tx.completedAt)
+    if (isTransactionScheduled(tx)) return "Scheduled for tomorrow morning"
     return when (tx.statusEnum) {
         TransactionStatus.SUCCESS,
         TransactionStatus.FAILED,

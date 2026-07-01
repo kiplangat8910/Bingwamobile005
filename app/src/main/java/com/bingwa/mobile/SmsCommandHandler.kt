@@ -299,8 +299,11 @@ object SmsCommandHandler {
             "RETRY","R" -> retryFailed(context, replyTo, replySubId, args)
             "BUY","BY","DISPATCH","SEND" -> manualBuy(context, replyTo, replySubId, args)
             "BUYAMT" -> buyByAmount(context, replyTo, replySubId, args)
-            "PENDING","P" -> listTransactions(context, replyTo, replySubId, "Pending")
-            "FAILED","F" -> listTransactions(context, replyTo, replySubId, "Failed")
+            "PENDING","P" -> listTransactions(context, replyTo, replySubId, "PENDING")
+            "FAILED","F" -> listTransactions(context, replyTo, replySubId, "FAILED")
+            "SCHEDULED","SCH" -> listTransactions(context, replyTo, replySubId, "SCHEDULED")
+            "UNMATCHED","U" -> listTransactions(context, replyTo, replySubId, "UNMATCHED")
+            "HISTORY","H" -> listTransactions(context, replyTo, replySubId, args.firstOrNull()?.uppercase() ?: "ALL")
             "BUYTOKENS","BT" -> buyTokensRemote(context, replyTo, replySubId, args)
             "PING" -> ping(context, replyTo, replySubId)
             "HELP","?" -> sendHelp(context, replyTo, replySubId)
@@ -340,18 +343,22 @@ object SmsCommandHandler {
     }
 
     private fun getStatus(context: Context, replyTo: String, replySubId: Int?) {
-        val prefs = context.getSharedPreferences("transactions", Context.MODE_PRIVATE)
-        val arr = try { JSONArray(prefs.getString("list", "[]")) } catch (_: Exception) { JSONArray() }
-        var sent=0; var pending=0; var failed=0
-        for (i in 0 until arr.length()) {
-            when (arr.getJSONObject(i).optString("status","")) {
-                "Success" -> sent++
-                "Pending" -> pending++
-                "Failed" -> failed++
-            }
+        val offers = OfferRepository.load(context)
+        val history = TransactionStore.load(context).filter { it.source != TX_SOURCE_AIRTIME }
+        val sent = history.count { it.statusEnum == TransactionStatus.SUCCESS }
+        val scheduled = history.count(::isTransactionScheduled)
+        val pending = history.count {
+            !isTransactionScheduled(it) &&
+                (it.statusEnum == TransactionStatus.PENDING ||
+                    it.statusEnum == TransactionStatus.PROCESSING ||
+                    it.statusEnum == TransactionStatus.RETRYING)
         }
-        val total = sent+pending+failed
-        val rate = if (total>0) (sent*100/total) else 0
+        val failed = history.count {
+            it.statusEnum == TransactionStatus.FAILED || it.statusEnum == TransactionStatus.CANCELLED
+        }
+        val unmatched = history.count { matchesTransactionListFilter(it, offers, "UNMATCHED") }
+        val total = sent + pending + failed + scheduled
+        val rate = if (total > 0) (sent * 100 / total) else 0
         val battery = BatteryStatus.formatForSms(BatteryStatus.read(context))
         val unlimited = UnlimitedManager(context)
         val usageLine = if (unlimited.isActive()) {
@@ -360,7 +367,12 @@ object SmsCommandHandler {
         } else {
             "Tokens: ${TokenManager(context).getBalance()}"
         }
-        sendSms(context, replyTo, "Status summary:\nSent: $sent\nPending: $pending\nFailed: $failed\nSuccess rate: ${rate}%\n$usageLine\n$battery", replySubId)
+        sendSms(
+            context,
+            replyTo,
+            "Status summary:\nCompleted: $sent\nPending: $pending\nScheduled: $scheduled\nFailed: $failed\nUnmatched: $unmatched\nSuccess rate: ${rate}%\n$usageLine\n$battery",
+            replySubId
+        )
     }
 
     private fun checkBattery(context: Context, replyTo: String, replySubId: Int?) {
@@ -501,22 +513,71 @@ object SmsCommandHandler {
     }
 
     private fun listTransactions(context: Context, replyTo: String, replySubId: Int?, statusFilter: String) {
-        val prefs = context.getSharedPreferences("transactions", Context.MODE_PRIVATE)
-        val arr = try { JSONArray(prefs.getString("list", "[]")) } catch (_: Exception) { JSONArray() }
-        val filtered = mutableListOf<String>()
-        for (i in arr.length()-1 downTo 0) {
-            val obj = arr.getJSONObject(i)
-            if (obj.optString("status") == statusFilter) {
-                val desc = obj.optString("description")
-                val phone = obj.optString("phoneNumber")
-                val amount = obj.optString("amount")
-                filtered.add("#${obj.optInt("id")} $desc – $amount – $phone")
-            }
+        val filter = normalizeTransactionListFilter(statusFilter)
+        if (filter == null) {
+            sendSms(context, replyTo, "Use HISTORY ALL, COMPLETED, PENDING, SCHEDULED, FAILED, or UNMATCHED.", replySubId)
+            return
         }
+        val offers = OfferRepository.load(context)
+        val filtered = TransactionStore.load(context)
+            .asSequence()
+            .filter { it.source != TX_SOURCE_AIRTIME }
+            .sortedByDescending(::transactionTimestamp)
+            .filter { matchesTransactionListFilter(it, offers, filter) }
+            .take(5)
+            .map { tx ->
+                val title = tx.description.ifBlank { "Transaction" }
+                val phone = tx.phoneNumber.ifBlank { "-" }
+                val amount = tx.amount.ifBlank { "-" }
+                "#${tx.id} $title - $amount - $phone - ${transactionStatusLabel(tx)}"
+            }
+            .toList()
+        val label = filter.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }.lowercase()
+            .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         if (filtered.isEmpty()) {
-            sendSms(context, replyTo, "No $statusFilter transactions.", replySubId)
+            sendSms(context, replyTo, "No $label transactions.", replySubId)
         } else {
-            sendSms(context, replyTo, filtered.take(5).joinToString("\n"), replySubId)
+            sendSms(context, replyTo, "$label transactions:\n${filtered.joinToString("\n")}", replySubId)
+        }
+    }
+
+    private fun normalizeTransactionListFilter(raw: String): String? {
+        return when (raw.trim().uppercase()) {
+            "", "ALL", "A" -> "ALL"
+            "COMPLETED", "DONE", "SUCCESS" -> "COMPLETED"
+            "PENDING", "OPEN" -> "PENDING"
+            "FAILED", "FAIL" -> "FAILED"
+            "SCHEDULED", "SCHEDULE" -> "SCHEDULED"
+            "UNMATCHED", "UNCONFIGURED" -> "UNMATCHED"
+            else -> null
+        }
+    }
+
+    private fun matchesTransactionListFilter(tx: Transaction, offers: List<OfferItem>, filter: String): Boolean {
+        return when (filter) {
+            "ALL" -> true
+            "COMPLETED" -> tx.statusEnum == TransactionStatus.SUCCESS
+            "PENDING" -> !isTransactionScheduled(tx) &&
+                (tx.statusEnum == TransactionStatus.PENDING ||
+                    tx.statusEnum == TransactionStatus.PROCESSING ||
+                    tx.statusEnum == TransactionStatus.RETRYING)
+            "FAILED" -> tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED
+            "SCHEDULED" -> isTransactionScheduled(tx)
+            "UNMATCHED" -> {
+                if (tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED) return false
+                if (DailyLimitPolicy.isDailyLimitHold(tx)) return false
+                val amount = tx.amountValue.takeIf { it > 0.0 }
+                    ?: Regex("""\d+(?:\.\d+)?""").find(tx.amount)?.value?.toDoubleOrNull()
+                    ?: 0.0
+                amount > 0.0 && offers.none { offer ->
+                    offer.id == tx.offerId ||
+                        offer.name.trim().equals(tx.description.trim(), ignoreCase = true) ||
+                        offer.price.toDouble() == amount ||
+                        UssdHelper.normalizeUssdCode(offer.ussdCode, tx.phoneNumber) ==
+                        UssdHelper.normalizeUssdCode(tx.ussdCode, tx.phoneNumber)
+                }
+            }
+            else -> false
         }
     }
 
@@ -580,7 +641,7 @@ object SmsCommandHandler {
             Commands:
             BALANCE (B) – check airtime and tokens
             TOKENS (T) – check token balance
-            STATUS (S) – view sent/pending/failed summary
+            STATUS (S) – view completed/pending/scheduled/failed summary
             BATTERY (BAT) – check phone battery level
             OFFERS (O) – list all offers
             ON <offer-id> – enable an offer
@@ -590,6 +651,9 @@ object SmsCommandHandler {
             BUYAMT <phone> <amount> – dispatch by amount (used for Relay forwarding)
             P – list pending transactions (latest 5)
             F – list failed transactions (latest 5)
+            SCHEDULED – list next-day scheduled transactions
+            UNMATCHED – list payments not configured in Offers
+            HISTORY <TAB> – ALL, COMPLETED, PENDING, SCHEDULED, FAILED, UNMATCHED
             BT <amount> – buy tokens using airtime
             PING – quick health/status check
             HELP – this message

@@ -1182,6 +1182,11 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
     var adminPrefix by remember { mutableStateOf(prefs.safeGetString("sms_prefix", "BINGWA") ?: "BINGWA") }
     var adminPin by remember { mutableStateOf(prefs.safeGetString("sms_pin", "") ?: "") }
     var pinVisible by remember { mutableStateOf(false) }
+    val pinHint = if (adminPin.trim().isNotEmpty()) {
+        "*".repeat((adminPin.trim().length - 2).coerceAtLeast(0)) + adminPin.trim().takeLast(2)
+    } else {
+        ""
+    }
 
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
         SettingsTopBar("Remote Control", "Admin SMS commands and security", onBack)
@@ -1193,7 +1198,6 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
                 }
                 GroupDivider()
                 Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    val pinHint = if (adminPin.trim().isNotEmpty()) "*".repeat((adminPin.trim().length - 2).coerceAtLeast(0)) + adminPin.trim().takeLast(2) else ""
                     Surface(shape = RoundedCornerShape(14.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
                         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(
@@ -1205,7 +1209,14 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
                             Column(Modifier.weight(1f)) {
                                 Text("Command Format", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                 Spacer(Modifier.height(2.dp))
-                                Text("${adminPrefix.trim().uppercase()} ${if (pinHint.isNotEmpty()) "$pinHint " else ""}STATUS", color = C.t2, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    "${adminPrefix.trim().uppercase()} ${if (pinHint.isNotEmpty()) "$pinHint " else ""}STATUS",
+                                    color = C.t2,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Clip
+                                )
                             }
                         }
                     }
@@ -1270,6 +1281,25 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
                     )
+                }
+                GroupDivider()
+                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Surface(shape = RoundedCornerShape(14.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text("Quick SMS Commands", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            listOf(
+                                "${adminPrefix.trim().uppercase()} ${if (pinHint.isNotEmpty()) "$pinHint " else ""}STATUS",
+                                "${adminPrefix.trim().uppercase()} ${if (pinHint.isNotEmpty()) "$pinHint " else ""}SCHEDULED",
+                                "${adminPrefix.trim().uppercase()} ${if (pinHint.isNotEmpty()) "$pinHint " else ""}UNMATCHED",
+                                "${adminPrefix.trim().uppercase()} ${if (pinHint.isNotEmpty()) "$pinHint " else ""}HISTORY FAILED"
+                            ).forEach { example ->
+                                Text(example, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
+                            }
+                        }
+                    }
                 }
                 GroupDivider()
                 Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
@@ -3151,7 +3181,7 @@ private fun TransactionSettings(onBack: () -> Unit) {
         mutableStateOf(historyVisibleTransactions(TransactionStore.load(ctx)))
     }
     var selectedTx by remember { mutableStateOf<Transaction?>(null) }
-    val offers = remember { OfferRepository.load(ctx).filter { it.enabled } }
+    val offers = remember { OfferRepository.load(ctx) }
     val clearOptions = listOf("Daily", "Weekly", "Monthly", "Yearly", "Never")
     val tabs = TransactionHistoryFilter.entries.map { filter ->
         TransactionHistoryTab(
@@ -3182,6 +3212,7 @@ private fun TransactionSettings(onBack: () -> Unit) {
             transactionMatchesSummaryPeriod(it, summaryPeriod)
     }
     val totalCollected = summaryCompleted.sumOf { transactionHistoryAmountValue(it) }
+    val scheduledCount = history.count { transactionHistoryFilterFor(it, offers) == TransactionHistoryFilter.SCHEDULED }
     val unmatchedCount = history.count { transactionHistoryFilterFor(it, offers) == TransactionHistoryFilter.UNMATCHED }
 
     DisposableEffect(Unit) {
@@ -3372,6 +3403,7 @@ private fun TransactionSettings(onBack: () -> Unit) {
                 summaryPeriod = summaryPeriod,
                 totalCollected = totalCollected,
                 completedCount = summaryCompleted.size,
+                scheduledCount = scheduledCount,
                 unmatchedCount = unmatchedCount
             )
             Spacer(Modifier.height(16.dp))
@@ -3480,6 +3512,7 @@ private enum class TransactionHistorySummaryPeriod(
 private enum class TransactionHistoryFilter(val label: String) {
     ALL("All"),
     COMPLETED("Completed"),
+    SCHEDULED("Scheduled"),
     PENDING("Pending"),
     FAILED("Failed"),
     UNMATCHED("Unmatched")
@@ -3496,6 +3529,7 @@ private fun TransactionHistoryHeroCard(
     summaryPeriod: TransactionHistorySummaryPeriod,
     totalCollected: Double,
     completedCount: Int,
+    scheduledCount: Int,
     unmatchedCount: Int
 ) {
     Box(
@@ -3546,11 +3580,11 @@ private fun TransactionHistoryHeroCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = C.cyan, modifier = Modifier.size(14.dp))
                 Text(
-                    if (unmatchedCount > 0) {
-                        "$completedCount successful transactions • $unmatchedCount unmatched"
-                    } else {
-                        "$completedCount successful transactions"
-                    },
+                    buildList {
+                        add("$completedCount successful transactions")
+                        if (scheduledCount > 0) add("$scheduledCount scheduled")
+                        if (unmatchedCount > 0) add("$unmatchedCount unmatched")
+                    }.joinToString(" • "),
                     color = C.t2,
                     fontSize = 12.sp
                 )
@@ -3679,7 +3713,6 @@ private fun TransactionHistoryRow(
     val classification = transactionHistoryFilterFor(tx, offers)
     val accent = transactionHistoryAccent(classification)
     val avatarColor = transactionAvatarColor(tx)
-    val expectedOffer = resolveOfferForHistory(tx, offers)
     val title = tx.clientName.ifBlank {
         tx.description.ifBlank { "Transaction #${tx.id}" }
     }
@@ -3690,9 +3723,11 @@ private fun TransactionHistoryRow(
     val note = when (classification) {
         TransactionHistoryFilter.UNMATCHED -> {
             val received = transactionHistoryCurrency(transactionHistoryAmountValue(tx))
-            expectedOffer?.let {
-                "Received $received but ${it.name} is set to KES ${it.price}"
-            } ?: "Received $received but it does not match any configured offer"
+            "Received $received but it is not configured in Offers."
+        }
+        TransactionHistoryFilter.SCHEDULED -> {
+            transactionReasonShort(tx).takeIf { it.isNotBlank() }
+                ?: "Scheduled for tomorrow because the daily limit was reached today."
         }
         TransactionHistoryFilter.FAILED -> {
             transactionReasonShort(tx).takeIf { it.isNotBlank() }
@@ -3854,6 +3889,7 @@ private fun transactionHistoryFilterFor(
     tx: Transaction,
     offers: List<OfferItem>
 ): TransactionHistoryFilter {
+    if (isTransactionScheduled(tx)) return TransactionHistoryFilter.SCHEDULED
     if (isTransactionUnmatched(tx, offers)) return TransactionHistoryFilter.UNMATCHED
     return when (tx.statusEnum) {
         TransactionStatus.SUCCESS -> TransactionHistoryFilter.COMPLETED
@@ -3867,14 +3903,10 @@ private fun isTransactionUnmatched(
     offers: List<OfferItem>
 ): Boolean {
     if (tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED) return false
+    if (DailyLimitPolicy.isDailyLimitHold(tx)) return false
     val amount = transactionHistoryAmountValue(tx)
     if (amount <= 0.0 || tx.source == TX_SOURCE_AIRTIME) return false
-    val expectedOffer = resolveOfferForHistory(tx, offers)
-    return if (expectedOffer != null) {
-        expectedOffer.price.toDouble() != amount
-    } else {
-        offers.none { it.enabled && it.price.toDouble() == amount }
-    }
+    return resolveOfferForHistory(tx, offers) == null
 }
 
 private fun resolveOfferForHistory(
@@ -3897,6 +3929,7 @@ private fun resolveOfferForHistory(
 private fun transactionHistoryAccent(classification: TransactionHistoryFilter): Color =
     when (classification) {
         TransactionHistoryFilter.COMPLETED -> C.green
+        TransactionHistoryFilter.SCHEDULED -> C.cyan
         TransactionHistoryFilter.FAILED -> C.red
         TransactionHistoryFilter.UNMATCHED -> C.orange
         TransactionHistoryFilter.PENDING -> Color(0xFFF7B731)

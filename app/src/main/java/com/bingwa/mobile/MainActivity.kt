@@ -2805,21 +2805,19 @@ fun HomeScreenVolcanic(
         .sortedByDescending { transactionTimestamp(it) }
         .toList()
     val sentCount = automatedTxns.size
+    val scheduledCount = automatedTxns.count(::isTransactionScheduled)
     val pendingCount = automatedTxns.count {
-        it.statusEnum == TransactionStatus.PROCESSING ||
-            it.statusEnum == TransactionStatus.PENDING ||
-            it.statusEnum == TransactionStatus.RETRYING
+        !isTransactionScheduled(it) && (
+            it.statusEnum == TransactionStatus.PROCESSING ||
+                it.statusEnum == TransactionStatus.PENDING ||
+                it.statusEnum == TransactionStatus.RETRYING
+            )
     }
     val failedCount = automatedTxns.count {
         it.statusEnum == TransactionStatus.FAILED || it.statusEnum == TransactionStatus.CANCELLED
     }
     val completedCount = automatedTxns.count { it.statusEnum == TransactionStatus.SUCCESS }
     val completionRate = if (sentCount > 0) (completedCount * 100 / sentCount) else 0
-    val scheduledCount = automatedTxns.count { tx ->
-        tx.status.equals("UnderMaintenance", ignoreCase = true) ||
-            tx.statusEnum == TransactionStatus.RETRYING ||
-            DailyLimitPolicy.isDailyLimitHold(tx)
-    }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
     val chromeAnim = rememberInfiniteTransition(label = "home_chrome")
@@ -5202,14 +5200,13 @@ private fun HomeStatusMetricCard(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                label.uppercase(Locale.getDefault()),
+                label,
                 color = C.t2,
-                fontSize = if (compact) 7.sp else 8.sp,
-                letterSpacing = if (compact) 0.5.sp else 0.8.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = if (compact) 8.sp else 9.sp,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 softWrap = false,
-                overflow = TextOverflow.Ellipsis,
+                overflow = TextOverflow.Clip,
                 textAlign = TextAlign.Center
             )
         }
@@ -5412,10 +5409,14 @@ fun DonutRing(pct: Int, color: Color, size: Dp, stroke: Dp) {
 @Composable
 fun VolcanicTxCard(tx: Transaction, onDelete: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    val statusColor = when (tx.status) {
-        TransactionStatus.SUCCESS.value -> C.green
-        TransactionStatus.FAILED.value, TransactionStatus.CANCELLED.value -> C.red
-        TransactionStatus.PROCESSING.value, TransactionStatus.PENDING.value, TransactionStatus.RETRYING.value -> C.amber
+    val isScheduled = isTransactionScheduled(tx)
+    val statusColor = when {
+        isScheduled -> C.cyan
+        tx.status == TransactionStatus.SUCCESS.value -> C.green
+        tx.status == TransactionStatus.FAILED.value || tx.status == TransactionStatus.CANCELLED.value -> C.red
+        tx.status == TransactionStatus.PROCESSING.value ||
+            tx.status == TransactionStatus.PENDING.value ||
+            tx.status == TransactionStatus.RETRYING.value -> C.amber
         else -> C.t2
     }
     val typeLabel = when (tx.source) {
@@ -5524,10 +5525,10 @@ fun VolcanicTxCard(tx: Transaction, onDelete: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    if (tx.status == TransactionStatus.PROCESSING.value) {
+                    if (tx.status == TransactionStatus.PROCESSING.value && !isScheduled) {
                         Box(Modifier.size(6.dp).clip(CircleShape).background(statusColor.copy(alpha = processingAlpha)))
                     }
-                    Text(tx.status, color = statusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text(transactionStatusLabel(tx), color = statusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
             }
             Text(tx.date, color = C.t3, fontSize = 10.sp, textAlign = TextAlign.End)

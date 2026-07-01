@@ -569,6 +569,12 @@ class AutomationService : Service() {
                 "${request.phoneNumber} has already received today's offer. A notice was sent instead of auto-queueing."
             )
         } else {
+            val message = buildString {
+                append(response)
+                append("\n\nScheduled for tomorrow morning dispatch because this offer already reached the daily limit.")
+            }
+            saveTransactionResponse(request.txId, TransactionStatus.PENDING.value, message)
+            sendBroadcastUpdate(request.txId, TransactionStatus.PENDING.value, message)
             sendCustomerOutcomeSms(this, "pending", originalTx)
             scheduleRetryTomorrow(request)
         }
