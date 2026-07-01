@@ -35,7 +35,8 @@ class AutomationService : Service() {
         val offerName: String,
         val signatureEnabled: Boolean,
         val signatureMode: String,
-        val signatureLearning: Boolean
+        val signatureLearning: Boolean,
+        val returnToAppAggressively: Boolean
     )
 
     private val patternManager by lazy { UssdResponsePatternManager(this) }
@@ -64,7 +65,7 @@ class AutomationService : Service() {
             "ADVANCED" -> startAdvanced(request)
             else -> handleSimple(request)
         }
-        return START_NOT_STICKY
+        return START_REDELIVER_INTENT
     }
 
     private fun buildRequest(intent: Intent?): AutomationRequest? {
@@ -82,7 +83,8 @@ class AutomationService : Service() {
             offerName = safeIntent.getStringExtra("offerName") ?: "",
             signatureEnabled = safeIntent.getBooleanExtra("signatureEnabled", false),
             signatureMode = (safeIntent.getStringExtra("signatureMode") ?: "STOP").uppercase(),
-            signatureLearning = safeIntent.getBooleanExtra("signatureLearning", false)
+            signatureLearning = safeIntent.getBooleanExtra("signatureLearning", false),
+            returnToAppAggressively = safeIntent.getBooleanExtra("returnToAppAggressively", true)
         )
     }
 
@@ -157,7 +159,10 @@ class AutomationService : Service() {
             val callIntent = UssdHelper.buildCallIntent(this, dialCode)
             if (callIntent.resolveActivity(packageManager) != null) {
                 startActivity(callIntent)
-                UssdHelper.relaunchAppUi(this)
+                UssdHelper.relaunchAppUi(
+                    context = this,
+                    aggressiveRetries = request.returnToAppAggressively
+                )
             } else {
                 UssdNavigationService.advancedSteps = emptyList()
                 UssdNavigationService.advancedActive = false
@@ -559,6 +564,7 @@ class AutomationService : Service() {
             putExtra("signatureEnabled", request.signatureEnabled)
             putExtra("signatureMode", request.signatureMode)
             putExtra("signatureLearning", request.signatureLearning)
+            putExtra("returnToAppAggressively", request.returnToAppAggressively)
         }
 
     private fun scheduleMaintenanceRetry(request: AutomationRequest, nextRetryCount: Int): Boolean {

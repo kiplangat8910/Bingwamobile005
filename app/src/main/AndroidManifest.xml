@@ -58,7 +58,8 @@
         <service
             android:name=".AutomationService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
 
         <!-- Periodic balance checker (keeps running in background) -->
         <service

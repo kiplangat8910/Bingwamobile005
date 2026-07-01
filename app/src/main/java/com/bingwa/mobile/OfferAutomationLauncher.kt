@@ -9,7 +9,8 @@ fun Context.startOfferAutomation(
     txId: Int,
     finalCode: String,
     mode: String = offer?.executionMode ?: "ADVANCED",
-    signatureLearning: Boolean = false
+    signatureLearning: Boolean = false,
+    returnToAppAggressively: Boolean = true
 ) {
     ServiceLauncher.startAutomationService(this, Intent(this, AutomationService::class.java).apply {
         putExtra("mode", mode)
@@ -17,6 +18,7 @@ fun Context.startOfferAutomation(
         putExtra("phoneNumber", phoneNumber)
         putExtra("txId", txId)
         putExtra("signatureLearning", signatureLearning)
+        putExtra("returnToAppAggressively", returnToAppAggressively)
         if (offer != null) {
             putExtra("offerId", offer.id)
             putExtra("offerName", offer.name)

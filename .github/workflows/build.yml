@@ -23,7 +23,7 @@ jobs:
     permissions:
       contents: write
     env:
-      SHOULD_PUBLISH_RELEASE: ${{ startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.upload_to_release) }}
+      SHOULD_PUBLISH_RELEASE: ${{ startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.upload_to_release) }}
     steps:
       - uses: actions/checkout@v4
       - name: Resolve release metadata
@@ -82,7 +82,12 @@ jobs:
           BINGWA_UPLOAD_STORE_PASSWORD: ${{ env.BINGWA_UPLOAD_STORE_PASSWORD }}
           BINGWA_UPLOAD_KEY_ALIAS: ${{ env.BINGWA_UPLOAD_KEY_ALIAS }}
           BINGWA_UPLOAD_KEY_PASSWORD: ${{ env.BINGWA_UPLOAD_KEY_PASSWORD }}
-        run: gradle :app:assembleRelease
+        run: gradle --stacktrace :app:assembleRelease
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bingwa-mobile-${{ env.APP_VERSION }}
+          path: app/build/outputs/apk/release/app-release.apk
       - name: Publish APK to Release
         if: env.SHOULD_PUBLISH_RELEASE == 'true'
         uses: softprops/action-gh-release@v2

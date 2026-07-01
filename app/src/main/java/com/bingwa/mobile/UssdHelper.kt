@@ -134,7 +134,11 @@ object UssdHelper {
         return intent
     }
 
-    fun relaunchAppUi(context: Context, delayMs: Long = RETURN_TO_APP_DELAYS_MS.first()) {
+    fun relaunchAppUi(
+        context: Context,
+        delayMs: Long = RETURN_TO_APP_DELAYS_MS.first(),
+        aggressiveRetries: Boolean = true
+    ) {
         val appIntent = Intent(context, MainActivity::class.java).apply {
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -144,12 +148,16 @@ object UssdHelper {
             )
         }
         val handler = Handler(Looper.getMainLooper())
-        val delays = buildList {
-            add(delayMs.coerceAtLeast(0L))
-            RETURN_TO_APP_DELAYS_MS.forEach { scheduled ->
-                if (scheduled > delayMs) add(scheduled)
-            }
-        }.distinct()
+        val delays = if (aggressiveRetries) {
+            buildList {
+                add(delayMs.coerceAtLeast(0L))
+                RETURN_TO_APP_DELAYS_MS.forEach { scheduled ->
+                    if (scheduled > delayMs) add(scheduled)
+                }
+            }.distinct()
+        } else {
+            listOf(delayMs.coerceAtLeast(0L))
+        }
         delays.forEach { scheduledDelay ->
             val action = Runnable {
                 runCatching { context.startActivity(appIntent) }

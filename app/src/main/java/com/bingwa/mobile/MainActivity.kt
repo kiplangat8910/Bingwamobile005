@@ -2208,7 +2208,16 @@ fun BingwaApp() {
     val tm = remember { TokenManager(ctx) }
     val unlimitedManager = remember { UnlimitedManager(ctx) }
     val appPrefs = remember { ctx.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
-    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    var screenRoute by rememberSaveable { mutableStateOf(Screen.Home.route) }
+    val screen = remember(screenRoute) {
+        when (screenRoute) {
+            Screen.Manual.route -> Screen.Manual
+            Screen.Tokens.route -> Screen.Tokens
+            Screen.Contacts.route -> Screen.Contacts
+            Screen.Settings.route -> Screen.Settings
+            else -> Screen.Home
+        }
+    }
     var tokenBal by remember { mutableIntStateOf(tm.getBalance()) }
     var airBal by remember { mutableStateOf(BalanceChecker.currentBalanceStr) }
     var isRefreshing by remember { mutableStateOf(false) }
@@ -2287,7 +2296,7 @@ fun BingwaApp() {
         onDispose { runCatching { RelayManager.stopHotspotMonitor() } }
     }
 
-    BackHandler(enabled = screen != Screen.Home) { screen = Screen.Home }
+    BackHandler(enabled = screen != Screen.Home) { screenRoute = Screen.Home.route }
 
     Scaffold(
         containerColor = C.bg,
@@ -2295,7 +2304,7 @@ fun BingwaApp() {
             VolcanicNavBar(
                 current = screen,
                 running = running,
-                onSelect = { screen = it },
+                onSelect = { screenRoute = it.route },
                 onToggleRunning = toggleRunning
             )
         }
@@ -5771,7 +5780,14 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                     offerId = selectedOffer.id
                 )
                 pendingTxId = txId
-                ctx.startOfferAutomation(selectedOffer, phone, txId, finalCode, mode)
+                ctx.startOfferAutomation(
+                    offer = selectedOffer,
+                    phoneNumber = phone,
+                    txId = txId,
+                    finalCode = finalCode,
+                    mode = mode,
+                    returnToAppAggressively = false
+                )
             }
         }
     }
