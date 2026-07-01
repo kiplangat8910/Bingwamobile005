@@ -5750,8 +5750,8 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
         phoneMatches.firstOrNull { SmsCommandHandler.normalizePhone(it.phone) == normalizedPhone }
     }
     val resolvedClientName = exactPhoneMatch?.name?.takeIf { it.isNotBlank() } ?: fallbackResolvedClientName
-    val dispatchReady = remember(phone, selOffer) {
-        phone.matches(Regex("^[0-9]{10}$")) && selOffer != null
+    val dispatchReady = remember(normalizedPhone, selOffer) {
+        normalizedPhone.matches(Regex("^0\\d{9}$")) && selOffer != null
     }
     val manualHistory = allTxns.filter { it.source == TX_SOURCE_MANUAL }.sortedByDescending { it.timestamp }
     val selectedHistoryTx = manualHistory.firstOrNull { it.id == selectedHistoryTxId }
@@ -5835,27 +5835,29 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
         "relayed" -> "Forwarded to Relay phone for execution"
         else -> null
     }
-    val commandPhone = if (phone.length == 10) phone else "0712345678"
+    val commandPhone = if (normalizedPhone.matches(Regex("^0\\d{9}$"))) normalizedPhone else "0712345678"
     val commandCode = selOffer?.ussdCode?.replace("pn", commandPhone, true) ?: "*544*1*1#"
     val executeManualRun = {
         val selectedOffer = selOffer
+        val finalPhone = SmsCommandHandler.normalizePhone(phone)
         phoneErr = when {
             phone.isBlank() -> "Phone number required"
-            !phone.matches(Regex("^[0-9]{10}$")) -> "Must be exactly 10 digits"
+            !finalPhone.matches(Regex("^0\\d{9}$")) -> "Enter a valid phone number"
             selectedOffer == null -> "Choose an offer"
             else -> null
         }
         if (phoneErr == null && selectedOffer != null) {
             vib(ctx, 70L)
-            upsertSavedContact(ctx, phone, resolvedClientName)
+            phone = finalPhone
+            upsertSavedContact(ctx, finalPhone, resolvedClientName)
             if (RelayManager.shouldRelayOffer(ctx, selectedOffer)) {
                 bannerState = "pending"
-                val finalCode = selectedOffer.ussdCode.replace("pn", phone, true)
+                val finalCode = selectedOffer.ussdCode.replace("pn", finalPhone, true)
                 val txId = createPendingTransaction(
                     ctx,
                     selectedOffer.name,
                     "KSh ${selectedOffer.price}",
-                    phone,
+                    finalPhone,
                     finalCode,
                     clientName = resolvedClientName,
                     status = TransactionStatus.PROCESSING.value,
@@ -5867,7 +5869,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                 saveTransactionOutcome(ctx, txId, TransactionStatus.PROCESSING.value, "Forwarded to Relay phone for execution.")
                 broadcastTransactionUpdated(ctx, txId)
 
-                val sent = RelayManager.forwardBuyAmount(ctx, phone, selectedOffer.price)
+                val sent = RelayManager.forwardBuyAmount(ctx, finalPhone, selectedOffer.price)
                 if (sent) {
                     bannerState = "relayed"
                 } else {
@@ -5877,12 +5879,12 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                 }
             } else {
                 bannerState = "pending"
-                val finalCode = selectedOffer.ussdCode.replace("pn", phone, true)
+                val finalCode = selectedOffer.ussdCode.replace("pn", finalPhone, true)
                 val txId = createPendingTransaction(
                     ctx,
                     selectedOffer.name,
                     "KSh ${selectedOffer.price}",
-                    phone,
+                    finalPhone,
                     finalCode,
                     clientName = resolvedClientName,
                     source = TX_SOURCE_MANUAL,
@@ -5892,11 +5894,11 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                 pendingTxId = txId
                 ctx.startOfferAutomation(
                     offer = selectedOffer,
-                    phoneNumber = phone,
+                    phoneNumber = finalPhone,
                     txId = txId,
                     finalCode = finalCode,
                     mode = mode,
-                    returnToAppAggressively = false
+                    returnToAppAggressively = true
                 )
             }
         }
@@ -6104,12 +6106,23 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                                         BasicTextField(
                                             value = phone,
                                             onValueChange = {
-                                                val digitsOnly = it.filter(Char::isDigit).take(10)
-                                                phone = digitsOnly
+                                                val digitsOnly = buildString {
+                                                    it.forEachIndexed { index, ch ->
+                                                        if (ch.isDigit() || (ch == '+' && index == 0)) append(ch)
+                                                    }
+                                                }.take(13)
+                                                val normalizedInput = SmsCommandHandler.normalizePhone(digitsOnly)
+                                                phone = when {
+                                                    normalizedInput.matches(Regex("^0\\d{9}$")) -> normalizedInput
+                                                    digitsOnly.startsWith("+") -> "+${digitsOnly.drop(1).filter(Char::isDigit).take(12)}"
+                                                    else -> digitsOnly.filter(Char::isDigit).take(12)
+                                                }
                                                 bannerState = null
                                                 phoneErr = when {
                                                     digitsOnly.isBlank() -> null
-                                                    digitsOnly.length < 10 -> "Enter all 10 digits"
+                                                    normalizedInput.matches(Regex("^0\\d{9}$")) -> null
+                                                    normalizedInput.isNotBlank() && normalizedInput.length > 10 -> "Enter a valid phone number"
+                                                    digitsOnly.filter(Char::isDigit).length < 9 -> "Enter the phone number"
                                                     else -> null
                                                 }
                                             },
@@ -6301,7 +6314,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                                         containerColor = C.amber,
                                         contentColor = C.bg
                                     ),
-                                    enabled = selOffer != null
+                                    enabled = dispatchReady && bannerState != "pending"
                                 ) {
                                     Icon(Icons.Filled.Send, null, tint = C.bg, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(10.dp))
