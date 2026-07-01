@@ -89,16 +89,17 @@ internal fun TransactionDetailDialog(
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val isFailed = tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED
-    val isDailyLimitHold = DailyLimitPolicy.isDailyLimitHold(tx)
+    val isDailyLimitHold = isScheduledTransaction(tx)
     val statusColor = when (tx.statusEnum) {
         TransactionStatus.SUCCESS -> C.green
         TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
-        else -> C.amber
+        else -> if (isDailyLimitHold) C.cyan else C.amber
     }
-    val statusLabel = when (tx.statusEnum) {
-        TransactionStatus.SUCCESS -> "Completed"
-        TransactionStatus.FAILED, TransactionStatus.CANCELLED -> "Failed"
-        TransactionStatus.PROCESSING, TransactionStatus.PENDING, TransactionStatus.RETRYING -> "In Progress"
+    val statusLabel = when {
+        isDailyLimitHold -> "Scheduled"
+        tx.statusEnum == TransactionStatus.SUCCESS -> "Completed"
+        tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED -> "Failed"
+        else -> "In Progress"
     }
 
     var retrying by remember { mutableStateOf(false) }
@@ -742,6 +743,7 @@ private fun formatTimestamp(ts: Long): String {
 
 private fun formatCompletedAt(tx: Transaction): String {
     if (tx.completedAt > 0L) return formatTimestamp(tx.completedAt)
+    if (isScheduledTransaction(tx)) return "Queued for tomorrow at 07:00"
     return when (tx.statusEnum) {
         TransactionStatus.SUCCESS,
         TransactionStatus.FAILED,

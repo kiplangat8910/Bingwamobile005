@@ -1205,7 +1205,13 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
                             Column(Modifier.weight(1f)) {
                                 Text("Command Format", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                 Spacer(Modifier.height(2.dp))
-                                Text("${adminPrefix.trim().uppercase()} ${if (pinHint.isNotEmpty()) "$pinHint " else ""}STATUS", color = C.t2, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    "${adminPrefix.trim().uppercase()} ${if (pinHint.isNotEmpty()) "$pinHint " else ""}STATUS",
+                                    color = C.t2,
+                                    fontSize = 11.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Clip
+                                )
                             }
                         }
                     }
@@ -3151,7 +3157,7 @@ private fun TransactionSettings(onBack: () -> Unit) {
         mutableStateOf(historyVisibleTransactions(TransactionStore.load(ctx)))
     }
     var selectedTx by remember { mutableStateOf<Transaction?>(null) }
-    val offers = remember { OfferRepository.load(ctx).filter { it.enabled } }
+    val offers = remember { OfferRepository.load(ctx) }
     val clearOptions = listOf("Daily", "Weekly", "Monthly", "Yearly", "Never")
     val tabs = TransactionHistoryFilter.entries.map { filter ->
         TransactionHistoryTab(
@@ -3480,9 +3486,10 @@ private enum class TransactionHistorySummaryPeriod(
 private enum class TransactionHistoryFilter(val label: String) {
     ALL("All"),
     COMPLETED("Completed"),
+    SCHEDULED("Scheduled"),
     PENDING("Pending"),
     FAILED("Failed"),
-    UNMATCHED("Unmatched")
+    UNMATCHED("Not Configured")
 }
 
 private data class TransactionHistoryTab(
@@ -3547,7 +3554,7 @@ private fun TransactionHistoryHeroCard(
                 Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = C.cyan, modifier = Modifier.size(14.dp))
                 Text(
                     if (unmatchedCount > 0) {
-                        "$completedCount successful transactions • $unmatchedCount unmatched"
+                        "$completedCount successful transactions • $unmatchedCount not configured"
                     } else {
                         "$completedCount successful transactions"
                     },
@@ -3679,7 +3686,6 @@ private fun TransactionHistoryRow(
     val classification = transactionHistoryFilterFor(tx, offers)
     val accent = transactionHistoryAccent(classification)
     val avatarColor = transactionAvatarColor(tx)
-    val expectedOffer = resolveOfferForHistory(tx, offers)
     val title = tx.clientName.ifBlank {
         tx.description.ifBlank { "Transaction #${tx.id}" }
     }
@@ -3688,11 +3694,13 @@ private fun TransactionHistoryRow(
         ?.let(::maskTransactionPhone)
         ?: transactionSourceLabel(tx.source)
     val note = when (classification) {
+        TransactionHistoryFilter.SCHEDULED -> {
+            transactionReasonShort(tx).takeIf { it.isNotBlank() }
+                ?: "Queued for tomorrow because the daily limit was reached."
+        }
         TransactionHistoryFilter.UNMATCHED -> {
             val received = transactionHistoryCurrency(transactionHistoryAmountValue(tx))
-            expectedOffer?.let {
-                "Received $received but ${it.name} is set to KES ${it.price}"
-            } ?: "Received $received but it does not match any configured offer"
+            "Received $received but this transaction is not configured in Offers."
         }
         TransactionHistoryFilter.FAILED -> {
             transactionReasonShort(tx).takeIf { it.isNotBlank() }
@@ -3854,7 +3862,8 @@ private fun transactionHistoryFilterFor(
     tx: Transaction,
     offers: List<OfferItem>
 ): TransactionHistoryFilter {
-    if (isTransactionUnmatched(tx, offers)) return TransactionHistoryFilter.UNMATCHED
+    if (isScheduledTransaction(tx)) return TransactionHistoryFilter.SCHEDULED
+    if (isUnmatchedTransaction(tx, offers)) return TransactionHistoryFilter.UNMATCHED
     return when (tx.statusEnum) {
         TransactionStatus.SUCCESS -> TransactionHistoryFilter.COMPLETED
         TransactionStatus.FAILED, TransactionStatus.CANCELLED -> TransactionHistoryFilter.FAILED
@@ -3862,41 +3871,10 @@ private fun transactionHistoryFilterFor(
     }
 }
 
-private fun isTransactionUnmatched(
-    tx: Transaction,
-    offers: List<OfferItem>
-): Boolean {
-    if (tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED) return false
-    val amount = transactionHistoryAmountValue(tx)
-    if (amount <= 0.0 || tx.source == TX_SOURCE_AIRTIME) return false
-    val expectedOffer = resolveOfferForHistory(tx, offers)
-    return if (expectedOffer != null) {
-        expectedOffer.price.toDouble() != amount
-    } else {
-        offers.none { it.enabled && it.price.toDouble() == amount }
-    }
-}
-
-private fun resolveOfferForHistory(
-    tx: Transaction,
-    offers: List<OfferItem>
-): OfferItem? {
-    tx.offerId.takeIf { it >= 0 }?.let { offerId ->
-        offers.firstOrNull { it.id == offerId }?.let { return it }
-    }
-    offers.firstOrNull { it.name.trim().equals(tx.description.trim(), ignoreCase = true) }?.let { return it }
-    if (tx.amountValue > 0.0) {
-        offers.firstOrNull { it.price == tx.amountValue.toInt() }?.let { return it }
-    }
-    val normalizedCode = UssdHelper.normalizeUssdCode(tx.ussdCode, tx.phoneNumber)
-    return offers.firstOrNull {
-        UssdHelper.normalizeUssdCode(it.ussdCode, tx.phoneNumber) == normalizedCode
-    }
-}
-
 private fun transactionHistoryAccent(classification: TransactionHistoryFilter): Color =
     when (classification) {
         TransactionHistoryFilter.COMPLETED -> C.green
+        TransactionHistoryFilter.SCHEDULED -> C.cyan
         TransactionHistoryFilter.FAILED -> C.red
         TransactionHistoryFilter.UNMATCHED -> C.orange
         TransactionHistoryFilter.PENDING -> Color(0xFFF7B731)

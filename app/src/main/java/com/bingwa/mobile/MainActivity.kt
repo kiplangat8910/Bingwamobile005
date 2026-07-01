@@ -2805,21 +2805,19 @@ fun HomeScreenVolcanic(
         .sortedByDescending { transactionTimestamp(it) }
         .toList()
     val sentCount = automatedTxns.size
+    val scheduledCount = automatedTxns.count { isScheduledTransaction(it) }
     val pendingCount = automatedTxns.count {
-        it.statusEnum == TransactionStatus.PROCESSING ||
-            it.statusEnum == TransactionStatus.PENDING ||
-            it.statusEnum == TransactionStatus.RETRYING
+        !isScheduledTransaction(it) && (
+            it.statusEnum == TransactionStatus.PROCESSING ||
+                it.statusEnum == TransactionStatus.PENDING ||
+                it.statusEnum == TransactionStatus.RETRYING
+            )
     }
     val failedCount = automatedTxns.count {
         it.statusEnum == TransactionStatus.FAILED || it.statusEnum == TransactionStatus.CANCELLED
     }
     val completedCount = automatedTxns.count { it.statusEnum == TransactionStatus.SUCCESS }
     val completionRate = if (sentCount > 0) (completedCount * 100 / sentCount) else 0
-    val scheduledCount = automatedTxns.count { tx ->
-        tx.status.equals("UnderMaintenance", ignoreCase = true) ||
-            tx.statusEnum == TransactionStatus.RETRYING ||
-            DailyLimitPolicy.isDailyLimitHold(tx)
-    }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
     val chromeAnim = rememberInfiniteTransition(label = "home_chrome")
@@ -5187,7 +5185,7 @@ private fun HomeStatusMetricCard(
     ) {
         Column(
             modifier = Modifier
-                .height(if (compact) 74.dp else 82.dp)
+                .height(if (compact) 80.dp else 88.dp)
                 .padding(horizontal = 6.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
@@ -5202,14 +5200,15 @@ private fun HomeStatusMetricCard(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                label.uppercase(Locale.getDefault()),
+                label,
                 color = C.t2,
-                fontSize = if (compact) 7.sp else 8.sp,
-                letterSpacing = if (compact) 0.5.sp else 0.8.sp,
+                fontSize = if (compact) 6.sp else 7.sp,
+                lineHeight = if (compact) 7.sp else 8.sp,
+                letterSpacing = if (compact) 0.2.sp else 0.4.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
+                maxLines = 2,
+                softWrap = true,
+                overflow = TextOverflow.Clip,
                 textAlign = TextAlign.Center
             )
         }
