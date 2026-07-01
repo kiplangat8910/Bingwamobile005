@@ -22,6 +22,7 @@ import java.util.Calendar
 object SmsCommandHandler {
     private const val TAG = "SmsCommandHandler"
     private const val PIN_TIMEOUT_MS = 3 * 60 * 1000L
+    private val LOCAL_PHONE_REGEX = Regex("^0\\d{9}$")
     private var lastPinSuccessTime = 0L
     private var lastPinValue = ""
     private val OWNER_NUMBERS = setOf("0790993046", "0746027073").map { normalizePhone(it) }.toSet()
@@ -45,18 +46,19 @@ object SmsCommandHandler {
         val replySubId = resolvePreferredUssdSubId(context)
         val prefix = (if (isPairedRelay) relayCfg.prefix else (prefs.safeGetString("sms_prefix", "BINGWA") ?: "BINGWA")).uppercase()
         val rawBody = body.trim()
+        val rawParts = rawBody.split("\\s+".toRegex(), limit = 2)
 
         if (!isPairedRelay && !prefs.safeGetBoolean("remote_enabled", false)) {
             sendSms(context, replyTo, "Remote admin is currently disabled.\n\nOpen Settings → Remote Admin, then enable Remote Control.", replySubId)
             return true
         }
 
-        if (!rawBody.uppercase().startsWith(prefix)) {
+        if (rawParts.firstOrNull()?.uppercase() != prefix) {
             sendSms(context, replyTo, "Command format:\n$prefix <COMMAND>\n\nText $prefix HELP to see all commands.", replySubId)
             return true
         }
 
-        var content = rawBody.substring(prefix.length).trim()
+        var content = rawParts.getOrNull(1)?.trim().orEmpty()
         if (content.isBlank()) {
             sendHelp(context, replyTo, replySubId)
             return true
@@ -66,7 +68,8 @@ object SmsCommandHandler {
         if (pin.isNotEmpty()) {
             if (System.currentTimeMillis() - lastPinSuccessTime < PIN_TIMEOUT_MS && lastPinValue == pin) {
             } else {
-                if (!content.startsWith(pin)) {
+                val contentParts = content.split("\\s+".toRegex(), limit = 2)
+                if (contentParts.firstOrNull() != pin) {
                     val pinHint = maskPin(pin)
                     sendSms(
                         context,
@@ -78,7 +81,11 @@ object SmsCommandHandler {
                 }
                 lastPinSuccessTime = System.currentTimeMillis()
                 lastPinValue = pin
-                content = content.substring(pin.length).trim()
+                content = contentParts.getOrNull(1)?.trim().orEmpty()
+                if (content.isBlank()) {
+                    sendHelp(context, replyTo, replySubId)
+                    return true
+                }
             }
         }
 
@@ -283,6 +290,10 @@ object SmsCommandHandler {
     }
 
     private fun executeCommand(context: Context, replyTo: String, replySubId: Int?, cmd: String) {
+        if (cmd.isBlank()) {
+            sendHelp(context, replyTo, replySubId)
+            return
+        }
         val parts = cmd.split("\\s+".toRegex())
         val action = parts[0].uppercase()
         val args = parts.drop(1)
@@ -380,21 +391,21 @@ object SmsCommandHandler {
         }
         val sb = StringBuilder()
         offers.forEachIndexed { idx, o ->
-            sb.append("${idx+1}. ${o.name} – KSh${o.price} [${if (o.enabled) "ON" else "OFF"}]\n")
+            sb.append("${idx + 1}. ${o.name} – KSh${o.price} [${if (o.enabled) "ON" else "OFF"}] (ID ${o.id})\n")
         }
+        sb.append("\nUse the offer number or ID with ON, OFF, or BUY.")
         sendSms(context, replyTo, sb.toString().trimEnd(), replySubId)
     }
 
     private fun toggleOffer(context: Context, replyTo: String, replySubId: Int?, args: List<String>, enable: Boolean) {
-        if (args.isEmpty()) { sendSms(context, replyTo, "Usage: ${if (enable) "ON" else "OFF"} <offer-id>", replySubId); return }
-        val id = args[0].toIntOrNull() ?: run { sendSms(context, replyTo, "✗ Invalid offer ID", replySubId); return }
+        if (args.isEmpty()) { sendSms(context, replyTo, "Usage: ${if (enable) "ON" else "OFF"} <offer-number>", replySubId); return }
         val prefs = context.getSharedPreferences("DataOffers", Context.MODE_PRIVATE)
         val gson = Gson()
         val offers: MutableList<OfferItem> = try {
             gson.fromJson(prefs.getString("offers","[]"), object : TypeToken<MutableList<OfferItem>>(){}.type)
         } catch (e: Exception) { mutableListOf() }
-        val index = offers.indexOfFirst { it.id == id }
-        if (index == -1) { sendSms(context, replyTo, "✗ Offer $id not found", replySubId); return }
+        val index = resolveOfferIndex(args[0], offers)
+        if (index == -1) { sendSms(context, replyTo, "Offer not found. Text OFFERS to see valid offer numbers.", replySubId); return }
         offers[index] = offers[index].copy(enabled = enable)
         prefs.edit().putString("offers", gson.toJson(offers)).apply()
         sendSms(context, replyTo, "\"${offers[index].name}\" has been ${if (enable) "enabled" else "disabled"}.", replySubId)
@@ -424,17 +435,17 @@ object SmsCommandHandler {
     }
 
     private fun manualBuy(context: Context, replyTo: String, replySubId: Int?, args: List<String>) {
-        if (args.size < 2) { sendSms(context, replyTo, "Usage: BUY <phone> <offer-id>", replySubId); return }
-        val phone = args[0]
-        if (!phone.matches(Regex("^0\\d{9}$"))) { sendSms(context, replyTo, "Invalid phone number. Use 10 digits (e.g. 0712345678).", replySubId); return }
-        val offerId = args[1].toIntOrNull() ?: run { sendSms(context, replyTo, "✗ Invalid offer ID", replySubId); return }
+        if (args.size < 2) { sendSms(context, replyTo, "Usage: BUY <phone> <offer-number>", replySubId); return }
+        val phone = normalizePhone(args[0])
+        if (!phone.matches(LOCAL_PHONE_REGEX)) { sendSms(context, replyTo, "Invalid phone number. Use 10 digits (e.g. 0712345678) or +254712345678.", replySubId); return }
         val prefs = context.getSharedPreferences("DataOffers", Context.MODE_PRIVATE)
         val gson = Gson()
         val offers: List<OfferItem> = try {
             gson.fromJson(prefs.getString("offers","[]"), object : TypeToken<List<OfferItem>>(){}.type)
         } catch (e: Exception) { emptyList() }
-        val offer = offers.find { it.id == offerId && it.enabled }
-        if (offer == null) { sendSms(context, replyTo, "✗ Offer $offerId not found or disabled", replySubId); return }
+        val offerIndex = resolveOfferIndex(args[1], offers)
+        val offer = offers.getOrNull(offerIndex)?.takeIf { it.enabled }
+        if (offer == null) { sendSms(context, replyTo, "Offer not found or disabled. Text OFFERS to see valid offer numbers.", replySubId); return }
 
         if (RelayManager.shouldRelayOffer(context, offer)) {
             val sent = RelayManager.forwardBuyAmount(context, phone, offer.price)
@@ -473,8 +484,8 @@ object SmsCommandHandler {
 
     private fun buyByAmount(context: Context, replyTo: String, replySubId: Int?, args: List<String>) {
         if (args.size < 2) { sendSms(context, replyTo, "Usage: BUYAMT <phone> <amount>", replySubId); return }
-        val phone = args[0]
-        if (!phone.matches(Regex("^0\\d{9}$"))) { sendSms(context, replyTo, "Invalid phone number. Use 10 digits (e.g. 0712345678).", replySubId); return }
+        val phone = normalizePhone(args[0])
+        if (!phone.matches(LOCAL_PHONE_REGEX)) { sendSms(context, replyTo, "Invalid phone number. Use 10 digits (e.g. 0712345678) or +254712345678.", replySubId); return }
         val amount = args[1].toIntOrNull() ?: run { sendSms(context, replyTo, "Invalid amount.", replySubId); return }
 
         val offer = RelayManager.findOfferByPrice(context, amount)
@@ -577,25 +588,37 @@ object SmsCommandHandler {
         }
 
         val menu = """
-            Commands:
-            BALANCE (B) – check airtime and tokens
-            TOKENS (T) – check token balance
-            STATUS (S) – view sent/pending/failed summary
-            BATTERY (BAT) – check phone battery level
-            OFFERS (O) – list all offers
-            ON <offer-id> – enable an offer
-            OFF <offer-id> – disable an offer
-            RETRY <tx-id> – retry a failed transaction
-            BUY <phone> <offer-id> – dispatch a bundle now
-            BUYAMT <phone> <amount> – dispatch by amount (used for Relay forwarding)
-            P – list pending transactions (latest 5)
-            F – list failed transactions (latest 5)
-            BT <amount> – buy tokens using airtime
+            Checks:
+            STATUS (S) – summary of sent, pending, failed, usage, and battery
             PING – quick health/status check
+            BALANCE (B) – airtime and token balance
+            TOKENS (T) – token or unlimited status
+            BATTERY (BAT) – phone battery level
+
+            Offers:
+            OFFERS (O) – list offers with their number and ID
+            ON <offer> – enable an offer by number or ID
+            OFF <offer> – disable an offer by number or ID
+            BUY <phone> <offer> – dispatch using an offer number or ID
+            BUYAMT <phone> <amount> – dispatch by amount
+
+            Transactions:
+            P – latest pending transactions
+            F – latest failed transactions
+            RETRY <tx-id> – retry a failed transaction
+
+            Wallet:
+            BT <amount> – buy tokens using airtime
             HELP – this message
         """.trimIndent()
 
         sendSms(context, replyTo, (intro + menu).trimEnd(), replySubId)
+    }
+
+    private fun resolveOfferIndex(reference: String, offers: List<OfferItem>): Int {
+        val numeric = reference.toIntOrNull() ?: return -1
+        val idIndex = offers.indexOfFirst { it.id == numeric }
+        return if (idIndex != -1) idIndex else offers.indices.firstOrNull { it + 1 == numeric } ?: -1
     }
 
     internal fun sendSms(context: Context, phone: String, message: String, preferredSubId: Int? = null) {

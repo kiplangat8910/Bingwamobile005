@@ -32,6 +32,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -1177,11 +1179,41 @@ private fun RelayScannerChip(
 private fun RemoteControlSettings(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val prefs = ctx.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+    val sims = getAvailableSims(ctx)
     var remoteEnabled by remember { mutableStateOf(prefs.safeGetBoolean("remote_enabled", false)) }
     var adminPhone by remember { mutableStateOf(prefs.safeGetString("admin_phone", "") ?: "") }
     var adminPrefix by remember { mutableStateOf(prefs.safeGetString("sms_prefix", "BINGWA") ?: "BINGWA") }
     var adminPin by remember { mutableStateOf(prefs.safeGetString("sms_pin", "") ?: "") }
     var pinVisible by remember { mutableStateOf(false) }
+    val normalizedAdminPhone = remember(adminPhone) {
+        adminPhone.trim().takeIf { it.isNotEmpty() }?.let(SmsCommandHandler::normalizePhone).orEmpty()
+    }
+    val normalizedPrefix = remember(adminPrefix) {
+        normalizeAdminCommandPrefix(adminPrefix)
+    }
+    val savedPrefix = normalizedPrefix.ifBlank { "BINGWA" }
+    val pinHint = remember(adminPin) { adminPin.trim().takeIf { it.isNotEmpty() }?.let(::maskPin).orEmpty() }
+    val phoneError = remoteEnabled && normalizedAdminPhone.isBlank()
+    val phoneFormatError = normalizedAdminPhone.isNotBlank() && !isRemoteAdminPhoneValid(normalizedAdminPhone)
+    val pinError = adminPin.isNotBlank() && adminPin.length !in 4..6
+    val canSave = !phoneError && !phoneFormatError && !pinError
+    val previewMessage = buildString {
+        append(savedPrefix)
+        append(' ')
+        if (pinHint.isNotEmpty()) {
+            append(pinHint)
+            append(' ')
+        }
+        append("STATUS")
+    }
+    val adminReplySimLabel = remember(sims, prefs) {
+        val subId = prefs.safeGetInt("admin_sms_sim_id", -1)
+        if (subId == -1) {
+            "Default SIM"
+        } else {
+            sims.find { it.subscriptionId == subId }?.let { "${it.displayName} · Slot ${it.simSlotIndex + 1}" } ?: "SIM $subId"
+        }
+    }
 
     Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
         SettingsTopBar("Remote Control", "Admin SMS commands and security", onBack)
@@ -1193,7 +1225,6 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
                 }
                 GroupDivider()
                 Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    val pinHint = if (adminPin.trim().isNotEmpty()) "*".repeat((adminPin.trim().length - 2).coerceAtLeast(0)) + adminPin.trim().takeLast(2) else ""
                     Surface(shape = RoundedCornerShape(14.dp), color = C.w04, border = BorderStroke(1.dp, C.border)) {
                         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(
@@ -1205,7 +1236,14 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
                             Column(Modifier.weight(1f)) {
                                 Text("Command Format", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                 Spacer(Modifier.height(2.dp))
-                                Text("${adminPrefix.trim().uppercase()} ${if (pinHint.isNotEmpty()) "$pinHint " else ""}STATUS", color = C.t2, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(previewMessage, color = C.t2, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 16.sp)
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "Replies use $adminReplySimLabel. Change it in SIM Settings if admin SMS replies need a different line.",
+                                    color = C.t3,
+                                    fontSize = 10.sp,
+                                    lineHeight = 14.sp
+                                )
                             }
                         }
                     }
@@ -1225,8 +1263,21 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = fieldColors(),
+                        isError = phoneError || phoneFormatError,
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        when {
+                            phoneError -> "Add the admin phone number before enabling Remote Control."
+                            phoneFormatError -> "Use a valid Kenyan mobile number such as 0712345678 or +254712345678."
+                            normalizedAdminPhone.isNotBlank() -> "Commands will be accepted only from $normalizedAdminPhone."
+                            else -> "Only one trusted number can send admin commands."
+                        },
+                        color = if (phoneError || phoneFormatError) C.red else C.t3,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
                     )
                 }
                 GroupDivider()
@@ -1238,12 +1289,19 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = adminPrefix,
-                        onValueChange = { adminPrefix = it.trim().uppercase() },
+                        onValueChange = { adminPrefix = normalizeAdminCommandPrefix(it) },
                         placeholder = { Text("BINGWA", color = C.t3) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = fieldColors(),
                         singleLine = true
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Saved as $savedPrefix. Letters and numbers only so the prefix is easy to type and match.",
+                        color = C.t3,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
                     )
                 }
                 GroupDivider()
@@ -1267,17 +1325,26 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = fieldColors(),
+                        isError = pinError,
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        if (pinError) "PIN must contain 4 to 6 digits." else "Leave blank to allow commands without a PIN. When set, send the PIN as its own word before the command.",
+                        color = if (pinError) C.red else C.t3,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
                     )
                 }
                 GroupDivider()
                 Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
                     Button(
+                        enabled = canSave,
                         onClick = {
                             prefs.edit()
-                                .putString("admin_phone", adminPhone.trim())
-                                .putString("sms_prefix", adminPrefix.trim().uppercase())
+                                .putString("admin_phone", normalizedAdminPhone)
+                                .putString("sms_prefix", savedPrefix)
                                 .putString("sms_pin", adminPin.trim())
                                 .apply()
                             vib(ctx)
@@ -1285,16 +1352,160 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
                         },
                         modifier = Modifier.fillMaxWidth().height(48.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = C.cyan)
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = C.cyan,
+                            contentColor = C.bg,
+                            disabledContainerColor = C.border,
+                            disabledContentColor = C.t3
+                        )
                     ) {
-                        Icon(Icons.Filled.Save, null, tint = C.bg, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Filled.Save, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Save Admin Settings", color = C.bg, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
+                        Text("Save Admin Settings", fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
                     }
                 }
             }
+            SettingsGroup("Quick Start") {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Surface(shape = RoundedCornerShape(16.dp), color = C.cyanDim, border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.18f))) {
+                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Use one of these formats from the saved Admin Phone number.", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            RemoteCommandExamples(
+                                examples = listOf(
+                                    previewMessage,
+                                    buildString {
+                                        append(savedPrefix)
+                                        append(' ')
+                                        if (pinHint.isNotEmpty()) {
+                                            append(pinHint)
+                                            append(' ')
+                                        }
+                                        append("OFFERS")
+                                    },
+                                    buildString {
+                                        append(savedPrefix)
+                                        append(' ')
+                                        if (pinHint.isNotEmpty()) {
+                                            append(pinHint)
+                                            append(' ')
+                                        }
+                                        append("BUY 0712345678 1")
+                                    }
+                                )
+                            )
+                            Text(
+                                "Tip: `OFFERS` shows the offer numbers you can use with `ON`, `OFF`, and `BUY`.",
+                                color = C.t2,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+                }
+            }
+            SettingsGroup("Command Reference") {
+                RemoteCommandSection(
+                    title = "Checks",
+                    items = listOf(
+                        RemoteCommandItem("STATUS", "View sent, pending, failed, usage, and battery summary."),
+                        RemoteCommandItem("PING", "Get a quick app health snapshot."),
+                        RemoteCommandItem("BALANCE", "Check airtime balance and token balance."),
+                        RemoteCommandItem("TOKENS", "Check token or unlimited status."),
+                        RemoteCommandItem("BATTERY", "Check the current phone battery status.")
+                    )
+                )
+                GroupDivider()
+                RemoteCommandSection(
+                    title = "Offers",
+                    items = listOf(
+                        RemoteCommandItem("OFFERS", "List offers with the numbers and IDs you can use remotely."),
+                        RemoteCommandItem("ON <offer>", "Enable an offer using the number or ID from OFFERS."),
+                        RemoteCommandItem("OFF <offer>", "Disable an offer using the number or ID from OFFERS."),
+                        RemoteCommandItem("BUY <phone> <offer>", "Dispatch a bundle to a phone using an offer number or ID."),
+                        RemoteCommandItem("BUYAMT <phone> <amount>", "Dispatch by amount when you know the KSh value.")
+                    )
+                )
+                GroupDivider()
+                RemoteCommandSection(
+                    title = "Transactions",
+                    items = listOf(
+                        RemoteCommandItem("P", "Show the latest pending transactions."),
+                        RemoteCommandItem("F", "Show the latest failed transactions."),
+                        RemoteCommandItem("RETRY <tx-id>", "Retry a failed transaction by its ID.")
+                    )
+                )
+                GroupDivider()
+                RemoteCommandSection(
+                    title = "Wallet",
+                    items = listOf(
+                        RemoteCommandItem("BT <amount>", "Buy tokens using airtime."),
+                        RemoteCommandItem("HELP", "Send the full SMS help message back to the admin phone.")
+                    )
+                )
+            }
         }
         Spacer(Modifier.height(22.dp))
+    }
+}
+
+private data class RemoteCommandItem(
+    val command: String,
+    val description: String
+)
+
+private fun normalizeAdminCommandPrefix(value: String): String =
+    value.uppercase().filter { it.isLetterOrDigit() }.take(12)
+
+private fun isRemoteAdminPhoneValid(phone: String): Boolean =
+    phone.matches(Regex("^0\\d{9}$"))
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RemoteCommandExamples(examples: List<String>) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        examples.distinct().forEach { example ->
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = C.cardHi,
+                border = BorderStroke(1.dp, C.border)
+            ) {
+                Text(
+                    text = example,
+                    color = C.t1,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RemoteCommandSection(title: String, items: List<RemoteCommandItem>) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(title, color = C.cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        items.forEach { item ->
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = C.w04,
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(item.command, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(item.description, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
+                }
+            }
+        }
     }
 }
 
