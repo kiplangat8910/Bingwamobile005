@@ -72,6 +72,7 @@ object UssdHelper {
         try {
             val intent = buildCallIntent(context, code)
             if (intent.resolveActivity(context.packageManager) != null) {
+                UssdNavigationService.armForegroundUi()
                 context.startActivity(intent)
                 relaunchAppUi(context)
                 return false
