@@ -119,7 +119,13 @@ class AutomationService : Service() {
     }
 
     private fun startAdvanced(request: AutomationRequest) {
-        val clean = request.code.trim().replace("%23", "#").trimEnd('#')
+        val offer = request.offerId.takeIf { it >= 0 }?.let { OfferRepository.findById(this, it) }
+        val automationCode = when {
+            request.code.contains("pn", ignoreCase = true) -> request.code
+            offer?.ussdCode?.contains("pn", ignoreCase = true) == true -> offer.ussdCode
+            else -> request.code
+        }
+        val clean = automationCode.trim().replace("%23", "#").trimEnd('#')
         val parts = clean.split("*").filter { it.isNotEmpty() }
         if (parts.isEmpty()) {
             processResponse(request, "Invalid USSD code", forcedStatus = "Failed")
@@ -129,7 +135,6 @@ class AutomationService : Service() {
         val steps = (1 until parts.size).map {
             if (parts[it].equals("pn", true)) "INPUT_PHONE" else parts[it]
         }
-        val offer = request.offerId.takeIf { it >= 0 }?.let { OfferRepository.findById(this, it) }
         Log.d(TAG, "startAdvanced: dial=$dialCode steps=$steps txId=${request.txId}")
 
         UssdNavigationService.onDispatchComplete = { result ->
