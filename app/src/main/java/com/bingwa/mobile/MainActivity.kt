@@ -3653,15 +3653,14 @@ private fun HomeDispatchRow(
                             color = titleColor,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
-                            maxLines = 1
+                            lineHeight = 18.sp
                         )
                         Text(
                             phone,
                             color = phoneColor,
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            lineHeight = 15.sp
                         )
                     }
                 }
@@ -3719,9 +3718,7 @@ private fun HomeDispatchRow(
                                 color = offerColor,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
-                                lineHeight = 15.sp,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
+                                lineHeight = 15.sp
                             )
                         }
                         Row(
@@ -4255,10 +4252,11 @@ private data class TransactionRetryResult(
     val newTxId: Int = -1
 )
 
-private fun transactionStatusColor(tx: Transaction): Color = when (tx.statusEnum) {
-    TransactionStatus.SUCCESS -> C.green
-    TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
-    TransactionStatus.PROCESSING, TransactionStatus.PENDING, TransactionStatus.RETRYING -> C.amber
+private fun transactionStatusColor(tx: Transaction): Color = when {
+    DailyLimitPolicy.isDailyLimitHold(tx) -> C.cyan
+    tx.statusEnum == TransactionStatus.SUCCESS -> C.green
+    tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED -> C.red
+    else -> C.amber
 }
 
 private fun transactionTypeLabel(tx: Transaction): String = when (tx.source) {
@@ -6785,16 +6783,13 @@ private fun ManualTerminalHistoryRow(
                     color = C.t1,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    lineHeight = 18.sp
                 )
                 Text(
                     "${tx.clientName.ifBlank { tx.phoneNumber }} · ${transactionSummaryTime(tx)}",
                     color = C.t2,
                     fontSize = 11.sp,
-                    lineHeight = 15.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    lineHeight = 15.sp
                 )
             }
             Surface(
