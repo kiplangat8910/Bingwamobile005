@@ -2752,6 +2752,11 @@ fun HomeScreenVolcanic(
     }
     val completedCount = automatedTxns.count { it.statusEnum == TransactionStatus.SUCCESS }
     val completionRate = if (sentCount > 0) (completedCount * 100 / sentCount) else 0
+    val scheduledCount = automatedTxns.count { tx ->
+        tx.status.equals("UnderMaintenance", ignoreCase = true) ||
+            tx.statusEnum == TransactionStatus.RETRYING ||
+            DailyLimitPolicy.isDailyLimitHold(tx)
+    }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
     val chromeAnim = rememberInfiniteTransition(label = "home_chrome")
@@ -2822,6 +2827,7 @@ fun HomeScreenVolcanic(
                             completedCount = completedCount,
                             pendingCount = pendingCount,
                             failedCount = failedCount,
+                            scheduledCount = scheduledCount,
                             rate = completionRate,
                             isRefreshing = isRefreshing,
                             spin = spin,
@@ -3041,6 +3047,7 @@ private fun HomeSplitBalanceCard(
     completedCount: Int,
     pendingCount: Int,
     failedCount: Int,
+    scheduledCount: Int,
     rate: Int,
     isRefreshing: Boolean,
     spin: Float,
@@ -3213,13 +3220,15 @@ private fun HomeSplitBalanceCard(
                 completed = completedCount,
                 pending = pendingCount,
                 failed = failedCount,
+                scheduled = scheduledCount,
                 rate = rate,
                 compact = compact,
                 spacing = statsSpacing,
                 sentAccent = mint,
                 pendingAccent = amber,
                 failedAccent = coral,
-                completedAccent = completedAccent
+                completedAccent = completedAccent,
+                scheduledAccent = cyan
             )
         }
     }
@@ -3994,6 +4003,7 @@ private fun GithubOverviewCard(
     sent: Int,
     pending: Int,
     failed: Int,
+    scheduled: Int = 0,
     rate: Int,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
@@ -4060,6 +4070,7 @@ private fun GithubOverviewCard(
                 GithubStatPill("Sent", sent.toString(), C.green, Modifier.weight(1f))
                 GithubStatPill("Pending", pending.toString(), C.amber, Modifier.weight(1f))
                 GithubStatPill("Failed", failed.toString(), C.red, Modifier.weight(1f))
+                GithubStatPill("Scheduled", scheduled.toString(), C.purple, Modifier.weight(1f))
                 GithubStatPill("Rate", "$rate%", if (rate >= 70) C.green else C.amber, Modifier.weight(1f))
             }
         }
@@ -4755,6 +4766,7 @@ fun VolcanicBalanceCard(
     pending: Int,
     failed: Int,
     completed: Int,
+    scheduled: Int = 0,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     spin: Float,
@@ -4994,13 +5006,15 @@ fun VolcanicBalanceCard(
                 completed = completed,
                 pending = pending,
                 failed = failed,
+                scheduled = scheduled,
                 rate = if (sent > 0) (completed * 100 / sent) else 0,
                 compact = true,
                 spacing = statSpacing,
                 sentAccent = sentAccent,
                 pendingAccent = pendingAccent,
                 failedAccent = failedAccent,
-                completedAccent = completedAccent
+                completedAccent = completedAccent,
+                scheduledAccent = Color(0xFF74E6D8)
             )
         }
     }
@@ -5041,13 +5055,15 @@ private fun HomeStatsRow(
     completed: Int,
     pending: Int,
     failed: Int,
+    scheduled: Int = 0,
     rate: Int,
     compact: Boolean,
     spacing: Dp,
     sentAccent: Color,
     pendingAccent: Color,
     failedAccent: Color,
-    completedAccent: Color
+    completedAccent: Color,
+    scheduledAccent: Color = C.cyan
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -5072,6 +5088,13 @@ private fun HomeStatsRow(
             label = "Failed",
             value = failed.toString(),
             accent = failedAccent,
+            compact = compact,
+            modifier = Modifier.weight(1f)
+        )
+        HomeStatusMetricCard(
+            label = "Scheduled",
+            value = scheduled.toString(),
+            accent = scheduledAccent,
             compact = compact,
             modifier = Modifier.weight(1f)
         )
