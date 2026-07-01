@@ -89,32 +89,65 @@ class AutomationService : Service() {
     }
 
     private fun handleSimple(request: AutomationRequest) {
-        val prefs = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-        val subId = prefs.getInt("selected_sim_id", -1)
         val baseTm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
         if (baseTm == null) {
             processResponse(request, "Telephony unavailable on this phone", forcedStatus = "Failed")
             return
         }
-        val tm = if (subId != -1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            baseTm.createForSubscriptionId(subId)
+        val simTargets = resolveUssdSimTargets(this)
+        attemptSimpleDispatch(
+            request = request,
+            baseTm = baseTm,
+            simTargets = simTargets,
+            attemptIndex = 0
+        )
+    }
+
+    private fun attemptSimpleDispatch(
+        request: AutomationRequest,
+        baseTm: TelephonyManager,
+        simTargets: List<UssdSimTarget>,
+        attemptIndex: Int
+    ) {
+        val target = simTargets.getOrNull(attemptIndex)
+        val tm = if (target != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            baseTm.createForSubscriptionId(target.subId)
         } else {
             baseTm
         }
+        val slotLabel = target?.slotIndex?.let { "slot ${it + 1}" } ?: "default telephony"
         val started = SilentUssd.execute(
             telephonyManager = tm,
             ussdCode = request.code,
             onSuccess = { response ->
-                Log.d(TAG, "SIMPLE success txId=${request.txId} response='$response'")
+                Log.d(TAG, "SIMPLE success txId=${request.txId} via $slotLabel response='$response'")
                 processResponse(request, response)
             },
             onFailure = { error ->
-                Log.e(TAG, "SIMPLE failed txId=${request.txId} error='$error'")
-                processResponse(request, error)
+                val nextTarget = simTargets.getOrNull(attemptIndex + 1)
+                if (nextTarget != null) {
+                    Log.w(
+                        TAG,
+                        "SIMPLE failed txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}: '$error'"
+                    )
+                    attemptSimpleDispatch(request, baseTm, simTargets, attemptIndex + 1)
+                } else {
+                    Log.e(TAG, "SIMPLE failed txId=${request.txId} on $slotLabel error='$error'")
+                    processResponse(request, error)
+                }
             }
         )
         if (!started) {
-            processResponse(request, "Silent USSD is not supported on this phone", forcedStatus = "Failed")
+            val nextTarget = simTargets.getOrNull(attemptIndex + 1)
+            if (nextTarget != null) {
+                Log.w(
+                    TAG,
+                    "SIMPLE could not start txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}"
+                )
+                attemptSimpleDispatch(request, baseTm, simTargets, attemptIndex + 1)
+            } else {
+                processResponse(request, "Silent USSD is not supported on this phone", forcedStatus = "Failed")
+            }
         }
     }
 
@@ -162,16 +195,13 @@ class AutomationService : Service() {
         UssdNavigationService.refreshRunningOverlay()
 
         try {
-            val callIntent = UssdHelper.buildCallIntent(this, dialCode)
-            if (callIntent.resolveActivity(packageManager) != null) {
-                startActivity(callIntent)
-                if (request.returnToAppAggressively) {
-                    UssdHelper.relaunchAppUi(
-                        context = this,
-                        aggressiveRetries = true
-                    )
-                }
-            } else {
+            val started = startAdvancedDialAttempt(
+                request = request,
+                dialCode = dialCode,
+                simTargets = resolveUssdSimTargets(this),
+                attemptIndex = 0
+            )
+            if (!started) {
                 UssdNavigationService.advancedSteps = emptyList()
                 UssdNavigationService.advancedActive = false
                 UssdNavigationService.advancedInProgress = false
@@ -186,6 +216,49 @@ class AutomationService : Service() {
             UssdNavigationService.onDispatchComplete = null
             processResponse(request, "Dial error: ${e.message}", forcedStatus = "Failed")
             return
+        }
+    }
+
+    private fun startAdvancedDialAttempt(
+        request: AutomationRequest,
+        dialCode: String,
+        simTargets: List<UssdSimTarget>,
+        attemptIndex: Int
+    ): Boolean {
+        val target = simTargets.getOrNull(attemptIndex)
+        val slotLabel = target?.slotIndex?.let { "slot ${it + 1}" } ?: "default telephony"
+        val callIntent = UssdHelper.buildCallIntent(this, dialCode, target?.subId)
+        if (callIntent.resolveActivity(packageManager) == null) {
+            val nextTarget = simTargets.getOrNull(attemptIndex + 1)
+            if (nextTarget != null) {
+                Log.w(TAG, "ADVANCED could not resolve dialer on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}")
+                return startAdvancedDialAttempt(request, dialCode, simTargets, attemptIndex + 1)
+            }
+            return false
+        }
+
+        return try {
+            Log.d(TAG, "ADVANCED dialing txId=${request.txId} via $slotLabel")
+            startActivity(callIntent)
+            if (request.returnToAppAggressively) {
+                UssdHelper.relaunchAppUi(
+                    context = this,
+                    aggressiveRetries = true
+                )
+            }
+            true
+        } catch (e: Exception) {
+            val nextTarget = simTargets.getOrNull(attemptIndex + 1)
+            if (nextTarget != null) {
+                Log.w(
+                    TAG,
+                    "ADVANCED dial launch failed txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}",
+                    e
+                )
+                startAdvancedDialAttempt(request, dialCode, simTargets, attemptIndex + 1)
+            } else {
+                throw e
+            }
         }
     }
 

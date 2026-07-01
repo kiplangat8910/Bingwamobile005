@@ -1989,6 +1989,69 @@ fun SimPickerRow(title: String, sub: String, sims: List<SubscriptionInfo>, curre
 }
 
 @Composable
+fun UssdSimPickerRow(title: String, sims: List<SubscriptionInfo>, current: Int, onSelect: (Int) -> Unit) {
+    var exp by remember { mutableStateOf(false) }
+    val normalized = remember(current, sims) { normalizeUssdSimSelection(current, sims) }
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SettingsRowIcon(Icons.Rounded.SimCard)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = C.t1, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                describeUssdSimSelection(normalized, sims),
+                color = C.t2,
+                fontSize = 12.sp,
+                lineHeight = 17.sp
+            )
+        }
+        Box {
+            TextButton(
+                onClick = { exp = true },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text("Change", color = C.cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+            DropdownMenu(
+                expanded = exp,
+                onDismissRequest = { exp = false },
+                modifier = Modifier
+                    .background(C.cardHi, RoundedCornerShape(12.dp))
+                    .border(1.dp, C.border, RoundedCornerShape(12.dp))
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Slot 1 (Default)", color = C.t1) },
+                    onClick = {
+                        onSelect(USSD_SIM_SELECTION_SLOT_1)
+                        exp = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Slot 2", color = C.t1) },
+                    onClick = {
+                        onSelect(USSD_SIM_SELECTION_SLOT_2)
+                        exp = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Both Slots", color = C.t1) },
+                    onClick = {
+                        onSelect(USSD_SIM_SELECTION_BOTH)
+                        exp = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun SettingsRowIcon(icon: ImageVector, tint: Color = C.t1) {
     Box(
         Modifier
@@ -7369,7 +7432,7 @@ fun SettingsScreen() {
     var autoRetry by remember { mutableStateOf(prefs.safeGetBoolean("auto_retry", false)) }
     var autoContacts by remember { mutableStateOf(prefs.safeGetBoolean("auto_save_contacts", true)) }
     val sims = getAvailableSims(ctx)
-    var simId by remember { mutableIntStateOf(prefs.safeGetInt("selected_sim_id", -1)) }
+    var simId by remember { mutableIntStateOf(currentUssdSimSelection(ctx)) }
     var notifySuccess by remember { mutableStateOf(prefs.safeGetBoolean("notify_success", true)) }
     var notifyFailed by remember { mutableStateOf(prefs.safeGetBoolean("notify_failed", true)) }
     var notifySimId by remember { mutableIntStateOf(prefs.safeGetInt("notify_sim_id", -1)) }
@@ -7470,7 +7533,10 @@ fun SettingsScreen() {
                 GroupDivider()
                 ToggleRow(Icons.Rounded.PersonAdd, "Auto-Save Contacts", "Save payer numbers from M-PESA SMS", autoContacts) { autoContacts = it; prefs.edit().putBoolean("auto_save_contacts", it).apply() }
                 GroupDivider()
-                SimPickerRow("USSD SIM Card", "SIM used for USSD calls", sims, simId) { simId = it; prefs.edit().putInt("selected_sim_id", it).apply() }
+                UssdSimPickerRow("USSD SIM Card", sims, simId) {
+                    simId = it
+                    prefs.edit().putInt("selected_sim_id", it).apply()
+                }
             }
 
             SettingsGroup("Bundle Offers") {

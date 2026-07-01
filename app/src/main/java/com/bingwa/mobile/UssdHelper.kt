@@ -51,26 +51,97 @@ object UssdHelper {
     fun dialUssd(context: Context, ussdCode: String, silentOnly: Boolean = false, onSuccess: ((String) -> Unit)? = null, onFailure: ((String) -> Unit)? = null): Boolean {
         val code = normalizeUssdCode(ussdCode)
         Log.d("UssdHelper", "Dialing: $code")
-        val tm = selectedTelephonyManager(context)
-        if (tm == null) {
-            val reason = "Telephony unavailable on this phone"
-            if (!silentOnly) return fallbackToVisible(context, code, onSuccess, onFailure)
-            onFailure?.invoke(reason)
-            return false
-        }
-        val silentOk = SilentUssd.execute(tm, code, onSuccess = { onSuccess?.invoke(it) }, onFailure = { if (!silentOnly) fallbackToVisible(context, code, onSuccess, onFailure) else onFailure?.invoke(it) })
-        if (silentOk) return true
-        if (!silentOnly) return fallbackToVisible(context, code, onSuccess, onFailure)
-        onFailure?.invoke("Silent unsupported"); return false
+        val targets = resolveUssdSimTargets(context)
+        return dialUssdAttempt(
+            context = context,
+            code = code,
+            silentOnly = silentOnly,
+            targets = targets,
+            attemptIndex = 0,
+            onSuccess = onSuccess,
+            onFailure = onFailure
+        )
     }
 
     fun dialUssd(context: Context, ussdCode: String) {
         dialUssd(context, ussdCode, silentOnly = false, onSuccess = null, onFailure = null)
     }
 
-    private fun fallbackToVisible(context: Context, code: String, onSuccess: ((String) -> Unit)?, onFailure: ((String) -> Unit)?): Boolean {
+    private fun dialUssdAttempt(
+        context: Context,
+        code: String,
+        silentOnly: Boolean,
+        targets: List<UssdSimTarget>,
+        attemptIndex: Int,
+        onSuccess: ((String) -> Unit)?,
+        onFailure: ((String) -> Unit)?
+    ): Boolean {
+        val target = targets.getOrNull(attemptIndex)
+        val tm = selectedTelephonyManager(context, target?.subId)
+        if (tm == null) {
+            val reason = "Telephony unavailable on this phone"
+            return if (attemptIndex + 1 < targets.size) {
+                dialUssdAttempt(context, code, silentOnly, targets, attemptIndex + 1, onSuccess, onFailure)
+            } else {
+                if (!silentOnly) {
+                    fallbackToVisible(context, code, onSuccess, onFailure, target?.subId)
+                } else {
+                    onFailure?.invoke(reason)
+                    false
+                }
+            }
+        }
+
+        val slotLabel = target?.slotIndex?.let { "slot ${it + 1}" } ?: "default telephony"
+        Log.d("UssdHelper", "Trying USSD on $slotLabel")
+
+        val silentOk = SilentUssd.execute(
+            tm,
+            code,
+            onSuccess = { onSuccess?.invoke(it) },
+            onFailure = { error ->
+                val nextTarget = targets.getOrNull(attemptIndex + 1)
+                if (nextTarget != null) {
+                    Log.w(
+                        "UssdHelper",
+                        "USSD failed on $slotLabel, retrying slot ${nextTarget.slotIndex + 1}: $error"
+                    )
+                    dialUssdAttempt(context, code, silentOnly, targets, attemptIndex + 1, onSuccess, onFailure)
+                } else if (!silentOnly) {
+                    fallbackToVisible(context, code, onSuccess, onFailure, target?.subId)
+                } else {
+                    onFailure?.invoke(error)
+                }
+            }
+        )
+        if (silentOk) return true
+
+        return if (attemptIndex + 1 < targets.size) {
+            val nextTarget = targets[attemptIndex + 1]
+            Log.w(
+                "UssdHelper",
+                "Silent USSD could not start on $slotLabel, retrying slot ${nextTarget.slotIndex + 1}"
+            )
+            dialUssdAttempt(context, code, silentOnly, targets, attemptIndex + 1, onSuccess, onFailure)
+        } else {
+            if (!silentOnly) {
+                fallbackToVisible(context, code, onSuccess, onFailure, target?.subId)
+            } else {
+                onFailure?.invoke("Silent unsupported")
+                false
+            }
+        }
+    }
+
+    private fun fallbackToVisible(
+        context: Context,
+        code: String,
+        onSuccess: ((String) -> Unit)?,
+        onFailure: ((String) -> Unit)?,
+        subIdOverride: Int? = null
+    ): Boolean {
         try {
-            val intent = buildCallIntent(context, code)
+            val intent = buildCallIntent(context, code, subIdOverride)
             if (intent.resolveActivity(context.packageManager) != null) {
                 UssdNavigationService.armForegroundUi()
                 context.startActivity(intent)
@@ -89,14 +160,14 @@ object UssdHelper {
         }
     }
 
-    fun buildCallIntent(context: Context, ussdCode: String): Intent {
+    fun buildCallIntent(context: Context, ussdCode: String, subIdOverride: Int? = null): Intent {
         val code = normalizeUssdCode(ussdCode)
         val uri = Uri.parse("tel:" + Uri.encode(code))
         val canCall = ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) ==
             PackageManager.PERMISSION_GRANTED
         val action = if (canCall) Intent.ACTION_CALL else Intent.ACTION_DIAL
         val intent = Intent(action).apply { data = uri; addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-        val subId = selectedSubId(context)
+        val subId = subIdOverride ?: resolvePreferredUssdSubId(context) ?: -1
         if (subId != -1) {
             intent.putExtra("android.telephony.extra.SUBSCRIPTION_ID", subId)
             intent.putExtra("subscription", subId)
@@ -171,17 +242,8 @@ object UssdHelper {
         }
     }
 
-    private fun selectedSubId(context: Context): Int {
-        val raw = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE).safeGetInt("selected_sim_id", -1)
-        if (raw == -1) return -1
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return -1
-        val sm = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager ?: return -1
-        val active = runCatching { sm.activeSubscriptionInfoList }.getOrNull().orEmpty()
-        return if (active.any { it.subscriptionId == raw }) raw else -1
-    }
-
-    private fun selectedTelephonyManager(context: Context): TelephonyManager? {
-        val subId = selectedSubId(context)
+    private fun selectedTelephonyManager(context: Context, subIdOverride: Int? = null): TelephonyManager? {
+        val subId = subIdOverride ?: resolvePreferredUssdSubId(context) ?: -1
         val baseTm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return null
         if (subId != -1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) return baseTm.createForSubscriptionId(subId)
         return baseTm

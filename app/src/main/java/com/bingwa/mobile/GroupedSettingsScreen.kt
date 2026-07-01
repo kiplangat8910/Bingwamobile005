@@ -337,7 +337,7 @@ private fun SimSettings(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val prefs = ctx.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
     val sims = getAvailableSims(ctx)
-    var ussdSimId by remember { mutableIntStateOf(prefs.safeGetInt("selected_sim_id", -1)) }
+    var ussdSimId by remember { mutableIntStateOf(currentUssdSimSelection(ctx)) }
     var notifySimId by remember { mutableIntStateOf(prefs.safeGetInt("notify_sim_id", -1)) }
     var adminSmsSimId by remember { mutableIntStateOf(prefs.safeGetInt("admin_sms_sim_id", -1)) }
 
@@ -348,7 +348,7 @@ private fun SimSettings(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(UiDimens.SpacingLg)
         ) {
             SettingsGroup("SIM Settings") {
-                SimPickerRow("USSD Execution SIM", "SIM used for USSD calls", sims, ussdSimId) { v ->
+                UssdSimPickerRow("USSD Execution SIM", sims, ussdSimId) { v ->
                     ussdSimId = v
                     prefs.edit().putInt("selected_sim_id", v).apply()
                 }

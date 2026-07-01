@@ -42,7 +42,7 @@ object SmsCommandHandler {
         if (!isAdmin && !isPairedRelay) return false
 
         val replyTo = preferredDest(sender)
-        val replySubId = prefs.safeGetInt("selected_sim_id", -1).takeIf { it != -1 }
+        val replySubId = resolvePreferredUssdSubId(context)
         val prefix = (if (isPairedRelay) relayCfg.prefix else (prefs.safeGetString("sms_prefix", "BINGWA") ?: "BINGWA")).uppercase()
         val rawBody = body.trim()
 
@@ -607,7 +607,7 @@ object SmsCommandHandler {
             val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
             val adminSubId = prefs.getInt("admin_sms_sim_id", -1)
             val notifySubId = prefs.getInt("notify_sim_id", -1)
-            val ussdSubId = prefs.getInt("selected_sim_id", -1)
+            val ussdSubId = resolvePreferredUssdSubId(context) ?: -1
             val subId = listOf(preferredSubId ?: -1, ussdSubId, adminSubId, notifySubId).firstOrNull { it != -1 } ?: -1
 
             val managers = buildList {
