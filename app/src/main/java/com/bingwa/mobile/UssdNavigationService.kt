@@ -92,6 +92,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val ROOT_REACQUIRE_TIMEOUT_MS = 3_000L
         private const val DIALOG_DISMISS_SETTLE_MS = 240L
         private const val UI_KEEP_VISIBLE_INTERVAL_MS = 1_500L
+        private const val UI_HOLD_DURATION_MS = 90_000L
         // Some devices emit extra events on the same USSD dialog after we click "Send".
         // If we process those events immediately, we can inject the NEXT step into the PREVIOUS screen.
         private const val STEP_TRANSITION_GUARD_MS = 650L
@@ -191,6 +192,34 @@ class UssdNavigationService : AccessibilityService() {
         private var signatureChangeDetected = false
         private var signatureAutoAdjusted = false
 
+        @Volatile
+        private var uiHoldUntilElapsed: Long = 0L
+
+        fun armUiHold(durationMs: Long = UI_HOLD_DURATION_MS) {
+            val now = SystemClock.elapsedRealtime()
+            val wasActive = isUiHoldActive()
+            uiHoldUntilElapsed = maxOf(uiHoldUntilElapsed, now + durationMs).coerceAtLeast(now + 5_000L)
+            if (!wasActive) {
+                activeInstance?.handler?.post {
+                    activeInstance?.requestAppUiBehindPopup(force = true)
+                    activeInstance?.startKeepingAppUiVisible()
+                }
+            }
+        }
+
+        fun disarmUiHold() {
+            uiHoldUntilElapsed = 0L
+            activeInstance?.handler?.post {
+                activeInstance?.clearUiHoldState()
+            }
+        }
+
+        fun isUiHoldActive(): Boolean {
+            val until = uiHoldUntilElapsed
+            if (until <= 0L) return false
+            return SystemClock.elapsedRealtime() < until
+        }
+
         fun resetSignatureTracking() {
             adjustedStepInputs.clear()
             learnedSignatureSteps.clear()
@@ -223,6 +252,7 @@ class UssdNavigationService : AccessibilityService() {
     private var lastWindowId = -1
     private var lastRelevantEventElapsed = 0L
     private var hasSeenAdvancedPopup = false
+    private var hasSeenUiHoldPopup = false
     private var lastMenuSignatureKey = ""
     private var lastMenuSignature: ParsedMenuSignature? = null
     private var lastScreenSignatureKey = ""
@@ -357,7 +387,7 @@ class UssdNavigationService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
-        if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null) return
+        if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null && !isUiHoldActive()) return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED &&
@@ -367,6 +397,10 @@ class UssdNavigationService : AccessibilityService() {
             event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED
         ) return
         val pkg = event.packageName?.toString() ?: ""
+        if (isUiHoldActive() && isLauncherPackage(pkg)) {
+            disarmUiHold()
+            return
+        }
         val allowSystemUi = pkg == "com.android.systemui" &&
                 (advancedActive || balanceCallback != null || tokenPurchaseCallback != null || signatureLearningMode)
         if (pkg in BLOCKED_PACKAGES && !allowSystemUi) return
@@ -408,6 +442,18 @@ class UssdNavigationService : AccessibilityService() {
             }
             if (!looksLikeDialog) return
             lastRelevantEventElapsed = SystemClock.elapsedRealtime()
+
+            if (isUiHoldActive()) {
+                armUiHold()
+                if (!hasSeenUiHoldPopup) {
+                    hasSeenUiHoldPopup = true
+                    requestAppUiBehindPopup(force = true)
+                    startKeepingAppUiVisible()
+                } else if (windowChanged) {
+                    requestAppUiBehindPopup()
+                    startKeepingAppUiVisible()
+                }
+            }
 
             if (advancedActive && advancedSteps.isNotEmpty()) {
                 if (!hasSeenAdvancedPopup) {
@@ -1580,7 +1626,9 @@ class UssdNavigationService : AccessibilityService() {
         runCatching {
             val i = UssdHelper.buildCallIntent(this, dialCode)
             startActivity(i)
-            UssdHelper.relaunchAppUi(this)
+            if (isUiHoldActive()) {
+                UssdHelper.relaunchAppUi(this)
+            }
         }
     }
 
@@ -1589,10 +1637,10 @@ class UssdNavigationService : AccessibilityService() {
             when {
                 lower.contains("you have transferred") ||
                 (lower.contains("transfer") && lower.contains("successful")) -> {
-                    cb(true); closeCurrentUssdUi(); clearCallbacks(); return
+                    cb(true); closeCurrentUssdUi(); clearCallbacks(); disarmUiHold(); return
                 }
                 lower.contains("insufficient") || lower.contains("failed") || lower.contains("cancelled") -> {
-                    cb(false); closeCurrentUssdUi(); clearCallbacks(); return
+                    cb(false); closeCurrentUssdUi(); clearCallbacks(); disarmUiHold(); return
                 }
                 else -> {}
             }
@@ -1611,6 +1659,7 @@ class UssdNavigationService : AccessibilityService() {
                 BalanceChecker.balanceCallback?.invoke(display)
                 closeCurrentUssdUi()
                 clearCallbacks()
+                disarmUiHold()
             }
         }
     }
@@ -1632,6 +1681,8 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun cleanupAdvanced() {
+        uiHoldUntilElapsed = 0L
+        hasSeenUiHoldPopup = false
         stopKeepingAppUiVisible()
         cancelStepTimeout()
         processStepRunnable?.let { handler.removeCallbacks(it) }
@@ -1659,6 +1710,7 @@ class UssdNavigationService : AccessibilityService() {
         lastWindowPkg       = ""
         lastRelevantEventElapsed = 0L
         hasSeenAdvancedPopup = false
+        hasSeenUiHoldPopup = false
         lastMenuSignatureKey = ""
         lastMenuSignature = null
         lastScreenSignatureKey = ""
@@ -1800,7 +1852,7 @@ class UssdNavigationService : AccessibilityService() {
         SHOW_RUNNING_OVERLAY && (advancedInProgress || (advancedActive && advancedSteps.isNotEmpty()))
 
     private fun requestAppUiBehindPopup(force: Boolean = false) {
-        if (!advancedActive && !advancedInProgress) return
+        if (!isUiHoldActive()) return
         val now = SystemClock.elapsedRealtime()
         if (!force && now - lastUiReturnElapsed < 900L) return
         lastUiReturnElapsed = now
@@ -1811,7 +1863,7 @@ class UssdNavigationService : AccessibilityService() {
         uiKeepVisibleRunnable?.let { handler.removeCallbacks(it) }
         val task = object : Runnable {
             override fun run() {
-                if (!advancedActive || !advancedInProgress || !hasSeenAdvancedPopup) {
+                if (!isUiHoldActive() || !hasSeenUiHoldPopup) {
                     uiKeepVisibleRunnable = null
                     return
                 }
@@ -1826,6 +1878,21 @@ class UssdNavigationService : AccessibilityService() {
     private fun stopKeepingAppUiVisible() {
         uiKeepVisibleRunnable?.let { handler.removeCallbacks(it) }
         uiKeepVisibleRunnable = null
+    }
+
+    private fun clearUiHoldState() {
+        hasSeenUiHoldPopup = false
+        stopKeepingAppUiVisible()
+    }
+
+    private fun isLauncherPackage(pkg: String): Boolean {
+        if (pkg.isBlank()) return false
+        if (pkg.contains("launcher", ignoreCase = true)) return true
+        return pkg == "com.android.launcher" ||
+            pkg == "com.google.android.apps.nexuslauncher" ||
+            pkg == "com.miui.home" ||
+            pkg == "com.sec.android.app.launcher" ||
+            pkg == "com.huawei.android.launcher"
     }
 
     private fun buildRunningOverlayView(): View {

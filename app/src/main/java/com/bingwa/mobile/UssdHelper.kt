@@ -72,8 +72,14 @@ object UssdHelper {
         try {
             val intent = buildCallIntent(context, code)
             if (intent.resolveActivity(context.packageManager) != null) {
+                val keepUi = AppVisibility.isForeground
+                if (keepUi) {
+                    UssdNavigationService.armUiHold()
+                }
                 context.startActivity(intent)
-                relaunchAppUi(context)
+                if (keepUi) {
+                    relaunchAppUi(context)
+                }
                 return false
             }
             else { onFailure?.invoke("No dialer"); return false }
@@ -138,7 +144,6 @@ object UssdHelper {
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
                     Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             )
         }

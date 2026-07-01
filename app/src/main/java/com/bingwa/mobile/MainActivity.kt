@@ -101,6 +101,16 @@ class MainActivity : ComponentActivity() {
         if (denied.isNotEmpty()) Toast.makeText(this, "Permissions denied: ${denied.joinToString()}", Toast.LENGTH_LONG).show()
     }
 
+    override fun onResume() {
+        super.onResume()
+        AppVisibility.setForeground(true)
+    }
+
+    override fun onPause() {
+        AppVisibility.setForeground(false)
+        super.onPause()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         configureWindowSafely()
