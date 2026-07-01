@@ -1195,10 +1195,10 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
     val pinError = adminPin.isNotBlank() && adminPin.length !in 4..6
     val canSave = !phoneError && !phoneFormatError && !pinError
     val previewMessage = buildString {
-        append(savedPrefix)
+        append(savedPrefix.toString())
         append(' ')
         if (pinHint.isNotEmpty()) {
-            append(pinHint)
+            append(pinHint.toString())
             append(' ')
         }
         append("STATUS")
@@ -1371,19 +1371,19 @@ private fun RemoteControlSettings(onBack: () -> Unit) {
                                 examples = listOf(
                                     previewMessage,
                                     buildString {
-                                        append(savedPrefix)
+                                        append(savedPrefix.toString())
                                         append(' ')
                                         if (pinHint.isNotEmpty()) {
-                                            append(pinHint)
+                                            append(pinHint.toString())
                                             append(' ')
                                         }
                                         append("OFFERS")
                                     },
                                     buildString {
-                                        append(savedPrefix)
+                                        append(savedPrefix.toString())
                                         append(' ')
                                         if (pinHint.isNotEmpty()) {
-                                            append(pinHint)
+                                            append(pinHint.toString())
                                             append(' ')
                                         }
                                         append("BUY 0712345678 1")
