@@ -463,7 +463,7 @@ private fun ActivityInsightChip(label: String, value: String, tint: Color, modif
             Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(label, color = C.t3, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, color = C.t3, fontSize = 11.sp, lineHeight = 14.sp)
             Text(value, color = tint, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
@@ -595,16 +595,13 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
                     color = C.t1,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    lineHeight = 18.sp
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     subtitle,
                     color = C.t3,
                     fontSize = 11.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                     lineHeight = 16.sp
                 )
             }

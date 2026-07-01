@@ -90,15 +90,17 @@ internal fun TransactionDetailDialog(
     val clipboard = LocalClipboardManager.current
     val isFailed = tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED
     val isDailyLimitHold = DailyLimitPolicy.isDailyLimitHold(tx)
-    val statusColor = when (tx.statusEnum) {
-        TransactionStatus.SUCCESS -> C.green
-        TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
+    val statusColor = when {
+        isDailyLimitHold -> C.cyan
+        tx.statusEnum == TransactionStatus.SUCCESS -> C.green
+        tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED -> C.red
         else -> C.amber
     }
-    val statusLabel = when (tx.statusEnum) {
-        TransactionStatus.SUCCESS -> "Completed"
-        TransactionStatus.FAILED, TransactionStatus.CANCELLED -> "Failed"
-        TransactionStatus.PROCESSING, TransactionStatus.PENDING, TransactionStatus.RETRYING -> "In Progress"
+    val statusLabel = when {
+        isDailyLimitHold -> "Scheduled"
+        tx.statusEnum == TransactionStatus.SUCCESS -> "Completed"
+        tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED -> "Failed"
+        else -> "In Progress"
     }
 
     var retrying by remember { mutableStateOf(false) }
@@ -380,16 +382,14 @@ private fun TransactionDetailHeader(
                 color = C.t1,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.ExtraBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                lineHeight = 22.sp
             )
             Text(
                 tx.description.ifBlank { tx.phoneNumber.ifBlank { "Offer details" } },
                 color = C.t2,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                lineHeight = 18.sp
             )
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -532,9 +532,7 @@ private fun TransactionDetailInfoRow(
             color = C.t3,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.6.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            letterSpacing = 0.6.sp
         )
         if (trailingChip) {
             SourceChip(text = value)
@@ -550,8 +548,7 @@ private fun TransactionDetailInfoRow(
                 fontWeight = if (muted) FontWeight.Medium else FontWeight.SemiBold,
                 fontFamily = if (mono) FontFamily.Monospace else null,
                 textAlign = TextAlign.End,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+                lineHeight = 18.sp,
                 modifier = Modifier.padding(start = 10.dp)
             )
         }

@@ -5187,7 +5187,7 @@ private fun HomeStatusMetricCard(
     ) {
         Column(
             modifier = Modifier
-                .height(if (compact) 74.dp else 82.dp)
+                .heightIn(min = if (compact) 82.dp else 90.dp)
                 .padding(horizontal = 6.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
@@ -5202,14 +5202,13 @@ private fun HomeStatusMetricCard(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                label.uppercase(Locale.getDefault()),
+                label,
                 color = C.t2,
-                fontSize = if (compact) 7.sp else 8.sp,
-                letterSpacing = if (compact) 0.5.sp else 0.8.sp,
+                fontSize = if (compact) 8.sp else 9.sp,
+                lineHeight = if (compact) 10.sp else 11.sp,
+                letterSpacing = 0.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
+                maxLines = 2,
                 textAlign = TextAlign.Center
             )
         }

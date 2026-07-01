@@ -3693,6 +3693,7 @@ private enum class TransactionHistoryFilter(val label: String) {
     COMPLETED("Completed"),
     PENDING("Pending"),
     FAILED("Failed"),
+    SCHEDULED("Scheduled"),
     UNMATCHED("Unmatched")
 }
 
@@ -3890,7 +3891,6 @@ private fun TransactionHistoryRow(
     val classification = transactionHistoryFilterFor(tx, offers)
     val accent = transactionHistoryAccent(classification)
     val avatarColor = transactionAvatarColor(tx)
-    val expectedOffer = resolveOfferForHistory(tx, offers)
     val title = tx.clientName.ifBlank {
         tx.description.ifBlank { "Transaction #${tx.id}" }
     }
@@ -3899,11 +3899,13 @@ private fun TransactionHistoryRow(
         ?.let(::maskTransactionPhone)
         ?: transactionSourceLabel(tx.source)
     val note = when (classification) {
+        TransactionHistoryFilter.SCHEDULED -> {
+            transactionReasonShort(tx).takeIf { it.isNotBlank() }
+                ?: "Queued for dispatch tomorrow because the daily sending limit has been reached."
+        }
         TransactionHistoryFilter.UNMATCHED -> {
             val received = transactionHistoryCurrency(transactionHistoryAmountValue(tx))
-            expectedOffer?.let {
-                "Received $received but ${it.name} is set to KES ${it.price}"
-            } ?: "Received $received but it does not match any configured offer"
+            "Received $received but this transaction is not configured in the Offers section."
         }
         TransactionHistoryFilter.FAILED -> {
             transactionReasonShort(tx).takeIf { it.isNotBlank() }
@@ -3960,27 +3962,23 @@ private fun TransactionHistoryRow(
                     color = C.t1,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    lineHeight = 18.sp
                 )
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        primaryDetail,
-                        color = C.t3,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    TransactionStatusBadge(classification = classification, accent = accent)
-                }
                 Text(
-                    note,
-                    color = if (classification == TransactionHistoryFilter.UNMATCHED) accent else C.t2,
+                    primaryDetail,
+                    color = C.t3,
                     fontSize = 11.sp,
-                    lineHeight = 16.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    lineHeight = 16.sp
                 )
+                TransactionStatusBadge(classification = classification, accent = accent)
+                note.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        it,
+                        color = if (classification == TransactionHistoryFilter.UNMATCHED) accent else C.t2,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
+                }
             }
             Spacer(Modifier.width(12.dp))
             Column(
@@ -4065,6 +4063,7 @@ private fun transactionHistoryFilterFor(
     tx: Transaction,
     offers: List<OfferItem>
 ): TransactionHistoryFilter {
+    if (DailyLimitPolicy.isDailyLimitHold(tx)) return TransactionHistoryFilter.SCHEDULED
     if (isTransactionUnmatched(tx, offers)) return TransactionHistoryFilter.UNMATCHED
     return when (tx.statusEnum) {
         TransactionStatus.SUCCESS -> TransactionHistoryFilter.COMPLETED
@@ -4080,12 +4079,7 @@ private fun isTransactionUnmatched(
     if (tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED) return false
     val amount = transactionHistoryAmountValue(tx)
     if (amount <= 0.0 || tx.source == TX_SOURCE_AIRTIME) return false
-    val expectedOffer = resolveOfferForHistory(tx, offers)
-    return if (expectedOffer != null) {
-        expectedOffer.price.toDouble() != amount
-    } else {
-        offers.none { it.enabled && it.price.toDouble() == amount }
-    }
+    return resolveOfferForHistory(tx, offers) == null
 }
 
 private fun resolveOfferForHistory(
@@ -4109,6 +4103,7 @@ private fun transactionHistoryAccent(classification: TransactionHistoryFilter): 
     when (classification) {
         TransactionHistoryFilter.COMPLETED -> C.green
         TransactionHistoryFilter.FAILED -> C.red
+        TransactionHistoryFilter.SCHEDULED -> C.cyan
         TransactionHistoryFilter.UNMATCHED -> C.orange
         TransactionHistoryFilter.PENDING -> Color(0xFFF7B731)
         TransactionHistoryFilter.ALL -> C.cyan
