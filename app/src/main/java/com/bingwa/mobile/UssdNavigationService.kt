@@ -63,6 +63,7 @@ class UssdNavigationService : AccessibilityService() {
         var onDispatchComplete      : ((result: AdvancedDispatchResult) -> Unit)? = null
 
         private const val MAX_RETRIES            = 5
+        private const val SHOW_RUNNING_OVERLAY   = false
         private const val STEP_DELAY_MS          = 90L
         private const val EVENT_HOT_POLL_MS      = 16L
         private const val FAST_VERIFY_POLL_MS    = 24L
@@ -235,6 +236,7 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingStepAdvanceFromKey: String = ""
     private var pendingStepAdvanceSinceElapsed: Long = 0L
     private var pendingStepAdvanceTimeoutRunnable: Runnable? = null
+    private var pendingAdvanceKickRunnable: Runnable? = null
     private var uiKeepVisibleRunnable: Runnable? = null
     private var waitingForRootSinceElapsed: Long = 0L
     private var windowManager: WindowManager? = null
@@ -1671,7 +1673,24 @@ class UssdNavigationService : AccessibilityService() {
         resetSignatureTracking()
     }
 
+    private fun clearPendingAdvanceKick() {
+        pendingAdvanceKickRunnable?.let { handler.removeCallbacks(it) }
+        pendingAdvanceKickRunnable = null
+    }
+
+    private fun schedulePendingAdvanceKick(delayMs: Long = ROOT_REACQUIRE_RETRY_DELAY_MS) {
+        if (!advancedActive || pendingPhase == PendingPhase.NONE) return
+        clearPendingAdvanceKick()
+        val task = Runnable {
+            pendingAdvanceKickRunnable = null
+            attemptPendingAdvanceWithRoot(null)
+        }
+        pendingAdvanceKickRunnable = task
+        if (delayMs <= 0L) handler.post(task) else handler.postDelayed(task, delayMs)
+    }
+
     private fun clearPendingAdvance() {
+        clearPendingAdvanceKick()
         pendingExpectedValue = null
         pendingPhase = PendingPhase.NONE
         pendingSinceElapsed = 0L
@@ -1685,12 +1704,24 @@ class UssdNavigationService : AccessibilityService() {
         pendingAttempts = 0
         isProcessing = false
         // Safety kick in case OEM doesn't emit a useful event after ACTION_SET_TEXT.
-        handler.postDelayed({ attemptPendingAdvanceWithRoot(null) }, 120L)
+        schedulePendingAdvanceKick(delayMs = 120L)
     }
 
     private fun attemptPendingAdvanceWithRoot(existingRoot: AccessibilityNodeInfo?) {
         if (!advancedActive) { clearPendingAdvance(); isProcessing = false; return }
-        val root = existingRoot ?: getUssdRoot() ?: return
+        clearPendingAdvanceKick()
+        val root = existingRoot ?: getUssdRoot() ?: run {
+            if (pendingSinceElapsed > 0L &&
+                SystemClock.elapsedRealtime() - pendingSinceElapsed > PENDING_ADVANCE_TIMEOUT_MS
+            ) {
+                clearPendingAdvance()
+                isProcessing = false
+                dismissErrorAndRestart()
+            } else {
+                schedulePendingAdvanceKick()
+            }
+            return
+        }
         try {
             attemptPendingAdvance(root)
         } finally {
@@ -1736,6 +1767,7 @@ class UssdNavigationService : AccessibilityService() {
                     pendingAttempts++
                     writeValueToField(expected)
                 }
+                schedulePendingAdvanceKick()
                 isProcessing = false
             }
 
@@ -1748,6 +1780,7 @@ class UssdNavigationService : AccessibilityService() {
                     startPendingStepAdvance(root, text)
                 } else {
                     // Let the next event re-try, but avoid expensive work here.
+                    schedulePendingAdvanceKick()
                     isProcessing = false
                 }
             }
@@ -1764,7 +1797,7 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun shouldShowRunningOverlay(): Boolean =
-        advancedInProgress || (advancedActive && advancedSteps.isNotEmpty())
+        SHOW_RUNNING_OVERLAY && (advancedInProgress || (advancedActive && advancedSteps.isNotEmpty()))
 
     private fun requestAppUiBehindPopup(force: Boolean = false) {
         if (!advancedActive && !advancedInProgress) return
