@@ -67,6 +67,10 @@ class UssdNavigationService : AccessibilityService() {
         private var foregroundUiActive: Boolean = false
         @Volatile
         private var foregroundUiUntilElapsed: Long = 0L
+        @Volatile
+        private var keepAppUiVisibleEnabled: Boolean = true
+        @Volatile
+        private var uiReturnSuppressed: Boolean = false
 
         private const val MAX_RETRIES            = 5
         private const val SHOW_RUNNING_OVERLAY   = false
@@ -243,6 +247,24 @@ class UssdNavigationService : AccessibilityService() {
             refreshRunningOverlay()
         }
 
+        fun configureUiReturn(keepVisible: Boolean) {
+            keepAppUiVisibleEnabled = keepVisible
+            uiReturnSuppressed = false
+            refreshRunningOverlay()
+        }
+
+        fun suppressUiReturn() {
+            uiReturnSuppressed = true
+            refreshRunningOverlay()
+        }
+
+        fun onAppUiForegrounded() {
+            if (uiReturnSuppressed) {
+                uiReturnSuppressed = false
+                refreshRunningOverlay()
+            }
+        }
+
         private fun refreshForegroundUi(timeoutMs: Long = 35_000L) {
             if (!foregroundUiActive) return
             foregroundUiUntilElapsed = SystemClock.elapsedRealtime() + timeoutMs
@@ -318,8 +340,10 @@ class UssdNavigationService : AccessibilityService() {
         clearPendingAdvance()
         clearPendingStepAdvance()
         clearInputWriteMarker()
-        requestAppUiBehindPopup(force = true)
-        startKeepingAppUiVisible()
+        if (shouldKeepAppUiVisible()) {
+            requestAppUiBehindPopup(force = true)
+            startKeepingAppUiVisible()
+        }
         updateRunningOverlay()
         startStepTimeout()
     }
@@ -447,6 +471,15 @@ class UssdNavigationService : AccessibilityService() {
             event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED
         ) return
         val pkg = event.packageName?.toString() ?: ""
+        if (advancedActive &&
+            pkg in LAUNCHER_PACKAGES &&
+            (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED)
+        ) {
+            suppressUiReturn()
+            stopKeepingAppUiVisible()
+            updateRunningOverlay()
+            return
+        }
         if (foregroundUiActive &&
             !advancedActive &&
             pkg in LAUNCHER_PACKAGES &&
@@ -1695,7 +1728,7 @@ class UssdNavigationService : AccessibilityService() {
         runCatching {
             val i = UssdHelper.buildCallIntent(this, dialCode)
             startActivity(i)
-            UssdHelper.relaunchAppUi(this)
+            if (shouldKeepAppUiVisible()) UssdHelper.relaunchAppUi(this)
         }
     }
 
@@ -1789,6 +1822,7 @@ class UssdNavigationService : AccessibilityService() {
         onDispatchComplete  = null
         tokenPurchaseCallback = null
         resetSignatureTracking()
+        configureUiReturn(true)
     }
 
     private fun clearPendingAdvanceKick() {
@@ -1915,7 +1949,9 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun shouldKeepAppUiVisible(): Boolean =
-        (advancedActive && advancedInProgress) || isForegroundUiActive()
+        keepAppUiVisibleEnabled &&
+            !uiReturnSuppressed &&
+            ((advancedActive && advancedInProgress) || isForegroundUiActive())
 
     private fun hasSeenUssdPopup(): Boolean =
         hasSeenAdvancedPopup || hasSeenForegroundPopup

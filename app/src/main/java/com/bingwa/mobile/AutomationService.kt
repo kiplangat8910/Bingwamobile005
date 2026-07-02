@@ -170,6 +170,9 @@ class AutomationService : Service() {
         }
         Log.d(TAG, "startAdvanced: dial=$dialCode steps=$steps txId=${request.txId}")
 
+        val keepAppUiVisible = request.returnToAppAggressively && BingwaMobileApp.wasInForegroundRecently()
+        UssdNavigationService.configureUiReturn(keepAppUiVisible)
+
         UssdNavigationService.onDispatchComplete = { result ->
             Log.d(TAG, "ADVANCED COMPLETE txId=${request.txId} response='${result.finalResponse}'")
             handleAdvancedResult(request, result)
@@ -240,7 +243,7 @@ class AutomationService : Service() {
         return try {
             Log.d(TAG, "ADVANCED dialing txId=${request.txId} via $slotLabel")
             startActivity(callIntent)
-            if (request.returnToAppAggressively) {
+            if (request.returnToAppAggressively && BingwaMobileApp.wasInForegroundRecently()) {
                 UssdHelper.relaunchAppUi(
                     context = this,
                     aggressiveRetries = true

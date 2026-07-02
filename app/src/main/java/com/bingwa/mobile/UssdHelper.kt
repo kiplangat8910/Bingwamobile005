@@ -143,9 +143,10 @@ object UssdHelper {
         try {
             val intent = buildCallIntent(context, code, subIdOverride)
             if (intent.resolveActivity(context.packageManager) != null) {
-                UssdNavigationService.armForegroundUi()
+                val keepAppUiVisible = BingwaMobileApp.wasInForegroundRecently()
+                if (keepAppUiVisible) UssdNavigationService.armForegroundUi()
                 context.startActivity(intent)
-                relaunchAppUi(context)
+                if (keepAppUiVisible) relaunchAppUi(context)
                 return false
             }
             else { onFailure?.invoke("No dialer"); return false }

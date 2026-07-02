@@ -135,6 +135,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        UssdNavigationService.onAppUiForegrounded()
+    }
+
     private fun warmUpLaunchState() {
         runCatching { RelayManager.load(this) }
             .onFailure { Log.e("MainActivity", "Launch warm-up failed", it) }
