@@ -2012,6 +2012,7 @@ private fun FallbackOverviewSwitch(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FallbackMappingCard(
     primaryOffer: OfferItem,
@@ -2136,6 +2137,7 @@ private fun FallbackMappingCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FallbackRouteEditorCard(
     primaryOffer: OfferItem,
