@@ -2012,7 +2012,6 @@ private fun FallbackOverviewSwitch(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FallbackMappingCard(
     primaryOffer: OfferItem,
@@ -2038,99 +2037,127 @@ private fun FallbackMappingCard(
         Column(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("Primary plan", color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    Text(primaryOffer.name, color = C.t1, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Primary plan", color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(primaryOffer.name, color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Text("${primaryOffer.category} • KES ${primaryOffer.price}", color = C.t2, fontSize = 11.sp)
                 }
-                FallbackEditorChip(label = fallbackPlanLabel, tint = C.amber)
+                FallbackStatusChip(
+                    icon = Icons.Rounded.Autorenew,
+                    label = fallbackPlanLabel,
+                    tint = C.amber
+                )
             }
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = C.cardHi.copy(alpha = 0.56f),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.78f))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text("Fallback order", color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    fallbackOffers.forEachIndexed { index, offer ->
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                FallbackSummaryTile(
+                    label = "Trigger",
+                    value = fallbackRuleSummary,
+                    accent = C.cyan,
+                    modifier = Modifier.weight(1f)
+                )
+                FallbackSummaryTile(
+                    label = "Updated",
+                    value = fallbackUpdatedLabel,
+                    accent = C.border,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            GroupDivider()
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Backup order", color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                fallbackOffers.forEachIndexed { index, offer ->
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (index == 0) C.amber.copy(alpha = 0.16f) else C.cardHi,
+                            border = BorderStroke(
+                                1.dp,
+                                if (index == 0) C.amber.copy(alpha = 0.28f) else C.border.copy(alpha = 0.72f)
+                            )
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = if (index == 0) C.amber.copy(alpha = 0.16f) else C.cardHi,
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (index == 0) C.amber.copy(alpha = 0.28f) else C.border.copy(alpha = 0.72f)
+                            Box(Modifier.size(30.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    "${index + 1}",
+                                    color = if (index == 0) C.amber else C.t1,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
+                            }
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-                                    Text("${index + 1}", color = if (index == 0) C.amber else C.t1, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    offer.name,
+                                    color = C.t1,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (index == 0) {
+                                    Text("Runs first", color = C.amber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(offer.name, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                Text("${offer.category} • KES ${offer.price}", color = C.t2, fontSize = 11.sp)
-                            }
-                            if (index == 0) {
-                                FallbackEditorChip(label = "First", tint = C.amber)
-                            }
+                            Text("${offer.category} • KES ${offer.price}", color = C.t2, fontSize = 11.sp)
+                            Text(
+                                if (index == 0) "First backup after the primary plan." else "Runs after backup ${index}.",
+                                color = C.t3,
+                                fontSize = 10.sp,
+                                lineHeight = 15.sp
+                            )
                         }
                     }
                 }
             }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                FallbackEditorChip(label = "Trigger: $fallbackRuleSummary", tint = C.cyan)
-                FallbackEditorChip(label = fallbackUpdatedLabel, tint = C.border)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = C.cyan.copy(alpha = 0.14f),
-                    border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.24f)),
-                    modifier = Modifier.clickable(onClick = onEdit)
+                Button(
+                    onClick = onEdit,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = C.cyan.copy(alpha = 0.16f),
+                        contentColor = C.cyan
+                    ),
+                    contentPadding = PaddingValues(vertical = 10.dp)
                 ) {
-                    Row(
-                        Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(Icons.Rounded.AutoFixHigh, null, tint = C.cyan, modifier = Modifier.size(13.dp))
-                        Text("Edit route", color = C.cyan, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                    }
+                    Icon(Icons.Rounded.AutoFixHigh, null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Edit route", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = C.red.copy(alpha = 0.12f),
-                    border = BorderStroke(1.dp, C.red.copy(alpha = 0.22f)),
-                    modifier = Modifier.clickable(onClick = onDelete)
+                Button(
+                    onClick = onDelete,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = C.red.copy(alpha = 0.14f),
+                        contentColor = C.red
+                    ),
+                    contentPadding = PaddingValues(vertical = 10.dp)
                 ) {
-                    Row(
-                        Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(Icons.Rounded.DeleteSweep, null, tint = C.red, modifier = Modifier.size(13.dp))
-                        Text("Delete", color = C.red, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                    }
+                    Icon(Icons.Rounded.DeleteSweep, null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Delete route", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
