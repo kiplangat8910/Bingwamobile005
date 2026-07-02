@@ -95,17 +95,17 @@ class UssdNavigationService : AccessibilityService() {
         private const val POST_GESTURE_WAIT_MS   = 18L
         private const val POPUP_STABILITY_DELAY_MS = 20L
         private const val TAP_GESTURE_DURATION_MS = 40L
-        private const val REDIAL_COOLDOWN_MS     = 700L
+        private const val REDIAL_COOLDOWN_MS     = 550L
         private const val PENDING_ADVANCE_TIMEOUT_MS = 6_000L
         private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 6_000L
-        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 140L
+        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 110L
         private const val ROOT_REACQUIRE_TIMEOUT_MS = 3_000L
-        private const val DIALOG_DISMISS_SETTLE_MS = 240L
+        private const val DIALOG_DISMISS_SETTLE_MS = 170L
         private const val UI_KEEP_VISIBLE_INTERVAL_MS = 1_500L
         private const val STARTUP_UI_KEEP_VISIBLE_MS = 12_000L
         // Some devices emit extra events on the same USSD dialog after we click "Send".
         // If we process those events immediately, we can inject the NEXT step into the PREVIOUS screen.
-        private const val STEP_TRANSITION_GUARD_MS = 650L
+        private const val STEP_TRANSITION_GUARD_MS = 480L
         private const val CHANNEL_ID             = "bingwa_ussd"
         private const val NOTIFICATION_ID        = 2001
         private val MULTI_SPACE_REGEX = Regex("\\s+")
