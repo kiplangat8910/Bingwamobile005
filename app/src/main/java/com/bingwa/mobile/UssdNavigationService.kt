@@ -491,6 +491,22 @@ class UssdNavigationService : AccessibilityService() {
             updateRunningOverlay()
             return
         }
+        val allowUnknownPkg = pkg.isBlank() || pkg == "android"
+        val otherAppInFront = (advancedActive || isForegroundUiActive()) &&
+            !allowUnknownPkg &&
+            pkg != "com.bingwa.mobile" &&
+            pkg != "com.android.systemui" &&
+            !isPotentialUssdPackage(pkg)
+        if (otherAppInFront) {
+            if (advancedActive) suppressUiReturn()
+            if (isForegroundUiActive() && !advancedActive) {
+                disarmForegroundUi()
+                hasSeenForegroundPopup = false
+            }
+            stopKeepingAppUiVisible()
+            updateRunningOverlay()
+            return
+        }
         val allowSystemUi = pkg == "com.android.systemui" &&
                 (advancedActive || balanceCallback != null || tokenPurchaseCallback != null || signatureLearningMode || isForegroundUiActive())
         if (pkg in BLOCKED_PACKAGES && !allowSystemUi) return
