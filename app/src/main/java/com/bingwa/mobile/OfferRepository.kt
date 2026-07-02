@@ -10,7 +10,7 @@ object OfferRepository {
     private const val PREFS_NAME = "DataOffers"
     private const val KEY_OFFERS = "offers"
     private const val KEY_CATALOG_VERSION = "catalog_version"
-    private const val CURRENT_CATALOG_VERSION = 2
+    private const val CURRENT_CATALOG_VERSION = 3
     const val ACTION_OFFERS_UPDATED = "com.bingwa.mobile.OFFERS_UPDATED"
     private val gson = Gson()
     @Volatile private var cachedRawJson: String? = null
@@ -66,11 +66,14 @@ object OfferRepository {
         val current = parse(prefs.safeGetString(KEY_OFFERS, null)).orEmpty()
         val cleaned = sanitize(current)
         val existingKeys = cleaned.mapTo(mutableSetOf(), ::offerKey)
+        val managedPrices = UssdStorage(context).managedCatalogPrices()
+        val existingManagedPrices = cleaned.mapTo(mutableSetOf()) { it.price }.intersect(managedPrices)
         val merged = cleaned.toMutableList()
         var nextId = ((merged.maxOfOrNull { it.id } ?: 0).coerceAtLeast(0)) + 1
         var restoredDefaultOffers = 0
 
         defaultOffers(context).forEach { offer ->
+            if (offer.price in existingManagedPrices) return@forEach
             if (existingKeys.add(offerKey(offer))) {
                 merged += offer.copy(id = nextId++)
                 restoredDefaultOffers++
@@ -212,21 +215,9 @@ object OfferRepository {
         defaults.forEach { default ->
             val existing = existingByPrice[default.price]
             migrated += if (existing != null) {
-                default.copy(
-                    id = existing.id,
-                    enabled = existing.enabled,
-                    executionMode = existing.executionMode,
-                    category = existing.category,
-                    targetDevice = existing.targetDevice,
-                    signatureDetectionEnabled = existing.signatureDetectionEnabled,
-                    signatureAction = existing.signatureAction,
-                    learnedSignature = existing.learnedSignature,
-                    signatureLearnedAt = existing.signatureLearnedAt,
-                    signatureLearningCaptures = existing.signatureLearningCaptures,
-                    pendingLearnedSignature = existing.pendingLearnedSignature,
-                    pendingSignatureLearnedAt = existing.pendingSignatureLearnedAt,
-                    pendingSignatureLearningCaptures = existing.pendingSignatureLearningCaptures
-                )
+                // Preserve the user's saved offer exactly as edited instead of
+                // overwriting fields like name or USSD code from catalog defaults.
+                existing
             } else {
                 default.copy(id = nextId++)
             }

@@ -14,8 +14,6 @@ import android.telephony.SmsManager
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationCompat
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import org.json.JSONArray
 import java.util.Calendar
 
@@ -380,11 +378,7 @@ object SmsCommandHandler {
     }
 
     private fun listOffers(context: Context, replyTo: String, replySubId: Int?) {
-        val prefs = context.getSharedPreferences("DataOffers", Context.MODE_PRIVATE)
-        val gson = Gson()
-        val offers: List<OfferItem> = try {
-            gson.fromJson(prefs.getString("offers","[]"), object : TypeToken<List<OfferItem>>(){}.type)
-        } catch (e: Exception) { emptyList() }
+        val offers = OfferRepository.load(context).toList()
         if (offers.isEmpty()) {
             sendSms(context, replyTo, "No offers configured.", replySubId)
             return
@@ -399,15 +393,11 @@ object SmsCommandHandler {
 
     private fun toggleOffer(context: Context, replyTo: String, replySubId: Int?, args: List<String>, enable: Boolean) {
         if (args.isEmpty()) { sendSms(context, replyTo, "Usage: ${if (enable) "ON" else "OFF"} <offer-number>", replySubId); return }
-        val prefs = context.getSharedPreferences("DataOffers", Context.MODE_PRIVATE)
-        val gson = Gson()
-        val offers: MutableList<OfferItem> = try {
-            gson.fromJson(prefs.getString("offers","[]"), object : TypeToken<MutableList<OfferItem>>(){}.type)
-        } catch (e: Exception) { mutableListOf() }
+        val offers = OfferRepository.load(context)
         val index = resolveOfferIndex(args[0], offers)
         if (index == -1) { sendSms(context, replyTo, "Offer not found. Text OFFERS to see valid offer numbers.", replySubId); return }
         offers[index] = offers[index].copy(enabled = enable)
-        prefs.edit().putString("offers", gson.toJson(offers)).apply()
+        OfferRepository.save(context, offers)
         sendSms(context, replyTo, "\"${offers[index].name}\" has been ${if (enable) "enabled" else "disabled"}.", replySubId)
     }
 
@@ -438,11 +428,7 @@ object SmsCommandHandler {
         if (args.size < 2) { sendSms(context, replyTo, "Usage: BUY <phone> <offer-number>", replySubId); return }
         val phone = normalizePhone(args[0])
         if (!phone.matches(LOCAL_PHONE_REGEX)) { sendSms(context, replyTo, "Invalid phone number. Use 10 digits (e.g. 0712345678) or +254712345678.", replySubId); return }
-        val prefs = context.getSharedPreferences("DataOffers", Context.MODE_PRIVATE)
-        val gson = Gson()
-        val offers: List<OfferItem> = try {
-            gson.fromJson(prefs.getString("offers","[]"), object : TypeToken<List<OfferItem>>(){}.type)
-        } catch (e: Exception) { emptyList() }
+        val offers = OfferRepository.load(context).toList()
         val offerIndex = resolveOfferIndex(args[1], offers)
         val offer = offers.getOrNull(offerIndex)?.takeIf { it.enabled }
         if (offer == null) { sendSms(context, replyTo, "Offer not found or disabled. Text OFFERS to see valid offer numbers.", replySubId); return }
