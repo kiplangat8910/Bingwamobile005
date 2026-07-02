@@ -1,16 +1,16 @@
 package com.bingwa.mobile
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Contacts
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.filled.Toll
-import androidx.compose.material.icons.outlined.Contacts
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Terminal
-import androidx.compose.material.icons.outlined.Toll
+import androidx.compose.material.icons.filled.Contacts as ContactsFilled
+import androidx.compose.material.icons.filled.Home as HomeFilled
+import androidx.compose.material.icons.filled.Settings as SettingsFilled
+import androidx.compose.material.icons.filled.Terminal as TerminalFilled
+import androidx.compose.material.icons.filled.Toll as TollFilled
+import androidx.compose.material.icons.outlined.Contacts as ContactsOutlined
+import androidx.compose.material.icons.outlined.Home as HomeOutlined
+import androidx.compose.material.icons.outlined.Settings as SettingsOutlined
+import androidx.compose.material.icons.outlined.Terminal as TerminalOutlined
+import androidx.compose.material.icons.outlined.Toll as TollOutlined
 import androidx.compose.ui.graphics.vector.ImageVector
 
 internal sealed class Screen(
@@ -19,11 +19,11 @@ internal sealed class Screen(
     val icon: ImageVector,
     val iconSel: ImageVector
 ) {
-    data object Home : Screen("home", "Home", Icons.Outlined.Home, Icons.Filled.Home)
-    data object Manual : Screen("manual", "Manual", Icons.Outlined.Terminal, Icons.Filled.Terminal)
-    data object Tokens : Screen("tokens", "Tokens", Icons.Outlined.Toll, Icons.Filled.Toll)
-    data object Contacts : Screen("contacts", "Contacts", Icons.Outlined.Contacts, Icons.Filled.Contacts)
-    data object Settings : Screen("settings", "Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
+    data object Home : Screen("home", "Home", Icons.Outlined.HomeOutlined, Icons.Filled.HomeFilled)
+    data object Manual : Screen("manual", "Manual", Icons.Outlined.TerminalOutlined, Icons.Filled.TerminalFilled)
+    data object Tokens : Screen("tokens", "Tokens", Icons.Outlined.TollOutlined, Icons.Filled.TollFilled)
+    data object Contacts : Screen("contacts", "Contacts", Icons.Outlined.ContactsOutlined, Icons.Filled.ContactsFilled)
+    data object Settings : Screen("settings", "Settings", Icons.Outlined.SettingsOutlined, Icons.Filled.SettingsFilled)
 }
 
 internal val NAV_ITEMS = listOf(Screen.Home, Screen.Manual, Screen.Tokens, Screen.Settings)
