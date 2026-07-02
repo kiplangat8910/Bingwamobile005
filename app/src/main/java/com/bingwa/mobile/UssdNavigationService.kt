@@ -40,6 +40,8 @@ class UssdNavigationService : AccessibilityService() {
         const val TAG = "UssdNavigation"
         @Volatile
         private var activeInstance: UssdNavigationService? = null
+        @Volatile
+        private var pendingAdvancedArm: Boolean = false
 
         var airtimeBalance          = "N/A"
         var balanceCallback         : ((String) -> Unit)?  = null
@@ -221,7 +223,10 @@ class UssdNavigationService : AccessibilityService() {
 
         fun beginAdvancedSessionMonitoring() {
             activeInstance?.let { instance ->
+                pendingAdvancedArm = false
                 instance.handler.post { instance.handleAdvancedSessionArmed() }
+            } ?: run {
+                pendingAdvancedArm = true
             }
         }
 
@@ -330,6 +335,10 @@ class UssdNavigationService : AccessibilityService() {
             foregroundServiceType = ForegroundServiceTypes.dataSync
         )
         updateRunningOverlay()
+        if (pendingAdvancedArm) {
+            pendingAdvancedArm = false
+            handler.post { handleAdvancedSessionArmed() }
+        }
     }
 
     override fun onServiceConnected() {
@@ -350,6 +359,10 @@ class UssdNavigationService : AccessibilityService() {
                 AccessibilityServiceInfo.DEFAULT
             // Keep event delivery immediate so we reduce local UI latency without relaxing verification.
             notificationTimeout = 0
+        }
+        if (pendingAdvancedArm) {
+            pendingAdvancedArm = false
+            handler.post { handleAdvancedSessionArmed() }
         }
     }
 
@@ -866,7 +879,10 @@ class UssdNavigationService : AccessibilityService() {
         if (!hasAction) return false
         val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(lower)
         val hasUssdLanguage = USSD_HINTS.any { lower.contains(it) } || errorKeywords.any { lower.contains(it) }
-        return hasUssdLanguage || menuLike
+        val startupRelaxed = advancedActive &&
+            !hasSeenUssdPopup() &&
+            (SystemClock.elapsedRealtime() - lastRelevantEventElapsed) <= STARTUP_UI_KEEP_VISIBLE_MS
+        return hasUssdLanguage || menuLike || startupRelaxed
     }
 
     private fun shouldAllowAndroidDialogRoot(root: AccessibilityNodeInfo, pkg: String): Boolean {
@@ -881,7 +897,10 @@ class UssdNavigationService : AccessibilityService() {
         if (!hasAction) return false
         val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(lower)
         val hasUssdLanguage = USSD_HINTS.any { lower.contains(it) } || errorKeywords.any { lower.contains(it) }
-        return hasUssdLanguage || menuLike
+        val startupRelaxed = advancedActive &&
+            !hasSeenUssdPopup() &&
+            (SystemClock.elapsedRealtime() - lastRelevantEventElapsed) <= STARTUP_UI_KEEP_VISIBLE_MS
+        return hasUssdLanguage || menuLike || startupRelaxed
     }
 
     private data class ParsedMenuSignature(
