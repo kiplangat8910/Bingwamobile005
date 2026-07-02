@@ -2166,7 +2166,12 @@ private fun FallbackRouteEditorCard(
     editingExistingRoute: Boolean,
     onChangePrimary: () -> Unit
 ) {
-    val firstFallback = selectedFallbackOffers.firstOrNull()
+    val nextFallback = selectedFallbackOffers.firstOrNull()
+    val fallbackCountLabel = if (selectedFallbackOffers.size == 1) {
+        "1 stop selected"
+    } else {
+        "${selectedFallbackOffers.size} stops selected"
+    }
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = C.surface.copy(alpha = 0.70f),
@@ -2218,117 +2223,193 @@ private fun FallbackRouteEditorCard(
                 }
             }
 
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("PRIMARY", color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Surface(
-                        shape = CircleShape,
-                        color = C.bg,
-                        border = BorderStroke(2.dp, C.cyan.copy(alpha = 0.88f))
-                    ) {
-                        Box(Modifier.size(46.dp), contentAlignment = Alignment.Center) {
-                            Text(primaryOffer.price.toString(), color = C.cyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        primaryOffer.name,
-                        color = C.t1,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .weight(0.5f)
-                        .height(2.dp)
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(
-                                    C.cyan.copy(alpha = 0.55f),
-                                    C.cyan.copy(alpha = 0.08f)
-                                )
-                            )
-                        )
-                ) {
-                    Surface(
-                        modifier = Modifier.align(Alignment.Center),
-                        shape = CircleShape,
-                        color = C.cardHi,
-                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
-                    ) {
-                        Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Rounded.Devices, null, tint = C.t2, modifier = Modifier.size(14.dp))
-                        }
-                    }
-                }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("FALLBACK", color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Surface(
-                        shape = CircleShape,
-                        color = C.bg,
-                        border = BorderStroke(
-                            2.dp,
-                            if (firstFallback != null) C.amber.copy(alpha = 0.88f) else C.border.copy(alpha = 0.72f)
-                        )
-                    ) {
-                        Box(Modifier.size(46.dp), contentAlignment = Alignment.Center) {
-                            Text(
-                                firstFallback?.price?.toString() ?: "+",
-                                color = if (firstFallback != null) C.amber else C.t3,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        firstFallback?.name ?: "Add stop",
-                        color = if (firstFallback != null) C.t1 else C.t3,
-                        fontSize = 12.sp,
-                        fontWeight = if (firstFallback != null) FontWeight.SemiBold else FontWeight.Normal,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
+            FallbackEditorSummaryRow(
+                title = "Primary plan",
+                value = primaryOffer.name,
+                supporting = "${primaryOffer.category} • KES ${primaryOffer.price}",
+                tint = C.cyan,
+                actionLabel = "Change",
+                onClick = onChangePrimary
+            )
 
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = C.cardHi.copy(alpha = 0.74f),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onChangePrimary)
+                shape = RoundedCornerShape(14.dp),
+                color = C.cardHi.copy(alpha = 0.58f),
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.78f))
             ) {
-                Row(
+                Column(
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text("Change primary plan", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    Icon(Icons.Rounded.ArrowDropDown, null, tint = C.t2, modifier = Modifier.size(18.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "Fallback queue",
+                            color = C.t1,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        FallbackEditorChip(
+                            label = fallbackCountLabel,
+                            tint = if (selectedFallbackOffers.isEmpty()) C.border else C.amber
+                        )
+                    }
+                    if (selectedFallbackOffers.isEmpty()) {
+                        Text(
+                            "No fallback stops added yet. Use the list below to build the order this route should try next.",
+                            color = C.t2,
+                            fontSize = 11.sp,
+                            lineHeight = 17.sp
+                        )
+                    } else {
+                        selectedFallbackOffers.forEachIndexed { index, offer ->
+                            val attemptLabel = if (index == 0) {
+                                "Tried first after the primary plan"
+                            } else {
+                                "Tried if stop ${index} cannot run"
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = C.surface.copy(alpha = 0.52f),
+                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f))
+                            ) {
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = if (index == 0) C.amber.copy(alpha = 0.18f) else C.cardHi,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (index == 0) C.amber.copy(alpha = 0.28f) else C.border.copy(alpha = 0.72f)
+                                        )
+                                    ) {
+                                        Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+                                            Text(
+                                                "${index + 1}",
+                                                color = if (index == 0) C.amber else C.t1,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text(offer.name, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("${offer.category} • KES ${offer.price}", color = C.t2, fontSize = 11.sp)
+                                        Text(
+                                            attemptLabel,
+                                            color = if (index == 0) C.amber else C.t3,
+                                            fontSize = 10.sp,
+                                            lineHeight = 15.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Text(
+                        if (nextFallback != null) {
+                            "Next up: ${nextFallback.name}. Move items below to change the order."
+                        } else {
+                            "Add one or more fallback plans below, then save this route."
+                        },
+                        color = C.t3,
+                        fontSize = 10.sp,
+                        lineHeight = 15.sp
+                    )
                 }
             }
         }
     }
 }
 
+@Composable
+private fun FallbackEditorSummaryRow(
+    title: String,
+    value: String,
+    supporting: String,
+    tint: Color,
+    actionLabel: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = C.cardHi.copy(alpha = 0.72f),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.78f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = tint.copy(alpha = 0.14f),
+                border = BorderStroke(1.dp, tint.copy(alpha = 0.24f))
+            ) {
+                Box(Modifier.size(38.dp), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Devices, null, tint = tint, modifier = Modifier.size(18.dp))
+                }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                Text(value, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(supporting, color = C.t2, fontSize = 11.sp)
+            }
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = tint.copy(alpha = 0.14f),
+                border = BorderStroke(1.dp, tint.copy(alpha = 0.24f))
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(actionLabel, color = tint, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    Icon(Icons.Rounded.ArrowDropDown, null, tint = tint, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FallbackEditorChip(
+    label: String,
+    tint: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = tint.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.24f))
+    ) {
+        Text(
+            label,
+            color = if (tint == C.border) C.t3 else tint,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FallbackSelectedPlanCard(
     index: Int,
@@ -2388,9 +2469,18 @@ private fun FallbackSelectedPlanCard(
                     }
                     Text(offer.name, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     Text("${offer.category} • KES ${offer.price}", color = C.t2, fontSize = 11.sp)
+                    Text(
+                        if (index == 0) "First fallback after the primary plan" else "Runs after stop $index",
+                        color = C.t3,
+                        fontSize = 10.sp,
+                        lineHeight = 15.sp
+                    )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Surface(
                     shape = RoundedCornerShape(999.dp),
                     color = if (canMoveUp) C.cardHi else C.w04,
@@ -2398,7 +2488,7 @@ private fun FallbackSelectedPlanCard(
                     modifier = Modifier.clickable(enabled = canMoveUp, onClick = onMoveUp)
                 ) {
                     Text(
-                        "UP",
+                        "Move up",
                         color = if (canMoveUp) C.t1 else C.t3,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -2412,7 +2502,7 @@ private fun FallbackSelectedPlanCard(
                     modifier = Modifier.clickable(enabled = canMoveDown, onClick = onMoveDown)
                 ) {
                     Text(
-                        "DOWN",
+                        "Move down",
                         color = if (canMoveDown) C.t1 else C.t3,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -2438,9 +2528,11 @@ private fun FallbackSelectedPlanCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FallbackAvailablePlanCard(
     offer: OfferItem,
+    recommendation: String?,
     onAdd: () -> Unit
 ) {
     Surface(
@@ -2448,7 +2540,7 @@ private fun FallbackAvailablePlanCard(
         color = C.surface.copy(alpha = 0.56f),
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
     ) {
-        Row(
+        Column(
             Modifier
                 .fillMaxWidth()
                 .background(
@@ -2460,37 +2552,39 @@ private fun FallbackAvailablePlanCard(
                     )
                 )
                 .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = C.cardHi,
-                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.65f))
-                ) {
-                    Text(
-                        "Available fallback",
-                        color = C.t3,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-                Text(offer.name, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text("${offer.category} • KES ${offer.price}", color = C.t2, fontSize = 11.sp)
-            }
-            Button(
-                onClick = onAdd,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = C.cyan.copy(alpha = 0.16f),
-                    contentColor = C.t1
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(Icons.Rounded.Add, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Add", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(offer.name, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("${offer.category} • KES ${offer.price}", color = C.t2, fontSize = 11.sp)
+                }
+                Button(
+                    onClick = onAdd,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = C.cyan.copy(alpha = 0.16f),
+                        contentColor = C.t1
+                    )
+                ) {
+                    Icon(Icons.Rounded.Add, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Add", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FallbackEditorChip(label = "Available fallback", tint = C.border)
+                FallbackEditorChip(label = offer.category, tint = C.border)
+                FallbackEditorChip(label = "KES ${offer.price}", tint = C.border)
+                if (!recommendation.isNullOrBlank()) {
+                    FallbackEditorChip(label = recommendation, tint = C.amber)
+                }
             }
         }
     }
@@ -2667,6 +2761,15 @@ private fun AutomationSettings(onBack: () -> Unit) {
                 { offer -> offer.name.lowercase() }
             )
         )
+    val suggestedFallbackOffers = availableFallbackOffers.filter { offer ->
+        selectedPrimaryOffer?.let { primary ->
+            val sameCategory = offer.category.equals(primary.category, ignoreCase = true)
+            sameCategory || offer.price <= primary.price
+        } ?: false
+    }
+    val secondaryFallbackOffers = availableFallbackOffers.filterNot { offer ->
+        suggestedFallbackOffers.any { it.id == offer.id }
+    }
     val configuredFallbackPlans = fallbackMappings.mapNotNull { mapping ->
         val primary = enabledOffers.firstOrNull { it.id == mapping.primaryOfferId } ?: return@mapNotNull null
         val fallbacks = mapping.fallbackOfferIds.mapNotNull { fallbackId ->
@@ -3028,18 +3131,58 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                     Spacer(Modifier.height(12.dp))
                                     FallbackSectionHeader(
                                         title = "Available Stops",
-                                        subtitle = "Add backup plans to this route."
+                                        subtitle = "Suggested matches are shown first so you can add fallbacks faster."
                                     )
                                     Spacer(Modifier.height(8.dp))
-                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        availableFallbackOffers.forEach { offer ->
-                                            FallbackAvailablePlanCard(
-                                                offer = offer,
-                                                onAdd = {
-                                                    editorFallbackIds = editorFallbackIds + offer.id
-                                                    editorDirty = true
+                                    if (suggestedFallbackOffers.isNotEmpty()) {
+                                        FallbackSectionHeader(
+                                            title = "Suggested Stops",
+                                            subtitle = "Best matches for ${selectedPrimaryOffer.name}."
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            suggestedFallbackOffers.forEach { offer ->
+                                                val recommendation = when {
+                                                    offer.category.equals(selectedPrimaryOffer.category, ignoreCase = true) &&
+                                                        offer.price <= selectedPrimaryOffer.price ->
+                                                        "Same category and lower amount"
+                                                    offer.category.equals(selectedPrimaryOffer.category, ignoreCase = true) ->
+                                                        "Same category"
+                                                    offer.price <= selectedPrimaryOffer.price ->
+                                                        "Lower amount"
+                                                    else -> null
                                                 }
-                                            )
+                                                FallbackAvailablePlanCard(
+                                                    offer = offer,
+                                                    recommendation = recommendation,
+                                                    onAdd = {
+                                                        editorFallbackIds = editorFallbackIds + offer.id
+                                                        editorDirty = true
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (secondaryFallbackOffers.isNotEmpty()) {
+                                        if (suggestedFallbackOffers.isNotEmpty()) {
+                                            Spacer(Modifier.height(12.dp))
+                                        }
+                                        FallbackSectionHeader(
+                                            title = "More Options",
+                                            subtitle = "Other enabled plans you can still add to this route."
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            secondaryFallbackOffers.forEach { offer ->
+                                                FallbackAvailablePlanCard(
+                                                    offer = offer,
+                                                    recommendation = null,
+                                                    onAdd = {
+                                                        editorFallbackIds = editorFallbackIds + offer.id
+                                                        editorDirty = true
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                 }
