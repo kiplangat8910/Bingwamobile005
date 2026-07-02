@@ -7855,7 +7855,7 @@ fun SettingsScreen() {
 
             SettingsGroup("Transactions") {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SettingsRowIcon(Icons.Rounded.AutoDelete); Spacer(Modifier.width(12.dp))
+                    SettingsRowIcon(Icons.Rounded.DeleteSweep); Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Auto-Clear Transactions", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                         Text("Automatically delete old records", color = C.t2, fontSize = 11.sp)
@@ -7897,7 +7897,7 @@ fun SettingsScreen() {
             }
 
             SettingsGroup("Haptics") {
-                ToggleRow(Icons.Rounded.Vibration, "Vibrate on Toggle", "Haptic feedback on start/stop", vibToggle) { vibToggle = it; prefs.edit().putBoolean("vibration_on_toggle", it).apply() }
+                ToggleRow(Icons.Rounded.Settings, "Vibrate on Toggle", "Haptic feedback on start/stop", vibToggle) { vibToggle = it; prefs.edit().putBoolean("vibration_on_toggle", it).apply() }
                 GroupDivider()
                 ToggleRow(Icons.Rounded.PlayArrow, "Vibrate on Manual", "Haptic feedback on manual send", vibExecute) { vibExecute = it; prefs.edit().putBoolean("vibration_on_execute", it).apply() }
             }

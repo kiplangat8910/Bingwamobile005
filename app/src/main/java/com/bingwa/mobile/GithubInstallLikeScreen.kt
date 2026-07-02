@@ -27,7 +27,6 @@ import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.MoreHoriz
@@ -35,8 +34,6 @@ import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.TaskAlt
-import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
@@ -297,7 +294,7 @@ private fun HeroHeader() {
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     HeaderStatChip(icon = Icons.Outlined.Security, label = "Secure")
-                    HeaderStatChip(icon = Icons.Outlined.Insights, label = "Organized")
+                    HeaderStatChip(icon = Icons.Outlined.Folder, label = "Organized")
                     HeaderStatChip(icon = Icons.Outlined.Public, label = "Git ready")
                 }
             }
@@ -569,7 +566,7 @@ private fun PermissionsCard(items: List<String>) {
                         .padding(horizontal = 12.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    Icon(Icons.Outlined.TaskAlt, null, tint = C.green, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.Shield, null, tint = C.green, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
                     Text(s, color = C.t2, fontSize = 12.sp, lineHeight = 16.sp)
                 }
@@ -689,7 +686,7 @@ private fun DangerZone() {
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Row(verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Outlined.WarningAmber, null, tint = C.red, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Outlined.DeleteOutline, null, tint = C.red, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Suspend this installation", color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
