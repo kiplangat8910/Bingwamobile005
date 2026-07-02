@@ -74,6 +74,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -8458,99 +8460,224 @@ private fun SignatureLearningDetailsDialog(
         buildLearnedStepDetails(learnedSteps, learningCaptures)
     }
 
-    AlertDialog(
-        containerColor = C.card,
-        shape = RoundedCornerShape(20.dp),
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Learned Steps", color = C.t1, fontWeight = FontWeight.Bold)
-                Text(
-                    "Saved on ${formatSignatureLearnedAt(learnedAt)}",
-                    color = C.t2,
-                    fontSize = 11.sp
-                )
-            }
-        },
-        text = {
-            if (details.isEmpty()) {
-                Text("No learned steps are available yet.", color = C.t2, fontSize = 12.sp)
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 420.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    details.forEach { detail ->
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            color = C.cardHi,
-                            border = BorderStroke(1.dp, C.border)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = C.bg
+        ) {
+            Scaffold(
+                containerColor = C.bg,
+                topBar = {
+                    Surface(
+                        color = C.surface.copy(alpha = 0.96f),
+                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .statusBarsPadding()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(
-                                Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text("USSD Learning Record", color = C.t1, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text(
+                                    "Saved on ${formatSignatureLearnedAt(learnedAt)}",
+                                    color = C.t2,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = C.w04,
+                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+                            ) {
+                                IconButton(onClick = onDismiss) {
+                                    Icon(Icons.Outlined.Close, null, tint = C.t2)
+                                }
+                            }
+                        }
+                    }
+                }
+            ) { pad ->
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        top = pad.calculateTopPadding() + 16.dp,
+                        end = 16.dp,
+                        bottom = 28.dp + pad.calculateBottomPadding()
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item {
+                        OfferDialogSection(
+                            title = "Learning Summary",
+                            subtitle = "Review the captured steps, the selected option for each step, and the recorded popup text."
+                        ) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                MiniTag("STEPS ${learnedSteps.size}", C.green)
+                                MiniTag("POPUPS ${learningCaptures.size}", C.amber)
+                                MiniTag(if (details.isEmpty()) "NO RECORD" else "RECORD READY", if (details.isEmpty()) C.red else C.cyan)
+                            }
+                        }
+                    }
+                    if (details.isEmpty()) {
+                        item {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(18.dp),
+                                color = C.cardHi,
+                                border = BorderStroke(1.dp, C.border)
                             ) {
                                 Text(
-                                    if (detail.stepIndex >= 0) "Step ${detail.stepIndex + 1}" else "Final Popup",
-                                    color = C.cyan,
-                                    fontWeight = FontWeight.SemiBold,
+                                    "No learned steps are available yet.",
+                                    modifier = Modifier.padding(16.dp),
+                                    color = C.t2,
                                     fontSize = 13.sp
                                 )
-                                if (detail.menuTitle.isNotBlank()) {
-                                    Text(
-                                        "Menu: ${detail.menuTitle}",
-                                        color = C.t2,
-                                        fontSize = 11.sp,
-                                        lineHeight = 16.sp
-                                    )
-                                }
+                            }
+                        }
+                    } else {
+                        items(details, key = { it.stepIndex }) { detail ->
+                            SignatureLearningRecordCard(detail = detail)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SignatureLearningRecordCard(
+    detail: LearnedStepDetail,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = C.cardHi,
+        border = BorderStroke(1.dp, C.border)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        if (detail.stepIndex >= 0) "Step ${detail.stepIndex + 1}" else "Final Popup",
+                        color = C.cyan,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                    if (detail.menuTitle.isNotBlank()) {
+                        Text(
+                            detail.menuTitle,
+                            color = C.t2,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp
+                        )
+                    }
+                }
+                MiniTag(
+                    if (detail.selectedOptionLabel.isBlank()) "NO OPTION" else "OPTION SAVED",
+                    if (detail.selectedOptionLabel.isBlank()) C.red else C.green
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = C.surface.copy(alpha = 0.45f),
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.75f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "Selected option: ${detail.selectedOptionLabel.ifBlank { "Not captured" }}",
+                        color = C.t1,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                    Text(
+                        "Sent input: ${detail.enteredInput.ifBlank { "Not captured" }}",
+                        color = C.t2,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp
+                    )
+                    if (detail.menuOptionsSnapshot.isNotEmpty()) {
+                        Text(
+                            "Visible options: ${detail.menuOptionsSnapshot.joinToString(" | ")}",
+                            color = C.t3,
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Record",
+                    color = C.t1,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp
+                )
+                if (detail.recordedTexts.isEmpty()) {
+                    Text(
+                        "No recorded text was saved for this step.",
+                        color = C.t3,
+                        fontSize = 11.sp
+                    )
+                } else {
+                    detail.recordedTexts.forEachIndexed { index, popupText ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            color = C.w04,
+                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.7f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 Text(
-                                    "Chosen option: ${detail.selectedOptionLabel.ifBlank { "Not captured" }}",
-                                    color = C.t1,
-                                    fontSize = 12.sp,
-                                    lineHeight = 17.sp
+                                    if (index == 0) "Recorded text" else "Recorded text ${index + 1}",
+                                    color = C.amber,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.8.sp
                                 )
-                                if (detail.enteredInput.isNotBlank()) {
+                                SelectionContainer {
                                     Text(
-                                        "Sent input: ${detail.enteredInput}",
-                                        color = C.t2,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                if (detail.menuOptionsSnapshot.isNotEmpty()) {
-                                    Text(
-                                        "Visible options: ${detail.menuOptionsSnapshot.joinToString(" | ")}",
-                                        color = C.t3,
-                                        fontSize = 10.sp,
-                                        lineHeight = 15.sp
-                                    )
-                                }
-                                if (detail.recordedTexts.isNotEmpty()) {
-                                    detail.recordedTexts.forEach { popupText ->
-                                        Surface(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = C.w04,
-                                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.7f))
-                                        ) {
-                                            Text(
-                                                popupText,
-                                                modifier = Modifier.padding(10.dp),
-                                                color = C.t1,
-                                                fontSize = 11.sp,
-                                                lineHeight = 16.sp
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    Text(
-                                        "No recorded text was saved for this step.",
-                                        color = C.t3,
-                                        fontSize = 11.sp
+                                        popupText,
+                                        color = C.t1,
+                                        fontSize = 11.sp,
+                                        lineHeight = 17.sp
                                     )
                                 }
                             }
@@ -8558,11 +8685,52 @@ private fun SignatureLearningDetailsDialog(
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close", color = C.cyan) }
         }
-    )
+    }
+}
+
+@Composable
+private fun SignatureLearningRecordSection(
+    title: String,
+    subtitle: String,
+    details: List<LearnedStepDetail>,
+    learnedAt: Long,
+    learnedStepsCount: Int,
+    popupCount: Int,
+    emptyMessage: String,
+    accent: Color,
+    actions: @Composable (() -> Unit)? = null
+) {
+    OfferDialogSection(title = title, subtitle = subtitle) {
+        Text(
+            "Saved on ${formatSignatureLearnedAt(learnedAt)}",
+            color = C.t3,
+            fontSize = 11.sp
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            MiniTag("STEPS $learnedStepsCount", accent)
+            MiniTag("POPUPS $popupCount", C.amber)
+            MiniTag(if (details.isEmpty()) "NO RECORD" else "RECORD READY", if (details.isEmpty()) C.red else C.cyan)
+        }
+        if (details.isEmpty()) {
+            Text(
+                emptyMessage,
+                color = C.t2,
+                fontSize = 12.sp,
+                lineHeight = 18.sp
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                details.forEach { detail ->
+                    SignatureLearningRecordCard(detail = detail)
+                }
+            }
+        }
+        actions?.invoke()
+    }
 }
 
 @Composable
@@ -8793,8 +8961,6 @@ fun OfferDialog(
     var catExp by remember { mutableStateOf(false) }
     var devExp by remember { mutableStateOf(false) }
     var signatureExp by remember { mutableStateOf(false) }
-    var showSignatureDetails by remember { mutableStateOf(false) }
-    var showPendingSignatureDetails by remember { mutableStateOf(false) }
     val learnedSteps = existing?.learnedSignature.orEmpty()
     val learningCaptures = existing?.signatureLearningCaptures.orEmpty()
     val learnedAt = existing?.signatureLearnedAt ?: 0L
@@ -8803,10 +8969,16 @@ fun OfferDialog(
     val pendingLearnedAt = existing?.pendingSignatureLearnedAt ?: 0L
     val hasLearnedSignature = learnedSteps.isNotEmpty() || learningCaptures.isNotEmpty()
     val hasPendingSignature = pendingLearnedSteps.isNotEmpty() || pendingLearningCaptures.isNotEmpty()
+    val learnedDetails = remember(learnedSteps, learningCaptures) {
+        buildLearnedStepDetails(learnedSteps, learningCaptures)
+    }
+    val pendingLearnedDetails = remember(pendingLearnedSteps, pendingLearningCaptures) {
+        buildLearnedStepDetails(pendingLearnedSteps, pendingLearningCaptures)
+    }
     val canSave = remember(name, price, code) {
         name.isNotBlank() && code.isNotBlank() && (price.toIntOrNull() ?: 0) > 0
     }
-    val maxDialogBodyHeight = (configuration.screenHeightDp.dp * 0.50f).coerceAtLeast(320.dp)
+    val compactActions = configuration.screenWidthDp < 420
 
     fun buildOffer(): OfferItem? {
         val p = price.toIntOrNull() ?: 0
@@ -8832,343 +9004,321 @@ fun OfferDialog(
         )
     }
 
-    AlertDialog(
-        containerColor = C.surface,
-        shape = RoundedCornerShape(28.dp),
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
-                    Text(
-                        if (existing != null) "BUNDLE SETTINGS" else "CREATE OFFER",
-                        color = C.cyan,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.1.sp
-                    )
-                    Text(
-                        if (existing != null) "Edit Bundle" else "New Bundle",
-                        color = C.t1,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 24.sp,
-                        lineHeight = 28.sp
-                    )
-                    Text(
-                        "Update pricing, routing, and automation behavior for this bundle.",
-                        color = C.t2,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp
-                    )
-                }
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Outlined.Close, null, tint = C.t2)
-                }
-            }
-        },
-        text = {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = maxDialogBodyHeight)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                OfferDialogToggleRow(
-                    title = "Enable bundle",
-                    description = if (enabled) "Bundle is active and available for matching." else "Bundle is paused and hidden from matching.",
-                    checked = enabled,
-                    onCheckedChange = { enabled = it }
-                )
-
-                DialogDropdown("Category", cat, listOf("Data", "Minutes", "SMS", "Night", "Social"), catExp, { catExp = !catExp }) {
-                    cat = it
-                    catExp = false
-                }
-
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    label = { Text("Plan name", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
-                    placeholder = { Text("e.g. 250mbs, 24 hours", color = C.t3) },
-                    colors = dialogFieldColors(),
-                    singleLine = true,
-                    textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                )
-                Text("Example: 1GB 1hr, 250MB till midnight", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
-
-                UssdCodeDialogField(
-                    value = codeField,
-                    onValueChange = { codeField = it }
-                )
-
-                OutlinedTextField(
-                    value = price,
-                    onValueChange = { price = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    label = { Text("Selling Price (KES)", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
-                    placeholder = { Text("e.g. 20", color = C.t3) },
-                    colors = dialogFieldColors(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                )
-                Text("Your price to customer", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
-
-                DialogDropdown("USSD Type", mode, listOf("SIMPLE", "ADVANCED"), modeExp, { modeExp = !modeExp }) {
-                    mode = it
-                    modeExp = false
-                }
-
-                DialogDropdown("Execute On", device, listOf("PRIMARY", "RELAY"), devExp, { devExp = !devExp }) {
-                    device = it
-                    devExp = false
-                }
-
-                if (mode == "ADVANCED") {
-                    OfferDialogToggleRow(
-                        title = "Protection",
-                        description = if (signatureEnabled) "Protection is on and can detect menu changes before executing." else "Turn this on to learn live menu labels and stop/adjust if menus change.",
-                        checked = signatureEnabled,
-                        onCheckedChange = { signatureEnabled = it }
-                    )
-                    if (signatureEnabled) {
-                        DialogDropdown(
-                            "When codes change",
-                            if (signatureAction == "ADJUST") "ADJUST" else "STOP",
-                            listOf("STOP", "ADJUST"),
-                            signatureExp,
-                            { signatureExp = !signatureExp }
-                        ) {
-                            signatureAction = it
-                            signatureExp = false
-                        }
-                        Text(
-                            if (signatureAction == "ADJUST")
-                                "ADJUST only auto-fixes exact same-label moves. If the network changes wording, the app stops instead of guessing."
-                            else
-                                "STOP is the recommended production setting. It prevents the app from choosing the wrong bundle when the menu looks different.",
-                            color = C.t2,
-                            fontSize = 11.sp,
-                            lineHeight = 16.sp,
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
-                        if (hasPendingSignature) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                color = C.orangeDim,
-                                border = BorderStroke(1.dp, C.orange.copy(alpha = 0.24f))
-                            ) {
-                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Approval Needed", color = C.orange, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                    Text(
-                                        "A new learning run is waiting for approval. Review it before it replaces the saved signature.",
-                                        color = C.t2,
-                                        fontSize = 11.sp,
-                                        lineHeight = 16.sp
-                                    )
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        MiniTag("NEW STEPS ${pendingLearnedSteps.size}", C.orange)
-                                        MiniTag("NEW POPUPS ${pendingLearningCaptures.size}", C.amber)
-                                    }
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        OutlinedButton(
-                                            onClick = { existing?.let(onRelearnSignature) },
-                                            shape = RoundedCornerShape(14.dp),
-                                            border = BorderStroke(1.dp, C.amber.copy(alpha = 0.5f))
-                                        ) {
-                                            Text("Relearn", color = C.amber, fontWeight = FontWeight.Bold)
-                                        }
-                                        Button(
-                                            onClick = { existing?.let(onApprovePending) },
-                                            shape = RoundedCornerShape(14.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = C.green)
-                                        ) {
-                                            Text("Approve", color = C.bg, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                    TextButton(
-                                        onClick = { showPendingSignatureDetails = true },
-                                        contentPadding = PaddingValues(0.dp)
-                                    ) {
-                                        Text("Review Pending Steps", color = C.cyan, fontWeight = FontWeight.SemiBold)
-                                    }
-                                }
-                            }
-                        }
-                        Surface(
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = C.bg
+        ) {
+            val showSaveAndLearn = mode == "ADVANCED" && signatureEnabled
+            Scaffold(
+                containerColor = C.bg,
+                topBar = {
+                    Surface(
+                        color = C.surface.copy(alpha = 0.96f),
+                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
+                    ) {
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .then(if (hasLearnedSignature) Modifier.clickable { showSignatureDetails = true } else Modifier),
-                            shape = RoundedCornerShape(16.dp),
-                            color = C.w04,
-                            border = BorderStroke(1.dp, C.border)
+                                .statusBarsPadding()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.Top
                         ) {
-                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Signature Learning", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 Text(
-                                    if (learnedSteps.isNotEmpty() || learningCaptures.isNotEmpty())
-                                        when {
-                                            learnedSteps.isNotEmpty() ->
-                                                "Learned ${learnedSteps.size} menu step(s) and captured ${learningCaptures.size} popup(s) on ${formatSignatureLearnedAt(learnedAt)}."
-                                            else ->
-                                                "Captured ${learningCaptures.size} popup(s) on ${formatSignatureLearnedAt(learnedAt)}."
-                                        }
-                                    else
-                                        "No signature learned yet. Save this offer, then use Save & Learn to scan the live USSD menus with test number 0700000000.",
-                                    color = C.t2,
+                                    if (existing != null) "BUNDLE SETTINGS" else "CREATE OFFER",
+                                    color = C.cyan,
                                     fontSize = 11.sp,
-                                    lineHeight = 16.sp
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.1.sp
                                 )
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    MiniTag("STEPS ${learnedSteps.size}", C.green)
-                                    MiniTag("POPUPS ${learningCaptures.size}", C.amber)
-                                    MiniTag(if (signatureAction == "ADJUST") "AUTO ADJUST" else "STOP ONLY", if (signatureAction == "ADJUST") C.green else C.amber)
-                                }
-                                existing?.signatureLearningCaptures?.lastOrNull()?.let { capture ->
-                                    val preview = capture.popupText.replace(Regex("\\s+"), " ").trim().take(140)
-                                    if (preview.isNotBlank()) {
-                                        Text(
-                                            "Last popup: $preview",
-                                            color = C.t3,
-                                            fontSize = 10.sp,
-                                            lineHeight = 14.sp
-                                        )
-                                    }
-                                }
-                                if (hasLearnedSignature) {
-                                    Text(
-                                        "Tap to view every learned step, recorded text, and chosen option.",
-                                        color = C.cyan,
-                                        fontSize = 10.sp,
-                                        lineHeight = 14.sp
-                                    )
-                                    TextButton(
-                                        onClick = { showSignatureDetails = true },
-                                        contentPadding = PaddingValues(0.dp)
-                                    ) {
-                                        Text("View Learned Steps", color = C.cyan, fontWeight = FontWeight.SemiBold)
-                                    }
+                                Text(
+                                    if (existing != null) "Edit Bundle" else "New Bundle",
+                                    color = C.t1,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 24.sp,
+                                    lineHeight = 28.sp
+                                )
+                                Text(
+                                    "Full screen editor with offer details, learning steps, selected options, and the saved USSD record.",
+                                    color = C.t2,
+                                    fontSize = 12.sp,
+                                    lineHeight = 18.sp
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = C.w04,
+                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+                            ) {
+                                IconButton(onClick = onDismiss) {
+                                    Icon(Icons.Outlined.Close, null, tint = C.t2)
                                 }
                             }
                         }
                     }
-                }
-            }
-        },
-        confirmButton = {
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val compactActions = maxWidth < 360.dp
-                val showSaveAndLearn = mode == "ADVANCED" && signatureEnabled
-
-                if (compactActions && showSaveAndLearn) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                },
+                bottomBar = {
+                    Surface(
+                        color = C.surface.copy(alpha = 0.97f),
+                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
                     ) {
-                        TextButton(
-                            onClick = onDismiss,
-                            shape = RoundedCornerShape(16.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(
-                                onClick = { buildOffer()?.let(onSaveAndLearn) },
-                                enabled = canSave,
-                                shape = RoundedCornerShape(16.dp),
-                                border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
+                        if (compactActions && showSaveAndLearn) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .navigationBarsPadding()
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                horizontalAlignment = Alignment.End,
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
-                                Spacer(Modifier.width(7.dp))
-                                Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            }
-                            Button(
-                                onClick = { buildOffer()?.let(onSave) },
-                                enabled = canSave,
-                                shape = RoundedCornerShape(18.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
-                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
-                            ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(17.dp))
-                                    Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = onDismiss,
-                            shape = RoundedCornerShape(16.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (showSaveAndLearn) {
-                                OutlinedButton(
-                                    onClick = { buildOffer()?.let(onSaveAndLearn) },
-                                    enabled = canSave,
+                                TextButton(
+                                    onClick = onDismiss,
                                     shape = RoundedCornerShape(16.dp),
-                                    border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
-                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                                 ) {
-                                    Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
-                                    Spacer(Modifier.width(7.dp))
-                                    Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    OutlinedButton(
+                                        onClick = { buildOffer()?.let(onSaveAndLearn) },
+                                        enabled = canSave,
+                                        shape = RoundedCornerShape(16.dp),
+                                        border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
+                                    ) {
+                                        Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
+                                        Spacer(Modifier.width(7.dp))
+                                        Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
+                                    Button(
+                                        onClick = { buildOffer()?.let(onSave) },
+                                        enabled = canSave,
+                                        shape = RoundedCornerShape(18.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
+                                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
+                                    ) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(17.dp))
+                                            Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        }
+                                    }
                                 }
                             }
-                            Button(
-                                onClick = { buildOffer()?.let(onSave) },
-                                enabled = canSave,
-                                shape = RoundedCornerShape(18.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
-                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .navigationBarsPadding()
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(17.dp))
-                                    Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                TextButton(
+                                    onClick = onDismiss,
+                                    shape = RoundedCornerShape(16.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    if (showSaveAndLearn) {
+                                        OutlinedButton(
+                                            onClick = { buildOffer()?.let(onSaveAndLearn) },
+                                            enabled = canSave,
+                                            shape = RoundedCornerShape(16.dp),
+                                            border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
+                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
+                                        ) {
+                                            Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
+                                            Spacer(Modifier.width(7.dp))
+                                            Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        }
+                                    }
+                                    Button(
+                                        onClick = { buildOffer()?.let(onSave) },
+                                        enabled = canSave,
+                                        shape = RoundedCornerShape(18.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
+                                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
+                                    ) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(17.dp))
+                                            Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
+            ) { pad ->
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        top = pad.calculateTopPadding() + 16.dp,
+                        end = 16.dp,
+                        bottom = pad.calculateBottomPadding() + 20.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item {
+                        OfferStatusCard(
+                            enabled = enabled,
+                            onCheckedChange = { enabled = it }
+                        )
+                    }
+                    item {
+                        OfferDialogSection(
+                            title = "Bundle Details",
+                            subtitle = "Set the name, category, USSD code, price, and the device used to execute this offer."
+                        ) {
+                            DialogDropdown("Category", cat, listOf("Data", "Minutes", "SMS", "Night", "Social"), catExp, { catExp = !catExp }) {
+                                cat = it
+                                catExp = false
+                            }
+                            OutlinedTextField(
+                                value = name,
+                                onValueChange = { name = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(18.dp),
+                                label = { Text("Plan name", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
+                                placeholder = { Text("e.g. 250mbs, 24 hours", color = C.t3) },
+                                colors = dialogFieldColors(),
+                                singleLine = true,
+                                textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                            )
+                            Text("Example: 1GB 1hr, 250MB till midnight", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
+                            UssdCodeDialogField(
+                                value = codeField,
+                                onValueChange = { codeField = it }
+                            )
+                            OutlinedTextField(
+                                value = price,
+                                onValueChange = { price = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(18.dp),
+                                label = { Text("Selling Price (KES)", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
+                                placeholder = { Text("e.g. 20", color = C.t3) },
+                                colors = dialogFieldColors(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                            )
+                            Text("Your price to customer", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
+                            DialogDropdown("USSD Type", mode, listOf("SIMPLE", "ADVANCED"), modeExp, { modeExp = !modeExp }) {
+                                mode = it
+                                modeExp = false
+                            }
+                            DialogDropdown("Execute On", device, listOf("PRIMARY", "RELAY"), devExp, { devExp = !devExp }) {
+                                device = it
+                                devExp = false
+                            }
+                        }
+                    }
+                    if (mode == "ADVANCED") {
+                        item {
+                            OfferDialogSection(
+                                title = "Protection",
+                                subtitle = "Learn the live USSD flow and stop or adjust if the network menu changes."
+                            ) {
+                                OfferDialogToggleRow(
+                                    title = "Protection",
+                                    description = if (signatureEnabled) "Protection is on and can detect menu changes before executing." else "Turn this on to learn live menu labels and stop or adjust if menus change.",
+                                    checked = signatureEnabled,
+                                    onCheckedChange = { signatureEnabled = it }
+                                )
+                                if (signatureEnabled) {
+                                    DialogDropdown(
+                                        "When codes change",
+                                        if (signatureAction == "ADJUST") "ADJUST" else "STOP",
+                                        listOf("STOP", "ADJUST"),
+                                        signatureExp,
+                                        { signatureExp = !signatureExp }
+                                    ) {
+                                        signatureAction = it
+                                        signatureExp = false
+                                    }
+                                    Text(
+                                        if (signatureAction == "ADJUST")
+                                            "ADJUST only auto-fixes exact same-label moves. If the network changes wording, the app stops instead of guessing."
+                                        else
+                                            "STOP is the recommended production setting. It prevents the app from choosing the wrong bundle when the menu looks different.",
+                                        color = C.t2,
+                                        fontSize = 11.sp,
+                                        lineHeight = 16.sp,
+                                        modifier = Modifier.padding(start = 4.dp)
+                                    )
+                                } else if (!hasLearnedSignature && !hasPendingSignature) {
+                                    Text(
+                                        "No signature learned yet. Turn protection on, save the offer, then use Save & Learn to scan the live USSD menus.",
+                                        color = C.t2,
+                                        fontSize = 12.sp,
+                                        lineHeight = 18.sp
+                                    )
+                                }
+                            }
+                        }
+                        if (hasPendingSignature) {
+                            item {
+                                SignatureLearningRecordSection(
+                                    title = "Pending Review",
+                                    subtitle = "A new learning run is waiting for approval. Review each step, the selected option, and the recorded USSD text before replacing the saved record.",
+                                    details = pendingLearnedDetails,
+                                    learnedAt = pendingLearnedAt,
+                                    learnedStepsCount = pendingLearnedSteps.size,
+                                    popupCount = pendingLearningCaptures.size,
+                                    emptyMessage = "This pending learning run has no saved record yet.",
+                                    accent = C.orange,
+                                    actions = {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedButton(
+                                                onClick = { existing?.let(onRelearnSignature) },
+                                                shape = RoundedCornerShape(14.dp),
+                                                border = BorderStroke(1.dp, C.amber.copy(alpha = 0.5f))
+                                            ) {
+                                                Text("Relearn", color = C.amber, fontWeight = FontWeight.Bold)
+                                            }
+                                            Button(
+                                                onClick = { existing?.let(onApprovePending) },
+                                                shape = RoundedCornerShape(14.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = C.green)
+                                            ) {
+                                                Text("Approve", color = C.bg, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                        item {
+                            SignatureLearningRecordSection(
+                                title = "USSD Learning Record",
+                                subtitle = "This record shows the learned menu steps, selected options, and the popup text captured during learning.",
+                                details = learnedDetails,
+                                learnedAt = learnedAt,
+                                learnedStepsCount = learnedSteps.size,
+                                popupCount = learningCaptures.size,
+                                emptyMessage = "No signature learned yet. Save this offer, then use Save & Learn to scan the live USSD menus with test number 0700000000.",
+                                accent = C.green
+                            )
+                        }
+                    }
+                }
             }
-        },
-        dismissButton = {}
-    )
-
-    if (showSignatureDetails) {
-        SignatureLearningDetailsDialog(
-            learnedSteps = learnedSteps,
-            learningCaptures = learningCaptures,
-            learnedAt = learnedAt,
-            onDismiss = { showSignatureDetails = false }
-        )
-    }
-    if (showPendingSignatureDetails) {
-        SignatureLearningDetailsDialog(
-            learnedSteps = pendingLearnedSteps,
-            learningCaptures = pendingLearningCaptures,
-            learnedAt = pendingLearnedAt,
-            onDismiss = { showPendingSignatureDetails = false }
-        )
+        }
     }
 }
 
