@@ -97,6 +97,13 @@ private data class ManualSearchEntry(
     val source: String,
     val lastSeen: Long = 0L
 )
+
+private data class StartupFallbackFeatureItem(
+    val icon: ImageVector,
+    val title: String,
+    val detail: String,
+    val accent: Color
+)
 // ─── MainActivity ─────────────────────────────────────────────────────────
 class MainActivity : ComponentActivity() {
     private var pendingStartupPermissions: Array<String> = emptyArray()
@@ -239,6 +246,26 @@ private fun StartupFallbackScreen(errorLabel: String, onRetry: () -> Unit) {
         val accent = Color(0xFF67E8F9)
         val warmAccent = Color(0xFFF59E0B)
         val danger = Color(0xFFFB7185)
+        val featureItems = listOf(
+            StartupFallbackFeatureItem(
+                icon = Icons.Rounded.Inventory2,
+                title = "Saved offers and settings stay available",
+                detail = "Your local data remains untouched while the normal startup path is retried.",
+                accent = accent
+            ),
+            StartupFallbackFeatureItem(
+                icon = Icons.Rounded.Sync,
+                title = "One tap gets you back into the app",
+                detail = "Use the retry action after the temporary startup problem clears.",
+                accent = warmAccent
+            ),
+            StartupFallbackFeatureItem(
+                icon = Icons.Rounded.Security,
+                title = "Built to fail safely",
+                detail = "This fallback view avoids a hard crash and keeps the app usable during recovery.",
+                accent = Color(0xFFA78BFA)
+            )
+        )
 
         Box(
             modifier = Modifier
@@ -286,180 +313,217 @@ private fun StartupFallbackScreen(errorLabel: String, onRetry: () -> Unit) {
                     .padding(horizontal = if (compact) 18.dp else 24.dp, vertical = if (compact) 20.dp else 24.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
+                StartupFallbackHeader(
+                    compact = compact,
+                    accent = accent,
+                    warmAccent = warmAccent
+                )
+                StartupFallbackStatusCard(
+                    errorLabel = errorLabel,
+                    accent = accent,
+                    warmAccent = warmAccent,
+                    danger = danger
+                )
+                StartupFallbackHighlights(featureItems = featureItems)
+                StartupFallbackFooter(onRetry = onRetry, accent = accent)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StartupFallbackHeader(
+    compact: Boolean,
+    accent: Color,
+    warmAccent: Color
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = accent.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, accent.copy(alpha = 0.24f))
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = accent.copy(alpha = 0.12f),
-                            border = BorderStroke(1.dp, accent.copy(alpha = 0.24f))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Rounded.AutoFixHigh, null, tint = accent, modifier = Modifier.size(14.dp))
-                                Text(
-                                    "Safe startup mode",
-                                    color = accent,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                        Text(
-                            "Bingwa Mobile",
-                            color = Color(0xFFF8FAFC),
-                            fontSize = if (compact) 28.sp else 32.sp,
-                            fontWeight = FontWeight.Black
-                        )
-                        Text(
-                            "We switched to a protected launch screen so your setup stays intact while the app recovers.",
-                            color = Color(0xFFC0CAD9),
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .padding(start = 12.dp)
-                            .size(if (compact) 54.dp else 60.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(accent.copy(alpha = 0.24f), warmAccent.copy(alpha = 0.20f))
-                                )
-                            )
-                            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(20.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Rounded.Shield,
-                            null,
-                            tint = Color(0xFFF8FAFC),
-                            modifier = Modifier.size(if (compact) 26.dp else 30.dp)
-                        )
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(22.dp),
-                    color = Color.Black.copy(alpha = 0.14f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Recovery status",
-                                color = Color(0xFFE5EDF8),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "Ready to retry",
-                                color = accent,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            StartupFallbackPill(
-                                icon = Icons.Rounded.VerifiedUser,
-                                label = "Existing setup protected",
-                                accent = accent
-                            )
-                            StartupFallbackPill(
-                                icon = Icons.Rounded.Bolt,
-                                label = "Fast relaunch",
-                                accent = warmAccent
-                            )
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(18.dp),
-                            color = danger.copy(alpha = 0.10f),
-                            border = BorderStroke(1.dp, danger.copy(alpha = 0.22f))
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Rounded.ErrorOutline, null, tint = danger, modifier = Modifier.size(16.dp))
-                                Text(
-                                    "Issue detected: $errorLabel",
-                                    color = Color(0xFFFFCDD8),
-                                    fontSize = 12.sp,
-                                    lineHeight = 18.sp
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StartupFallbackFeature(
-                        icon = Icons.Rounded.Inventory2,
-                        title = "Saved offers and settings stay available",
-                        detail = "Your local data remains untouched while the normal startup path is retried.",
-                        accent = accent
-                    )
-                    StartupFallbackFeature(
-                        icon = Icons.Rounded.Sync,
-                        title = "One tap gets you back into the app",
-                        detail = "Use the retry action after the temporary startup problem clears.",
-                        accent = warmAccent
-                    )
-                    StartupFallbackFeature(
-                        icon = Icons.Rounded.Security,
-                        title = "Built to fail safely",
-                        detail = "This fallback view avoids a hard crash and keeps the app usable during recovery.",
-                        accent = Color(0xFFA78BFA)
+                    Icon(Icons.Rounded.AutoFixHigh, null, tint = accent, modifier = Modifier.size(14.dp))
+                    Text(
+                        "Safe startup mode",
+                        color = accent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-
-                Button(
-                    onClick = onRetry,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = accent,
-                        contentColor = Color(0xFF051018)
+            }
+            Text(
+                "Bingwa Mobile",
+                color = Color(0xFFF8FAFC),
+                fontSize = if (compact) 28.sp else 32.sp,
+                fontWeight = FontWeight.Black
+            )
+            Text(
+                "We switched to a protected launch screen so your setup stays intact while the app recovers.",
+                color = Color(0xFFC0CAD9),
+                fontSize = 14.sp,
+                lineHeight = 20.sp
+            )
+        }
+        Box(
+            modifier = Modifier
+                .padding(start = 12.dp)
+                .size(if (compact) 54.dp else 60.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(accent.copy(alpha = 0.24f), warmAccent.copy(alpha = 0.20f))
                     )
-                ) {
-                    Icon(Icons.Rounded.Refresh, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Text("Retry Launch", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
-                }
+                )
+                .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(20.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Rounded.Shield,
+                null,
+                tint = Color(0xFFF8FAFC),
+                modifier = Modifier.size(if (compact) 26.dp else 30.dp)
+            )
+        }
+    }
+}
 
+@Composable
+private fun StartupFallbackStatusCard(
+    errorLabel: String,
+    accent: Color,
+    warmAccent: Color,
+    danger: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = Color.Black.copy(alpha = 0.14f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    "Bingwa keeps your existing setup safe and automatically returns to the full experience when startup completes normally.",
-                    color = Color(0xFF94A3B8),
-                    textAlign = TextAlign.Center,
+                    "Recovery status",
+                    color = Color(0xFFE5EDF8),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "Ready to retry",
+                    color = accent,
                     fontSize = 12.sp,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.fillMaxWidth()
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                StartupFallbackPill(
+                    icon = Icons.Rounded.VerifiedUser,
+                    label = "Existing setup protected",
+                    accent = accent
+                )
+                StartupFallbackPill(
+                    icon = Icons.Rounded.Bolt,
+                    label = "Fast relaunch",
+                    accent = warmAccent
+                )
+            }
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = danger.copy(alpha = 0.10f),
+                border = BorderStroke(1.dp, danger.copy(alpha = 0.22f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Rounded.ErrorOutline, null, tint = danger, modifier = Modifier.size(16.dp))
+                    Text(
+                        "Issue detected: $errorLabel",
+                        color = Color(0xFFFFCDD8),
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StartupFallbackHighlights(featureItems: List<StartupFallbackFeatureItem>) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            "Why this screen appears",
+            color = Color(0xFF94A3B8),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.3.sp
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            featureItems.forEach { feature ->
+                StartupFallbackFeature(
+                    icon = feature.icon,
+                    title = feature.title,
+                    detail = feature.detail,
+                    accent = feature.accent
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun StartupFallbackFooter(onRetry: () -> Unit, accent: Color) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Button(
+            onClick = onRetry,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 54.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = accent,
+                contentColor = Color(0xFF051018)
+            )
+        ) {
+            Icon(Icons.Rounded.Refresh, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("Retry Launch", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+        }
+        Text(
+            "Bingwa keeps your existing setup safe and automatically returns to the full experience when startup completes normally.",
+            color = Color(0xFF94A3B8),
+            textAlign = TextAlign.Center,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
