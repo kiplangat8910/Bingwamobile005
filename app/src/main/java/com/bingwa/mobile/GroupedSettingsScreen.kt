@@ -1615,42 +1615,28 @@ private fun FallbackRuleSelectorCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        color = C.surface.copy(alpha = 0.66f),
-        border = BorderStroke(1.dp, if (selected) C.amber.copy(alpha = 0.40f) else C.border.copy(alpha = 0.72f))
+        shape = RoundedCornerShape(18.dp),
+        color = if (selected) C.amber.copy(alpha = 0.10f) else C.surface.copy(alpha = 0.66f),
+        border = BorderStroke(1.dp, if (selected) C.amber.copy(alpha = 0.44f) else C.border.copy(alpha = 0.72f))
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 13.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .width(18.dp)
-                    .heightIn(min = 66.dp),
-                contentAlignment = Alignment.TopCenter
+            Surface(
+                shape = CircleShape,
+                color = C.bg,
+                border = BorderStroke(2.dp, if (selected) C.amber else C.border.copy(alpha = 0.90f))
             ) {
-                Box(
-                    Modifier
-                        .width(2.dp)
-                        .fillMaxHeight()
-                        .background(C.border.copy(alpha = 0.55f))
-                )
-                Surface(
-                    modifier = Modifier.padding(top = 6.dp),
-                    shape = CircleShape,
-                    color = if (selected) C.bg else C.cardHi,
-                    border = BorderStroke(2.dp, if (selected) C.amber else C.border.copy(alpha = 0.90f))
-                ) {
-                    Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
-                        Box(
-                            Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(if (selected) C.amber else Color.Transparent)
-                        )
-                    }
+                Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(if (selected) C.amber else Color.Transparent)
+                    )
                 }
             }
             Column(
@@ -1667,22 +1653,17 @@ private fun FallbackRuleSelectorCard(
                         tint = if (selected) C.amber else C.t2,
                         modifier = Modifier.size(15.dp)
                     )
-                    Text(
-                        option.title,
-                        color = if (selected) C.amber else C.t1,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text(option.title, color = if (selected) C.amber else C.t1, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     if (selected) {
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = C.amber.copy(alpha = 0.14f),
+                            shape = RoundedCornerShape(6.dp),
+                            color = C.amber,
                             border = BorderStroke(1.dp, C.amber.copy(alpha = 0.28f))
                         ) {
                             Text(
                                 "SET",
-                                color = C.amber,
-                                fontSize = 9.sp,
+                                color = C.bg,
+                                fontSize = 8.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                             )
@@ -1903,6 +1884,7 @@ private fun FallbackChevronRowCard(
 private fun FallbackSectionHeader(
     title: String,
     subtitle: String,
+    sectionNumber: Int? = null,
     modifier: Modifier = Modifier,
     action: (@Composable () -> Unit)? = null
 ) {
@@ -1915,18 +1897,22 @@ private fun FallbackSectionHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                title.uppercase(),
-                color = C.t3,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Box(
-                Modifier
-                    .weight(1f)
-                    .height(1.dp)
-                    .background(C.border.copy(alpha = 0.55f))
-            )
+            if (sectionNumber != null) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = C.amber,
+                    border = BorderStroke(1.dp, C.amber.copy(alpha = 0.28f))
+                ) {
+                    Box(
+                        Modifier.size(18.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(sectionNumber.toString(), color = C.bg, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Text(title.uppercase(), color = C.t2, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
             if (action != null) action()
         }
         if (subtitle.isNotBlank()) {
@@ -2747,61 +2733,35 @@ private fun FallbackSelectedPlanCard(
         else -> "KES $amountDelta higher than primary"
     }
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = C.surface.copy(alpha = 0.56f),
+        shape = RoundedCornerShape(14.dp),
+        color = if (index == 0) C.amber.copy(alpha = 0.10f) else C.cardHi.copy(alpha = 0.58f),
         border = BorderStroke(1.dp, if (index == 0) C.amber.copy(alpha = 0.30f) else C.border.copy(alpha = 0.82f))
     ) {
-        Column(
+        Row(
             Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = CircleShape,
-                    color = if (index == 0) C.amber.copy(alpha = 0.16f) else C.cardHi,
-                    border = BorderStroke(1.dp, if (index == 0) C.amber.copy(alpha = 0.24f) else C.border.copy(alpha = 0.72f))
-                ) {
-                    Box(
-                        Modifier.size(28.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("${index + 1}", color = if (index == 0) C.amber else C.t1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = if (index == 0) C.amber.copy(alpha = 0.14f) else C.cardHi,
-                        border = BorderStroke(1.dp, if (index == 0) C.amber.copy(alpha = 0.22f) else C.border.copy(alpha = 0.65f))
-                    ) {
-                        Text(
-                            if (index == 0) "Runs first" else "Queue position ${index + 1}",
-                            color = if (index == 0) C.amber else C.t3,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                    Text(offer.name, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Text("${offer.category} • KES ${offer.price}", color = C.t2, fontSize = 11.sp)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FallbackEditorChip(
-                            label = if (index == 0) "First backup after primary" else "Runs after backup $index",
-                            tint = if (index == 0) C.amber else C.border
-                        )
-                        FallbackEditorChip(label = deltaLabel, tint = C.border)
-                    }
+            Text("::", color = C.t3, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (index == 0) C.amber.copy(alpha = 0.14f) else C.cyan.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, if (index == 0) C.amber.copy(alpha = 0.24f) else C.cyan.copy(alpha = 0.22f))
+            ) {
+                Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+                    Text("${index + 1}", color = if (index == 0) C.amber else C.cyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(offer.name, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text("${offer.category} • KES ${offer.price}", color = C.t3, fontSize = 10.sp)
+                Text(if (index == 0) "Runs first" else deltaLabel, color = if (index == 0) C.amber else C.t3, fontSize = 9.sp)
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Surface(
                     shape = RoundedCornerShape(999.dp),
@@ -2810,11 +2770,11 @@ private fun FallbackSelectedPlanCard(
                     modifier = Modifier.clickable(enabled = canMoveUp, onClick = onMoveUp)
                 ) {
                     Text(
-                        "Move up",
+                        "Up",
                         color = if (canMoveUp) C.t1 else C.t3,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                     )
                 }
                 Surface(
@@ -2824,11 +2784,11 @@ private fun FallbackSelectedPlanCard(
                     modifier = Modifier.clickable(enabled = canMoveDown, onClick = onMoveDown)
                 ) {
                     Text(
-                        "Move down",
+                        "Down",
                         color = if (canMoveDown) C.t1 else C.t3,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                     )
                 }
                 Surface(
@@ -2838,11 +2798,11 @@ private fun FallbackSelectedPlanCard(
                     modifier = Modifier.clickable(onClick = onRemove)
                 ) {
                     Text(
-                        "REMOVE",
+                        "X",
                         color = C.red,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                     )
                 }
             }
@@ -2859,6 +2819,7 @@ private fun FallbackAvailablePlanCard(
     onAdd: () -> Unit
 ) {
     val sameCategory = offer.category.equals(primaryOffer.category, ignoreCase = true)
+    val topMatch = sameCategory || !recommendation.isNullOrBlank()
     val amountDelta = offer.price - primaryOffer.price
     val deltaLabel = when {
         amountDelta == 0 -> "Matches the primary amount"
@@ -2868,29 +2829,31 @@ private fun FallbackAvailablePlanCard(
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = C.surface.copy(alpha = 0.56f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
+        border = BorderStroke(1.dp, if (topMatch) C.cyan.copy(alpha = 0.28f) else C.border.copy(alpha = 0.82f))
     ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(13.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(offer.name, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Text("${offer.category} • KES ${offer.price}", color = C.t2, fontSize = 11.sp)
+                    Text(offer.name, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("${offer.category} • KES ${offer.price} • $deltaLabel", color = C.t3, fontSize = 10.sp)
                 }
                 Button(
                     onClick = onAdd,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = C.cyan.copy(alpha = 0.16f),
+                        containerColor = C.cardHi,
                         contentColor = C.t1
-                    )
+                    ),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     Icon(Icons.Rounded.Add, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
@@ -2903,9 +2866,8 @@ private fun FallbackAvailablePlanCard(
             ) {
                 FallbackEditorChip(label = "Available backup", tint = C.border)
                 FallbackEditorChip(label = if (sameCategory) "Same category" else offer.category, tint = if (sameCategory) C.amber else C.border)
-                FallbackEditorChip(label = deltaLabel, tint = C.border)
                 if (!recommendation.isNullOrBlank()) {
-                    FallbackEditorChip(label = recommendation, tint = C.amber)
+                    FallbackEditorChip(label = recommendation, tint = C.cyan)
                 }
             }
         }
