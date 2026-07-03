@@ -19,7 +19,6 @@ data class DailyLimitPolicyConfig(
     val fallbackRuleMode: String = DailyLimitPolicy.FALLBACK_RULE_BOTH,
     val fallbackMappings: List<DailyLimitFallbackMapping> = emptyList(),
     val legacyFallbackOfferId: Int = -1,
-    val fallbackMinPrice: Int = 0,
     val repeatNoticeEnabled: Boolean = false
 ) {
     val fallbackTriggerOfferNotFound: Boolean
@@ -70,7 +69,6 @@ object DailyLimitPolicy {
             ),
             fallbackMappings = parseFallbackMappings(prefs.safeGetString(KEY_FALLBACK_MAPPINGS, null)),
             legacyFallbackOfferId = prefs.safeGetInt(KEY_FALLBACK_OFFER_ID, -1),
-            fallbackMinPrice = prefs.safeGetInt(KEY_FALLBACK_MIN_PRICE, 0).coerceAtLeast(0),
             repeatNoticeEnabled = prefs.safeGetBoolean("daily_limit_repeat_notice_enabled", false)
         )
     }
@@ -133,7 +131,6 @@ object DailyLimitPolicy {
     fun resolveFallbackOffers(context: Context, originalOfferId: Int, originalPrice: Int): List<OfferItem> {
         val config = load(context)
         if (!config.fallbackEnabled) return emptyList()
-        if (originalPrice < config.fallbackMinPrice) return emptyList()
 
         val allOffers = OfferRepository.load(context)
         val offerById = allOffers.associateBy { it.id }
