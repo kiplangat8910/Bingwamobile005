@@ -13,6 +13,7 @@ object OfferRepository {
     private const val CURRENT_CATALOG_VERSION = 3
     const val ACTION_OFFERS_UPDATED = "com.bingwa.mobile.OFFERS_UPDATED"
     private val gson = Gson()
+    private val lock = Any()
     @Volatile private var cachedRawJson: String? = null
     @Volatile private var cachedOffers: List<OfferItem>? = null
 
@@ -23,72 +24,80 @@ object OfferRepository {
     )
 
     fun ensureSeeded(context: Context): List<OfferItem> {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val rawJson = prefs.safeGetString(KEY_OFFERS, null)
-        val parsed = parse(rawJson)
-        return when {
-            rawJson.isNullOrBlank() -> {
-                seedDefaults(context, prefs)
-            }
-            parsed == null -> repair(context).offers
-            else -> {
-                val cleaned = sanitize(parsed)
-                if (prefs.getInt(KEY_CATALOG_VERSION, 0) < CURRENT_CATALOG_VERSION) {
-                    migrateCatalog(context, cleaned, prefs)
-                } else {
-                    cleaned.also { updateCache(rawJson, it) }
+        return synchronized(lock) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val rawJson = prefs.safeGetString(KEY_OFFERS, null)
+            val parsed = parse(rawJson)
+            when {
+                rawJson.isNullOrBlank() -> {
+                    seedDefaults(context, prefs)
+                }
+                parsed == null -> repair(context).offers
+                else -> {
+                    val cleaned = sanitize(parsed)
+                    if (prefs.getInt(KEY_CATALOG_VERSION, 0) < CURRENT_CATALOG_VERSION) {
+                        migrateCatalog(context, cleaned, prefs)
+                    } else {
+                        cleaned.also { updateCache(rawJson, it) }
+                    }
                 }
             }
         }
     }
 
     fun load(context: Context): MutableList<OfferItem> {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val rawJson = prefs.safeGetString(KEY_OFFERS, null)
-        val cached = cachedOffers
-        if (rawJson == cachedRawJson && cached != null) return copyOffers(cached)
-        return (parse(rawJson)?.let(::sanitize) ?: mutableListOf()).also { updateCache(rawJson, it) }
+        return synchronized(lock) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val rawJson = prefs.safeGetString(KEY_OFFERS, null)
+            val cached = cachedOffers
+            if (rawJson == cachedRawJson && cached != null) return@synchronized copyOffers(cached)
+            (parse(rawJson)?.let(::sanitize) ?: mutableListOf()).also { updateCache(rawJson, it) }
+        }
     }
 
     fun save(context: Context, offers: List<OfferItem>) {
-        val sanitized = sanitize(offers)
-        val json = gson.toJson(sanitized)
-        updateCache(json, sanitized)
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_OFFERS, json)
-            .apply()
+        synchronized(lock) {
+            val sanitized = sanitize(offers)
+            val json = gson.toJson(sanitized)
+            updateCache(json, sanitized)
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_OFFERS, json)
+                .apply()
+        }
         context.sendBroadcast(Intent(ACTION_OFFERS_UPDATED).setPackage(context.packageName))
     }
 
     fun repair(context: Context): RepairResult {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val current = parse(prefs.safeGetString(KEY_OFFERS, null)).orEmpty()
-        val cleaned = sanitize(current)
-        val existingKeys = cleaned.mapTo(mutableSetOf(), ::offerKey)
-        val managedPrices = UssdStorage(context).managedCatalogPrices()
-        val existingManagedPrices = cleaned.mapTo(mutableSetOf()) { it.price }.intersect(managedPrices)
-        val merged = cleaned.toMutableList()
-        var nextId = ((merged.maxOfOrNull { it.id } ?: 0).coerceAtLeast(0)) + 1
-        var restoredDefaultOffers = 0
+        return synchronized(lock) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val current = parse(prefs.safeGetString(KEY_OFFERS, null)).orEmpty()
+            val cleaned = sanitize(current)
+            val existingKeys = cleaned.mapTo(mutableSetOf(), ::offerKey)
+            val managedPrices = UssdStorage(context).managedCatalogPrices()
+            val existingManagedPrices = cleaned.mapTo(mutableSetOf()) { it.price }.intersect(managedPrices)
+            val merged = cleaned.toMutableList()
+            var nextId = ((merged.maxOfOrNull { it.id } ?: 0).coerceAtLeast(0)) + 1
+            var restoredDefaultOffers = 0
 
-        defaultOffers(context).forEach { offer ->
-            if (offer.price in existingManagedPrices) return@forEach
-            if (existingKeys.add(offerKey(offer))) {
-                merged += offer.copy(id = nextId++)
-                restoredDefaultOffers++
+            defaultOffers(context).forEach { offer ->
+                if (offer.price in existingManagedPrices) return@forEach
+                if (existingKeys.add(offerKey(offer))) {
+                    merged += offer.copy(id = nextId++)
+                    restoredDefaultOffers++
+                }
             }
-        }
 
-        val repairedOffers = sanitize(merged).sortedWith(compareBy<OfferItem> { it.price }.thenBy { it.name })
-        val removedBrokenOffers = current.size - cleaned.size
-        save(context, repairedOffers)
-        setCatalogVersion(prefs)
-        return RepairResult(
-            offers = repairedOffers,
-            restoredDefaultOffers = restoredDefaultOffers,
-            removedBrokenOffers = removedBrokenOffers
-        )
+            val repairedOffers = sanitize(merged).sortedWith(compareBy<OfferItem> { it.price }.thenBy { it.name })
+            val removedBrokenOffers = current.size - cleaned.size
+            save(context, repairedOffers)
+            setCatalogVersion(prefs)
+            RepairResult(
+                offers = repairedOffers,
+                restoredDefaultOffers = restoredDefaultOffers,
+                removedBrokenOffers = removedBrokenOffers
+            )
+        }
     }
 
     fun findById(context: Context, offerId: Int): OfferItem? =

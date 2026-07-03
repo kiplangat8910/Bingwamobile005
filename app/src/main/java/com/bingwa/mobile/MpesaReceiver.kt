@@ -148,45 +148,7 @@ class MpesaReceiver : BroadcastReceiver() {
         // Helper methods used by the companion
         private fun addTransaction(context: Context, tx: Transaction): Int {
             return try {
-                val prefs = context.getSharedPreferences("transactions", Context.MODE_PRIVATE)
-                val arr = try { JSONArray(prefs.getString("list", "[]")) } catch (_: Exception) { JSONArray() }
-                val newId = System.currentTimeMillis().toInt() and 0x7FFFFFFF
-                val newEntry = JSONObject().apply {
-                    val createdAt = tx.timestamp.takeIf { it > 0L } ?: System.currentTimeMillis()
-                    val normalizedStatus = TransactionStatus.fromString(tx.status)
-                    val finishedAt = tx.completedAt.takeIf { it > 0L } ?: when (normalizedStatus) {
-                        TransactionStatus.SUCCESS,
-                        TransactionStatus.FAILED,
-                        TransactionStatus.CANCELLED -> createdAt
-                        else -> 0L
-                    }
-                    put("id", newId)
-                    put("description", tx.description)
-                    put("amount", tx.amount)
-                    put("date", tx.date)
-                    put("status", tx.status)
-                    put("phoneNumber", tx.phoneNumber)
-                    put("clientName", formatClientName(tx.clientName))
-                    put("ussdCode", tx.ussdCode)
-                    put("ussdResponse", "")
-                    put("ussdTranscript", "")
-                    put("timestamp", createdAt)
-                    put("source", tx.source)
-                    put("showInRecent", tx.showInRecent)
-                    put("offerId", tx.offerId)
-                    put("completedAt", finishedAt)
-                    put(
-                        "executionDurationMs",
-                        tx.executionDurationMs.takeIf { it > 0L }
-                            ?: if (finishedAt > 0L) (finishedAt - createdAt).coerceAtLeast(0L) else 0L
-                    )
-                }
-                val newArr = JSONArray()
-                newArr.put(newEntry)
-                for (i in 0 until minOf(arr.length(), 99)) newArr.put(arr.getJSONObject(i))
-                prefs.edit().putString("list", newArr.toString()).apply()
-                broadcastTransactionCreated(context, newId)
-                newId
+                TransactionStore.insertTransaction(context, tx)
             } catch (e: Exception) {
                 Log.e(TAG, "addTransaction failed", e)
                 -1
@@ -740,25 +702,10 @@ class MpesaReceiver : BroadcastReceiver() {
 
     private fun saveContact(context: Context, number: String, name: String = "") {
         try {
-            if (number.isBlank() || !number.matches(Regex("^0\\d{9}$"))) return
-            val prefs = context.getSharedPreferences("saved_contacts", Context.MODE_PRIVATE)
-            val arr = try { JSONArray(prefs.getString("list", "[]")) } catch (_: Exception) { JSONArray() }
-            for (i in 0 until arr.length()) {
-                val obj = arr.getJSONObject(i)
-                if (obj.getString("phone") == number) {
-                    val existingName = obj.optString("name", "")
-                    val improvedName = choosePreferredClientName(existingName, name)
-                    if (improvedName.isNotBlank() && improvedName != existingName) {
-                        obj.put("name", improvedName)
-                        prefs.edit().putString("list", arr.toString()).apply()
-                        Log.d(TAG, "Contact name updated: $number -> $improvedName")
-                    }
-                    return
-                }
+            val updated = SavedContactStore.upsert(context, number, name)
+            if (updated.any { it.phone == SmsCommandHandler.normalizePhone(number) }) {
+                Log.d(TAG, "Contact saved: $name -> $number")
             }
-            arr.put(JSONObject().apply { put("name", formatClientName(name)); put("phone", number) })
-            prefs.edit().putString("list", arr.toString()).apply()
-            Log.d(TAG, "Contact saved: $name -> $number")
         } catch (e: Exception) { Log.e(TAG, "saveContact failed", e) }
     }
 

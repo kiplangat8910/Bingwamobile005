@@ -3986,7 +3986,7 @@ private fun TransactionSettings(onBack: () -> Unit) {
             onDismissRequest = { confirmClear = false },
             confirmButton = {
                 TextButton(onClick = {
-                    ctx.getSharedPreferences("transactions", Context.MODE_PRIVATE).edit().remove("list").apply()
+                    TransactionStore.clear(ctx)
                     history = emptyList()
                     Toast.makeText(ctx, "Transactions cleared", Toast.LENGTH_SHORT).show()
                     confirmClear = false

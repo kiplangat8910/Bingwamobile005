@@ -897,7 +897,7 @@ fun resolveClientNameByPhone(context: Context, phone: String): String {
     val normalized = SmsCommandHandler.normalizePhone(phone)
     if (!normalized.matches(Regex("^0\\d{9}$"))) return ""
 
-    val contacts = loadContacts(context.getSharedPreferences("saved_contacts", Context.MODE_PRIVATE))
+    val contacts = SavedContactStore.load(context)
     contacts.firstOrNull { SmsCommandHandler.normalizePhone(it.phone) == normalized && it.name.isNotBlank() }?.let {
         return formatClientName(it.name)
     }
@@ -916,21 +916,7 @@ fun upsertSavedContact(context: Context, phone: String, name: String) {
     if (!normalizedPhone.matches(Regex("^0\\d{9}$"))) return
     if (formattedName.isBlank()) return
 
-    val prefs = context.getSharedPreferences("saved_contacts", Context.MODE_PRIVATE)
-    val current = loadContacts(prefs).toMutableList()
-    val idx = current.indexOfFirst { SmsCommandHandler.normalizePhone(it.phone) == normalizedPhone }
-    if (idx >= 0) {
-        val existing = current[idx]
-        val improved = choosePreferredClientName(existing.name, formattedName)
-        if (improved.isNotBlank() && improved != existing.name) {
-            current[idx] = existing.copy(name = improved)
-            saveContacts(prefs, current)
-        }
-        return
-    }
-
-    current.add(SavedContact(formattedName, normalizedPhone))
-    saveContacts(prefs, current)
+    SavedContactStore.upsert(context, normalizedPhone, formattedName)
 }
 
 fun choosePreferredClientName(current: String, candidate: String): String {
@@ -982,7 +968,7 @@ private fun buildManualSearchEntries(
         merged[normalizedPhone] = mergeManualSearchEntry(merged[normalizedPhone], incoming)
     }
 
-    loadContacts(context.getSharedPreferences("saved_contacts", Context.MODE_PRIVATE))
+    SavedContactStore.load(context)
         .forEach { addEntry(it.name, it.phone, "Saved") }
     smsContacts.forEach { addEntry(it.name, it.phone, "M-PESA SMS") }
     allTxns.forEach { tx ->
@@ -1182,19 +1168,10 @@ private fun buildLearnedStepDetails(
     }
 }
 
-fun loadContacts(prefs: SharedPreferences): List<SavedContact> =
-    runCatching {
-        val arr = JSONArray(prefs.getString("list", "[]") ?: "[]")
-        (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
-            SavedContact(o.optString("name", ""), o.getString("phone"))
-        }
-    }.getOrDefault(emptyList())
+fun loadContacts(prefs: SharedPreferences): List<SavedContact> = SavedContactStore.load(prefs)
 
 fun saveContacts(prefs: SharedPreferences, list: List<SavedContact>) {
-    val arr = JSONArray()
-    list.forEach { c -> arr.put(JSONObject().apply { put("name", c.name); put("phone", c.phone) }) }
-    prefs.edit().putString("list", arr.toString()).apply()
+    SavedContactStore.save(prefs, list)
 }
 
 fun firstNameFrom(fullName: String): String =
@@ -7510,14 +7487,33 @@ private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
 @Composable
 fun ContactsScreen(onBack: (() -> Unit)? = null) {
     val ctx = LocalContext.current
-    val prefs = ctx.getSharedPreferences("saved_contacts", Context.MODE_PRIVATE)
-    var contacts by remember { mutableStateOf(loadContacts(prefs)) }
+    var contacts by remember { mutableStateOf(SavedContactStore.load(ctx)) }
     var query by remember { mutableStateOf("") }
     var showImport by remember { mutableStateOf(false) }
     var showAddDlg by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
     var newPhone by remember { mutableStateOf("") }
     val filtered = contacts.filter { query.isBlank() || it.name.contains(query, true) || it.phone.contains(query) }
+
+    DisposableEffect(ctx) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == SavedContactStore.ACTION_CONTACTS_UPDATED) {
+                    contacts = SavedContactStore.load(ctx)
+                }
+            }
+        }
+        val registered = registerAppReceiver(
+            ctx,
+            receiver,
+            android.content.IntentFilter(SavedContactStore.ACTION_CONTACTS_UPDATED)
+        )
+        onDispose {
+            if (registered) {
+                try { ctx.unregisterReceiver(receiver) } catch (_: Exception) {}
+            }
+        }
+    }
 
     Column(Modifier.fillMaxSize().background(C.bg)) {
         if (onBack != null) {
@@ -7661,8 +7657,7 @@ fun ContactsScreen(onBack: (() -> Unit)? = null) {
                     ContactCard(
                         c = c,
                         onDelete = {
-                            contacts = contacts.filter { it.phone != c.phone }
-                            saveContacts(prefs, contacts)
+                            contacts = SavedContactStore.delete(ctx, c.phone)
                         },
                         onCall = {
                             runCatching {
@@ -7681,8 +7676,8 @@ fun ContactsScreen(onBack: (() -> Unit)? = null) {
         }
         if (showImport) {
             MpesaImportDialog(onDismiss = { showImport = false }) { imported ->
-                val merged = (contacts + imported).distinctBy { it.phone }.sortedBy { it.name }
-                contacts = merged; saveContacts(prefs, merged); vib(ctx)
+                contacts = SavedContactStore.merge(ctx, imported)
+                vib(ctx)
                 Toast.makeText(ctx, "${imported.size} contacts imported", Toast.LENGTH_LONG).show()
                 showImport = false
             }
@@ -7698,7 +7693,13 @@ fun ContactsScreen(onBack: (() -> Unit)? = null) {
                     }
                 },
                 confirmButton = {
-                    Button(onClick = { if (newPhone.isNotBlank()) { contacts = contacts + SavedContact(newName.trim(), newPhone.trim()); saveContacts(prefs, contacts); showAddDlg = false; vib(ctx) } }, colors = ButtonDefaults.buttonColors(containerColor = C.cyan)) {
+                    Button(onClick = {
+                        if (newPhone.isNotBlank()) {
+                            contacts = SavedContactStore.upsert(ctx, newPhone.trim(), newName.trim())
+                            showAddDlg = false
+                            vib(ctx)
+                        }
+                    }, colors = ButtonDefaults.buttonColors(containerColor = C.cyan)) {
                         Text("Save", color = C.bg, fontWeight = FontWeight.Bold)
                     }
                 },
@@ -8291,7 +8292,7 @@ fun SettingsScreen() {
                 }
                 GroupDivider()
                 LinkRow(Icons.Rounded.DeleteSweep, "Clear All Transactions", "Wipe entire transaction history", C.red) {
-                    ctx.getSharedPreferences("transactions", Context.MODE_PRIVATE).edit().remove("list").apply()
+                    TransactionStore.clear(ctx)
                     Toast.makeText(ctx, "Transactions cleared", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -8311,7 +8312,7 @@ fun SettingsScreen() {
                     }
                     GroupDivider()
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        TextButton(onClick = { ctx.getSharedPreferences("transactions", Context.MODE_PRIVATE).edit().remove("list").apply(); overviewData = emptyList() }) {
+                        TextButton(onClick = { TransactionStore.clear(ctx); overviewData = emptyList() }) {
                             Text("Clear Overview Data", color = C.amber, fontSize = 12.sp)
                         }
                     }
