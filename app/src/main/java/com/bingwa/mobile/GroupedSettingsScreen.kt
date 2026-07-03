@@ -50,6 +50,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -3885,37 +3887,57 @@ private fun TransactionSettings(onBack: () -> Unit) {
     }
     var selectedTx by remember { mutableStateOf<Transaction?>(null) }
     val offers = remember { OfferRepository.load(ctx).filter { it.enabled } }
-    val clearOptions = listOf("Daily", "Weekly", "Monthly", "Yearly", "Never")
-    val tabs = TransactionHistoryFilter.entries.map { filter ->
-        TransactionHistoryTab(
-            filter = filter,
-            label = filter.label,
-            count = if (filter == TransactionHistoryFilter.ALL) {
-                history.size
-            } else {
-                history.count { transactionHistoryFilterFor(it, offers) == filter }
-            }
-        )
-    }
+    val clearOptions = remember { listOf("Daily", "Weekly", "Monthly", "Yearly", "Never") }
     val normalizedQuery = searchQuery.trim()
-    val filteredHistory = history
-        .sortedByDescending { transactionHistoryTimestamp(it) }
-        .filter { tx ->
+    val historyEntries = remember(history, offers) {
+        history.map { tx ->
+            TransactionHistoryEntry(
+                tx = tx,
+                classification = transactionHistoryFilterFor(tx, offers),
+                dateLabel = transactionHistoryDateLabel(tx)
+            )
+        }
+    }
+    val tabs = remember(historyEntries) {
+        TransactionHistoryFilter.entries.map { filter ->
+            TransactionHistoryTab(
+                filter = filter,
+                label = filter.label,
+                count = if (filter == TransactionHistoryFilter.ALL) {
+                    historyEntries.size
+                } else {
+                    historyEntries.count { it.classification == filter }
+                }
+            )
+        }
+    }
+    val filteredHistory = remember(historyEntries, activeTab, normalizedQuery) {
+        historyEntries.filter { entry ->
+            val tx = entry.tx
             val matchesTab = activeTab == TransactionHistoryFilter.ALL ||
-                transactionHistoryFilterFor(tx, offers) == activeTab
+                entry.classification == activeTab
             val matchesQuery = normalizedQuery.isBlank() ||
                 tx.clientName.contains(normalizedQuery, ignoreCase = true) ||
                 tx.description.contains(normalizedQuery, ignoreCase = true) ||
                 tx.phoneNumber.contains(normalizedQuery, ignoreCase = true)
             matchesTab && matchesQuery
         }
-    val groupedHistory = filteredHistory.groupBy { transactionHistoryDateLabel(it) }
-    val summaryCompleted = history.filter {
-        transactionHistoryFilterFor(it, offers) == TransactionHistoryFilter.COMPLETED &&
-            transactionMatchesSummaryPeriod(it, summaryPeriod)
     }
-    val totalCollected = summaryCompleted.sumOf { transactionHistoryAmountValue(it) }
-    val unmatchedCount = history.count { transactionHistoryFilterFor(it, offers) == TransactionHistoryFilter.UNMATCHED }
+    val groupedHistory = remember(filteredHistory) {
+        filteredHistory.groupBy { it.dateLabel }
+    }
+    val summaryCompleted = remember(historyEntries, summaryPeriod) {
+        historyEntries.filter {
+            it.classification == TransactionHistoryFilter.COMPLETED &&
+                transactionMatchesSummaryPeriod(it.tx, summaryPeriod)
+        }
+    }
+    val totalCollected = remember(summaryCompleted) {
+        summaryCompleted.sumOf { transactionHistoryAmountValue(it.tx) }
+    }
+    val unmatchedCount = remember(historyEntries) {
+        historyEntries.count { it.classification == TransactionHistoryFilter.UNMATCHED }
+    }
 
     DisposableEffect(Unit) {
         val receiver = object : android.content.BroadcastReceiver() {
@@ -3978,7 +4000,7 @@ private fun TransactionSettings(onBack: () -> Unit) {
         )
     }
 
-    Column(
+    LazyColumn(
         Modifier
             .fillMaxSize()
             .background(
@@ -3989,195 +4011,207 @@ private fun TransactionSettings(onBack: () -> Unit) {
                         C.bg
                     )
                 )
-            )
-            .verticalScroll(rememberScrollState())
+            ),
+        contentPadding = PaddingValues(bottom = 22.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
             ) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(C.surface.copy(alpha = 0.92f), RoundedCornerShape(14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = C.t1)
-                }
-                Text(
-                    "Transactions",
-                    color = C.t1,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Box {
                     IconButton(
-                        onClick = { menuExpanded = true },
+                        onClick = onBack,
                         modifier = Modifier
                             .size(44.dp)
                             .background(C.surface.copy(alpha = 0.92f), RoundedCornerShape(14.dp))
                     ) {
-                        Icon(Icons.Rounded.MoreVert, contentDescription = "More", tint = C.t1)
+                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = C.t1)
                     }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                        modifier = Modifier
-                            .width(272.dp)
-                            .background(Color(0xFF262C2F), RoundedCornerShape(16.dp))
-                            .border(1.dp, C.border.copy(alpha = 0.74f), RoundedCornerShape(16.dp))
-                    ) {
-                        TransactionMenuSectionTitle("Total Received Window")
-                        TransactionHistorySummaryPeriod.entries.forEach { period ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        period.menuLabel,
-                                        color = if (period == summaryPeriod) C.amber else C.t1,
-                                        fontSize = 13.sp,
-                                        fontWeight = if (period == summaryPeriod) FontWeight.Bold else FontWeight.Medium
-                                    )
-                                },
-                                trailingIcon = {
-                                    if (period == summaryPeriod) {
-                                        Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = C.amber)
-                                    }
-                                },
-                                onClick = {
-                                    summaryPeriod = period
-                                    prefs.edit().putString("transaction_summary_period", period.value).apply()
-                                    menuExpanded = false
-                                }
-                            )
+                    Text(
+                        "Transactions",
+                        color = C.t1,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Box {
+                        IconButton(
+                            onClick = { menuExpanded = true },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .background(C.surface.copy(alpha = 0.92f), RoundedCornerShape(14.dp))
+                        ) {
+                            Icon(Icons.Rounded.MoreVert, contentDescription = "More", tint = C.t1)
                         }
-                        TransactionMenuDivider()
-                        TransactionMenuSectionTitle("Retention & Cleanup")
-                        clearOptions.forEach { option ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "Auto-Clear: $option",
-                                        color = if (option == autoClear) C.cyan else C.t1,
-                                        fontSize = 13.sp,
-                                        fontWeight = if (option == autoClear) FontWeight.Bold else FontWeight.Medium
-                                    )
-                                },
-                                trailingIcon = {
-                                    if (option == autoClear) {
-                                        Icon(Icons.Rounded.Autorenew, contentDescription = null, tint = C.cyan)
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                            modifier = Modifier
+                                .width(272.dp)
+                                .background(Color(0xFF262C2F), RoundedCornerShape(16.dp))
+                                .border(1.dp, C.border.copy(alpha = 0.74f), RoundedCornerShape(16.dp))
+                        ) {
+                            TransactionMenuSectionTitle("Total Received Window")
+                            TransactionHistorySummaryPeriod.entries.forEach { period ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            period.menuLabel,
+                                            color = if (period == summaryPeriod) C.amber else C.t1,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (period == summaryPeriod) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (period == summaryPeriod) {
+                                            Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = C.amber)
+                                        }
+                                    },
+                                    onClick = {
+                                        summaryPeriod = period
+                                        prefs.edit().putString("transaction_summary_period", period.value).apply()
+                                        menuExpanded = false
                                     }
-                                },
-                                onClick = {
-                                    autoClear = option
-                                    prefs.edit().putString("auto_clear", option).apply()
-                                    menuExpanded = false
-                                }
-                            )
-                        }
-                        TransactionMenuDivider()
-                        DropdownMenuItem(
-                            text = {
-                                Column {
-                                    Text("Clear All Transactions", color = C.red, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                    Text("Wipe entire transaction history", color = C.t3, fontSize = 11.sp)
-                                }
-                            },
-                            trailingIcon = {
-                                Icon(Icons.Rounded.DeleteSweep, contentDescription = null, tint = C.red)
-                            },
-                            onClick = {
-                                confirmClear = true
-                                menuExpanded = false
+                                )
                             }
+                            TransactionMenuDivider()
+                            TransactionMenuSectionTitle("Retention & Cleanup")
+                            clearOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "Auto-Clear: $option",
+                                            color = if (option == autoClear) C.cyan else C.t1,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (option == autoClear) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (option == autoClear) {
+                                            Icon(Icons.Rounded.Autorenew, contentDescription = null, tint = C.cyan)
+                                        }
+                                    },
+                                    onClick = {
+                                        autoClear = option
+                                        prefs.edit().putString("auto_clear", option).apply()
+                                        menuExpanded = false
+                                    }
+                                )
+                            }
+                            TransactionMenuDivider()
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text("Clear All Transactions", color = C.red, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        Text("Wipe entire transaction history", color = C.t3, fontSize = 11.sp)
+                                    }
+                                },
+                                trailingIcon = {
+                                    Icon(Icons.Rounded.DeleteSweep, contentDescription = null, tint = C.red)
+                                },
+                                onClick = {
+                                    confirmClear = true
+                                    menuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
+                TransactionHistoryHeroCard(
+                    summaryPeriod = summaryPeriod,
+                    totalCollected = totalCollected,
+                    completedCount = summaryCompleted.size,
+                    unmatchedCount = unmatchedCount
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("Search by name or number...", color = C.t3) },
+                    leadingIcon = {
+                        Icon(Icons.Rounded.Search, contentDescription = null, tint = C.t3)
+                    },
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xFF15191B),
+                        unfocusedContainerColor = Color(0xFF15191B),
+                        focusedBorderColor = Color(0xFF333B3E),
+                        unfocusedBorderColor = Color(0xFF333B3E),
+                        focusedTextColor = C.t1,
+                        unfocusedTextColor = C.t1,
+                        cursorColor = C.cyan,
+                        focusedLeadingIconColor = C.t3,
+                        unfocusedLeadingIconColor = C.t3,
+                        focusedPlaceholderColor = C.t3,
+                        unfocusedPlaceholderColor = C.t3
+                    )
+                )
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    tabs.forEach { tab ->
+                        TransactionHistoryTabChip(
+                            tab = tab,
+                            isActive = activeTab == tab.filter,
+                            onClick = { activeTab = tab.filter }
                         )
                     }
                 }
-            }
-            Spacer(Modifier.height(18.dp))
-            TransactionHistoryHeroCard(
-                summaryPeriod = summaryPeriod,
-                totalCollected = totalCollected,
-                completedCount = summaryCompleted.size,
-                unmatchedCount = unmatchedCount
-            )
-            Spacer(Modifier.height(16.dp))
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("Search by name or number...", color = C.t3) },
-                leadingIcon = {
-                    Icon(Icons.Rounded.Search, contentDescription = null, tint = C.t3)
-                },
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF15191B),
-                    unfocusedContainerColor = Color(0xFF15191B),
-                    focusedBorderColor = Color(0xFF333B3E),
-                    unfocusedBorderColor = Color(0xFF333B3E),
-                    focusedTextColor = C.t1,
-                    unfocusedTextColor = C.t1,
-                    cursorColor = C.cyan,
-                    focusedLeadingIconColor = C.t3,
-                    unfocusedLeadingIconColor = C.t3,
-                    focusedPlaceholderColor = C.t3,
-                    unfocusedPlaceholderColor = C.t3
-                )
-            )
-            Spacer(Modifier.height(14.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                tabs.forEach { tab ->
-                    TransactionHistoryTabChip(
-                        tab = tab,
-                        isActive = activeTab == tab.filter,
-                        onClick = { activeTab = tab.filter }
-                    )
-                }
+                Spacer(Modifier.height(8.dp))
             }
         }
-
-        Column(
-            Modifier.padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Spacer(Modifier.height(8.dp))
-            if (filteredHistory.isEmpty()) {
+        if (filteredHistory.isEmpty()) {
+            item {
                 TransactionHistoryEmptyState(
                     hasTransactions = history.isNotEmpty(),
                     filterLabel = activeTab.label,
                     hasSearch = normalizedQuery.isNotBlank()
                 )
-            } else {
-                groupedHistory.forEach { (dateLabel, items) ->
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            }
+        } else {
+            groupedHistory.forEach { (dateLabel, itemsForDate) ->
+                item {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         Text(
                             dateLabel.uppercase(Locale.getDefault()),
                             color = C.t3,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        items.forEach { tx ->
-                            TransactionHistoryRow(tx = tx, offers = offers, onClick = { selectedTx = tx })
-                        }
                     }
-                    Spacer(Modifier.height(4.dp))
+                }
+                items(
+                    items = itemsForDate,
+                    key = { it.tx.id }
+                ) { entry ->
+                    TransactionHistoryRow(
+                        tx = entry.tx,
+                        offers = offers,
+                        onClick = { selectedTx = entry.tx },
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+                item {
+                    Spacer(Modifier.height(14.dp))
                 }
             }
         }
-        Spacer(Modifier.height(22.dp))
     }
 
     selectedTx?.let { tx ->
@@ -4187,7 +4221,7 @@ private fun TransactionSettings(onBack: () -> Unit) {
             onDelete = {
                 val updated = history.filterNot { it.id == tx.id }
                 TransactionStore.save(ctx, updated)
-                history = updated.sortedByDescending { transactionHistoryTimestamp(it) }
+                history = historyVisibleTransactions(updated)
                 Toast.makeText(ctx, "Transaction deleted", Toast.LENGTH_SHORT).show()
                 selectedTx = null
             }
@@ -4223,6 +4257,12 @@ private data class TransactionHistoryTab(
     val filter: TransactionHistoryFilter,
     val label: String,
     val count: Int
+)
+
+private data class TransactionHistoryEntry(
+    val tx: Transaction,
+    val classification: TransactionHistoryFilter,
+    val dateLabel: String
 )
 
 @Composable
@@ -4414,7 +4454,8 @@ private fun TransactionHistoryEmptyState(
 private fun TransactionHistoryRow(
     tx: Transaction,
     offers: List<OfferItem>,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val classification = transactionHistoryFilterFor(tx, offers)
     val accent = transactionHistoryAccent(classification)
@@ -4457,7 +4498,10 @@ private fun TransactionHistoryRow(
         color = Color(0xFF1C2123),
         shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, Color(0xFF262D2F)),
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick)
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier
