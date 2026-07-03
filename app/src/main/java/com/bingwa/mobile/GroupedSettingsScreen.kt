@@ -2046,6 +2046,7 @@ private fun FallbackOverviewSwitch(
 
 @Composable
 private fun FallbackMappingCard(
+    number: Int,
     primaryOffer: OfferItem,
     fallbackOffers: List<OfferItem>,
     fallbackRuleSummary: String,
@@ -2080,7 +2081,33 @@ private fun FallbackMappingCard(
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Primary plan", color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Text(primaryOffer.name, color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = C.cardHi.copy(alpha = 0.74f),
+                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+                        ) {
+                            Text(
+                                number.toString(),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = C.amber,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Text(
+                            primaryOffer.name,
+                            color = C.t1,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     Text("${primaryOffer.category} • KES ${primaryOffer.price}", color = C.t2, fontSize = 11.sp)
                 }
                 FallbackStatusChip(
@@ -2838,6 +2865,7 @@ private fun FallbackPrimarySelectorCard(
     offer: OfferItem,
     selected: Boolean,
     mapped: Boolean,
+    planNumber: Int?,
     onClick: () -> Unit
 ) {
     val accent = when {
@@ -2888,7 +2916,35 @@ private fun FallbackPrimarySelectorCard(
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(offer.name, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (planNumber != null) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = C.surface.copy(alpha = 0.92f),
+                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+                        ) {
+                            Text(
+                                planNumber.toString(),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = accent,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                    Text(
+                        offer.name,
+                        color = C.t1,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Text("${offer.category} • KES ${offer.price}", color = C.t2, fontSize = 11.sp)
             }
             Text(
@@ -3053,6 +3109,11 @@ private fun AutomationSettings(onBack: () -> Unit) {
         }
         if (fallbacks.isEmpty()) null else primary to fallbacks
     }.sortedBy { it.first.name.lowercase() }
+    val fallbackPlanNumberByPrimaryId = remember(configuredFallbackPlans) {
+        configuredFallbackPlans.mapIndexed { index, (primary, _) ->
+            primary.id to (index + 1)
+        }.toMap()
+    }
     val mappedPrimaryOfferIds = remember(fallbackMappings) { fallbackMappings.map { it.primaryOfferId }.toSet() }
     val unmappedPrimaryOffers = enabledOffers.filter { it.id !in mappedPrimaryOfferIds }
     val editingExistingRoute = fallbackPrimaryOfferId in mappedPrimaryOfferIds
@@ -3293,6 +3354,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                         offer = offer,
                                         selected = offer.id == fallbackPrimaryOfferId,
                                         mapped = offer.id in mappedPrimaryOfferIds,
+                                        planNumber = fallbackPlanNumberByPrimaryId[offer.id],
                                         onClick = { beginEditingPrimary(offer.id) }
                                     )
                                 }
@@ -3355,8 +3417,9 @@ private fun AutomationSettings(onBack: () -> Unit) {
                             FallbackEmptyState("No fallback routes are saved yet. Pick a primary plan below, add backup plans, then save the route.")
                         } else {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                configuredFallbackPlans.forEach { (primaryOffer, fallbackOffers) ->
+                                configuredFallbackPlans.forEachIndexed { index, (primaryOffer, fallbackOffers) ->
                                     FallbackMappingCard(
+                                        number = index + 1,
                                         primaryOffer = primaryOffer,
                                         fallbackOffers = fallbackOffers,
                                         fallbackRuleSummary = fallbackRuleSummary,
