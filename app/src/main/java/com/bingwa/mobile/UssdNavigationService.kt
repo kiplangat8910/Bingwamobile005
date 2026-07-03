@@ -89,14 +89,14 @@ class UssdNavigationService : AccessibilityService() {
         private const val NO_FIELD_PATIENCE      = 4
         private const val INPUT_TARGET_DEPTH     = 8
         private const val RECENT_INPUT_GRACE_MS  = 4_000L
-        private const val RECENT_VERIFIED_INPUT_GRACE_MS = 4_500L
+        private const val RECENT_VERIFIED_INPUT_GRACE_MS = 6_500L
         private const val RECENT_UI_EVENT_GRACE_MS = 1_200L
         private const val GESTURE_SETTLE_MS      = 12L
         private const val POST_GESTURE_WAIT_MS   = 18L
         private const val POPUP_STABILITY_DELAY_MS = 20L
         private const val TAP_GESTURE_DURATION_MS = 40L
         private const val REDIAL_COOLDOWN_MS     = 550L
-        private const val PENDING_ADVANCE_TIMEOUT_MS = 6_000L
+        private const val PENDING_ADVANCE_TIMEOUT_MS = 7_500L
         private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 6_000L
         private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 110L
         private const val ROOT_REACQUIRE_TIMEOUT_MS = 3_000L
@@ -972,6 +972,16 @@ class UssdNavigationService : AccessibilityService() {
         val autoAdjustSafe: Boolean
     )
 
+    private data class ScoredMenuOptionMatch(
+        val optionKey: String,
+        val optionLabel: String,
+        val sharedTokenCount: Int,
+        val strongSharedTokenCount: Int,
+        val expectedTokenCount: Int,
+        val candidateTokenCount: Int,
+        val score: Double
+    )
+
     private fun scheduleProcessStep(dialogChanged: Boolean, overrideDelayMs: Long? = null) {
         processStepRunnable?.let { handler.removeCallbacks(it) }
         val token = pendingProcessToken
@@ -1328,9 +1338,85 @@ class UssdNavigationService : AccessibilityService() {
             .toList()
         return when (exactMatches.size) {
             1 -> exactMatches.first()
-            else -> null
+            else -> {
+                val scoredMatches = menu.options.entries
+                    .asSequence()
+                    .mapNotNull { entry ->
+                        scoreMenuOptionMatch(
+                            expectedLabel = normalizedExpected,
+                            candidateLabel = normalizeMenuText(entry.value)
+                        )?.let { scored ->
+                            scored.copy(
+                                optionKey = entry.key,
+                                optionLabel = entry.value
+                            )
+                        }
+                    }
+                    .sortedByDescending { it.score }
+                    .toList()
+                val bestMatch = scoredMatches.firstOrNull() ?: return null
+                val runnerUp = scoredMatches.getOrNull(1)
+                val uniqueEnough = runnerUp == null || (bestMatch.score - runnerUp.score) >= 0.18
+                if (!uniqueEnough) return null
+
+                val expectedTokens = tokenizeMenuLabel(normalizedExpected)
+                val candidateTokens = tokenizeMenuLabel(normalizeMenuText(bestMatch.optionLabel))
+                val hasStrongAnchor = bestMatch.strongSharedTokenCount >= minOf(2, bestMatch.expectedTokenCount.coerceAtLeast(1))
+                val hasNumericAnchor = expectedTokens
+                    .intersect(candidateTokens)
+                    .any { token -> token.any(Char::isDigit) }
+                val safeToAdjust = bestMatch.score >= 0.72 &&
+                    bestMatch.sharedTokenCount >= 1 &&
+                    (hasStrongAnchor || hasNumericAnchor)
+                val strongEnoughToReport = bestMatch.score >= 0.48 &&
+                    bestMatch.sharedTokenCount >= 1 &&
+                    bestMatch.candidateTokenCount > 0
+                if (!strongEnoughToReport) return null
+
+                MenuOptionMatch(
+                    optionKey = bestMatch.optionKey,
+                    optionLabel = bestMatch.optionLabel,
+                    autoAdjustSafe = safeToAdjust
+                )
+            }
         }
     }
+
+    private fun scoreMenuOptionMatch(
+        expectedLabel: String,
+        candidateLabel: String
+    ): ScoredMenuOptionMatch? {
+        val expectedTokens = tokenizeMenuLabel(expectedLabel)
+        val candidateTokens = tokenizeMenuLabel(candidateLabel)
+        if (expectedTokens.isEmpty() || candidateTokens.isEmpty()) return null
+
+        val sharedTokens = expectedTokens.intersect(candidateTokens)
+        if (sharedTokens.isEmpty()) return null
+
+        val sharedCount = sharedTokens.size
+        val precision = sharedCount.toDouble() / candidateTokens.size.toDouble()
+        val recall = sharedCount.toDouble() / expectedTokens.size.toDouble()
+        val f1Score = if (precision + recall == 0.0) 0.0 else (2 * precision * recall) / (precision + recall)
+        val strongSharedCount = sharedTokens.count { token ->
+            token.any(Char::isDigit) || token.length >= 4
+        }
+        return ScoredMenuOptionMatch(
+            optionKey = "",
+            optionLabel = candidateLabel,
+            sharedTokenCount = sharedCount,
+            strongSharedTokenCount = strongSharedCount,
+            expectedTokenCount = expectedTokens.size,
+            candidateTokenCount = candidateTokens.size,
+            score = f1Score
+        )
+    }
+
+    private fun tokenizeMenuLabel(value: String): Set<String> =
+        value.split(' ')
+            .asSequence()
+            .map { token -> token.trim() }
+            .filter { token -> token.length >= 2 || token.any(Char::isDigit) }
+            .toSet()
 
     private fun isMenuContextCompatible(menu: ParsedMenuSignature, learned: UssdSignatureStep): Boolean {
         val learnedTitle = normalizeMenuText(learned.menuTitle)

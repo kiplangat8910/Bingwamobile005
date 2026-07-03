@@ -104,6 +104,16 @@ private data class StartupFallbackFeatureItem(
     val detail: String,
     val accent: Color
 )
+
+private fun formatStartupFallbackErrorLabel(raw: String): String {
+    val cleaned = raw.trim().ifBlank { "Startup issue" }
+    return cleaned
+        .replace('_', ' ')
+        .replace(Regex("([a-z])([A-Z])"), "$1 $2")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .take(72)
+}
 // ─── MainActivity ─────────────────────────────────────────────────────────
 class MainActivity : ComponentActivity() {
     private var pendingStartupPermissions: Array<String> = emptyArray()
@@ -246,6 +256,7 @@ private fun StartupFallbackScreen(errorLabel: String, onRetry: () -> Unit) {
         val accent = Color(0xFF67E8F9)
         val warmAccent = Color(0xFFF59E0B)
         val danger = Color(0xFFFB7185)
+        val readableError = remember(errorLabel) { formatStartupFallbackErrorLabel(errorLabel) }
         val featureItems = listOf(
             StartupFallbackFeatureItem(
                 icon = Icons.Rounded.Inventory2,
@@ -319,7 +330,7 @@ private fun StartupFallbackScreen(errorLabel: String, onRetry: () -> Unit) {
                     warmAccent = warmAccent
                 )
                 StartupFallbackStatusCard(
-                    errorLabel = errorLabel,
+                    errorLabel = readableError,
                     accent = accent,
                     warmAccent = warmAccent,
                     danger = danger
@@ -410,12 +421,22 @@ private fun StartupFallbackStatusCard(
 ) {
     Surface(
         shape = RoundedCornerShape(22.dp),
-        color = Color.Black.copy(alpha = 0.14f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+        color = Color(0xFF0C1422).copy(alpha = 0.96f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            accent.copy(alpha = 0.06f),
+                            Color.Transparent,
+                            warmAccent.copy(alpha = 0.05f)
+                        )
+                    )
+                )
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -428,11 +449,48 @@ private fun StartupFallbackStatusCard(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    "Ready to retry",
-                    color = accent,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = accent.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, accent.copy(alpha = 0.22f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(accent)
+                        )
+                        Text(
+                            "Ready to retry",
+                            color = accent,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.White.copy(alpha = 0.06f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(0.82f)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(accent.copy(alpha = 0.85f), warmAccent.copy(alpha = 0.90f))
+                            )
+                        )
                 )
             }
             FlowRow(
@@ -450,6 +508,29 @@ private fun StartupFallbackStatusCard(
                     accent = warmAccent
                 )
             }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                StartupFallbackMiniStat(
+                    label = "State",
+                    value = "Protected",
+                    tint = accent,
+                    modifier = Modifier.weight(1f)
+                )
+                StartupFallbackMiniStat(
+                    label = "Data",
+                    value = "Intact",
+                    tint = Color(0xFFA78BFA),
+                    modifier = Modifier.weight(1f)
+                )
+                StartupFallbackMiniStat(
+                    label = "Retry",
+                    value = "Instant",
+                    tint = warmAccent,
+                    modifier = Modifier.weight(1f)
+                )
+            }
             Surface(
                 shape = RoundedCornerShape(18.dp),
                 color = danger.copy(alpha = 0.10f),
@@ -463,12 +544,20 @@ private fun StartupFallbackStatusCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Rounded.ErrorOutline, null, tint = danger, modifier = Modifier.size(16.dp))
-                    Text(
-                        "Issue detected: $errorLabel",
-                        color = Color(0xFFFFCDD8),
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            "Issue detected",
+                            color = danger,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            errorLabel,
+                            color = Color(0xFFFFCDD8),
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp
+                        )
+                    }
                 }
             }
         }
@@ -505,16 +594,31 @@ private fun StartupFallbackFooter(onRetry: () -> Unit, accent: Color) {
             onClick = onRetry,
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 54.dp),
+                .heightIn(min = 56.dp)
+                .shadow(14.dp, RoundedCornerShape(20.dp)),
             shape = RoundedCornerShape(20.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = accent,
                 contentColor = Color(0xFF051018)
-            )
+            ),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
         ) {
-            Icon(Icons.Rounded.Refresh, null, modifier = Modifier.size(18.dp))
+            Surface(
+                shape = CircleShape,
+                color = Color(0xFF051018).copy(alpha = 0.10f)
+            ) {
+                Box(
+                    modifier = Modifier.size(28.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Rounded.Refresh, null, modifier = Modifier.size(18.dp))
+                }
+            }
             Spacer(Modifier.width(10.dp))
-            Text("Retry Launch", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+            Column(horizontalAlignment = Alignment.Start) {
+                Text("Retry Launch", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                Text("Return to the full app as soon as startup completes", fontSize = 11.sp)
+            }
         }
         Text(
             "Bingwa keeps your existing setup safe and automatically returns to the full experience when startup completes normally.",
@@ -544,6 +648,40 @@ private fun StartupFallbackPill(icon: ImageVector, label: String, accent: Color)
                 label,
                 color = accent,
                 fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun StartupFallbackMiniStat(
+    label: String,
+    value: String,
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = tint.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.18f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                label.uppercase(),
+                color = tint,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.4.sp
+            )
+            Text(
+                value,
+                color = Color(0xFFEAF2FF),
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold
             )
         }
