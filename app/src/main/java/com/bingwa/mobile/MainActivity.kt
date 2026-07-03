@@ -5488,7 +5488,9 @@ private fun HomeStatusMetricCard(
                 lineHeight = if (compact) 10.sp else 11.sp,
                 letterSpacing = 0.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = 2,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center
             )
         }

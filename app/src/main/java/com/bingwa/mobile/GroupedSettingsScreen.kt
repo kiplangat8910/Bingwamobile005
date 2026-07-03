@@ -4334,7 +4334,10 @@ private fun TransactionHistoryTabChip(
             tab.label,
             color = if (isActive) Color(0xFF15191B) else C.t2,
             fontSize = 13.sp,
-            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
+            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
         )
         Box(
             modifier = Modifier
@@ -4349,7 +4352,10 @@ private fun TransactionHistoryTabChip(
                 tab.count.toString(),
                 color = if (isActive) Color(0xFF15191B) else C.t3,
                 fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip
             )
         }
     }
