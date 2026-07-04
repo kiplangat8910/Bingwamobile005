@@ -2439,13 +2439,6 @@ fun UssdSimPickerRow(title: String, sims: List<SubscriptionInfo>, current: Int, 
                         exp = false
                     }
                 )
-                DropdownMenuItem(
-                    text = { Text("Both Slots", color = C.t1) },
-                    onClick = {
-                        onSelect(USSD_SIM_SELECTION_BOTH)
-                        exp = false
-                    }
-                )
             }
         }
     }
@@ -4755,7 +4748,7 @@ private fun retryRecentTransaction(context: Context, tx: Transaction): Transacti
         phoneNumber = phone,
         txId = newTxId,
         finalCode = finalCode,
-        mode = matchedOffer?.executionMode ?: "ADVANCED"
+        mode = matchedOffer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE
     )
     return TransactionRetryResult(
         success = true,
@@ -6179,7 +6172,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
     var phone by remember { mutableStateOf("") }
     var phoneErr by remember { mutableStateOf<String?>(null) }
     var selOffer by remember { mutableStateOf(offers.firstOrNull { it.enabled }) }
-    var mode by remember { mutableStateOf("ADVANCED") }
+    var mode by remember { mutableStateOf(OFFER_EXECUTION_MODE_SIMPLE) }
     var manualTab by rememberSaveable { mutableStateOf("DISPATCH") }
     var offerExp by remember { mutableStateOf(false) }
     var bannerState by remember { mutableStateOf<String?>(null) }
@@ -6274,7 +6267,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
             selOffer == null -> enabledOffers.first()
             else -> enabledOffers.firstOrNull { it.id == selOffer?.id } ?: enabledOffers.first()
         }
-        if (selOffer == null) mode = "ADVANCED"
+        mode = selOffer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE
     }
 
     val clockLabel = remember { SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()) }
@@ -8563,6 +8556,7 @@ fun OfferCard(number: Int, o: OfferItem, onEdit: () -> Unit, onToggle: () -> Uni
                         MiniTag(if (o.enabled) "ACTIVE" else "DISABLED", if (o.enabled) C.green else C.red)
                         MiniTag(o.category.uppercase(), C.orange)
                         MiniTag(o.targetDevice.uppercase(), C.blue)
+                        MiniTag(offerSimSelectionLabel(o.simSelection).uppercase(), C.purple)
                     }
                 }
                 Box {
@@ -9317,16 +9311,25 @@ fun OfferDialog(
     }
     val code = codeField.text
     var price by remember { mutableStateOf(existing?.price?.toString() ?: "") }
-    var mode by remember { mutableStateOf(existing?.executionMode ?: "ADVANCED") }
-    var cat by remember { mutableStateOf(existing?.category ?: "Data") }
+    val initialCategory = normalizeOfferCategory(existing?.category)
+    val initialMode = normalizeOfferExecutionMode(existing?.executionMode, initialCategory)
+    var mode by remember { mutableStateOf(initialMode) }
+    var cat by remember { mutableStateOf(initialCategory) }
     var device by remember { mutableStateOf(existing?.targetDevice ?: "PRIMARY") }
+    var simSelection by remember {
+        mutableIntStateOf(normalizeOfferSimSelection(existing?.simSelection ?: OFFER_SIM_USE_GENERAL))
+    }
     var enabled by remember { mutableStateOf(existing?.enabled ?: true) }
     var signatureEnabled by remember { mutableStateOf(existing?.signatureDetectionEnabled ?: false) }
     var signatureAction by remember { mutableStateOf(existing?.signatureAction ?: "STOP") }
     var modeExp by remember { mutableStateOf(false) }
     var catExp by remember { mutableStateOf(false) }
     var devExp by remember { mutableStateOf(false) }
+    var simExp by remember { mutableStateOf(false) }
     var signatureExp by remember { mutableStateOf(false) }
+    var modeTouched by remember {
+        mutableStateOf(existing != null && initialMode != defaultExecutionModeForCategory(initialCategory))
+    }
     val learnedSteps = existing?.learnedSignature.orEmpty()
     val learningCaptures = existing?.signatureLearningCaptures.orEmpty()
     val learnedAt = existing?.signatureLearnedAt ?: 0L
@@ -9350,16 +9353,19 @@ fun OfferDialog(
         val p = price.toIntOrNull() ?: 0
         if (name.isBlank() || p <= 0 || code.isBlank()) return null
         val codeChanged = existing?.ussdCode?.trim()?.equals(code.trim(), ignoreCase = true) == false
+        val normalizedCategory = normalizeOfferCategory(cat)
+        val normalizedMode = normalizeOfferExecutionMode(mode, normalizedCategory)
         return OfferItem(
             id = existing?.id ?: (System.currentTimeMillis() % 100000).toInt(),
             name = name.trim(),
             price = p,
             ussdCode = code.trim(),
             enabled = enabled,
-            executionMode = mode,
-            category = cat,
+            executionMode = normalizedMode,
+            category = normalizedCategory,
             targetDevice = device,
-            signatureDetectionEnabled = signatureEnabled && mode == "ADVANCED",
+            simSelection = simSelection,
+            signatureDetectionEnabled = signatureEnabled && normalizedMode == OFFER_EXECUTION_MODE_ADVANCED,
             signatureAction = signatureAction,
             learnedSignature = if (codeChanged) emptyList() else existing?.learnedSignature.orEmpty(),
             signatureLearnedAt = if (codeChanged) 0L else (existing?.signatureLearnedAt ?: 0L),
@@ -9368,6 +9374,17 @@ fun OfferDialog(
             pendingSignatureLearnedAt = if (codeChanged) 0L else (existing?.pendingSignatureLearnedAt ?: 0L),
             pendingSignatureLearningCaptures = if (codeChanged) emptyList() else existing?.pendingSignatureLearningCaptures.orEmpty()
         )
+    }
+
+    fun updateCategory(nextCategory: String) {
+        val normalizedCategory = normalizeOfferCategory(nextCategory)
+        val currentDefaultMode = defaultExecutionModeForCategory(cat)
+        val shouldFollowCategoryDefault = !modeTouched || mode == currentDefaultMode
+        cat = normalizedCategory
+        if (shouldFollowCategoryDefault) {
+            mode = defaultExecutionModeForCategory(normalizedCategory)
+            modeTouched = false
+        }
     }
 
     Dialog(
@@ -9382,7 +9399,7 @@ fun OfferDialog(
             modifier = Modifier.fillMaxSize(),
             color = C.bg
         ) {
-            val showSaveAndLearn = mode == "ADVANCED" && signatureEnabled
+            val showSaveAndLearn = mode == OFFER_EXECUTION_MODE_ADVANCED && signatureEnabled
             Scaffold(
                 containerColor = C.bg,
                 topBar = {
@@ -9549,10 +9566,10 @@ fun OfferDialog(
                     item {
                         OfferDialogSection(
                             title = "Bundle Details",
-                            subtitle = "Set the name, category, USSD code, price, and the device used to execute this offer."
+                            subtitle = "Set the name, category, USSD code, price, SIM slot, and device used to execute this offer."
                         ) {
-                            DialogDropdown("Category", cat, listOf("Data", "Minutes", "SMS", "Night", "Social"), catExp, { catExp = !catExp }) {
-                                cat = it
+                            DialogDropdown("Category", cat, offerCategoryOptions(), catExp, { catExp = !catExp }) {
+                                updateCategory(it)
                                 catExp = false
                             }
                             OutlinedTextField(
@@ -9584,9 +9601,31 @@ fun OfferDialog(
                                 textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
                             )
                             Text("Your price to customer", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
-                            DialogDropdown("USSD Type", mode, listOf("SIMPLE", "ADVANCED"), modeExp, { modeExp = !modeExp }) {
+                            DialogDropdown("USSD Type", mode, listOf(OFFER_EXECUTION_MODE_SIMPLE, OFFER_EXECUTION_MODE_ADVANCED), modeExp, { modeExp = !modeExp }) {
                                 mode = it
+                                modeTouched = it != defaultExecutionModeForCategory(cat)
                                 modeExp = false
+                            }
+                            Text(
+                                "Default mode follows category: Data uses SIMPLE, while Calls and SMS use ADVANCED.",
+                                color = C.t3,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                            DialogDropdown(
+                                "SIM To Use",
+                                offerSimSelectionLabel(simSelection),
+                                listOf("General SIM", "Slot 1", "Slot 2"),
+                                simExp,
+                                { simExp = !simExp }
+                            ) {
+                                simSelection = when (it) {
+                                    "Slot 1" -> USSD_SIM_SELECTION_SLOT_1
+                                    "Slot 2" -> USSD_SIM_SELECTION_SLOT_2
+                                    else -> OFFER_SIM_USE_GENERAL
+                                }
+                                simExp = false
                             }
                             DialogDropdown("Execute On", device, listOf("PRIMARY", "RELAY"), devExp, { devExp = !devExp }) {
                                 device = it
@@ -9594,7 +9633,7 @@ fun OfferDialog(
                             }
                         }
                     }
-                    if (mode == "ADVANCED") {
+                    if (mode == OFFER_EXECUTION_MODE_ADVANCED) {
                         item {
                             OfferDialogSection(
                                 title = "Protection",

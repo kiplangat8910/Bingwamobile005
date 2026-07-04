@@ -10,7 +10,7 @@ object OfferRepository {
     private const val PREFS_NAME = "DataOffers"
     private const val KEY_OFFERS = "offers"
     private const val KEY_CATALOG_VERSION = "catalog_version"
-    private const val CURRENT_CATALOG_VERSION = 3
+    private const val CURRENT_CATALOG_VERSION = 4
     const val ACTION_OFFERS_UPDATED = "com.bingwa.mobile.OFFERS_UPDATED"
     private val gson = Gson()
     private val lock = Any()
@@ -262,13 +262,15 @@ object OfferRepository {
             val trimmedCode = offer.ussdCode.trim()
             if (trimmedName.isBlank() || trimmedCode.isBlank() || offer.price <= 0) return@forEach
 
-            val mode = offer.executionMode.takeIf { it == "SIMPLE" || it == "ADVANCED" } ?: "ADVANCED"
+            val category = normalizeOfferCategory(offer.category)
+            val mode = normalizeOfferExecutionMode(offer.executionMode, category)
             var normalized = offer.copy(
                 name = trimmedName,
                 ussdCode = trimmedCode,
                 executionMode = mode,
-                category = offer.category.ifBlank { "Data" },
+                category = category,
                 targetDevice = offer.targetDevice.ifBlank { "PRIMARY" },
+                simSelection = normalizeOfferSimSelection(offer.simSelection),
                 signatureDetectionEnabled = offer.signatureDetectionEnabled && mode == "ADVANCED"
             )
 
@@ -291,10 +293,21 @@ object OfferRepository {
                     id = index,
                     name = label,
                     price = price.toInt(),
-                    ussdCode = storage.getUssdForAmount(price).orEmpty()
+                    ussdCode = storage.getUssdForAmount(price).orEmpty(),
+                    category = inferCategoryFromLabel(label),
+                    executionMode = defaultExecutionModeForCategory(inferCategoryFromLabel(label))
                 )
             }
             .filter { it.ussdCode.isNotBlank() }
+    }
+
+    private fun inferCategoryFromLabel(label: String): String {
+        val normalized = label.trim().uppercase()
+        return when {
+            "SMS" in normalized || "TEXT" in normalized -> OFFER_CATEGORY_SMS
+            "MINUTE" in normalized || "CALL" in normalized || "VOICE" in normalized -> OFFER_CATEGORY_CALLS
+            else -> OFFER_CATEGORY_DATA
+        }
     }
 
     private fun offerKey(offer: OfferItem): String =

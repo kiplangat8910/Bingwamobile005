@@ -317,7 +317,7 @@ object DailyLimitPolicy {
             phoneNumber = alternativePhone,
             txId = txId,
             finalCode = finalCode,
-            mode = offer?.executionMode ?: "ADVANCED",
+            mode = offer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE,
             returnToAppAggressively = false
         )
         val offerLabel = offer?.name ?: originalTx.description
@@ -454,12 +454,13 @@ fun scheduleRetryTomorrowForTransaction(context: Context, tx: Transaction, offer
     runCatching {
         val intent = Intent(context, AutomationService::class.java).apply {
             action = AutomationService.ACTION_RETRY_PENDING
-            putExtra("mode", offer?.executionMode ?: "ADVANCED")
+            putExtra("mode", offer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE)
             putExtra("code", tx.ussdCode)
             putExtra("phoneNumber", tx.phoneNumber)
             putExtra("txId", tx.id)
             putExtra("offerId", offer?.id ?: -1)
             putExtra("offerName", offer?.name ?: tx.description)
+            putExtra("simSelection", offer?.simSelection ?: OFFER_SIM_USE_GENERAL)
             putExtra("signatureEnabled", offer?.signatureDetectionEnabled ?: false)
             putExtra("signatureMode", offer?.signatureAction ?: "STOP")
             putExtra("signatureLearning", false)

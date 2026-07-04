@@ -33,6 +33,7 @@ class AutomationService : Service() {
         val mode: String,
         val offerId: Int,
         val offerName: String,
+        val simSelection: Int,
         val signatureEnabled: Boolean,
         val signatureMode: String,
         val signatureLearning: Boolean,
@@ -78,9 +79,12 @@ class AutomationService : Service() {
             code = code,
             phoneNumber = ussdPhoneNumber,
             txId = safeIntent.getIntExtra("txId", -1),
-            mode = safeIntent.getStringExtra("mode") ?: "SIMPLE",
+            mode = safeIntent.getStringExtra("mode") ?: OFFER_EXECUTION_MODE_SIMPLE,
             offerId = safeIntent.getIntExtra("offerId", -1),
             offerName = safeIntent.getStringExtra("offerName") ?: "",
+            simSelection = normalizeOfferSimSelection(
+                safeIntent.getIntExtra("simSelection", OFFER_SIM_USE_GENERAL)
+            ),
             signatureEnabled = safeIntent.getBooleanExtra("signatureEnabled", false),
             signatureMode = (safeIntent.getStringExtra("signatureMode") ?: "STOP").uppercase(),
             signatureLearning = safeIntent.getBooleanExtra("signatureLearning", false),
@@ -94,7 +98,10 @@ class AutomationService : Service() {
             processResponse(request, "Telephony unavailable on this phone", forcedStatus = "Failed")
             return
         }
-        val simTargets = resolveUssdSimTargets(this)
+        val simTargets = resolveUssdSimTargets(
+            context = this,
+            selectionOverride = request.simSelection.takeUnless { it == OFFER_SIM_USE_GENERAL }
+        )
         attemptSimpleDispatch(
             request = request,
             baseTm = baseTm,
@@ -201,7 +208,10 @@ class AutomationService : Service() {
             val started = startAdvancedDialAttempt(
                 request = request,
                 dialCode = dialCode,
-                simTargets = resolveUssdSimTargets(this),
+                simTargets = resolveUssdSimTargets(
+                    context = this,
+                    selectionOverride = request.simSelection.takeUnless { it == OFFER_SIM_USE_GENERAL }
+                ),
                 attemptIndex = 0
             )
             if (!started) {

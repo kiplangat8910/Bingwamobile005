@@ -436,7 +436,7 @@ class MpesaReceiver : BroadcastReceiver() {
             val us = UssdStorage(context)
             val code = offer?.ussdCode ?: us.getUssdForAmount(amount.toDouble())
             val label = offer?.name ?: (us.getLabels()[amount.toDouble()] ?: "Data Bundle (KSh $amount)")
-            val mode = offer?.executionMode ?: "ADVANCED"
+            val mode = offer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE
             val targetDevice = offer?.targetDevice ?: "PRIMARY"
             val finalCode = code?.replace("pn", phone, ignoreCase = true).orEmpty()
 

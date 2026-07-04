@@ -8,7 +8,7 @@ fun Context.startOfferAutomation(
     phoneNumber: String,
     txId: Int,
     finalCode: String,
-    mode: String = offer?.executionMode ?: "ADVANCED",
+    mode: String = offer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE,
     signatureLearning: Boolean = false,
     returnToAppAggressively: Boolean = true
 ) {
@@ -22,6 +22,7 @@ fun Context.startOfferAutomation(
         if (offer != null) {
             putExtra("offerId", offer.id)
             putExtra("offerName", offer.name)
+            putExtra("simSelection", offer.simSelection)
             putExtra("signatureEnabled", offer.signatureDetectionEnabled)
             putExtra("signatureMode", offer.signatureAction)
         }
