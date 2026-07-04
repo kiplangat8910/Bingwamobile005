@@ -18,7 +18,6 @@ data class DailyLimitPolicyConfig(
     val fallbackEnabled: Boolean = false,
     val fallbackRuleMode: String = DailyLimitPolicy.FALLBACK_RULE_BOTH,
     val fallbackMappings: List<DailyLimitFallbackMapping> = emptyList(),
-    val fallbackMinPrice: Int = 0,
     val legacyFallbackOfferId: Int = -1,
     val repeatNoticeEnabled: Boolean = false
 ) {
@@ -48,7 +47,6 @@ object DailyLimitPolicy {
     private const val KEY_FALLBACK_TRIGGER_DAILY_LIMIT = "fallback_trigger_daily_limit"
     private const val KEY_FALLBACK_OFFER_ID = "daily_limit_fallback_offer_id"
     private const val KEY_FALLBACK_MAPPINGS = "daily_limit_fallback_mappings"
-    private const val KEY_FALLBACK_MIN_PRICE = "daily_limit_fallback_min_price"
     private const val REPLY_PREFS = "daily_limit_reply_state"
     private const val STAGE_MENU = "MENU"
     private const val STAGE_ALT_NUMBER = "ALT_NUMBER"
@@ -69,7 +67,6 @@ object DailyLimitPolicy {
                 legacyDailyLimit = legacyDailyLimit
             ),
             fallbackMappings = parseFallbackMappings(prefs.safeGetString(KEY_FALLBACK_MAPPINGS, null)),
-            fallbackMinPrice = prefs.safeGetInt(KEY_FALLBACK_MIN_PRICE, 0).coerceAtLeast(0),
             legacyFallbackOfferId = prefs.safeGetInt(KEY_FALLBACK_OFFER_ID, -1),
             repeatNoticeEnabled = prefs.safeGetBoolean("daily_limit_repeat_notice_enabled", false)
         )
@@ -126,14 +123,13 @@ object DailyLimitPolicy {
             .apply()
     }
 
-    fun resolveFallbackOffer(context: Context, originalOfferId: Int, originalPrice: Int): OfferItem? {
-        return resolveFallbackOffers(context, originalOfferId, originalPrice).firstOrNull()
+    fun resolveFallbackOffer(context: Context, originalOfferId: Int): OfferItem? {
+        return resolveFallbackOffers(context, originalOfferId).firstOrNull()
     }
 
-    fun resolveFallbackOffers(context: Context, originalOfferId: Int, originalPrice: Int): List<OfferItem> {
+    fun resolveFallbackOffers(context: Context, originalOfferId: Int): List<OfferItem> {
         val config = load(context)
         if (!config.fallbackEnabled) return emptyList()
-        if (originalPrice < config.fallbackMinPrice) return emptyList()
 
         val allOffers = OfferRepository.load(context)
         val offerById = allOffers.associateBy { it.id }

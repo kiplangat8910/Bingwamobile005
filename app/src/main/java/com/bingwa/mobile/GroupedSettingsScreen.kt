@@ -2441,10 +2441,8 @@ private fun FallbackRouteEditorCard(
     editingExistingRoute: Boolean,
     fallbackRuleOptions: List<FallbackRuleOption>,
     selectedFallbackRuleMode: String,
-    minimumOriginalAmount: String,
     onChangePrimary: () -> Unit,
     onSelectFallbackRule: (String) -> Unit,
-    onMinimumOriginalAmountChange: (String) -> Unit,
     onMoveFallbackUp: (Int) -> Unit,
     onMoveFallbackDown: (Int) -> Unit,
     onRemoveFallback: (Int) -> Unit
@@ -2736,51 +2734,6 @@ private fun FallbackRouteEditorCard(
                             selected = selectedFallbackRuleMode == option.mode,
                             onClick = { onSelectFallbackRule(option.mode) }
                         )
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                        Text("Min. Original Amount", color = C.t1, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-                        Text(
-                            "Only original plans at or above this amount can use fallback. Leave 0 to allow every plan.",
-                            color = C.t2,
-                            fontSize = 11.sp,
-                            lineHeight = 17.sp
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = C.bg.copy(alpha = 0.92f),
-                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f))
-                        ) {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text("KES", color = C.t3, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                OutlinedTextField(
-                                    value = minimumOriginalAmount,
-                                    onValueChange = onMinimumOriginalAmountChange,
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true,
-                                    textStyle = androidx.compose.ui.text.TextStyle(
-                                        color = C.t1,
-                                        fontSize = 18.sp,
-                                        fontWeight = FontWeight.ExtraBold
-                                    ),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = Color.Transparent,
-                                        unfocusedBorderColor = Color.Transparent,
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        focusedTextColor = C.t1,
-                                        unfocusedTextColor = C.t1,
-                                        cursorColor = C.green
-                                    )
-                                )
-                            }
-                        }
                     }
                 }
             }
@@ -3336,11 +3289,8 @@ private fun AutomationSettings(onBack: () -> Unit) {
             legacyDailyLimit = initialFallbackTriggerDailyLimit
         )
     }
-    val initialFallbackMinOriginalAmount = remember { prefs.safeGetInt("daily_limit_fallback_min_price", 0) }
     var fallbackRuleModeSaved by remember { mutableStateOf(initialFallbackRuleMode) }
     var fallbackRuleMode by remember { mutableStateOf(initialFallbackRuleMode) }
-    var fallbackMinOriginalAmountSaved by remember { mutableIntStateOf(initialFallbackMinOriginalAmount) }
-    var fallbackMinOriginalAmountText by remember { mutableStateOf(initialFallbackMinOriginalAmount.toString()) }
     val fallbackRuleOptions = remember {
         listOf(
             FallbackRuleOption(
@@ -3462,9 +3412,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
         "Tap to review this route"
     }
     val ruleDirty = fallbackRuleMode != fallbackRuleModeSaved
-    val fallbackMinOriginalAmount = fallbackMinOriginalAmountText.toIntOrNull() ?: 0
-    val minimumAmountDirty = fallbackMinOriginalAmount != fallbackMinOriginalAmountSaved
-    val hasUnsavedFallbackChanges = ruleDirty || editorDirty || minimumAmountDirty
+    val hasUnsavedFallbackChanges = ruleDirty || editorDirty
 
     fun saveDailyLimitMode(mode: String) {
         dailyLimitMode = mode
@@ -3674,13 +3622,9 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                     editingExistingRoute = editingExistingRoute,
                                     fallbackRuleOptions = fallbackRuleOptions,
                                     selectedFallbackRuleMode = fallbackRuleMode,
-                                    minimumOriginalAmount = fallbackMinOriginalAmountText,
                                     onChangePrimary = { fallbackPrimaryExp = true },
                                     onSelectFallbackRule = { mode ->
                                         fallbackRuleMode = mode
-                                    },
-                                    onMinimumOriginalAmountChange = { value ->
-                                        fallbackMinOriginalAmountText = value.filter(Char::isDigit).ifBlank { "0" }
                                     },
                                     onMoveFallbackUp = { index ->
                                         if (index > 0) {
@@ -3808,7 +3752,6 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                 Button(
                                     onClick = {
                                         fallbackRuleModeSaved = fallbackRuleMode
-                                        fallbackMinOriginalAmountSaved = fallbackMinOriginalAmount
                                         prefs.edit()
                                             .putString("daily_limit_fallback_rule_mode", fallbackRuleMode)
                                             .putBoolean(
@@ -3819,7 +3762,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                 "fallback_trigger_daily_limit",
                                                 DailyLimitPolicy.ruleIncludesAlreadyRecommended(fallbackRuleMode)
                                             )
-                                            .putInt("daily_limit_fallback_min_price", fallbackMinOriginalAmount)
+                                            .remove("daily_limit_fallback_min_price")
                                             .apply()
                                         updateFallbacksForPrimary(fallbackPrimaryOfferId) { editorFallbackIds }
                                         editorDirty = false

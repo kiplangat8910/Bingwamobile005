@@ -486,12 +486,9 @@ class AutomationService : Service() {
         reasonLabel: String
     ): Boolean {
         val tx = originalTx
-        val originalOffer = request.offerId.takeIf { it >= 0 }?.let { OfferRepository.findById(this, it) }
-        val originalPrice = originalOffer?.price ?: tx?.amountValue?.toInt() ?: 0
         val fallbackOffers = DailyLimitPolicy.resolveFallbackOffers(
             context = this,
-            originalOfferId = request.offerId,
-            originalPrice = originalPrice
+            originalOfferId = request.offerId
         )
 
         fallbackOffers.forEachIndexed { index, fallbackOffer ->
@@ -520,13 +517,10 @@ class AutomationService : Service() {
     private fun handleDailyLimitPending(request: AutomationRequest, response: String) {
         val config = DailyLimitPolicy.load(this)
         val originalTx = loadTransactionById(this, request.txId)
-        val originalOffer = request.offerId.takeIf { it >= 0 }?.let { OfferRepository.findById(this, it) }
-        val originalPrice = originalOffer?.price ?: originalTx?.amountValue?.toInt() ?: 0
         if (config.fallbackEnabled && DailyLimitPolicy.ruleIncludesAlreadyRecommended(config.fallbackRuleMode)) {
             val fallbackOffers = DailyLimitPolicy.resolveFallbackOffers(
                 context = this,
-                originalOfferId = request.offerId,
-                originalPrice = originalPrice
+                originalOfferId = request.offerId
             )
 
             fallbackOffers.forEachIndexed { index, fallbackOffer ->
