@@ -2061,7 +2061,6 @@ private fun FallbackScreenContainer(
 private fun FallbackOverviewCard(
     fallbackEnabled: Boolean,
     onToggleChange: (Boolean) -> Unit,
-    fallbackRuleDescription: String,
     fallbackRouteCount: Int,
     fallbackPrimaryCount: Int,
     enabledPrimaryCount: Int
@@ -2159,25 +2158,13 @@ private fun FallbackOverviewCard(
                     )
                 }
 
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    FallbackOverviewMetric(
-                        label = "Status",
-                        value = if (fallbackEnabled) "Enabled" else "Disabled",
-                        supporting = readinessLabel,
-                        accent = if (fallbackEnabled) C.green else C.t3,
-                        modifier = Modifier.weight(1f)
-                    )
-                    FallbackOverviewMetric(
-                        label = "Trigger",
-                        value = fallbackRuleDescription,
-                        supporting = "Controls when backup plans take over from the original route.",
-                        accent = C.amber,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                FallbackOverviewMetric(
+                    label = "Status",
+                    value = if (fallbackEnabled) "Enabled" else "Disabled",
+                    supporting = readinessLabel,
+                    accent = if (fallbackEnabled) C.green else C.t3,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
 
@@ -3384,14 +3371,6 @@ private fun AutomationSettings(onBack: () -> Unit) {
         DailyLimitPolicy.FALLBACK_RULE_OFFER_NOT_FOUND -> "Offer not found only"
         else -> "Already recommended and offer not found"
     }
-    val fallbackRuleDescription = when (fallbackRuleMode) {
-        DailyLimitPolicy.FALLBACK_RULE_ALREADY_RECOMMENDED ->
-            "Fallback starts only after the network says the number already got today's plan."
-        DailyLimitPolicy.FALLBACK_RULE_OFFER_NOT_FOUND ->
-            "Fallback starts only when the saved USSD menu, code, or signature can no longer be matched."
-        else ->
-            "Fallback starts when either the number already got today's plan or the offer path can no longer be found."
-    }
     val initialFallbackMappings = remember(enabledOffers) {
         fun normalizeMappings(raw: List<DailyLimitFallbackMapping>): List<DailyLimitFallbackMapping> {
             return raw.mapNotNull { mapping ->
@@ -3604,7 +3583,6 @@ private fun AutomationSettings(onBack: () -> Unit) {
                         fallbackEnabled = it
                         prefs.edit().putBoolean("daily_limit_fallback_enabled", it).apply()
                     },
-                    fallbackRuleDescription = fallbackRuleDescription,
                     fallbackRouteCount = fallbackRouteCount,
                     fallbackPrimaryCount = fallbackPrimaryCount,
                     enabledPrimaryCount = enabledOffers.size
