@@ -4413,16 +4413,16 @@ private fun TransactionHistoryRow(
         .takeIf { it.isNotBlank() }
         ?.let(::maskTransactionPhone)
         ?: transactionSourceLabel(tx.source)
-    val note = when (classification) {
-        TransactionHistoryFilter.SCHEDULED -> {
+    val note = when {
+        classification == TransactionHistoryFilter.SCHEDULED -> {
             transactionReasonShort(tx).takeIf { it.isNotBlank() }
                 ?: "Queued for dispatch tomorrow because the daily sending limit has been reached."
         }
-        TransactionHistoryFilter.UNMATCHED -> {
+        classification == TransactionHistoryFilter.UNMATCHED -> {
             val received = transactionHistoryCurrency(transactionHistoryAmountValue(tx))
             "Received $received but this transaction is not configured in the Offers section."
         }
-        TransactionHistoryFilter.FAILED -> {
+        classification == TransactionHistoryFilter.FAILED -> {
             transactionReasonShort(tx).takeIf { it.isNotBlank() }
                 ?: tx.description.takeIf { it.isNotBlank() && !it.equals(title, ignoreCase = true) }
                 ?: transactionSourceLabel(tx.source)
