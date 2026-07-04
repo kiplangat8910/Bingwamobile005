@@ -2054,30 +2054,12 @@ private fun FallbackScreenContainer(
 @Composable
 private fun FallbackOverviewCard(
     fallbackEnabled: Boolean,
-    onToggleChange: (Boolean) -> Unit,
-    fallbackRouteCount: Int,
-    fallbackPrimaryCount: Int,
-    enabledPrimaryCount: Int
+    onToggleChange: (Boolean) -> Unit
 ) {
-    val routeSummary = if (fallbackRouteCount == 1) {
-        "1 fallback route mapped"
-    } else {
-        "$fallbackRouteCount fallback routes mapped"
-    }
-    val primarySummary = when {
-        enabledPrimaryCount <= 0 -> "No enabled primary plans"
-        fallbackPrimaryCount == 1 -> "1 primary plan linked"
-        else -> "$fallbackPrimaryCount of $enabledPrimaryCount primary plans linked"
-    }
     val overviewDescription = if (fallbackEnabled) {
         "Select a primary plan, then attach the backup plans that should run in order when it is blocked or missing."
     } else {
         "Turn fallback on to link each primary plan to the right backup plans."
-    }
-    val readinessLabel = when {
-        fallbackRouteCount == 0 -> "Create the first route to make fallback usable."
-        fallbackPrimaryCount < enabledPrimaryCount -> "Some enabled primary plans still need backup routes."
-        else -> "Every enabled primary plan already has a backup route."
     }
     Column(
         Modifier
@@ -2129,36 +2111,6 @@ private fun FallbackOverviewCard(
                         )
                     }
                     FallbackOverviewSwitch(checked = fallbackEnabled, onChange = onToggleChange)
-                }
-                if (fallbackEnabled) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        FallbackStatusChip(
-                            icon = Icons.Rounded.CheckCircle,
-                            label = "Fallback active",
-                            tint = C.green
-                        )
-                        FallbackStatusChip(
-                            icon = Icons.Rounded.Autorenew,
-                            label = routeSummary,
-                            tint = C.amber
-                        )
-                        FallbackStatusChip(
-                            icon = Icons.Rounded.Devices,
-                            label = primarySummary,
-                            tint = C.cyan
-                        )
-                    }
-
-                    FallbackOverviewMetric(
-                        label = "Status",
-                        value = "Enabled",
-                        supporting = readinessLabel,
-                        accent = C.green,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
             }
         }
@@ -3527,10 +3479,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                     onToggleChange = {
                         fallbackEnabled = it
                         prefs.edit().putBoolean("daily_limit_fallback_enabled", it).apply()
-                    },
-                    fallbackRouteCount = fallbackRouteCount,
-                    fallbackPrimaryCount = fallbackPrimaryCount,
-                    enabledPrimaryCount = enabledOffers.size
+                    }
                 )
 
                 AnimatedVisibility(visible = fallbackEnabled) {
