@@ -2056,107 +2056,13 @@ private fun FallbackOverviewCard(
     fallbackEnabled: Boolean,
     onToggleChange: (Boolean) -> Unit
 ) {
-    val overviewDescription = if (fallbackEnabled) {
-        "Select a primary plan, then attach the backup plans that should run in order when it is blocked or missing."
-    } else {
-        "Turn fallback on to link each primary plan to the right backup plans."
-    }
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
-    ) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = Color.Transparent,
-            border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                C.amber.copy(alpha = 0.16f),
-                                C.cardHi.copy(alpha = 0.94f),
-                                C.surface.copy(alpha = 0.98f)
-                            )
-                        )
-                    )
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(22.dp),
-                        color = C.amber.copy(alpha = 0.14f),
-                        border = BorderStroke(1.dp, C.amber.copy(alpha = 0.28f))
-                    ) {
-                        Box(Modifier.size(58.dp), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Rounded.Autorenew, null, tint = C.t1, modifier = Modifier.size(24.dp))
-                        }
-                    }
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Fallback Plans", color = C.t1, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                        Text(
-                            overviewDescription,
-                            color = C.t2,
-                            fontSize = 12.sp,
-                            lineHeight = 18.sp
-                        )
-                    }
-                    FallbackOverviewSwitch(checked = fallbackEnabled, onChange = onToggleChange)
-                }
-            }
-        }
-
-        if (fallbackEnabled) {
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = C.cardHi.copy(alpha = 0.52f),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.78f))
-            ) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("Setup flow", color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        FallbackJourneyStep(
-                            index = 1,
-                            title = "Pick primary",
-                            subtitle = "Choose the main plan to protect.",
-                            accent = C.cyan,
-                            modifier = Modifier.weight(1f)
-                        )
-                        FallbackJourneyStep(
-                            index = 2,
-                            title = "Add backups",
-                            subtitle = "Attach one or more plans in order.",
-                            accent = C.amber,
-                            modifier = Modifier.weight(1f)
-                        )
-                        FallbackJourneyStep(
-                            index = 3,
-                            title = "Save route",
-                            subtitle = "Review the queue and store it.",
-                            accent = C.green,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-        }
+    SettingsGroup("Fallback Plans") {
+        ToggleRow(
+            Icons.Rounded.Autorenew,
+            "Enable Fallback Plans",
+            "Link backup plans when the main plan is blocked or missing",
+            fallbackEnabled
+        ) { onToggleChange(it) }
     }
 }
 
@@ -3473,16 +3379,16 @@ private fun AutomationSettings(onBack: () -> Unit) {
                 .padding(horizontal = UiDimens.ScreenPaddingHorizontal),
             verticalArrangement = Arrangement.spacedBy(UiDimens.SpacingLg)
         ) {
-            FallbackScreenContainer {
-                FallbackOverviewCard(
-                    fallbackEnabled = fallbackEnabled,
-                    onToggleChange = {
-                        fallbackEnabled = it
-                        prefs.edit().putBoolean("daily_limit_fallback_enabled", it).apply()
-                    }
-                )
+            FallbackOverviewCard(
+                fallbackEnabled = fallbackEnabled,
+                onToggleChange = {
+                    fallbackEnabled = it
+                    prefs.edit().putBoolean("daily_limit_fallback_enabled", it).apply()
+                }
+            )
 
-                AnimatedVisibility(visible = fallbackEnabled) {
+            AnimatedVisibility(visible = fallbackEnabled) {
+                FallbackScreenContainer {
                     Column(
                         Modifier
                             .fillMaxWidth()
