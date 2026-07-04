@@ -44,6 +44,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -588,6 +590,12 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
         animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
         label = "activity_row_processing_dot"
     )
+    val liveSweep by anim.animateFloat(
+        initialValue = -0.30f,
+        targetValue = 1.10f,
+        animationSpec = infiniteRepeatable(tween(1500)),
+        label = "activity_row_processing_sweep"
+    )
     Surface(
         color = C.surface.copy(alpha = 0.95f),
         shape = RoundedCornerShape(16.dp),
@@ -595,7 +603,27 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
             1.dp,
             if (liveExecution) statusColor.copy(alpha = 0.28f) else C.border.copy(alpha = 0.72f)
         ),
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .drawBehind {
+                if (!liveExecution) return@drawBehind
+                val beamWidth = size.width * 0.34f
+                val startX = (size.width * liveSweep) - beamWidth
+                drawRoundRect(
+                    brush = Brush.horizontalGradient(
+                        listOf(
+                            Color.Transparent,
+                            statusColor.copy(alpha = 0.16f),
+                            Color.Transparent
+                        ),
+                        startX = startX,
+                        endX = startX + beamWidth
+                    ),
+                    cornerRadius = CornerRadius(16.dp.toPx(), 16.dp.toPx())
+                )
+            }
+            .clickable(onClick = onClick)
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
@@ -624,18 +652,7 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
                 )
                 if (liveExecution) {
                     Spacer(Modifier.height(6.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        ActivityProcessingDots(statusColor)
-                        Text(
-                            "Processing...",
-                            color = statusColor,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                    ActivityProcessingPill(accent = statusColor)
                 }
             }
             Spacer(Modifier.width(8.dp))
@@ -698,6 +715,63 @@ private fun ActivityProcessingDots(accent: Color) {
             )
         }
     }
+}
+
+@Composable
+private fun ActivityProcessingPill(accent: Color) {
+    val anim = rememberInfiniteTransition(label = "activity_processing_pill")
+    val sweep by anim.animateFloat(
+        initialValue = -0.35f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(tween(1300)),
+        label = "activity_processing_pill_sweep"
+    )
+    val phase by anim.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900)),
+        label = "activity_processing_pill_phase"
+    )
+    Surface(
+        color = accent.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.22f)),
+        modifier = Modifier.drawBehind {
+            val beamWidth = size.width * 0.42f
+            val startX = (size.width * sweep) - beamWidth
+            drawRoundRect(
+                brush = Brush.horizontalGradient(
+                    listOf(
+                        Color.Transparent,
+                        accent.copy(alpha = 0.16f),
+                        Color.Transparent
+                    ),
+                    startX = startX,
+                    endX = startX + beamWidth
+                ),
+                cornerRadius = CornerRadius(size.height / 2f, size.height / 2f)
+            )
+        }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            ActivityProcessingDots(accent)
+            Text(
+                "Processing${animatedProcessingSuffix(phase)}",
+                color = accent,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+private fun animatedProcessingSuffix(phase: Float): String {
+    val step = (phase * 3f).toInt().coerceIn(0, 2)
+    return ".".repeat(step + 1)
 }
 
 private fun maskActivityPhone(phone: String): String {
