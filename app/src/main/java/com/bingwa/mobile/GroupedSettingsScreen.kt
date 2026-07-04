@@ -4388,6 +4388,21 @@ private fun TransactionHistoryRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val offerMode = remember(tx.offerId, offers) {
+        offers.firstOrNull { it.id == tx.offerId }?.executionMode
+    }
+    val executionCopy = remember(
+        tx.id,
+        tx.status,
+        tx.offerId,
+        tx.ussdCode,
+        tx.ussdTranscript,
+        tx.ussdResponse,
+        offerMode
+    ) {
+        transactionExecutionCopy(tx, offerMode)
+    }
+    val liveExecution = isTransactionActivelyExecuting(tx)
     val classification = transactionHistoryFilterFor(tx, offers)
     val accent = transactionHistoryAccent(classification)
     val avatarColor = transactionAvatarColor(tx)
@@ -4412,6 +4427,7 @@ private fun TransactionHistoryRow(
                 ?: tx.description.takeIf { it.isNotBlank() && !it.equals(title, ignoreCase = true) }
                 ?: transactionSourceLabel(tx.source)
         }
+        liveExecution -> executionCopy.detailLabel
         else -> {
             if (DailyLimitPolicy.isDailyLimitHold(tx)) {
                 transactionReasonShort(tx).takeIf { it.isNotBlank() }
@@ -4495,7 +4511,7 @@ private fun TransactionHistoryRow(
                     fontWeight = FontWeight.ExtraBold
                 )
                 Text(
-                    transactionStatusLabel(tx),
+                    executionCopy.statusLabel,
                     color = accent.copy(alpha = 0.92f),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold

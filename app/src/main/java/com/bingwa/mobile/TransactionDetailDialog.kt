@@ -90,18 +90,24 @@ internal fun TransactionDetailDialog(
     val clipboard = LocalClipboardManager.current
     val isFailed = tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED
     val isDailyLimitHold = DailyLimitPolicy.isDailyLimitHold(tx)
+    val executionCopy = remember(
+        tx.id,
+        tx.status,
+        tx.offerId,
+        tx.ussdCode,
+        tx.ussdTranscript,
+        tx.ussdResponse
+    ) {
+        transactionExecutionCopy(ctx, tx)
+    }
+    val liveExecution = isTransactionActivelyExecuting(tx)
     val statusColor = when {
         isDailyLimitHold -> C.cyan
         tx.statusEnum == TransactionStatus.SUCCESS -> C.green
         tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED -> C.red
         else -> C.amber
     }
-    val statusLabel = when {
-        isDailyLimitHold -> "Scheduled"
-        tx.statusEnum == TransactionStatus.SUCCESS -> "Completed"
-        tx.statusEnum == TransactionStatus.FAILED || tx.statusEnum == TransactionStatus.CANCELLED -> "Failed"
-        else -> "In Progress"
-    }
+    val statusLabel = executionCopy.statusLabel
 
     var retrying by remember { mutableStateOf(false) }
     var altPhone by remember { mutableStateOf("") }
@@ -282,6 +288,10 @@ internal fun TransactionDetailDialog(
                             TransactionDetailInfoRow("Time of Execution", formatTimestamp(tx.timestamp), mono = true)
                             TransactionDetailInfoRow("Completed", formatCompletedAt(tx), mono = true)
                             TransactionDetailInfoRow("Duration", formatDuration(tx), muted = tx.executionDurationMs <= 0L)
+                            TransactionDetailInfoRow("Mode", executionCopy.modeLabel)
+                            if (liveExecution) {
+                                TransactionDetailInfoRow("Live Status", executionCopy.detailLabel)
+                            }
                             TransactionDetailInfoRow(
                                 "Source",
                                 transactionSource(tx),
@@ -309,7 +319,10 @@ internal fun TransactionDetailDialog(
                         title = "Last Response",
                         contentPadding = PaddingValues(horizontal = 22.dp, vertical = 12.dp)
                     ) {
-                        LastResponsePanel(text = tx.ussdResponse)
+                        LastResponsePanel(
+                            text = tx.ussdResponse,
+                            emptyMessage = if (liveExecution) executionCopy.detailLabel else "No final response captured yet."
+                        )
                     }
 
                     Row(
@@ -663,7 +676,7 @@ private fun UssdTerminal(
 }
 
 @Composable
-private fun LastResponsePanel(text: String) {
+private fun LastResponsePanel(text: String, emptyMessage: String = "No final response captured yet.") {
     val hasResponse = text.isNotBlank()
     val strokeColor = if (hasResponse) C.green.copy(alpha = 0.28f) else C.border.copy(alpha = 0.60f)
     val bg = if (hasResponse) C.greenDim else Color.Transparent
@@ -702,7 +715,7 @@ private fun LastResponsePanel(text: String) {
                 )
             }
             Text(
-                if (hasResponse) text else "No final response captured yet.",
+                if (hasResponse) text else emptyMessage,
                 color = messageColor,
                 fontSize = 12.sp,
                 lineHeight = 18.sp,

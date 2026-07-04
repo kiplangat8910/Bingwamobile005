@@ -5139,11 +5139,20 @@ private fun GithubActivityCard(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
+    val executionCopy = remember(
+        tx.id,
+        tx.status,
+        tx.offerId,
+        tx.ussdCode,
+        tx.ussdTranscript,
+        tx.ussdResponse
+    ) {
+        transactionExecutionCopy(context, tx)
+    }
     val statusColor = transactionStatusColor(tx)
     val typeColor = transactionTypeColor(tx)
-    val showLiveAnimation = tx.statusEnum == TransactionStatus.PENDING ||
-        tx.statusEnum == TransactionStatus.PROCESSING ||
-        tx.statusEnum == TransactionStatus.RETRYING
+    val showLiveAnimation = isTransactionActivelyExecuting(tx)
     val initials = remember(tx.clientName, tx.phoneNumber) {
         tx.clientName
             .ifBlank { tx.phoneNumber }
@@ -5155,7 +5164,13 @@ private fun GithubActivityCard(
     }
     val responsePreview = tx.ussdResponse
         .ifBlank { tx.ussdTranscript.lineSequence().firstOrNull().orEmpty() }
-        .ifBlank { if (tx.statusEnum == TransactionStatus.FAILED) "Tap to view full failure details." else "" }
+        .ifBlank {
+            when {
+                showLiveAnimation -> executionCopy.detailLabel
+                tx.statusEnum == TransactionStatus.FAILED -> "Tap to view full failure details."
+                else -> ""
+            }
+        }
     val cardAnim = rememberInfiniteTransition(label = "recent_activity_card")
     val shimmer by cardAnim.animateFloat(
         initialValue = -0.4f,
@@ -5273,7 +5288,7 @@ private fun GithubActivityCard(
                         border = BorderStroke(1.dp, statusColor.copy(alpha = 0.28f))
                     ) {
                         Text(
-                            tx.status,
+                            executionCopy.statusLabel,
                             modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                             color = statusColor,
                             fontSize = 10.sp,
@@ -5304,7 +5319,7 @@ private fun GithubActivityCard(
                 RecentSummaryChip(text = transactionTypeLabel(tx), color = typeColor)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    if (showLiveAnimation) "Execution in progress" else "Tap for full execution details",
+                    if (showLiveAnimation) executionCopy.supportingLabel else "Tap for full execution details",
                     color = C.t3,
                     fontSize = 11.sp,
                     modifier = Modifier.weight(1f)
@@ -6174,6 +6189,18 @@ fun DonutRing(pct: Int, color: Color, size: Dp, stroke: Dp) {
 @Composable
 fun VolcanicTxCard(tx: Transaction, onDelete: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val executionCopy = remember(
+        tx.id,
+        tx.status,
+        tx.offerId,
+        tx.ussdCode,
+        tx.ussdTranscript,
+        tx.ussdResponse
+    ) {
+        transactionExecutionCopy(context, tx)
+    }
+    val liveExecution = isTransactionActivelyExecuting(tx)
     val statusColor = when (tx.status) {
         TransactionStatus.SUCCESS.value -> C.green
         TransactionStatus.FAILED.value, TransactionStatus.CANCELLED.value -> C.red
@@ -6202,11 +6229,14 @@ fun VolcanicTxCard(tx: Transaction, onDelete: () -> Unit) {
         label = "processing_alpha"
     )
     val initials = (tx.clientName.ifBlank { tx.phoneNumber }).split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("")
-    val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val transcriptText = tx.ussdTranscript.ifBlank {
         tx.ussdResponse.ifBlank {
-            "Response not captured yet. This transaction is queued for ${tx.description.ifBlank { "the selected activity" }}."
+            if (isTransactionActivelyExecuting(tx)) {
+                executionCopy.detailLabel
+            } else {
+                "Response not captured yet. This transaction is queued for ${tx.description.ifBlank { "the selected activity" }}."
+            }
         }
     }
     val transcriptCards = remember(tx.ussdTranscript, transcriptText) {
@@ -6223,7 +6253,7 @@ fun VolcanicTxCard(tx: Transaction, onDelete: () -> Unit) {
             .border(
                 1.dp,
                 when {
-                    tx.status == TransactionStatus.PROCESSING.value -> statusColor.copy(alpha = 0.22f + (processingAlpha * 0.22f))
+                    liveExecution -> statusColor.copy(alpha = 0.22f + (processingAlpha * 0.22f))
                     expanded -> statusColor.copy(alpha = 0.32f)
                     else -> C.border
                 },
@@ -6278,18 +6308,18 @@ fun VolcanicTxCard(tx: Transaction, onDelete: () -> Unit) {
         ) {
             Surface(
                 shape = RoundedCornerShape(50),
-                color = statusColor.copy(alpha = if (tx.status == TransactionStatus.PROCESSING.value) 0.10f + (processingAlpha * 0.08f) else 0.10f),
-                border = BorderStroke(1.dp, statusColor.copy(alpha = if (tx.status == TransactionStatus.PROCESSING.value) 0.16f + (processingAlpha * 0.20f) else 0.2f))
+                color = statusColor.copy(alpha = if (liveExecution) 0.10f + (processingAlpha * 0.08f) else 0.10f),
+                border = BorderStroke(1.dp, statusColor.copy(alpha = if (liveExecution) 0.16f + (processingAlpha * 0.20f) else 0.2f))
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    if (tx.status == TransactionStatus.PROCESSING.value) {
+                    if (liveExecution) {
                         Box(Modifier.size(6.dp).clip(CircleShape).background(statusColor.copy(alpha = processingAlpha)))
                     }
-                    Text(tx.status, color = statusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text(executionCopy.statusLabel, color = statusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
             }
             Text(tx.date, color = C.t3, fontSize = 10.sp, textAlign = TextAlign.End)

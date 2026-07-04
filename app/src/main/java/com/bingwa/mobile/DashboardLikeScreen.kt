@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -554,9 +555,18 @@ private fun RecentActivityShowcase() {
 
 @Composable
 private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
-    val liveExecution = tx.statusEnum == TransactionStatus.PENDING ||
-        tx.statusEnum == TransactionStatus.PROCESSING ||
-        tx.statusEnum == TransactionStatus.RETRYING
+    val context = LocalContext.current
+    val executionCopy = remember(
+        tx.id,
+        tx.status,
+        tx.offerId,
+        tx.ussdCode,
+        tx.ussdTranscript,
+        tx.ussdResponse
+    ) {
+        transactionExecutionCopy(context, tx)
+    }
+    val liveExecution = isTransactionActivelyExecuting(tx)
     val title = tx.clientName.ifBlank {
         tx.description.ifBlank { "Transaction" }
     }
@@ -652,7 +662,10 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
                 )
                 if (liveExecution) {
                     Spacer(Modifier.height(6.dp))
-                    ActivityProcessingPill(accent = statusColor)
+                    ActivityProcessingPill(
+                        accent = statusColor,
+                        label = executionCopy.processingLabel
+                    )
                 }
             }
             Spacer(Modifier.width(8.dp))
@@ -671,7 +684,7 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
                         )
                     }
                     Text(
-                        transactionStatusLabel(tx),
+                        executionCopy.statusLabel,
                         color = statusColor,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
@@ -718,7 +731,7 @@ private fun ActivityProcessingDots(accent: Color) {
 }
 
 @Composable
-private fun ActivityProcessingPill(accent: Color) {
+private fun ActivityProcessingPill(accent: Color, label: String) {
     val anim = rememberInfiniteTransition(label = "activity_processing_pill")
     val sweep by anim.animateFloat(
         initialValue = -0.35f,
@@ -760,7 +773,7 @@ private fun ActivityProcessingPill(accent: Color) {
         ) {
             ActivityProcessingDots(accent)
             Text(
-                "Processing${animatedProcessingSuffix(phase)}",
+                "$label${animatedProcessingSuffix(phase)}",
                 color = accent,
                 fontSize = 10.5.sp,
                 fontWeight = FontWeight.SemiBold
