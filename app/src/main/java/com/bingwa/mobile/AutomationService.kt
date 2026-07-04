@@ -649,6 +649,7 @@ class AutomationService : Service() {
             putExtra("txId", request.txId)
             putExtra("offerId", request.offerId)
             putExtra("offerName", request.offerName)
+            putExtra("simSelection", request.simSelection)
             putExtra("signatureEnabled", request.signatureEnabled)
             putExtra("signatureMode", request.signatureMode)
             putExtra("signatureLearning", request.signatureLearning)
