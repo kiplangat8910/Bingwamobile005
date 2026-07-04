@@ -2378,7 +2378,7 @@ fun SimPickerRow(title: String, sub: String, sims: List<SubscriptionInfo>, curre
             ) {
                 Text("Change", color = C.cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
-            DropdownMenu(expanded = exp, onDismissRequest = { exp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
+            BingwaDropdownMenu(expanded = exp, onDismissRequest = { exp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
                 DropdownMenuItem(text = { Text("Default", color = C.t1) }, onClick = { onSelect(-1); exp = false })
                 sims.forEach { s ->
                     DropdownMenuItem(text = { Text("${s.displayName} · Slot ${s.simSlotIndex + 1}", color = C.t1) }, onClick = { onSelect(s.subscriptionId); exp = false })
@@ -2418,7 +2418,7 @@ fun UssdSimPickerRow(title: String, sims: List<SubscriptionInfo>, current: Int, 
             ) {
                 Text("Change", color = C.cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
-            DropdownMenu(
+            BingwaDropdownMenu(
                 expanded = exp,
                 onDismissRequest = { exp = false },
                 modifier = Modifier
@@ -2645,7 +2645,14 @@ private fun UssdCodeDialogField(
 }
 
 @Composable
-fun DialogDropdown(label: String, value: String, opts: List<String>, expanded: Boolean, onToggle: () -> Unit, onSelect: (String) -> Unit) {
+fun DialogDropdown(
+    label: String,
+    value: String,
+    opts: List<String>,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelect: (String) -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.fillMaxWidth()) {
             OutlinedTextField(
@@ -2653,7 +2660,7 @@ fun DialogDropdown(label: String, value: String, opts: List<String>, expanded: B
                 onValueChange = {},
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onToggle),
+                    .clickable { onExpandedChange(!expanded) },
                 shape = RoundedCornerShape(18.dp),
                 readOnly = true,
                 label = { Text(label, color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
@@ -2668,9 +2675,9 @@ fun DialogDropdown(label: String, value: String, opts: List<String>, expanded: B
                 singleLine = true,
                 textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
             )
-            DropdownMenu(
+            BingwaDropdownMenu(
                 expanded = expanded,
-                onDismissRequest = onToggle,
+                onDismissRequest = { onExpandedChange(false) },
                 modifier = Modifier
                     .background(C.cardHi, RoundedCornerShape(12.dp))
                     .border(1.dp, C.border, RoundedCornerShape(12.dp))
@@ -6673,7 +6680,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                                         enabled = enabledOffers.isNotEmpty(),
                                         onClick = { offerExp = true }
                                     )
-                                    DropdownMenu(
+                                    BingwaDropdownMenu(
                                         expanded = offerExp,
                                         onDismissRequest = { offerExp = false },
                                         modifier = Modifier
@@ -7770,7 +7777,7 @@ fun ContactCard(c: SavedContact, onDelete: () -> Unit, onCall: () -> Unit, onMes
                     IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) {
                         Icon(Icons.Outlined.MoreVert, null, tint = C.t3, modifier = Modifier.size(16.dp))
                     }
-                    DropdownMenu(
+                    BingwaDropdownMenu(
                         expanded = menu,
                         onDismissRequest = { menu = false },
                         modifier = Modifier
@@ -7918,7 +7925,7 @@ fun SettingsScreen() {
                             }
                             Box {
                                 TextButton(onClick = { roleExp = true }) { Text(twoPhoneRole.uppercase(), color = C.cyan, fontSize = 12.sp) }
-                                DropdownMenu(expanded = roleExp, onDismissRequest = { roleExp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
+                                BingwaDropdownMenu(expanded = roleExp, onDismissRequest = { roleExp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
                                     listOf("PRIMARY", "RELAY").forEach { opt ->
                                         DropdownMenuItem(
                                             text = { Text(opt, color = if (opt == twoPhoneRole.uppercase()) C.cyan else C.t1) },
@@ -7938,7 +7945,7 @@ fun SettingsScreen() {
                             }
                             Box {
                                 TextButton(onClick = { methodExp = true }) { Text(relayMethod.uppercase(), color = C.cyan, fontSize = 12.sp) }
-                                DropdownMenu(expanded = methodExp, onDismissRequest = { methodExp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
+                                BingwaDropdownMenu(expanded = methodExp, onDismissRequest = { methodExp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
                                     listOf("SMS", "HOTSPOT").forEach { opt ->
                                         DropdownMenuItem(
                                             text = { Text(opt, color = if (opt == relayMethod.uppercase()) C.cyan else C.t1) },
@@ -8223,7 +8230,7 @@ fun SettingsScreen() {
                     }
                     Box {
                         TextButton(onClick = { clearExpanded = true }) { Text(autoClear, color = C.cyan, fontSize = 12.sp) }
-                        DropdownMenu(expanded = clearExpanded, onDismissRequest = { clearExpanded = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
+                        BingwaDropdownMenu(expanded = clearExpanded, onDismissRequest = { clearExpanded = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
                             clearOptions.forEach { opt -> DropdownMenuItem(text = { Text(opt, color = if (opt == autoClear) C.cyan else C.t1) }, onClick = { autoClear = opt; prefs.edit().putString("auto_clear", opt).apply(); clearExpanded = false }) }
                         }
                     }
@@ -8569,7 +8576,7 @@ fun OfferCard(number: Int, o: OfferItem, onEdit: () -> Unit, onToggle: () -> Uni
                             Icon(Icons.Filled.MoreVert, null, tint = C.t2, modifier = Modifier.size(17.dp))
                         }
                     }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
+                    BingwaDropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
                         DropdownMenuItem(text = { Text("Edit", color = C.t1) }, leadingIcon = { Icon(Icons.Outlined.Edit, null, tint = C.t1) }, onClick = { menu = false; onEdit() })
                         DropdownMenuItem(text = { Text(if (o.enabled) "Disable" else "Enable", color = if (o.enabled) C.red else C.green) }, leadingIcon = { Icon(if (o.enabled) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, null, tint = if (o.enabled) C.red else C.green) }, onClick = { menu = false; onToggle() })
                         DropdownMenuItem(text = { Text("Delete", color = C.red) }, leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = C.red) }, onClick = { menu = false; onDelete() })
@@ -9568,7 +9575,7 @@ fun OfferDialog(
                             title = "Bundle Details",
                             subtitle = "Set the name, category, USSD code, price, SIM slot, and device used to execute this offer."
                         ) {
-                            DialogDropdown("Category", cat, offerCategoryOptions(), catExp, { catExp = !catExp }) {
+                            DialogDropdown("Category", cat, offerCategoryOptions(), catExp, { catExp = it }) {
                                 updateCategory(it)
                                 catExp = false
                             }
@@ -9601,7 +9608,7 @@ fun OfferDialog(
                                 textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
                             )
                             Text("Your price to customer", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
-                            DialogDropdown("USSD Type", mode, listOf(OFFER_EXECUTION_MODE_SIMPLE, OFFER_EXECUTION_MODE_ADVANCED), modeExp, { modeExp = !modeExp }) {
+                            DialogDropdown("USSD Type", mode, listOf(OFFER_EXECUTION_MODE_SIMPLE, OFFER_EXECUTION_MODE_ADVANCED), modeExp, { modeExp = it }) {
                                 mode = it
                                 modeTouched = it != defaultExecutionModeForCategory(cat)
                                 modeExp = false
@@ -9618,7 +9625,7 @@ fun OfferDialog(
                                 offerSimSelectionLabel(simSelection),
                                 listOf("General SIM", "Slot 1", "Slot 2"),
                                 simExp,
-                                { simExp = !simExp }
+                                { simExp = it }
                             ) {
                                 simSelection = when (it) {
                                     "Slot 1" -> USSD_SIM_SELECTION_SLOT_1
@@ -9627,7 +9634,7 @@ fun OfferDialog(
                                 }
                                 simExp = false
                             }
-                            DialogDropdown("Execute On", device, listOf("PRIMARY", "RELAY"), devExp, { devExp = !devExp }) {
+                            DialogDropdown("Execute On", device, listOf("PRIMARY", "RELAY"), devExp, { devExp = it }) {
                                 device = it
                                 devExp = false
                             }
@@ -9651,7 +9658,7 @@ fun OfferDialog(
                                         if (signatureAction == "ADJUST") "ADJUST" else "STOP",
                                         listOf("STOP", "ADJUST"),
                                         signatureExp,
-                                        { signatureExp = !signatureExp }
+                                        { signatureExp = it }
                                     ) {
                                         signatureAction = it
                                         signatureExp = false

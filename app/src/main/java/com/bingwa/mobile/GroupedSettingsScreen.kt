@@ -93,7 +93,6 @@ import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -504,7 +503,7 @@ private fun RelaySettings(onBack: () -> Unit) {
                             }
                             Box {
                                 TextButton(onClick = { roleExp = true }) { Text(twoPhoneRole.uppercase(), color = C.cyan, fontSize = 12.sp) }
-                                DropdownMenu(expanded = roleExp, onDismissRequest = { roleExp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
+                                BingwaDropdownMenu(expanded = roleExp, onDismissRequest = { roleExp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
                                     listOf("PRIMARY", "RELAY").forEach { opt ->
                                         DropdownMenuItem(
                                             text = { Text(opt, color = if (opt == twoPhoneRole.uppercase()) C.cyan else C.t1) },
@@ -524,7 +523,7 @@ private fun RelaySettings(onBack: () -> Unit) {
                             }
                             Box {
                                 TextButton(onClick = { methodExp = true }) { Text(relayMethod.uppercase(), color = C.cyan, fontSize = 12.sp) }
-                                DropdownMenu(expanded = methodExp, onDismissRequest = { methodExp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
+                                BingwaDropdownMenu(expanded = methodExp, onDismissRequest = { methodExp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
                                     listOf("SMS", "HOTSPOT").forEach { opt ->
                                         DropdownMenuItem(
                                             text = { Text(opt, color = if (opt == relayMethod.uppercase()) C.cyan else C.t1) },
@@ -3449,7 +3448,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                                 }
                                             }
                                         )
-                                        DropdownMenu(
+                                        BingwaDropdownMenu(
                                             expanded = fallbackAddPrimaryExp,
                                             onDismissRequest = { fallbackAddPrimaryExp = false },
                                             modifier = Modifier
@@ -3504,7 +3503,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                                         editorDirty = true
                                     }
                                 )
-                                DropdownMenu(
+                                BingwaDropdownMenu(
                                     expanded = fallbackPrimaryExp,
                                     onDismissRequest = { fallbackPrimaryExp = false },
                                     modifier = Modifier
@@ -3677,7 +3676,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                     Box {
                         val label = if (dailyLimitMode == DailyLimitPolicy.MODE_NOTICE_ONLY) "NOTICE" else "QUEUE"
                         TextButton(onClick = { dailyLimitModeExp = true }) { Text(label, color = C.cyan, fontSize = 12.sp) }
-                        DropdownMenu(
+                        BingwaDropdownMenu(
                             expanded = dailyLimitModeExp,
                             onDismissRequest = { dailyLimitModeExp = false },
                             modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))
@@ -3980,7 +3979,7 @@ private fun TransactionSettings(onBack: () -> Unit) {
                         ) {
                             Icon(Icons.Rounded.MoreVert, contentDescription = "More", tint = C.t1)
                         }
-                        DropdownMenu(
+                        BingwaDropdownMenu(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false },
                             modifier = Modifier

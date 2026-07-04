@@ -40,7 +40,6 @@ import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -192,34 +191,36 @@ fun GithubInstallLikeScreen() {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             MetaPill(label = "${selectedRepos.size} selected", tint = C.cyan)
-                            OutlinedButton(
-                                onClick = { repoMenu = true },
-                                shape = RoundedCornerShape(14.dp),
-                                border = BorderStroke(1.dp, C.border),
-                                colors = ButtonDefaults.outlinedButtonColors(containerColor = C.cardHi),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-                            ) {
-                                Icon(Icons.Outlined.Folder, null, tint = C.t2, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Add repository", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                Spacer(Modifier.width(10.dp))
-                                Icon(Icons.Outlined.KeyboardArrowDown, null, tint = C.t2, modifier = Modifier.size(18.dp))
-                            }
-                            DropdownMenu(
-                                expanded = repoMenu,
-                                onDismissRequest = { repoMenu = false },
-                                modifier = Modifier.background(C.cardHi).clip(RoundedCornerShape(14.dp)).border(1.dp, C.border, RoundedCornerShape(14.dp))
-                            ) {
-                                availableRepos.forEach { repo ->
-                                    val alreadySelected = repo in selectedRepos
-                                    DropdownMenuItem(
-                                        text = { Text(repo, color = if (alreadySelected) C.t3 else C.t1, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                        leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = if (alreadySelected) C.t3 else C.t2, modifier = Modifier.size(16.dp)) },
-                                        onClick = {
-                                            if (!alreadySelected) selectedRepos.add(repo)
-                                            repoMenu = false
-                                        }
-                                    )
+                            Box {
+                                OutlinedButton(
+                                    onClick = { repoMenu = true },
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.dp, C.border),
+                                    colors = ButtonDefaults.outlinedButtonColors(containerColor = C.cardHi),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                                ) {
+                                    Icon(Icons.Outlined.Folder, null, tint = C.t2, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Add repository", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                    Spacer(Modifier.width(10.dp))
+                                    Icon(Icons.Outlined.KeyboardArrowDown, null, tint = C.t2, modifier = Modifier.size(18.dp))
+                                }
+                                BingwaDropdownMenu(
+                                    expanded = repoMenu,
+                                    onDismissRequest = { repoMenu = false },
+                                    modifier = Modifier.background(C.cardHi).clip(RoundedCornerShape(14.dp)).border(1.dp, C.border, RoundedCornerShape(14.dp))
+                                ) {
+                                    availableRepos.forEach { repo ->
+                                        val alreadySelected = repo in selectedRepos
+                                        DropdownMenuItem(
+                                            text = { Text(repo, color = if (alreadySelected) C.t3 else C.t1, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                            leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = if (alreadySelected) C.t3 else C.t2, modifier = Modifier.size(16.dp)) },
+                                            onClick = {
+                                                if (!alreadySelected) selectedRepos.add(repo)
+                                                repoMenu = false
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
