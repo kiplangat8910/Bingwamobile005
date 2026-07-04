@@ -271,7 +271,7 @@ object OfferRepository {
                 category = category,
                 targetDevice = offer.targetDevice.ifBlank { "PRIMARY" },
                 simSelection = normalizeOfferSimSelection(offer.simSelection),
-                signatureDetectionEnabled = offer.signatureDetectionEnabled && mode == "ADVANCED"
+                signatureDetectionEnabled = offer.signatureDetectionEnabled
             )
 
             if (!seenIds.add(normalized.id)) {

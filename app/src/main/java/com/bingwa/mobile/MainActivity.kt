@@ -10017,7 +10017,7 @@ fun OfferDialog(
             category = normalizedCategory,
             targetDevice = device,
             simSelection = simSelection,
-            signatureDetectionEnabled = signatureEnabled && normalizedMode == OFFER_EXECUTION_MODE_ADVANCED,
+            signatureDetectionEnabled = signatureEnabled,
             signatureAction = signatureAction,
             learnedSignature = if (codeChanged) emptyList() else existing?.learnedSignature.orEmpty(),
             signatureLearnedAt = if (codeChanged) 0L else (existing?.signatureLearnedAt ?: 0L),
@@ -10051,7 +10051,8 @@ fun OfferDialog(
             modifier = Modifier.fillMaxSize(),
             color = C.bg
         ) {
-            val showSaveAndLearn = mode == OFFER_EXECUTION_MODE_ADVANCED && signatureEnabled
+            val showSaveAndLearn = signatureEnabled
+            val showProtectionRecords = signatureEnabled || hasLearnedSignature || hasPendingSignature
             Scaffold(
                 containerColor = C.bg,
                 topBar = {
@@ -10222,7 +10223,7 @@ fun OfferDialog(
                             mode = mode,
                             device = device,
                             simSelection = simSelection,
-                            signatureEnabled = signatureEnabled && mode == OFFER_EXECUTION_MODE_ADVANCED,
+                            signatureEnabled = signatureEnabled,
                             hasLearnedSignature = hasLearnedSignature,
                             hasPendingSignature = hasPendingSignature
                         )
@@ -10278,7 +10279,10 @@ fun OfferDialog(
                                 modeExp = false
                             }
                             Text(
-                                "Default mode follows category: Data uses SIMPLE, while Calls and SMS use ADVANCED.",
+                                if (signatureEnabled)
+                                    "Protection-enabled offers automatically use the guided USSD flow so signature verification can run on more phones."
+                                else
+                                    "Default mode follows category: Data uses SIMPLE, while Calls and SMS use ADVANCED.",
                                 color = C.t3,
                                 fontSize = 11.sp,
                                 lineHeight = 15.sp,
@@ -10311,49 +10315,62 @@ fun OfferDialog(
                             }
                         }
                     }
-                    if (mode == OFFER_EXECUTION_MODE_ADVANCED) {
-                        item {
-                            OfferDialogSection(
+                    item {
+                        OfferDialogSection(
+                            title = "Protection",
+                            subtitle = "Learn the live USSD flow and stop or adjust if the network menu changes."
+                        ) {
+                            OfferDialogToggleRow(
                                 title = "Protection",
-                                subtitle = "Learn the live USSD flow and stop or adjust if the network menu changes."
-                            ) {
-                                OfferDialogToggleRow(
-                                    title = "Protection",
-                                    description = if (signatureEnabled) "Protection is on and can detect menu changes before executing." else "Turn this on to learn live menu labels and stop or adjust if menus change.",
-                                    checked = signatureEnabled,
-                                    onCheckedChange = { signatureEnabled = it }
+                                description = if (signatureEnabled) {
+                                    "Protection is on. The app will use guided verification before executing so signature checks can run on most phones."
+                                } else {
+                                    "Turn this on to learn live menu labels and stop or adjust if menus change."
+                                },
+                                checked = signatureEnabled,
+                                onCheckedChange = { signatureEnabled = it }
+                            )
+                            if (signatureEnabled) {
+                                DialogDropdown(
+                                    "When codes change",
+                                    if (signatureAction == "ADJUST") "ADJUST" else "STOP",
+                                    listOf("STOP", "ADJUST"),
+                                    signatureExp,
+                                    { signatureExp = it }
+                                ) {
+                                    signatureAction = it
+                                    signatureExp = false
+                                }
+                                Text(
+                                    if (signatureAction == "ADJUST")
+                                        "ADJUST only auto-fixes exact same-label moves. If the network changes wording, the app stops instead of guessing."
+                                    else
+                                        "STOP is the recommended production setting. It prevents the app from choosing the wrong bundle when the menu looks different.",
+                                    color = C.t2,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp,
+                                    modifier = Modifier.padding(start = 4.dp)
                                 )
-                                if (signatureEnabled) {
-                                    DialogDropdown(
-                                        "When codes change",
-                                        if (signatureAction == "ADJUST") "ADJUST" else "STOP",
-                                        listOf("STOP", "ADJUST"),
-                                        signatureExp,
-                                        { signatureExp = it }
-                                    ) {
-                                        signatureAction = it
-                                        signatureExp = false
-                                    }
+                                if (mode != OFFER_EXECUTION_MODE_ADVANCED) {
                                     Text(
-                                        if (signatureAction == "ADJUST")
-                                            "ADJUST only auto-fixes exact same-label moves. If the network changes wording, the app stops instead of guessing."
-                                        else
-                                            "STOP is the recommended production setting. It prevents the app from choosing the wrong bundle when the menu looks different.",
-                                        color = C.t2,
+                                        "This offer is saved as $mode, but Bingwa will switch to the guided USSD path automatically whenever protection or learning is enabled.",
+                                        color = C.t3,
                                         fontSize = 11.sp,
                                         lineHeight = 16.sp,
                                         modifier = Modifier.padding(start = 4.dp)
                                     )
-                                } else if (!hasLearnedSignature && !hasPendingSignature) {
-                                    Text(
-                                        "No signature learned yet. Turn protection on, save the offer, then use Save & Learn to scan the live USSD menus.",
-                                        color = C.t2,
-                                        fontSize = 12.sp,
-                                        lineHeight = 18.sp
-                                    )
                                 }
+                            } else if (!hasLearnedSignature && !hasPendingSignature) {
+                                Text(
+                                    "No signature learned yet. Turn protection on, save the offer, then use Save & Learn to scan the live USSD menus.",
+                                    color = C.t2,
+                                    fontSize = 12.sp,
+                                    lineHeight = 18.sp
+                                )
                             }
                         }
+                    }
+                    if (showProtectionRecords) {
                         if (hasPendingSignature) {
                             item {
                                 SignatureLearningRecordSection(

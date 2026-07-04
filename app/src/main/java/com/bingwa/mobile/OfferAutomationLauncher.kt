@@ -12,8 +12,14 @@ fun Context.startOfferAutomation(
     signatureLearning: Boolean = false,
     returnToAppAggressively: Boolean = true
 ) {
+    val requestedMode = mode.ifBlank { offer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE }
+    val effectiveMode = if (signatureLearning || offer?.signatureDetectionEnabled == true) {
+        OFFER_EXECUTION_MODE_ADVANCED
+    } else {
+        requestedMode
+    }
     ServiceLauncher.startAutomationService(this, Intent(this, AutomationService::class.java).apply {
-        putExtra("mode", mode)
+        putExtra("mode", effectiveMode)
         putExtra("code", finalCode)
         putExtra("phoneNumber", phoneNumber)
         putExtra("txId", txId)

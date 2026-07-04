@@ -42,6 +42,11 @@ class AutomationService : Service() {
 
     private val patternManager by lazy { UssdResponsePatternManager(this) }
 
+    private fun usesAdvancedFlow(request: AutomationRequest): Boolean {
+        return request.signatureEnabled || request.signatureLearning ||
+            request.mode.equals(OFFER_EXECUTION_MODE_ADVANCED, ignoreCase = true)
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
@@ -62,8 +67,8 @@ class AutomationService : Service() {
         } else {
             Log.d(TAG, "onStartCommand mode=${request.mode} code=${request.code} txId=${request.txId}")
         }
-        when (request.mode.uppercase()) {
-            "ADVANCED" -> startAdvanced(request)
+        when {
+            usesAdvancedFlow(request) -> startAdvanced(request)
             else -> handleSimple(request)
         }
         return START_REDELIVER_INTENT
