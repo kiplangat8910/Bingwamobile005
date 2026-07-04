@@ -75,15 +75,15 @@ class UssdNavigationService : AccessibilityService() {
         private const val MAX_RETRIES            = 5
         private const val SHOW_RUNNING_OVERLAY   = false
         private const val STEP_DELAY_MS          = 90L
-        private const val EVENT_HOT_POLL_MS      = 16L
-        private const val FAST_VERIFY_POLL_MS    = 24L
-        private const val HOT_SEND_RETRY_DELAY_MS = 28L
-        private const val SEND_RETRY_DELAY_MS    = 45L
+        private const val EVENT_HOT_POLL_MS      = 12L
+        private const val FAST_VERIFY_POLL_MS    = 16L
+        private const val HOT_SEND_RETRY_DELAY_MS = 18L
+        private const val SEND_RETRY_DELAY_MS    = 30L
         private const val STEP_TIMEOUT_MS        = 25_000L
-        private const val VERIFY_POLL_MS         = 40L
-        private const val RAPID_POST_POPUP_POLL_MS = 20L
-        private const val RAPID_POST_POPUP_VERIFY_MS = 18L
-        private const val RAPID_POST_POPUP_SEND_RETRY_MS = 24L
+        private const val VERIFY_POLL_MS         = 28L
+        private const val RAPID_POST_POPUP_POLL_MS = 14L
+        private const val RAPID_POST_POPUP_VERIFY_MS = 12L
+        private const val RAPID_POST_POPUP_SEND_RETRY_MS = 16L
         private const val MAX_VERIFY_ATTEMPTS    = 24
         private const val MAX_SEND_ATTEMPTS      = 10
         private const val NO_FIELD_PATIENCE      = 4
@@ -92,16 +92,16 @@ class UssdNavigationService : AccessibilityService() {
         private const val RECENT_VERIFIED_INPUT_GRACE_MS = 6_500L
         private const val RECENT_UI_EVENT_GRACE_MS = 1_200L
         private const val GESTURE_SETTLE_MS      = 12L
-        private const val POST_GESTURE_WAIT_MS   = 18L
-        private const val POPUP_STABILITY_DELAY_MS = 20L
-        private const val TAP_GESTURE_DURATION_MS = 40L
+        private const val POST_GESTURE_WAIT_MS   = 12L
+        private const val POPUP_STABILITY_DELAY_MS = 12L
+        private const val TAP_GESTURE_DURATION_MS = 28L
         private const val REDIAL_COOLDOWN_MS     = 550L
         private const val PENDING_ADVANCE_TIMEOUT_MS = 7_500L
-        private const val PENDING_ADVANCE_KICK_MS = 72L
+        private const val PENDING_ADVANCE_KICK_MS = 48L
         private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 6_000L
-        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 110L
+        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 72L
         private const val ROOT_REACQUIRE_TIMEOUT_MS = 3_000L
-        private const val DIALOG_DISMISS_SETTLE_MS = 170L
+        private const val DIALOG_DISMISS_SETTLE_MS = 110L
         private const val UI_KEEP_VISIBLE_INTERVAL_MS = 1_500L
         private const val STARTUP_UI_KEEP_VISIBLE_MS = 12_000L
         // Some devices emit extra events on the same USSD dialog after we click "Send".
@@ -568,7 +568,7 @@ class UssdNavigationService : AccessibilityService() {
                 }
                 cancelStepTimeout()
                 lastFinalResponse = dialogText
-                capturePopupTranscript(dialogText)
+                capturePopupTranscript(snapshot, dialogText)
                 if (signatureLearningMode && snapshot != null) captureLearningDialog(snapshot)
 
                 // Prevent "next-step" injections on the same dialog right after we click Send/OK.
@@ -768,7 +768,7 @@ class UssdNavigationService : AccessibilityService() {
             val step = advancedSteps[currentStep]
             val menuSignature = parseMenuSignature(snapshot)
             if (step != "INPUT_PHONE") {
-                captureSignatureStepIfNeeded(currentStep, step, menuSignature, dialogText)
+                captureSignatureStepIfNeeded(currentStep, step, menuSignature, snapshot, dialogText)
             }
             val resolved = resolveStepInput(currentStep, step, menuSignature)
             if (!advancedActive) {
@@ -1042,6 +1042,7 @@ class UssdNavigationService : AccessibilityService() {
         stepIndex: Int,
         rawStep: String,
         menu: ParsedMenuSignature?,
+        snapshot: UssdTreeSnapshot,
         dialogText: String
     ) {
         if (!signatureLearningMode || !rawStep.all(Char::isDigit) || menu == null) return
@@ -1050,7 +1051,7 @@ class UssdNavigationService : AccessibilityService() {
             stepIndex = stepIndex,
             expectedInput = rawStep,
             menuTitle = menu.title,
-            menuText = normalizeCollapsedText(dialogText),
+            menuText = formatRecordedDialogText(snapshot.textTokens, dialogText),
             selectedOptionLabel = optionLabel,
             menuOptionsSnapshot = menu.options.values
                 .map { normalizeCollapsedText(it) }
@@ -1154,16 +1155,16 @@ class UssdNavigationService : AccessibilityService() {
             popupTranscript = popupTranscript.toList()
         )
 
-    private fun capturePopupTranscript(dialogText: String) {
-        val normalizedText = normalizeCollapsedText(dialogText)
-        if (normalizedText.isBlank()) return
-        if (popupTranscript.lastOrNull() == normalizedText) return
-        popupTranscript += normalizedText
+    private fun capturePopupTranscript(snapshot: UssdTreeSnapshot?, dialogText: String) {
+        val recordedText = formatRecordedDialogText(snapshot?.textTokens.orEmpty(), dialogText)
+        if (recordedText.isBlank()) return
+        if (popupTranscript.lastOrNull() == recordedText) return
+        popupTranscript += recordedText
     }
 
     private fun captureLearningDialog(snapshot: UssdTreeSnapshot) {
-        val normalizedText = snapshot.normalizedDialogText
-        if (normalizedText.isBlank()) return
+        val recordedText = formatRecordedDialogText(snapshot.textTokens, snapshot.dialogText)
+        if (recordedText.isBlank()) return
 
         val captureIndex = when {
             advancedSteps.isEmpty() -> -1
@@ -1187,7 +1188,7 @@ class UssdNavigationService : AccessibilityService() {
             stepIndex = captureIndex,
             enteredInput = enteredInput,
             selectedOptionLabel = selectedOptionLabel,
-            popupText = normalizedText
+            popupText = recordedText
         )
         val existingIndex = learningCaptures.indexOfFirst {
             it.stepIndex == capture.stepIndex &&
@@ -1272,11 +1273,7 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun buildMenuSignature(tokens: List<String>): ParsedMenuSignature? {
-        val normalizedTokens = tokens
-            .flatMap { token -> token.lineSequence().map { it.trim() }.toList() }
-            .map { normalizeCollapsedText(it) }
-            .filter { it.isNotBlank() }
-            .distinct()
+        val normalizedTokens = normalizeDialogLines(tokens)
 
         val options = linkedMapOf<String, String>()
         val titleParts = mutableListOf<String>()
@@ -1314,6 +1311,60 @@ class UssdNavigationService : AccessibilityService() {
             title = titleParts.distinct().take(2).joinToString(" / "),
             options = LinkedHashMap(options)
         )
+    }
+
+    private fun normalizeDialogLines(tokens: List<String>): List<String> =
+        tokens
+            .flatMap { token -> token.lineSequence().map { it.trim() }.toList() }
+            .map { normalizeCollapsedText(it) }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+    private fun formatRecordedDialogText(tokens: List<String>, fallbackText: String = ""): String {
+        val normalizedLines = normalizeDialogLines(tokens)
+        if (normalizedLines.isEmpty()) return normalizeCollapsedText(fallbackText)
+
+        val recordedLines = mutableListOf<String>()
+        var pendingOptionKey: String? = null
+
+        for (token in normalizedLines) {
+            val numberedOption = MENU_OPTION_REGEX.find(token)
+            if (numberedOption != null) {
+                pendingOptionKey = null
+                val key = numberedOption.groupValues[1]
+                val label = normalizeCollapsedText(numberedOption.groupValues[2])
+                recordedLines += if (label.isBlank()) key else "$key. $label"
+                continue
+            }
+
+            val numberOnly = MENU_OPTION_NUMBER_ONLY_REGEX.find(token)
+            if (numberOnly != null) {
+                pendingOptionKey = numberOnly.groupValues[1]
+                continue
+            }
+
+            val deferredKey = pendingOptionKey
+            if (deferredKey != null && looksLikeMenuLabel(token)) {
+                recordedLines += "$deferredKey. $token"
+                pendingOptionKey = null
+                continue
+            }
+
+            if (deferredKey != null) {
+                recordedLines += deferredKey
+                pendingOptionKey = null
+            }
+
+            recordedLines += token
+        }
+
+        pendingOptionKey?.let(recordedLines::add)
+
+        return recordedLines
+            .map(::normalizeCollapsedText)
+            .filter { it.isNotBlank() }
+            .distinct()
+            .joinToString("\n")
     }
 
     private fun looksLikeMenuLabel(token: String): Boolean {
