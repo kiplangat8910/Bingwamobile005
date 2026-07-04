@@ -7512,61 +7512,211 @@ private fun ManualTerminalHistoryRow(
     onClick: () -> Unit
 ) {
     val statusColor = transactionStatusColor(tx)
-    Surface(
+    val liveExecution = tx.isLiveExecution()
+    val title = tx.clientName.ifBlank { tx.description.ifBlank { "Manual dispatch" } }
+    val phone = tx.phoneNumber.ifBlank { "Phone not available" }
+    val serviceLabel = tx.description.ifBlank { "Manual dispatch" }
+    val avatarLabel = recentActivityInitials(title)
+    val amountLabel = recentActivityAmountLabel(tx.amount)
+    val timeLabel = recentActivityTimeLabel(tx)
+    val relativeLabel = recentActivityRelativeLabel(tx)
+    val serviceIcon = recentActivityServiceIcon(serviceLabel)
+    val summary = transactionCompletionSummary(tx)
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        color = Color(0xFF121617),
-        border = BorderStroke(1.dp, Color(0xFF394144))
+            .height(IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                .width(5.dp)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(999.dp))
+                .background(statusColor.copy(alpha = 0.82f))
+        )
+        Surface(
+            color = Color(0xFF090B0C),
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(
+                1.dp,
+                if (liveExecution) statusColor.copy(alpha = 0.28f) else Color(0xFF152024).copy(alpha = 0.62f)
+            ),
+            modifier = Modifier.weight(1f)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(C.amber.copy(alpha = 0.12f))
-                    .border(1.dp, C.amber.copy(alpha = 0.20f), RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Outlined.History, null, tint = C.amber, modifier = Modifier.size(18.dp))
-            }
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onClick)
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
             ) {
-                Text(
-                    tx.description.ifBlank { "Manual dispatch" },
-                    color = C.t1,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    lineHeight = 18.sp
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF0D1113))
+                            .border(
+                                1.dp,
+                                statusColor.copy(alpha = if (liveExecution) 0.30f else 0.18f),
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            avatarLabel,
+                            color = Color(0xFFB8C0C3),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            title,
+                            color = Color(0xFFF2F6F7),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 18.sp
+                        )
+                        Text(
+                            phone,
+                            color = Color(0xFF8B979B),
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        amountLabel,
+                        color = Color(0xFFE8ECEE),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = statusColor.copy(alpha = if (liveExecution) 0.14f else 0.10f),
+                        border = BorderStroke(1.dp, statusColor.copy(alpha = if (liveExecution) 0.28f else 0.18f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (liveExecution) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(statusColor.copy(alpha = 0.92f))
+                                )
+                            }
+                            Text(
+                                transactionStatusLabel(tx),
+                                color = statusColor.copy(alpha = 0.96f),
+                                fontSize = 10.5.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(Color(0xFF11181B))
                 )
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                serviceIcon,
+                                null,
+                                tint = Color(0xFF9FD8FF),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                serviceLabel,
+                                color = Color(0xFF9FD8FF),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                lineHeight = 15.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.Schedule,
+                                null,
+                                tint = Color(0xFFC9D4DB),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                timeLabel,
+                                color = Color(0xFFC9D4DB),
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1
+                            )
+                            if (relativeLabel.isNotBlank()) {
+                                Text(
+                                    "•",
+                                    color = Color(0xFF647279),
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    relativeLabel,
+                                    color = statusColor.copy(alpha = 0.96f),
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
                 Text(
-                    "${tx.clientName.ifBlank { tx.phoneNumber }} · ${transactionSummaryTime(tx)}",
-                    color = C.t2,
+                    summary,
+                    color = statusColor.copy(alpha = 0.92f),
                     fontSize = 11.sp,
                     lineHeight = 15.sp
-                )
-            }
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = statusColor.copy(alpha = 0.12f),
-                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.20f))
-            ) {
-                Text(
-                    tx.status.uppercase(Locale.getDefault()),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                    color = statusColor,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
