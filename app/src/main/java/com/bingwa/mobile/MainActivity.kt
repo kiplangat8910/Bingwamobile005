@@ -1414,7 +1414,6 @@ private fun OverviewStatChip(
 
 @Composable
 private fun SettingsOverviewCard(
-    themeMode: String,
     autoEnabled: Boolean,
     remoteEnabled: Boolean,
     twoPhoneEnabled: Boolean
@@ -1452,7 +1451,7 @@ private fun SettingsOverviewCard(
                 ) {
                     Text("Control Center", color = C.t1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                     Text(
-                        "Manage appearance, automation, relay mode, alerts, and customer notifications from one place.",
+                        "Manage automation, relay mode, alerts, and customer notifications from one place.",
                         color = C.t2,
                         fontSize = 12.sp,
                         lineHeight = 18.sp
@@ -1475,7 +1474,6 @@ private fun SettingsOverviewCard(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OverviewStatChip("Theme", themeMode, C.cyan)
                 OverviewStatChip("Automation", if (autoEnabled) "ON" else "OFF", if (autoEnabled) C.green else C.amber)
                 OverviewStatChip("Remote", if (remoteEnabled) "ARMED" else "OFF", if (remoteEnabled) C.blue else C.t3)
                 OverviewStatChip("Relay", if (twoPhoneEnabled) "2-PHONE" else "SINGLE", if (twoPhoneEnabled) C.purple else C.t3)
@@ -7836,8 +7834,6 @@ fun SettingsScreen() {
     val ctx = LocalContext.current
     val prefs = ctx.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
     var showOffers by remember { mutableStateOf(false) }
-    var themeMode by remember { mutableStateOf((prefs.safeGetString("theme_mode", AppTheme.mode.name) ?: AppTheme.mode.name).uppercase()) }
-    var themeExp by remember { mutableStateOf(false) }
 
     if (showOffers) { OffersScreen(onBack = { showOffers = false }); return }
 
@@ -7887,61 +7883,10 @@ fun SettingsScreen() {
         PageHeader("Settings", "App preferences & configuration")
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SettingsOverviewCard(
-                themeMode = themeMode,
                 autoEnabled = autoEnabled,
                 remoteEnabled = remoteEnabled,
                 twoPhoneEnabled = twoPhoneEnabled
             )
-
-            SettingsGroup("Appearance") {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SettingsRowIcon(Icons.Rounded.DarkMode)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Theme", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        Text("System, Dark, or Light", color = C.t2, fontSize = 11.sp)
-                    }
-                    Box {
-                        TextButton(onClick = { themeExp = true }) { Text(themeMode, color = C.cyan, fontSize = 12.sp) }
-                        DropdownMenu(expanded = themeExp, onDismissRequest = { themeExp = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
-                            listOf("SYSTEM", "DARK", "LIGHT").forEach { opt ->
-                                DropdownMenuItem(
-                                    text = { Text(opt, color = if (opt == themeMode) C.cyan else C.t1) },
-                                    onClick = {
-                                        themeMode = opt
-                                        prefs.edit().putString("theme_mode", opt).apply()
-                                        AppTheme.mode = runCatching { ThemeMode.valueOf(opt) }.getOrDefault(ThemeMode.SYSTEM)
-                                        themeExp = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-                GroupDivider()
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SettingsRowIcon(Icons.Rounded.Palette)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("App Style", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        Text("Fixed Bybit-style yellow selection with green, pending, and failed status colors", color = C.t2, fontSize = 11.sp)
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = C.amberDim,
-                        border = BorderStroke(1.dp, C.amber.copy(alpha = 0.28f))
-                    ) {
-                        Text(
-                            "BYBIT",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            color = C.amber,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.8.sp
-                        )
-                    }
-                }
-            }
 
             SettingsGroup("Automation") {
                 ToggleRow(Icons.Outlined.Bolt, "Enable Automation", "Auto-run bundles on payment", autoEnabled) { autoEnabled = it; prefs.edit().putBoolean("automation_enabled", it).apply() }

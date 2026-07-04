@@ -154,7 +154,6 @@ private sealed class SettingsDest {
     data object Notifications : SettingsDest()
     data object Automation : SettingsDest()
     data object Contacts : SettingsDest()
-    data object Appearance : SettingsDest()
     data object Offers : SettingsDest()
     data object Alerts : SettingsDest()
     data object Transactions : SettingsDest()
@@ -181,7 +180,6 @@ fun GroupedSettingsScreen() {
             onOpenNotifications = { dest = SettingsDest.Notifications },
             onOpenAutomation = { dest = SettingsDest.Automation },
             onOpenContacts = { dest = SettingsDest.Contacts },
-            onOpenAppearance = { dest = SettingsDest.Appearance },
             onOpenOffers = { dest = SettingsDest.Offers },
             onOpenAlerts = { dest = SettingsDest.Alerts },
             onOpenTransactions = { dest = SettingsDest.Transactions },
@@ -193,7 +191,6 @@ fun GroupedSettingsScreen() {
         SettingsDest.Notifications -> CustomerNotificationSettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Automation -> AutomationSettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Contacts -> ContactsScreen(onBack = { dest = SettingsDest.Home })
-        SettingsDest.Appearance -> AppearanceSettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Offers -> OffersScreen(onBack = { dest = SettingsDest.Home })
         SettingsDest.Alerts -> AdminAlertsSettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Transactions -> TransactionSettings(onBack = { dest = SettingsDest.Home })
@@ -209,7 +206,6 @@ private fun SettingsHome(
     onOpenNotifications: () -> Unit,
     onOpenAutomation: () -> Unit,
     onOpenContacts: () -> Unit,
-    onOpenAppearance: () -> Unit,
     onOpenOffers: () -> Unit,
     onOpenAlerts: () -> Unit,
     onOpenTransactions: () -> Unit,
@@ -269,9 +265,7 @@ private fun SettingsHome(
                 LinkRow(Icons.Rounded.Warning, "Admin Alerts", "Low airtime, low tokens, and low battery alerts", C.amber, onOpenAlerts)
             }
 
-            SettingsGroup("Appearance & Support", accent = C.amber) {
-                LinkRow(Icons.Rounded.DarkMode, "Appearance", "Adjust theme and system colors", C.amber, onOpenAppearance)
-                GroupDivider(C.amber)
+            SettingsGroup("Support", accent = C.amber) {
                 LinkRow(Icons.Rounded.Info, "Setup Doctor", "Check permissions, compatibility, battery rules, and alarms", C.amber, onOpenDiagnostics)
                 GroupDivider(C.amber)
                 LinkRow(Icons.Rounded.Accessibility, "Accessibility", "Open your phone Accessibility settings", C.amber) {
@@ -3934,96 +3928,6 @@ private fun AutomationSettings(onBack: () -> Unit) {
             }
         }
 
-        Spacer(Modifier.height(22.dp))
-    }
-}
-
-@Composable
-private fun AppearanceSettings(onBack: () -> Unit) {
-    val ctx = LocalContext.current
-    val prefs = ctx.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-    var themeMode by remember { mutableStateOf((prefs.safeGetString("theme_mode", AppTheme.mode.name) ?: AppTheme.mode.name).uppercase()) }
-    var themeExp by remember { mutableStateOf(false) }
-    var themeAccent by remember { mutableStateOf(themeAccentFromName(prefs.safeGetString("theme_accent", AppTheme.accent.name))) }
-    var accentExp by remember { mutableStateOf(false) }
-    var useDynamicColors by remember { mutableStateOf(prefs.safeGetBoolean("use_dynamic_colors", AppTheme.useDynamicColors)) }
-    val dynSupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
-
-    Column(Modifier.fillMaxSize().background(C.bg).verticalScroll(rememberScrollState())) {
-        SettingsTopBar("Appearance", "Theme and system colors", onBack)
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SettingsGroup("Appearance") {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SettingsRowIcon(Icons.Rounded.DarkMode)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Theme", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        Text("System, Dark, or Light", color = C.t2, fontSize = 11.sp)
-                    }
-                    Box {
-                        TextButton(onClick = { themeExp = true }) { Text(themeMode, color = C.cyan, fontSize = 12.sp) }
-                        DropdownMenu(
-                            expanded = themeExp,
-                            onDismissRequest = { themeExp = false },
-                            modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))
-                        ) {
-                            listOf("SYSTEM", "DARK", "LIGHT").forEach { opt ->
-                                DropdownMenuItem(
-                                    text = { Text(opt, color = if (opt == themeMode) C.cyan else C.t1) },
-                                    onClick = {
-                                        themeMode = opt
-                                        prefs.edit().putString("theme_mode", opt).apply()
-                                        AppTheme.mode = runCatching { ThemeMode.valueOf(opt) }.getOrDefault(ThemeMode.SYSTEM)
-                                        themeExp = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-                GroupDivider()
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SettingsRowIcon(Icons.Rounded.Palette)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Main UI Color", color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        Text("Choose the dominant app color when system colors are off", color = C.t2, fontSize = 11.sp)
-                    }
-                    Box {
-                        TextButton(onClick = { accentExp = true }) { Text(themeAccentLabel(themeAccent), color = C.cyan, fontSize = 12.sp) }
-                        DropdownMenu(
-                            expanded = accentExp,
-                            onDismissRequest = { accentExp = false },
-                            modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))
-                        ) {
-                            themeAccentOptions().forEach { opt ->
-                                DropdownMenuItem(
-                                    text = { Text(themeAccentLabel(opt), color = if (opt == themeAccent) C.cyan else C.t1) },
-                                    onClick = {
-                                        themeAccent = opt
-                                        prefs.edit().putString("theme_accent", opt.name).apply()
-                                        AppTheme.accent = opt
-                                        accentExp = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-                GroupDivider()
-                ToggleRow(
-                    Icons.Rounded.Palette,
-                    "Use System Colors",
-                    if (dynSupported) "Uses your phone colors (Android 12+)" else "Requires Android 12+",
-                    checked = useDynamicColors && dynSupported
-                ) {
-                    val v = it && dynSupported
-                    useDynamicColors = v
-                    prefs.edit().putBoolean("use_dynamic_colors", v).apply()
-                    AppTheme.useDynamicColors = v
-                }
-            }
-        }
         Spacer(Modifier.height(22.dp))
     }
 }
