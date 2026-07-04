@@ -2075,7 +2075,6 @@ private fun FallbackOverviewCard(
         "Turn fallback on to link each primary plan to the right backup plans."
     }
     val readinessLabel = when {
-        !fallbackEnabled -> "Fallback is currently turned off."
         fallbackRouteCount == 0 -> "Create the first route to make fallback usable."
         fallbackPrimaryCount < enabledPrimaryCount -> "Some enabled primary plans still need backup routes."
         else -> "Every enabled primary plan already has a backup route."
@@ -2131,74 +2130,78 @@ private fun FallbackOverviewCard(
                     }
                     FallbackOverviewSwitch(checked = fallbackEnabled, onChange = onToggleChange)
                 }
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    FallbackStatusChip(
-                        icon = if (fallbackEnabled) Icons.Rounded.CheckCircle else Icons.Rounded.Info,
-                        label = if (fallbackEnabled) "Fallback active" else "Setup needed",
-                        tint = if (fallbackEnabled) C.green else C.t3
-                    )
-                    FallbackStatusChip(
-                        icon = Icons.Rounded.Autorenew,
-                        label = routeSummary,
-                        tint = C.amber
-                    )
-                    FallbackStatusChip(
-                        icon = Icons.Rounded.Devices,
-                        label = primarySummary,
-                        tint = C.cyan
+                if (fallbackEnabled) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        FallbackStatusChip(
+                            icon = Icons.Rounded.CheckCircle,
+                            label = "Fallback active",
+                            tint = C.green
+                        )
+                        FallbackStatusChip(
+                            icon = Icons.Rounded.Autorenew,
+                            label = routeSummary,
+                            tint = C.amber
+                        )
+                        FallbackStatusChip(
+                            icon = Icons.Rounded.Devices,
+                            label = primarySummary,
+                            tint = C.cyan
+                        )
+                    }
+
+                    FallbackOverviewMetric(
+                        label = "Status",
+                        value = "Enabled",
+                        supporting = readinessLabel,
+                        accent = C.green,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
-
-                FallbackOverviewMetric(
-                    label = "Status",
-                    value = if (fallbackEnabled) "Enabled" else "Disabled",
-                    supporting = readinessLabel,
-                    accent = if (fallbackEnabled) C.green else C.t3,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
         }
 
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = C.cardHi.copy(alpha = 0.52f),
-            border = BorderStroke(1.dp, C.border.copy(alpha = 0.78f))
-        ) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+        if (fallbackEnabled) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = C.cardHi.copy(alpha = 0.52f),
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.78f))
             ) {
-                Text("Setup flow", color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    FallbackJourneyStep(
-                        index = 1,
-                        title = "Pick primary",
-                        subtitle = "Choose the main plan to protect.",
-                        accent = C.cyan,
-                        modifier = Modifier.weight(1f)
-                    )
-                    FallbackJourneyStep(
-                        index = 2,
-                        title = "Add backups",
-                        subtitle = "Attach one or more plans in order.",
-                        accent = C.amber,
-                        modifier = Modifier.weight(1f)
-                    )
-                    FallbackJourneyStep(
-                        index = 3,
-                        title = "Save route",
-                        subtitle = "Review the queue and store it.",
-                        accent = C.green,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Text("Setup flow", color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        FallbackJourneyStep(
+                            index = 1,
+                            title = "Pick primary",
+                            subtitle = "Choose the main plan to protect.",
+                            accent = C.cyan,
+                            modifier = Modifier.weight(1f)
+                        )
+                        FallbackJourneyStep(
+                            index = 2,
+                            title = "Add backups",
+                            subtitle = "Attach one or more plans in order.",
+                            accent = C.amber,
+                            modifier = Modifier.weight(1f)
+                        )
+                        FallbackJourneyStep(
+                            index = 3,
+                            title = "Save route",
+                            subtitle = "Review the queue and store it.",
+                            accent = C.green,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }
