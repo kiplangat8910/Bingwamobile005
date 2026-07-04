@@ -2617,7 +2617,7 @@ private fun FallbackRouteEditorCard(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(Icons.Rounded.ChevronRight, null, tint = C.amber.copy(alpha = 0.45f), modifier = Modifier.size(20.dp))
+                                Icon(Icons.Filled.ChevronRight, null, tint = C.amber.copy(alpha = 0.45f), modifier = Modifier.size(20.dp))
                                 Text(
                                     "No backup plans coupled yet.\nAdd plans below and they will couple here in order.",
                                     color = C.t3,
@@ -3070,8 +3070,7 @@ private fun FallbackAvailablePlanCard(
                         Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    )
-                    {
+                    ) {
                         Text("+", color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Text("ADD", color = C.t1, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                     }
