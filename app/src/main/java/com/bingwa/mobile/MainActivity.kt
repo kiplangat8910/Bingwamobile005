@@ -2644,39 +2644,49 @@ private fun UssdCodeDialogField(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DialogDropdown(label: String, value: String, opts: List<String>, expanded: Boolean, onToggle: () -> Unit, onSelect: (String) -> Unit) {
+fun DialogDropdown(
+    label: String,
+    value: String,
+    opts: List<String>,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelect: (String) -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Box(Modifier.fillMaxWidth()) {
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = onExpandedChange
+        ) {
             OutlinedTextField(
                 value = value,
                 onValueChange = {},
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onToggle),
+                    .menuAnchor(),
                 shape = RoundedCornerShape(18.dp),
                 readOnly = true,
                 label = { Text(label, color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
                 trailingIcon = {
-                    Icon(
-                        Icons.Filled.KeyboardArrowDown,
-                        null,
-                        tint = if (expanded) C.cyan else C.t2
-                    )
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
                 },
                 colors = dialogFieldColors(),
                 singleLine = true,
                 textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
             )
-            DropdownMenu(
+            ExposedDropdownMenu(
                 expanded = expanded,
-                onDismissRequest = onToggle,
+                onDismissRequest = { onExpandedChange(false) },
                 modifier = Modifier
                     .background(C.cardHi, RoundedCornerShape(12.dp))
                     .border(1.dp, C.border, RoundedCornerShape(12.dp))
             ) {
                 opts.forEach { o ->
-                    DropdownMenuItem(text = { Text(o, color = C.t1) }, onClick = { onSelect(o) })
+                    DropdownMenuItem(
+                        text = { Text(o, color = C.t1) },
+                        onClick = { onSelect(o) }
+                    )
                 }
             }
         }
@@ -9568,7 +9578,7 @@ fun OfferDialog(
                             title = "Bundle Details",
                             subtitle = "Set the name, category, USSD code, price, SIM slot, and device used to execute this offer."
                         ) {
-                            DialogDropdown("Category", cat, offerCategoryOptions(), catExp, { catExp = !catExp }) {
+                            DialogDropdown("Category", cat, offerCategoryOptions(), catExp, { catExp = it }) {
                                 updateCategory(it)
                                 catExp = false
                             }
@@ -9601,7 +9611,7 @@ fun OfferDialog(
                                 textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
                             )
                             Text("Your price to customer", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
-                            DialogDropdown("USSD Type", mode, listOf(OFFER_EXECUTION_MODE_SIMPLE, OFFER_EXECUTION_MODE_ADVANCED), modeExp, { modeExp = !modeExp }) {
+                            DialogDropdown("USSD Type", mode, listOf(OFFER_EXECUTION_MODE_SIMPLE, OFFER_EXECUTION_MODE_ADVANCED), modeExp, { modeExp = it }) {
                                 mode = it
                                 modeTouched = it != defaultExecutionModeForCategory(cat)
                                 modeExp = false
@@ -9618,7 +9628,7 @@ fun OfferDialog(
                                 offerSimSelectionLabel(simSelection),
                                 listOf("General SIM", "Slot 1", "Slot 2"),
                                 simExp,
-                                { simExp = !simExp }
+                                { simExp = it }
                             ) {
                                 simSelection = when (it) {
                                     "Slot 1" -> USSD_SIM_SELECTION_SLOT_1
@@ -9627,7 +9637,7 @@ fun OfferDialog(
                                 }
                                 simExp = false
                             }
-                            DialogDropdown("Execute On", device, listOf("PRIMARY", "RELAY"), devExp, { devExp = !devExp }) {
+                            DialogDropdown("Execute On", device, listOf("PRIMARY", "RELAY"), devExp, { devExp = it }) {
                                 device = it
                                 devExp = false
                             }
@@ -9651,7 +9661,7 @@ fun OfferDialog(
                                         if (signatureAction == "ADJUST") "ADJUST" else "STOP",
                                         listOf("STOP", "ADJUST"),
                                         signatureExp,
-                                        { signatureExp = !signatureExp }
+                                        { signatureExp = it }
                                     ) {
                                         signatureAction = it
                                         signatureExp = false
