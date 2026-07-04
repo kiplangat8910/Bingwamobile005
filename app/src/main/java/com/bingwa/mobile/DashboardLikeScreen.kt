@@ -20,6 +20,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.Bolt
@@ -547,6 +552,9 @@ private fun RecentActivityShowcase() {
 
 @Composable
 private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
+    val liveExecution = tx.statusEnum == TransactionStatus.PENDING ||
+        tx.statusEnum == TransactionStatus.PROCESSING ||
+        tx.statusEnum == TransactionStatus.RETRYING
     val title = tx.clientName.ifBlank {
         tx.description.ifBlank { "Transaction" }
     }
@@ -573,10 +581,20 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
         TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
         else -> C.orange
     }
+    val anim = rememberInfiniteTransition(label = "activity_row_processing")
+    val liveDotAlpha by anim.animateFloat(
+        initialValue = 0.38f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "activity_row_processing_dot"
+    )
     Surface(
         color = C.surface.copy(alpha = 0.95f),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
+        border = BorderStroke(
+            1.dp,
+            if (liveExecution) statusColor.copy(alpha = 0.28f) else C.border.copy(alpha = 0.72f)
+        ),
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick)
     ) {
         Row(
@@ -586,7 +604,7 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
             Box(
                 Modifier.size(10.dp)
                     .clip(CircleShape)
-                    .background(statusColor)
+                    .background(statusColor.copy(alpha = if (liveExecution) liveDotAlpha else 1f))
             )
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
@@ -604,18 +622,80 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
                     fontSize = 11.sp,
                     lineHeight = 16.sp
                 )
+                if (liveExecution) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        ActivityProcessingDots(statusColor)
+                        Text(
+                            "Processing...",
+                            color = statusColor,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
             Spacer(Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.End) {
                 Text(tx.amount.ifBlank { "-" }, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(2.dp))
-                Text(
-                    transactionStatusLabel(tx),
-                    color = statusColor,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    if (liveExecution) {
+                        Box(
+                            Modifier.size(6.dp)
+                                .clip(CircleShape)
+                                .background(statusColor.copy(alpha = liveDotAlpha))
+                        )
+                    }
+                    Text(
+                        transactionStatusLabel(tx),
+                        color = statusColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun ActivityProcessingDots(accent: Color) {
+    val anim = rememberInfiniteTransition(label = "activity_processing_dots")
+    val dot1 by anim.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
+        label = "activity_processing_dot_1"
+    )
+    val dot2 by anim.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(600, delayMillis = 160), RepeatMode.Reverse),
+        label = "activity_processing_dot_2"
+    )
+    val dot3 by anim.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(600, delayMillis = 320), RepeatMode.Reverse),
+        label = "activity_processing_dot_3"
+    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        listOf(dot1, dot2, dot3).forEach { alpha ->
+            Box(
+                Modifier.size(5.dp)
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = alpha))
+            )
         }
     }
 }

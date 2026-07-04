@@ -7524,6 +7524,25 @@ private fun ManualTerminalHistoryRow(
     val relativeLabel = recentActivityRelativeLabel(tx)
     val serviceIcon = recentActivityServiceIcon(serviceLabel)
     val summary = transactionCompletionSummary(tx)
+    val rowAnim = rememberInfiniteTransition(label = "manual_history_row")
+    val liveBeam by rowAnim.animateFloat(
+        initialValue = -0.30f,
+        targetValue = 1.10f,
+        animationSpec = infiniteRepeatable(tween(if (liveExecution) 1500 else 3000, easing = LinearEasing)),
+        label = "manual_history_row_beam"
+    )
+    val liveDotAlpha by rowAnim.animateFloat(
+        initialValue = 0.38f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "manual_history_row_dot"
+    )
+    val liveAvatarScale by rowAnim.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(tween(1500, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "manual_history_row_avatar"
+    )
 
     Row(
         modifier = Modifier
@@ -7546,7 +7565,25 @@ private fun ManualTerminalHistoryRow(
                 1.dp,
                 if (liveExecution) statusColor.copy(alpha = 0.28f) else Color(0xFF152024).copy(alpha = 0.62f)
             ),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier
+                .weight(1f)
+                .drawBehind {
+                    if (!liveExecution) return@drawBehind
+                    val beamWidth = size.width * 0.24f
+                    val startX = (size.width * liveBeam) - beamWidth
+                    drawRoundRect(
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                statusColor.copy(alpha = 0.18f),
+                                Color.Transparent
+                            ),
+                            startX = startX,
+                            endX = startX + beamWidth
+                        ),
+                        cornerRadius = CornerRadius(28f, 28f)
+                    )
+                }
         ) {
             Column(
                 modifier = Modifier
@@ -7562,6 +7599,10 @@ private fun ManualTerminalHistoryRow(
                     Box(
                         modifier = Modifier
                             .size(42.dp)
+                            .graphicsLayer {
+                                scaleX = if (liveExecution) liveAvatarScale else 1f
+                                scaleY = if (liveExecution) liveAvatarScale else 1f
+                            }
                             .clip(CircleShape)
                             .background(Color(0xFF0D1113))
                             .border(
@@ -7627,7 +7668,7 @@ private fun ManualTerminalHistoryRow(
                                     modifier = Modifier
                                         .size(6.dp)
                                         .clip(CircleShape)
-                                        .background(statusColor.copy(alpha = 0.92f))
+                                        .background(statusColor.copy(alpha = liveDotAlpha))
                                 )
                             }
                             Text(
@@ -7714,12 +7755,29 @@ private fun ManualTerminalHistoryRow(
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Text(
-                    summary,
-                    color = statusColor.copy(alpha = 0.92f),
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp
-                )
+                if (liveExecution) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        HomeExecutionDots(accent = statusColor)
+                        Text(
+                            "Processing transaction. Status updates appear automatically.",
+                            color = statusColor.copy(alpha = 0.92f),
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                } else {
+                    Text(
+                        summary,
+                        color = statusColor.copy(alpha = 0.92f),
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+                }
             }
         }
     }
