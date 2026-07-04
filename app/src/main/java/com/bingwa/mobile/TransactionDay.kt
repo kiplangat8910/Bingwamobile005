@@ -37,9 +37,9 @@ fun millisUntilNextMidnight(): Long {
 fun transactionStatusLabel(tx: Transaction): String = when {
     DailyLimitPolicy.isDailyLimitHold(tx) -> "Scheduled"
     else -> when (tx.statusEnum) {
-        TransactionStatus.SUCCESS -> "Sent"
-        TransactionStatus.PROCESSING -> "Processing"
-        TransactionStatus.PENDING -> "Pending"
+        TransactionStatus.SUCCESS -> "Completed"
+        TransactionStatus.PROCESSING -> "Executing"
+        TransactionStatus.PENDING -> "Queued"
         TransactionStatus.RETRYING -> "Retrying"
         TransactionStatus.FAILED -> "Failed"
         TransactionStatus.CANCELLED -> "Cancelled"

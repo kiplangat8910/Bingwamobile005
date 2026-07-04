@@ -3202,6 +3202,8 @@ fun HomeScreenVolcanic(
         .filter { it.showInRecent && transactionDayKey(it) == dayKey }
         .sortedByDescending { transactionTimestamp(it) }
         .toList()
+    val activeExecutionTx = automatedTxns.firstOrNull { it.isLiveExecution() }
+    val latestStatusTx = automatedTxns.firstOrNull()
     val sentCount = automatedTxns.size
     val pendingCount = automatedTxns.count {
         it.statusEnum == TransactionStatus.PROCESSING ||
@@ -3280,7 +3282,11 @@ fun HomeScreenVolcanic(
                             .widthIn(max = 420.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        HomeHeroHeader(running = running)
+                        HomeHeroHeader(
+                            running = running,
+                            activeExecutionTx = activeExecutionTx,
+                            latestStatusTx = latestStatusTx
+                        )
                         HomeSplitBalanceCard(
                             airBal = airBal.ifBlank { "0.00" },
                             tokenValue = if (unlimitedLabel != null) "Unlimited" else tokenBal.toString(),
@@ -3442,7 +3448,11 @@ private fun HomeSignalBars(tint: Color) {
 }
 
 @Composable
-private fun HomeHeroHeader(running: Boolean) {
+private fun HomeHeroHeader(
+    running: Boolean,
+    activeExecutionTx: Transaction?,
+    latestStatusTx: Transaction?
+) {
     val cyan = Color(0xFF74E6D8)
     val borderColor = if (running) cyan.copy(alpha = 0.35f) else Color(0xFFFFB454).copy(alpha = 0.35f)
     val pillText = if (running) "AUTOMATION LIVE" else "AUTOMATION IDLE"
@@ -3496,6 +3506,239 @@ private fun HomeHeroHeader(running: Boolean) {
             }
             Spacer(Modifier.height(8.dp))
             RelayStatusPill()
+            Spacer(Modifier.height(10.dp))
+            HomeExecutionBanner(
+                activeExecutionTx = activeExecutionTx,
+                latestStatusTx = latestStatusTx
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeExecutionBanner(
+    activeExecutionTx: Transaction?,
+    latestStatusTx: Transaction?,
+    modifier: Modifier = Modifier
+) {
+    val trackedTx = activeExecutionTx ?: latestStatusTx
+    val executing = activeExecutionTx != null
+    val accent = trackedTx?.let(::transactionStatusColor) ?: Color(0xFF74E6D8)
+    val beamAnim = rememberInfiniteTransition(label = "home_execution_banner")
+    val beamProgress by beamAnim.animateFloat(
+        initialValue = -0.35f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(tween(if (executing) 1600 else 2800, easing = LinearEasing)),
+        label = "home_execution_banner_beam"
+    )
+    val pulseScale by beamAnim.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(tween(1500, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "home_execution_banner_pulse_scale"
+    )
+    val pulseAlpha by beamAnim.animateFloat(
+        initialValue = 0.10f,
+        targetValue = if (executing) 0.26f else 0.16f,
+        animationSpec = infiniteRepeatable(tween(1500, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "home_execution_banner_pulse_alpha"
+    )
+    val spin by beamAnim.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing)),
+        label = "home_execution_banner_spin"
+    )
+    val statusLabel = when {
+        executing -> "EXECUTING NOW"
+        trackedTx == null -> "READY"
+        else -> transactionStatusLabel(trackedTx).uppercase(Locale.getDefault())
+    }
+    val headline = when {
+        executing -> trackedTx?.description?.takeIf { it.isNotBlank() } ?: "Execution in progress"
+        trackedTx == null -> "Automation is standing by"
+        trackedTx.statusEnum == TransactionStatus.SUCCESS -> "Last execution completed"
+        trackedTx.statusEnum == TransactionStatus.FAILED -> "Last execution failed"
+        trackedTx.statusEnum == TransactionStatus.CANCELLED -> "Last execution was cancelled"
+        trackedTx.statusEnum == TransactionStatus.RETRYING -> "Execution is retrying"
+        else -> "Execution update available"
+    }
+    val detail = when {
+        executing -> buildString {
+            trackedTx?.clientName?.takeIf { it.isNotBlank() }?.let { append(it) }
+            trackedTx?.phoneNumber?.takeIf { it.isNotBlank() }?.let {
+                if (isNotEmpty()) append(" • ")
+                append(it)
+            }
+            if (isEmpty()) append("Please wait while the transaction finishes.")
+        }
+        trackedTx == null -> "Live progress and final status appear here after automation starts."
+        trackedTx.statusEnum == TransactionStatus.SUCCESS -> {
+            val duration = transactionExecutionDuration(trackedTx).takeIf {
+                it.isNotBlank() && !it.equals("Not recorded", ignoreCase = true)
+            }
+            duration?.let { "Completed in $it" }
+                ?: transactionCompletionTime(trackedTx).takeIf {
+                    it.isNotBlank() && !it.equals("Completed time not recorded", ignoreCase = true)
+                }
+                ?: "Completed successfully."
+        }
+        trackedTx.statusEnum == TransactionStatus.FAILED -> {
+            transactionReasonShort(trackedTx).takeIf { it.isNotBlank() }
+                ?: "Open the transaction to view the failure details."
+        }
+        trackedTx.statusEnum == TransactionStatus.CANCELLED -> "Execution stopped before completion."
+        trackedTx.statusEnum == TransactionStatus.RETRYING -> "The app is preparing another execution attempt."
+        else -> "Open recent activity for the full execution details."
+    }
+    val icon = when {
+        executing -> Icons.Outlined.Sync
+        trackedTx == null -> Icons.Outlined.Bolt
+        trackedTx.statusEnum == TransactionStatus.SUCCESS -> Icons.Rounded.CheckCircle
+        trackedTx.statusEnum == TransactionStatus.FAILED -> Icons.Rounded.ErrorOutline
+        trackedTx.statusEnum == TransactionStatus.CANCELLED -> Icons.Rounded.Block
+        trackedTx.statusEnum == TransactionStatus.RETRYING -> Icons.Outlined.Autorenew
+        else -> Icons.Outlined.Schedule
+    }
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xFF0D1113).copy(alpha = 0.92f),
+        border = BorderStroke(1.dp, accent.copy(alpha = if (executing) 0.34f else 0.22f)),
+        modifier = modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val beamWidth = size.width * if (executing) 0.28f else 0.18f
+                val startX = (size.width * beamProgress) - beamWidth
+                drawRoundRect(
+                    brush = Brush.horizontalGradient(
+                        listOf(
+                            Color.Transparent,
+                            accent.copy(alpha = if (executing) 0.22f else 0.10f),
+                            Color.Transparent
+                        ),
+                        startX = startX,
+                        endX = startX + beamWidth
+                    ),
+                    cornerRadius = CornerRadius(24f, 24f)
+                )
+            }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier.size(42.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            scaleX = pulseScale
+                            scaleY = pulseScale
+                            alpha = pulseAlpha
+                        }
+                        .clip(CircleShape)
+                        .background(accent.copy(alpha = 0.16f))
+                )
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.18f))
+                        .border(1.dp, accent.copy(alpha = 0.24f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .then(if (executing) Modifier.graphicsLayer { rotationZ = spin } else Modifier)
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = accent.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+                    ) {
+                        Text(
+                            text = statusLabel,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            color = accent,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.9.sp
+                        )
+                    }
+                    if (executing) {
+                        HomeExecutionDots(accent = accent)
+                    }
+                }
+                Text(
+                    text = headline,
+                    color = Color(0xFFF1F4F5),
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = detail,
+                    color = Color(0xFF8A9396),
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeExecutionDots(accent: Color, modifier: Modifier = Modifier) {
+    val dotsAnim = rememberInfiniteTransition(label = "home_execution_dots")
+    val offset by dotsAnim.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
+        label = "home_execution_dots_offset"
+    )
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(3) { index ->
+            val anchor = when (index) {
+                0 -> 0.15f
+                1 -> 0.50f
+                else -> 0.85f
+            }
+            val alpha = 0.35f + ((1f - kotlin.math.abs(offset - anchor) / 0.35f).coerceIn(0f, 1f) * 0.65f)
+            Box(
+                modifier = Modifier
+                    .size(5.dp)
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = alpha))
+            )
         }
     }
 }
@@ -3980,6 +4223,7 @@ private fun HomeDispatchRow(
     onOpen: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val liveExecution = tx.isLiveExecution()
     val statusColor = transactionStatusColor(tx)
     val titleColor = Color(0xFFF2F6F7)
     val phoneColor = Color(0xFF8B979B)
@@ -3995,6 +4239,25 @@ private fun HomeDispatchRow(
     val timeLabel = recentActivityTimeLabel(tx)
     val relativeLabel = recentActivityRelativeLabel(tx)
     val serviceIcon = recentActivityServiceIcon(serviceLabel)
+    val rowAnim = rememberInfiniteTransition(label = "home_dispatch_row")
+    val liveBeam by rowAnim.animateFloat(
+        initialValue = -0.30f,
+        targetValue = 1.10f,
+        animationSpec = infiniteRepeatable(tween(if (liveExecution) 1500 else 3000, easing = LinearEasing)),
+        label = "home_dispatch_row_beam"
+    )
+    val liveDotAlpha by rowAnim.animateFloat(
+        initialValue = 0.38f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "home_dispatch_row_dot"
+    )
+    val liveAvatarScale by rowAnim.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(tween(1500, easing = EaseInOutSine), RepeatMode.Reverse),
+        label = "home_dispatch_row_avatar"
+    )
 
     Row(
         modifier = Modifier
@@ -4013,8 +4276,29 @@ private fun HomeDispatchRow(
         Surface(
             color = Color(0xFF090B0C),
             shape = RoundedCornerShape(24.dp),
-            border = BorderStroke(1.dp, Color(0xFF152024).copy(alpha = 0.62f)),
-            modifier = Modifier.weight(1f)
+            border = BorderStroke(
+                1.dp,
+                if (liveExecution) statusColor.copy(alpha = 0.28f) else Color(0xFF152024).copy(alpha = 0.62f)
+            ),
+            modifier = Modifier
+                .weight(1f)
+                .drawBehind {
+                    if (!liveExecution) return@drawBehind
+                    val beamWidth = size.width * 0.24f
+                    val startX = (size.width * liveBeam) - beamWidth
+                    drawRoundRect(
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                statusColor.copy(alpha = 0.18f),
+                                Color.Transparent
+                            ),
+                            startX = startX,
+                            endX = startX + beamWidth
+                        ),
+                        cornerRadius = CornerRadius(28f, 28f)
+                    )
+                }
         ) {
             Column(
                 modifier = Modifier
@@ -4030,9 +4314,17 @@ private fun HomeDispatchRow(
                     Box(
                         modifier = Modifier
                             .size(42.dp)
+                            .graphicsLayer {
+                                scaleX = if (liveExecution) liveAvatarScale else 1f
+                                scaleY = if (liveExecution) liveAvatarScale else 1f
+                            }
                             .clip(CircleShape)
                             .background(Color(0xFF0D1113))
-                            .border(1.dp, statusColor.copy(alpha = 0.18f), CircleShape),
+                            .border(
+                                1.dp,
+                                statusColor.copy(alpha = if (liveExecution) 0.30f else 0.18f),
+                                CircleShape
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -4076,13 +4368,34 @@ private fun HomeDispatchRow(
                         fontFamily = FontFamily.Monospace,
                         maxLines = 1
                     )
-                    Text(
-                        transactionStatusLabel(tx),
-                        color = statusColor.copy(alpha = 0.96f),
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        maxLines = 1
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = statusColor.copy(alpha = if (liveExecution) 0.14f else 0.10f),
+                        border = BorderStroke(1.dp, statusColor.copy(alpha = if (liveExecution) 0.28f else 0.18f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (liveExecution) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(statusColor.copy(alpha = liveDotAlpha))
+                                )
+                            }
+                            Text(
+                                transactionStatusLabel(tx),
+                                color = statusColor.copy(alpha = 0.96f),
+                                fontSize = 10.5.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
+                            )
+                        }
+                    }
                 }
                 Spacer(Modifier.height(14.dp))
                 Box(
@@ -4162,6 +4475,36 @@ private fun HomeDispatchRow(
                         )
                     }
                 }
+                Spacer(Modifier.height(10.dp))
+                AnimatedContent(
+                    targetState = liveExecution,
+                    transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
+                    label = "home_dispatch_status_hint"
+                ) { executing ->
+                    if (executing) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            HomeExecutionDots(accent = statusColor)
+                            Text(
+                                "Execution taking place. Final status appears automatically when it finishes.",
+                                color = statusColor.copy(alpha = 0.92f),
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else {
+                        Text(
+                            transactionCompletionSummary(tx),
+                            color = statusColor.copy(alpha = 0.92f),
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
             }
         }
     }
@@ -4213,6 +4556,26 @@ private fun recentActivityServiceIcon(serviceLabel: String): ImageVector =
     } else {
         Icons.Outlined.PhoneAndroid
     }
+
+private fun Transaction.isLiveExecution(): Boolean =
+    statusEnum == TransactionStatus.PENDING ||
+        statusEnum == TransactionStatus.PROCESSING ||
+        statusEnum == TransactionStatus.RETRYING
+
+private fun transactionCompletionSummary(tx: Transaction): String = when {
+    DailyLimitPolicy.isDailyLimitHold(tx) -> "Scheduled to resume when execution conditions allow."
+    tx.statusEnum == TransactionStatus.SUCCESS -> {
+        val duration = transactionExecutionDuration(tx).takeIf {
+            it.isNotBlank() && !it.equals("Not recorded", ignoreCase = true)
+        }
+        duration?.let { "Completed successfully in $it." } ?: "Completed successfully."
+    }
+    tx.statusEnum == TransactionStatus.FAILED -> {
+        transactionReasonShort(tx).takeIf { it.isNotBlank() } ?: "Execution failed. Open the transaction for details."
+    }
+    tx.statusEnum == TransactionStatus.CANCELLED -> "Execution was cancelled before completion."
+    else -> "Tap to open the transaction for the latest execution details."
+}
 
 @Composable
 private fun HomeDashboardHeader(running: Boolean) {
