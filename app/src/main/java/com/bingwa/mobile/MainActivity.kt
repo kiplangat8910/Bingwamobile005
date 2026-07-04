@@ -3506,11 +3506,13 @@ private fun HomeHeroHeader(
             }
             Spacer(Modifier.height(8.dp))
             RelayStatusPill()
-            Spacer(Modifier.height(10.dp))
-            HomeExecutionBanner(
-                activeExecutionTx = activeExecutionTx,
-                latestStatusTx = latestStatusTx
-            )
+            if (activeExecutionTx != null || latestStatusTx != null) {
+                Spacer(Modifier.height(10.dp))
+                HomeExecutionBanner(
+                    activeExecutionTx = activeExecutionTx,
+                    latestStatusTx = latestStatusTx
+                )
+            }
         }
     }
 }
