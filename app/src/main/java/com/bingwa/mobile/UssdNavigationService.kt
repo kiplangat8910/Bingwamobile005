@@ -97,6 +97,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val TAP_GESTURE_DURATION_MS = 40L
         private const val REDIAL_COOLDOWN_MS     = 550L
         private const val PENDING_ADVANCE_TIMEOUT_MS = 7_500L
+        private const val PENDING_ADVANCE_KICK_MS = 72L
         private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 6_000L
         private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 110L
         private const val ROOT_REACQUIRE_TIMEOUT_MS = 3_000L
@@ -311,6 +312,11 @@ class UssdNavigationService : AccessibilityService() {
     private var runningOverlayStatusText: TextView? = null
     private var runningOverlayDetailText: TextView? = null
     private enum class PendingPhase { NONE, WAIT_VERIFY, WAIT_SEND }
+
+    private data class InputWriteResult(
+        val wroteValue: Boolean,
+        val likelyVerified: Boolean
+    )
 
     private val errorKeywords = listOf(
         "connection problem", "invalid mmi", "mmi code", "network error", "invalid", "failed",
@@ -1958,7 +1964,7 @@ class UssdNavigationService : AccessibilityService() {
         pendingAttempts = 0
         isProcessing = false
         // Safety kick in case OEM doesn't emit a useful event after ACTION_SET_TEXT.
-        schedulePendingAdvanceKick(delayMs = 120L)
+        schedulePendingAdvanceKick(delayMs = PENDING_ADVANCE_KICK_MS)
     }
 
     private fun attemptPendingAdvanceWithRoot(existingRoot: AccessibilityNodeInfo?) {
@@ -3052,8 +3058,12 @@ class UssdNavigationService : AccessibilityService() {
         val targets = obtainInputTargets(field)
         try {
             targets.forEach { target ->
-                if (writeValueUsingStrategies(target, value)) {
+                val result = writeValueUsingStrategies(target, value)
+                if (result.wroteValue) {
                     rememberInputWrite(value)
+                    if (result.likelyVerified) {
+                        rememberVerifiedInput(value)
+                    }
                     return true
                 }
             }
@@ -3063,15 +3073,35 @@ class UssdNavigationService : AccessibilityService() {
         }
     }
 
-    private fun writeValueUsingStrategies(node: AccessibilityNodeInfo, value: String): Boolean {
+    private fun writeValueUsingStrategies(node: AccessibilityNodeInfo, value: String): InputWriteResult {
         focusInputTarget(node)
-        if (setTextOnNode(node, value)) return true
-        if (pasteTextIntoNode(node, value)) return true
-        if (performTapGesture(node)) {
-            if (setTextOnNode(node, value)) return true
-            if (pasteTextIntoNode(node, value)) return true
+        if (setTextOnNode(node, value)) {
+            return InputWriteResult(
+                wroteValue = true,
+                likelyVerified = isLikelyDirectWriteVerified(node, value)
+            )
         }
-        return false
+        if (pasteTextIntoNode(node, value)) {
+            return InputWriteResult(
+                wroteValue = true,
+                likelyVerified = matchesExpectedInput(readFieldText(node), value)
+            )
+        }
+        if (performTapGesture(node)) {
+            if (setTextOnNode(node, value)) {
+                return InputWriteResult(
+                    wroteValue = true,
+                    likelyVerified = isLikelyDirectWriteVerified(node, value)
+                )
+            }
+            if (pasteTextIntoNode(node, value)) {
+                return InputWriteResult(
+                    wroteValue = true,
+                    likelyVerified = matchesExpectedInput(readFieldText(node), value)
+                )
+            }
+        }
+        return InputWriteResult(wroteValue = false, likelyVerified = false)
     }
 
     private fun obtainInputTargets(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
@@ -3120,6 +3150,15 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun setTextOnNode(node: AccessibilityNodeInfo, value: String): Boolean {
         if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) return false
+        val replacedDirectly = runCatching {
+            node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
+            })
+        }.getOrDefault(false)
+        if (replacedDirectly) {
+            moveCursorToEnd(node, value)
+            return true
+        }
         runCatching {
             node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
@@ -3132,6 +3171,16 @@ class UssdNavigationService : AccessibilityService() {
         }.getOrDefault(false)
         if (replaced) moveCursorToEnd(node, value)
         return replaced
+    }
+
+    private fun isLikelyDirectWriteVerified(node: AccessibilityNodeInfo, expectedValue: String): Boolean {
+        val readBack = readFieldText(node)
+        return when {
+            matchesExpectedInput(readBack, expectedValue) -> true
+            readBack.isNullOrBlank() -> true
+            isLikelyPromptText(readBack) -> true
+            else -> false
+        }
     }
 
     private fun pasteTextIntoNode(node: AccessibilityNodeInfo, value: String): Boolean {
