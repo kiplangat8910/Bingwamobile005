@@ -569,7 +569,7 @@ class UssdNavigationService : AccessibilityService() {
                 cancelStepTimeout()
                 lastFinalResponse = dialogText
                 capturePopupTranscript(dialogText)
-                if (signatureLearningMode) captureLearningDialog(root, dialogText)
+                if (signatureLearningMode && snapshot != null) captureLearningDialog(snapshot)
 
                 // Prevent "next-step" injections on the same dialog right after we click Send/OK.
                 if (shouldWaitForStepTransition(dialogText, windowChanged)) return
@@ -737,7 +737,8 @@ class UssdNavigationService : AccessibilityService() {
         try {
             clearRootRecoveryState()
             val windowPkg = root.packageName?.toString() ?: ""
-            val freshDialogText = normalizeCollapsedText(extractAllText(root))
+            val snapshot = captureTreeSnapshot(root)
+            val freshDialogText = snapshot.dialogText
             val dialogText = freshDialogText.ifBlank { lastFinalResponse }
             val lower = dialogText.lowercase()
             if (shouldWaitForStepTransition(dialogText, windowChanged = false)) {
@@ -765,7 +766,7 @@ class UssdNavigationService : AccessibilityService() {
             }
 
             val step = advancedSteps[currentStep]
-            val menuSignature = parseMenuSignature(root, dialogText)
+            val menuSignature = parseMenuSignature(snapshot)
             if (step != "INPUT_PHONE") {
                 captureSignatureStepIfNeeded(currentStep, step, menuSignature, dialogText)
             }
@@ -1160,8 +1161,8 @@ class UssdNavigationService : AccessibilityService() {
         popupTranscript += normalizedText
     }
 
-    private fun captureLearningDialog(root: AccessibilityNodeInfo, dialogText: String) {
-        val normalizedText = normalizeCollapsedText(dialogText)
+    private fun captureLearningDialog(snapshot: UssdTreeSnapshot) {
+        val normalizedText = snapshot.normalizedDialogText
         if (normalizedText.isBlank()) return
 
         val captureIndex = when {
@@ -1170,7 +1171,7 @@ class UssdNavigationService : AccessibilityService() {
             else -> currentStep
         }
         val rawStep = advancedSteps.getOrNull(captureIndex).orEmpty()
-        val menu = parseMenuSignature(root, dialogText)
+        val menu = parseMenuSignature(snapshot)
         val selectedOptionLabel = when {
             rawStep == "INPUT_PHONE" -> "Enter phone number"
             rawStep.all(Char::isDigit) -> menu?.options?.get(rawStep).orEmpty()
@@ -2518,17 +2519,75 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun captureTreeSnapshot(root: AccessibilityNodeInfo): UssdTreeSnapshot {
+        val captureRoot = findDialogCaptureRoot(root) ?: AccessibilityNodeInfo.obtain(root)
         val accumulator = TreeScanAccumulator()
-        collectTreeSnapshot(root, accumulator)
-        val dialogText = normalizeCollapsedText(accumulator.textTokens.joinToString(" "))
-        return UssdTreeSnapshot(
-            dialogText = dialogText,
-            normalizedDialogText = dialogText,
-            textTokens = accumulator.textTokens.toList(),
-            hasEditableField = accumulator.hasEditableField,
-            hasSendButton = accumulator.hasSendButton,
-            hasDismissButton = accumulator.hasDismissButton
-        )
+        return try {
+            collectTreeSnapshot(captureRoot, accumulator)
+            val dialogText = normalizeCollapsedText(accumulator.textTokens.joinToString(" "))
+            UssdTreeSnapshot(
+                dialogText = dialogText,
+                normalizedDialogText = dialogText,
+                textTokens = accumulator.textTokens.toList(),
+                hasEditableField = accumulator.hasEditableField,
+                hasSendButton = accumulator.hasSendButton,
+                hasDismissButton = accumulator.hasDismissButton
+            )
+        } finally {
+            captureRoot.recycle()
+        }
+    }
+
+    private fun findDialogCaptureRoot(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val rootBounds = Rect()
+        runCatching { root.getBoundsInScreen(rootBounds) }
+        return findDialogCaptureRootRecursive(root, rootBounds)
+    }
+
+    private fun findDialogCaptureRootRecursive(
+        node: AccessibilityNodeInfo,
+        rootBounds: Rect
+    ): AccessibilityNodeInfo? {
+        for (i in 0 until node.childCount) {
+            val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+            val nested = findDialogCaptureRootRecursive(child, rootBounds)
+            child.recycle()
+            if (nested != null) return nested
+        }
+        return if (isDialogCaptureCandidate(node, rootBounds)) AccessibilityNodeInfo.obtain(node) else null
+    }
+
+    private fun isDialogCaptureCandidate(node: AccessibilityNodeInfo, rootBounds: Rect): Boolean {
+        val childCount = try { node.childCount } catch (_: Exception) { 0 }
+        if (childCount == 0) return false
+
+        val bounds = Rect()
+        runCatching { node.getBoundsInScreen(bounds) }
+        val nodeArea = bounds.width().toLong() * bounds.height().toLong()
+        val rootArea = rootBounds.width().toLong() * rootBounds.height().toLong()
+        val areaRatio = if (nodeArea > 0L && rootArea > 0L) nodeArea.toFloat() / rootArea.toFloat() else 1f
+        if (nodeArea <= 0L || areaRatio < 0.05f || areaRatio > 0.96f) return false
+
+        val textTokens = extractTextTokens(node)
+            .map(::normalizeCollapsedText)
+            .filter { it.isNotBlank() }
+            .distinct()
+        if (textTokens.isEmpty()) return false
+
+        val combinedText = textTokens.joinToString(" ").lowercase()
+        if (NON_USSD_DIALOG_HINTS.any { combinedText.contains(it) }) return false
+
+        val hasAction = hasSendOrOkButton(node) || hasDismissButton(node) || hasEditableField(node)
+        val hasMenuOptions = buildMenuSignature(textTokens) != null
+        val className = node.className?.toString().orEmpty()
+        val hasDialogClass = className.contains("Dialog", ignoreCase = true) ||
+            className.contains("AlertDialog", ignoreCase = true) ||
+            className.contains("BottomSheet", ignoreCase = true)
+        val compactContainer = childCount in 1..8
+        val hasUssdLanguage = USSD_HINTS.any { combinedText.contains(it) } || errorKeywords.any { combinedText.contains(it) }
+
+        return (hasAction || hasMenuOptions) &&
+            (hasDialogClass || compactContainer || areaRatio <= 0.82f) &&
+            (hasUssdLanguage || hasMenuOptions || signatureLearningMode || advancedActive || isForegroundUiActive())
     }
 
     private fun collectTreeSnapshot(node: AccessibilityNodeInfo, accumulator: TreeScanAccumulator) {

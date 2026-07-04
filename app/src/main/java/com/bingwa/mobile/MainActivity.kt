@@ -9878,6 +9878,45 @@ private fun OfferStatusCard(enabled: Boolean, onCheckedChange: (Boolean) -> Unit
 }
 
 @Composable
+private fun OfferEditorOverviewCard(
+    existing: OfferItem?,
+    category: String,
+    mode: String,
+    device: String,
+    simSelection: Int,
+    signatureEnabled: Boolean,
+    hasLearnedSignature: Boolean,
+    hasPendingSignature: Boolean
+) {
+    OfferDialogSection(
+        title = if (existing != null) "Offer Snapshot" else "New Offer Snapshot",
+        subtitle = "Use this card to confirm the main setup before changing the detailed fields below."
+    ) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            MiniTag(if (existing != null) "EDITING" else "NEW", C.cyan)
+            MiniTag(category.uppercase(), C.orange)
+            MiniTag(mode.uppercase(), C.purple)
+            MiniTag(device.uppercase(), C.blue)
+            MiniTag(offerSimSelectionLabel(simSelection).uppercase(), C.purple)
+            if (signatureEnabled) MiniTag("PROTECTION ON", C.green)
+            if (hasLearnedSignature) MiniTag("LEARNED", C.green)
+            if (hasPendingSignature) MiniTag("REVIEW NEEDED", C.orange)
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OfferInfoTile("Category", category, C.orange, Icons.Outlined.Badge, Modifier.weight(1f))
+            OfferInfoTile("Execution", mode, C.purple, Icons.Outlined.Tune, Modifier.weight(1f))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OfferInfoTile("Device", device, C.blue, Icons.Outlined.PhoneAndroid, Modifier.weight(1f))
+            OfferInfoTile("SIM", offerSimSelectionLabel(simSelection), C.cyan, Icons.Outlined.Call, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
 private fun OfferDialogToggleRow(
     title: String,
     description: String,
@@ -10177,9 +10216,21 @@ fun OfferDialog(
                         )
                     }
                     item {
+                        OfferEditorOverviewCard(
+                            existing = existing,
+                            category = cat,
+                            mode = mode,
+                            device = device,
+                            simSelection = simSelection,
+                            signatureEnabled = signatureEnabled && mode == OFFER_EXECUTION_MODE_ADVANCED,
+                            hasLearnedSignature = hasLearnedSignature,
+                            hasPendingSignature = hasPendingSignature
+                        )
+                    }
+                    item {
                         OfferDialogSection(
-                            title = "Bundle Details",
-                            subtitle = "Set the name, category, USSD code, price, SIM slot, and device used to execute this offer."
+                            title = "Bundle Identity",
+                            subtitle = "Set the category, plan name, and selling price customers should see."
                         ) {
                             DialogDropdown("Category", cat, offerCategoryOptions(), catExp, { catExp = it }) {
                                 updateCategory(it)
@@ -10197,10 +10248,6 @@ fun OfferDialog(
                                 textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
                             )
                             Text("Example: 1GB 1hr, 250MB till midnight", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
-                            UssdCodeDialogField(
-                                value = codeField,
-                                onValueChange = { codeField = it }
-                            )
                             OutlinedTextField(
                                 value = price,
                                 onValueChange = { price = it },
@@ -10214,6 +10261,17 @@ fun OfferDialog(
                                 textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
                             )
                             Text("Your price to customer", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
+                        }
+                    }
+                    item {
+                        OfferDialogSection(
+                            title = "USSD Setup",
+                            subtitle = "Store the exact USSD code and choose how the network flow should be executed."
+                        ) {
+                            UssdCodeDialogField(
+                                value = codeField,
+                                onValueChange = { codeField = it }
+                            )
                             DialogDropdown("USSD Type", mode, listOf(OFFER_EXECUTION_MODE_SIMPLE, OFFER_EXECUTION_MODE_ADVANCED), modeExp, { modeExp = it }) {
                                 mode = it
                                 modeTouched = it != defaultExecutionModeForCategory(cat)
@@ -10226,6 +10284,13 @@ fun OfferDialog(
                                 lineHeight = 15.sp,
                                 modifier = Modifier.padding(start = 4.dp)
                             )
+                        }
+                    }
+                    item {
+                        OfferDialogSection(
+                            title = "Execution Path",
+                            subtitle = "Choose which SIM and device should dial this offer."
+                        ) {
                             DialogDropdown(
                                 "SIM To Use",
                                 offerSimSelectionLabel(simSelection),
