@@ -3506,7 +3506,7 @@ private fun HomeHeroHeader(
             }
             Spacer(Modifier.height(8.dp))
             RelayStatusPill()
-            if (activeExecutionTx != null || latestStatusTx != null) {
+            if (activeExecutionTx != null) {
                 Spacer(Modifier.height(10.dp))
                 HomeExecutionBanner(
                     activeExecutionTx = activeExecutionTx,
