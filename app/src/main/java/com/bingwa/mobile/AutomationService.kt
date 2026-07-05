@@ -743,6 +743,7 @@ class AutomationService : Service() {
     }
 
     private fun sendBroadcastUpdate(txId: Int, status: String, response: String) {
+        ScratchCardRechargeManager.handleTransactionUpdate(this, txId, status, response)
         Handler(Looper.getMainLooper()).post {
             sendBroadcast(
                 Intent("com.bingwa.mobile.TX_UPDATED")
