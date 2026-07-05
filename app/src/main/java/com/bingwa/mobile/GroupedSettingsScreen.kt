@@ -149,6 +149,7 @@ import kotlin.math.absoluteValue
 private sealed class SettingsDest {
     data object Home : SettingsDest()
     data object Sim : SettingsDest()
+    data object ScratchCards : SettingsDest()
     data object Relay : SettingsDest()
     data object Remote : SettingsDest()
     data object Notifications : SettingsDest()
@@ -175,6 +176,7 @@ fun GroupedSettingsScreen() {
     when (dest) {
         SettingsDest.Home -> SettingsHome(
             onOpenSim = { dest = SettingsDest.Sim },
+            onOpenScratchCards = { dest = SettingsDest.ScratchCards },
             onOpenRelay = { dest = SettingsDest.Relay },
             onOpenRemote = { dest = SettingsDest.Remote },
             onOpenNotifications = { dest = SettingsDest.Notifications },
@@ -186,6 +188,7 @@ fun GroupedSettingsScreen() {
             onOpenDiagnostics = { dest = SettingsDest.Diagnostics }
         )
         SettingsDest.Sim -> SimSettings(onBack = { dest = SettingsDest.Home })
+        SettingsDest.ScratchCards -> ScratchCardRechargeSettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Relay -> RelaySettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Remote -> RemoteControlSettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Notifications -> CustomerNotificationSettings(onBack = { dest = SettingsDest.Home })
@@ -201,6 +204,7 @@ fun GroupedSettingsScreen() {
 @Composable
 private fun SettingsHome(
     onOpenSim: () -> Unit,
+    onOpenScratchCards: () -> Unit,
     onOpenRelay: () -> Unit,
     onOpenRemote: () -> Unit,
     onOpenNotifications: () -> Unit,
@@ -251,6 +255,8 @@ private fun SettingsHome(
 
             SettingsGroup("Execution Setup", accent = C.amber) {
                 LinkRow(Icons.Rounded.SimCard, "SIM Settings", "Choose SIMs for USSD, customer notifications, and admin replies", C.amber, onOpenSim)
+                GroupDivider(C.amber)
+                LinkRow(Icons.Rounded.Search, "Scratch Card Recharge", "Scan one image, detect many 16-digit PINs, and recharge them one by one", C.amber, onOpenScratchCards)
                 GroupDivider(C.amber)
                 LinkRow(Icons.Rounded.Devices, "Relay (Two‑Phone Mode)", "Configure SMS or hotspot relay between two phones", C.amber, onOpenRelay)
                 GroupDivider(C.amber)
