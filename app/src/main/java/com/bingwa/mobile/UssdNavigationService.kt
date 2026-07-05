@@ -844,9 +844,10 @@ class UssdNavigationService : AccessibilityService() {
                         expectedValue = valueToEnter,
                         existingField = inputField
                     )
+                    val recentVerifiedWrite = inlineVerified || hasRecentVerifiedInput(valueToEnter)
                     if (!isFinalSignatureLearningStep(currentStep) &&
                         wroteValue &&
-                        inlineVerified &&
+                        recentVerifiedWrite &&
                         tryImmediateVerifiedSend(root, inputField, valueToEnter)
                     ) {
                         markStepAction(dialogText)
@@ -1729,7 +1730,7 @@ class UssdNavigationService : AccessibilityService() {
         }
         val root = getUssdRoot() ?: run {
             handler.postDelayed(
-                { clickSendButton(expectedValue, attempt + 1) },
+                { clickSendButton(expectedValue, attempt + 1, skipFieldVerification) },
                 sendRetryDelay(attempt)
             )
             return
@@ -1774,7 +1775,7 @@ class UssdNavigationService : AccessibilityService() {
                         return
                     }
                     handler.postDelayed(
-                        { clickSendButton(expectedValue, attempt + 1) },
+                        { clickSendButton(expectedValue, attempt + 1, skipFieldVerification) },
                         sendRetryDelay(attempt)
                     )
                 }
@@ -1790,7 +1791,7 @@ class UssdNavigationService : AccessibilityService() {
                     writeValueToField(expectedValue)
                 }
                 handler.postDelayed(
-                    { clickSendButton(expectedValue, attempt + 1) },
+                    { clickSendButton(expectedValue, attempt + 1, skipFieldVerification) },
                     sendRetryDelay(attempt) + HOT_SEND_RETRY_DELAY_MS
                 )
             }
@@ -2021,6 +2022,18 @@ class UssdNavigationService : AccessibilityService() {
         pendingAdvanceKickRunnable = null
     }
 
+    private fun pendingAdvanceKickDelay(expectedValue: String, phase: PendingPhase): Long =
+        when {
+            phase == PendingPhase.WAIT_SEND && hasRecentVerifiedInput(expectedValue) -> 0L
+            hasSeenAdvancedPopup && hasRecentVerifiedInput(expectedValue) -> 0L
+            hasSeenAdvancedPopup && hasRecentExpectedInput(expectedValue) -> RAPID_POST_POPUP_VERIFY_MS
+            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> RAPID_POST_POPUP_VERIFY_MS
+            hasRecentVerifiedInput(expectedValue) -> HOT_SEND_RETRY_DELAY_MS
+            hasRecentExpectedInput(expectedValue) -> FAST_VERIFY_POLL_MS
+            hasRecentUssdUiEvent() -> FAST_VERIFY_POLL_MS
+            else -> PENDING_ADVANCE_KICK_MS
+        }
+
     private fun schedulePendingAdvanceKick(delayMs: Long = ROOT_REACQUIRE_RETRY_DELAY_MS) {
         if (!advancedActive || pendingPhase == PendingPhase.NONE) return
         clearPendingAdvanceKick()
@@ -2042,12 +2055,12 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun startPendingAdvance(expectedValue: String) {
         pendingExpectedValue = expectedValue
-        pendingPhase = PendingPhase.WAIT_VERIFY
+        pendingPhase = if (hasRecentVerifiedInput(expectedValue)) PendingPhase.WAIT_SEND else PendingPhase.WAIT_VERIFY
         pendingSinceElapsed = SystemClock.elapsedRealtime()
         pendingAttempts = 0
         isProcessing = false
         // Safety kick in case OEM doesn't emit a useful event after ACTION_SET_TEXT.
-        schedulePendingAdvanceKick(delayMs = PENDING_ADVANCE_KICK_MS)
+        schedulePendingAdvanceKick(delayMs = pendingAdvanceKickDelay(expectedValue, pendingPhase))
     }
 
     private fun attemptPendingAdvanceWithRoot(existingRoot: AccessibilityNodeInfo?) {
@@ -2061,7 +2074,9 @@ class UssdNavigationService : AccessibilityService() {
                 isProcessing = false
                 dismissErrorAndRestart()
             } else {
-                schedulePendingAdvanceKick()
+                val expected = pendingExpectedValue
+                val delayMs = expected?.let { pendingAdvanceKickDelay(it, pendingPhase) } ?: ROOT_REACQUIRE_RETRY_DELAY_MS
+                schedulePendingAdvanceKick(delayMs = delayMs)
             }
             return
         }
@@ -2108,9 +2123,14 @@ class UssdNavigationService : AccessibilityService() {
                 // One corrective write, then wait for the next event.
                 if (pendingAttempts == 0 && !hasRecentExpectedInput(expected)) {
                     pendingAttempts++
-                    writeValueToField(expected)
+                    val wroteValue = writeValueToField(expected)
+                    if (wroteValue && hasRecentVerifiedInput(expected)) {
+                        pendingPhase = PendingPhase.WAIT_SEND
+                        attemptPendingAdvance(root)
+                        return
+                    }
                 }
-                schedulePendingAdvanceKick()
+                schedulePendingAdvanceKick(delayMs = pendingAdvanceKickDelay(expected, pendingPhase))
                 isProcessing = false
             }
 
@@ -2123,7 +2143,7 @@ class UssdNavigationService : AccessibilityService() {
                     startPendingStepAdvance(root, text)
                 } else {
                     // Let the next event re-try, but avoid expensive work here.
-                    schedulePendingAdvanceKick()
+                    schedulePendingAdvanceKick(delayMs = pendingAdvanceKickDelay(expected, pendingPhase))
                     isProcessing = false
                 }
             }
