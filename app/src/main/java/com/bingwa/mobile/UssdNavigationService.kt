@@ -198,6 +198,10 @@ class UssdNavigationService : AccessibilityService() {
             "allow", "deny", "permission", "grant", "not now",
             "isn't responding", "is not responding", "stopped", "keeps stopping", "close app"
         )
+        private val TRANSIENT_RESPONSE_HINTS = listOf(
+            "ussd running", "running", "processing", "please wait", "wait", "loading",
+            "requesting", "sending", "fetching", "working", "in progress"
+        )
         private val EDITABLE_CLASS_HINTS = listOf(
             "EditText", "TextInputEditText", "AutoCompleteTextView",
             "MultiAutoCompleteTextView", "ExtractEditText",
@@ -324,7 +328,7 @@ class UssdNavigationService : AccessibilityService() {
 
     private val errorKeywords = listOf(
         "connection problem", "invalid mmi", "mmi code", "network error", "invalid", "failed",
-        "cancelled", "try again", "unavailable", "problem", "request timeout", "ussd running",
+        "cancelled", "try again", "unavailable", "problem", "request timeout",
         "busy", "sim error", "not available", "service unavailable", "temporary error",
         "session expired", "not registered"
     )
@@ -589,6 +593,7 @@ class UssdNavigationService : AccessibilityService() {
                     }
                     return
                 }
+                if (currentStep >= advancedSteps.size && isTransientResponseText(lower)) return
                 if (pendingStepAdvanceFromKey.isNotBlank() &&
                     handlePendingStepAdvance(
                         windowId = windowId,
@@ -785,6 +790,12 @@ class UssdNavigationService : AccessibilityService() {
                 return
             }
             if (currentStep >= advancedSteps.size) {
+                if (shouldWaitForFinalResponse(snapshot, dialogText)) {
+                    isProcessing = false
+                    pendingProcessToken = SystemClock.elapsedRealtime()
+                    scheduleProcessStep(dialogChanged = false, overrideDelayMs = RAPID_POST_POPUP_POLL_MS)
+                    return
+                }
                 val finalText = lastFinalResponse
                 Log.d(TAG, "All steps complete, finalText='$finalText'")
                 finishAdvancedDispatch(finalText)
@@ -1089,6 +1100,26 @@ class UssdNavigationService : AccessibilityService() {
         if (existingIndex >= 0) learnedSignatureSteps[existingIndex] = captured else learnedSignatureSteps.add(captured)
     }
 
+    private fun recordedInputForStep(stepIndex: Int, rawStep: String): String =
+        when {
+            rawStep == "INPUT_PHONE" -> advancedPhoneNumber
+            stepIndex >= 0 -> adjustedStepInputs[stepIndex].takeUnless { it.isNullOrBlank() } ?: rawStep
+            else -> rawStep
+        }
+
+    private fun selectedOptionLabelForInput(
+        enteredInput: String,
+        rawStep: String,
+        menu: ParsedMenuSignature?
+    ): String =
+        when {
+            rawStep == "INPUT_PHONE" -> "Enter phone number"
+            enteredInput.all(Char::isDigit) -> menu?.options?.get(enteredInput)
+                ?: menu?.options?.get(rawStep)
+                .orEmpty()
+            else -> ""
+        }
+
     private fun resolveStepInput(stepIndex: Int, rawStep: String, menu: ParsedMenuSignature?): Pair<String, String?> {
         if (rawStep == "INPUT_PHONE") {
             adjustedStepInputs[stepIndex] = rawStep
@@ -1201,17 +1232,8 @@ class UssdNavigationService : AccessibilityService() {
         }
         val rawStep = advancedSteps.getOrNull(captureIndex).orEmpty()
         val menu = parseMenuSignature(snapshot)
-        val selectedOptionLabel = when {
-            rawStep == "INPUT_PHONE" -> "Enter phone number"
-            rawStep.all(Char::isDigit) -> menu?.options?.get(rawStep).orEmpty()
-            else -> ""
-        }
-        val enteredInput = when {
-            rawStep == "INPUT_PHONE" -> advancedPhoneNumber
-            rawStep.isNotBlank() -> rawStep
-            captureIndex >= 0 -> adjustedStepInputs[captureIndex].orEmpty()
-            else -> ""
-        }
+        val enteredInput = recordedInputForStep(captureIndex, rawStep)
+        val selectedOptionLabel = selectedOptionLabelForInput(enteredInput, rawStep, menu)
         val capture = UssdLearningCapture(
             stepIndex = captureIndex,
             enteredInput = enteredInput,
@@ -1341,12 +1363,18 @@ class UssdNavigationService : AccessibilityService() {
         )
     }
 
-    private fun normalizeDialogLines(tokens: List<String>): List<String> =
-        tokens
+    private fun normalizeDialogLines(tokens: List<String>): List<String> {
+        val normalized = tokens
             .flatMap { token -> token.lineSequence().map { it.trim() }.toList() }
             .map { normalizeCollapsedText(it) }
             .filter { it.isNotBlank() }
-            .distinct()
+        if (normalized.size < 2) return normalized
+        val collapsed = mutableListOf<String>()
+        normalized.forEach { token ->
+            if (collapsed.lastOrNull() != token) collapsed += token
+        }
+        return collapsed
+    }
 
     private fun formatRecordedDialogText(tokens: List<String>, fallbackText: String = ""): String {
         val normalizedLines = normalizeDialogLines(tokens)
@@ -1391,7 +1419,13 @@ class UssdNavigationService : AccessibilityService() {
         return recordedLines
             .map(::normalizeCollapsedText)
             .filter { it.isNotBlank() }
-            .distinct()
+            .let { lines ->
+                if (lines.size < 2) lines else buildList {
+                    lines.forEach { line ->
+                        if (lastOrNull() != line) add(line)
+                    }
+                }
+            }
             .joinToString("\n")
     }
 
@@ -1425,6 +1459,7 @@ class UssdNavigationService : AccessibilityService() {
         return when (exactMatches.size) {
             1 -> exactMatches.first()
             else -> {
+                exactMatches.firstOrNull { it.optionKey == learned.expectedInput }?.let { return it }
                 val scoredMatches = menu.options.entries
                     .asSequence()
                     .mapNotNull { entry ->
@@ -1504,10 +1539,22 @@ class UssdNavigationService : AccessibilityService() {
             .filter { token -> token.length >= 2 || token.any(Char::isDigit) }
             .toSet()
 
+    private fun titlesLookCompatible(learnedTitle: String, currentTitle: String): Boolean {
+        if (learnedTitle.isBlank() || currentTitle.isBlank()) return true
+        if (learnedTitle == currentTitle) return true
+        if (learnedTitle.contains(currentTitle) || currentTitle.contains(learnedTitle)) return true
+        val learnedTokens = tokenizeMenuLabel(learnedTitle)
+        val currentTokens = tokenizeMenuLabel(currentTitle)
+        if (learnedTokens.isEmpty() || currentTokens.isEmpty()) return true
+        val sharedCount = learnedTokens.intersect(currentTokens).size
+        val requiredShared = minOf(2, learnedTokens.size, currentTokens.size).coerceAtLeast(1)
+        return sharedCount >= requiredShared
+    }
+
     private fun isMenuContextCompatible(menu: ParsedMenuSignature, learned: UssdSignatureStep): Boolean {
         val learnedTitle = normalizeMenuText(learned.menuTitle)
         val currentTitle = normalizeMenuText(menu.title)
-        if (learnedTitle.isNotBlank() && currentTitle.isNotBlank() && learnedTitle != currentTitle) {
+        if (!titlesLookCompatible(learnedTitle, currentTitle)) {
             return false
         }
 
@@ -1524,8 +1571,35 @@ class UssdNavigationService : AccessibilityService() {
         if (learnedSnapshot.isEmpty() || currentSnapshot.isEmpty()) return true
 
         val overlapCount = learnedSnapshot.intersect(currentSnapshot).size
-        val requiredOverlap = minOf(2, learnedSnapshot.size, currentSnapshot.size)
+        val requiredOverlap = when (minOf(learnedSnapshot.size, currentSnapshot.size)) {
+            0 -> 0
+            1, 2, 3 -> 1
+            else -> 2
+        }
         return overlapCount >= requiredOverlap
+    }
+
+    private fun isTransientResponseText(lower: String): Boolean =
+        TRANSIENT_RESPONSE_HINTS.any { hint -> lower.contains(hint) }
+
+    private fun hasMeaningfulResponseText(snapshot: UssdTreeSnapshot, dialogText: String): Boolean {
+        if (dialogText.isBlank()) return false
+        val lines = normalizeDialogLines(snapshot.textTokens.ifEmpty { listOf(dialogText) })
+        if (lines.isEmpty()) return false
+        return lines.any { line ->
+            val normalized = normalizeActionLabel(line)
+            normalized.isNotBlank() &&
+                normalized !in SEND_BUTTON_LABELS &&
+                normalized !in DISMISS_BUTTON_LABELS &&
+                normalized.length >= 3
+        }
+    }
+
+    private fun shouldWaitForFinalResponse(snapshot: UssdTreeSnapshot, dialogText: String): Boolean {
+        val normalized = normalizeMenuText(dialogText)
+        if (!hasMeaningfulResponseText(snapshot, dialogText)) return true
+        if (isTransientResponseText(normalized)) return true
+        return lastStepActionKey.isNotBlank() && normalized == lastStepActionKey
     }
 
     private fun extractTextTokens(node: AccessibilityNodeInfo, into: MutableList<String> = mutableListOf()): List<String> {

@@ -346,6 +346,7 @@ class AutomationService : Service() {
             result.learningCaptures
         )
         val learnedLabel = updated?.name ?: offerLabel
+        val learningPhone = request.phoneNumber.ifBlank { "the provided test number" }
         val captureSummary = when {
             result.learningCaptures.isEmpty() -> ""
             else -> " Captured ${result.learningCaptures.size} USSD popup(s), the selected option, and the recorded text for each step."
@@ -359,9 +360,9 @@ class AutomationService : Service() {
             .orEmpty()
         val learnedSummary = when {
             result.learnedSignature.isNotEmpty() ->
-                "The system learned ${result.learnedSignature.size} USSD menu step(s) for $learnedLabel using test number 0700000000."
+                "The system learned ${result.learnedSignature.size} USSD menu step(s) for $learnedLabel using $learningPhone."
             else ->
-                "The system recorded the USSD learning transcript for $learnedLabel using test number 0700000000."
+                "The system recorded the USSD learning transcript for $learnedLabel using $learningPhone."
         }
         OfferNotifications.notify(
             this,
