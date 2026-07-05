@@ -6901,6 +6901,12 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                             onClick = { manualTab = "HISTORY" },
                             modifier = Modifier.weight(1f)
                         )
+                        ManualTerminalTabButton(
+                            text = "Scanner",
+                            active = manualTab == "SCANNER",
+                            onClick = { manualTab = "SCANNER" },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
 
                     Surface(
@@ -7182,7 +7188,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                                     )
                                 }
                             }
-                        } else {
+                        } else if (manualTab == "HISTORY") {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -7252,6 +7258,8 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                                     }
                                 }
                             }
+                        } else {
+                            RechargeScannerScreen(allTxns)
                         }
                     }
                 }
