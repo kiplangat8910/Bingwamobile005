@@ -9957,29 +9957,29 @@ fun OfferDialog(
     onRelearnSignature: (OfferItem) -> Unit
 ) {
     val configuration = LocalConfiguration.current
-    var name by remember { mutableStateOf(existing?.name ?: "") }
-    var codeField by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+    var name by remember(existing?.id, existing?.name) { mutableStateOf(existing?.name ?: "") }
+    var codeField by rememberSaveable(existing?.id, existing?.ussdCode, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(existing?.ussdCode ?: ""))
     }
     val code = codeField.text
-    var price by remember { mutableStateOf(existing?.price?.toString() ?: "") }
+    var price by remember(existing?.id, existing?.price) { mutableStateOf(existing?.price?.toString() ?: "") }
     val initialCategory = normalizeOfferCategory(existing?.category)
     val initialMode = normalizeOfferExecutionMode(existing?.executionMode, initialCategory)
-    var mode by remember { mutableStateOf(initialMode) }
-    var cat by remember { mutableStateOf(initialCategory) }
-    var device by remember { mutableStateOf(existing?.targetDevice ?: "PRIMARY") }
-    var simSelection by remember {
+    var mode by remember(existing?.id, initialMode) { mutableStateOf(initialMode) }
+    var cat by remember(existing?.id, initialCategory) { mutableStateOf(initialCategory) }
+    var device by remember(existing?.id, existing?.targetDevice) { mutableStateOf(existing?.targetDevice ?: "PRIMARY") }
+    var simSelection by remember(existing?.id, existing?.simSelection) {
         mutableIntStateOf(normalizeOfferSimSelection(existing?.simSelection ?: OFFER_SIM_USE_GENERAL))
     }
-    var enabled by remember { mutableStateOf(existing?.enabled ?: true) }
-    var signatureEnabled by remember { mutableStateOf(existing?.signatureDetectionEnabled ?: false) }
-    var signatureAction by remember { mutableStateOf(existing?.signatureAction ?: "STOP") }
+    var enabled by remember(existing?.id, existing?.enabled) { mutableStateOf(existing?.enabled ?: true) }
+    var signatureEnabled by remember(existing?.id, existing?.signatureDetectionEnabled) { mutableStateOf(existing?.signatureDetectionEnabled ?: false) }
+    var signatureAction by remember(existing?.id, existing?.signatureAction) { mutableStateOf(existing?.signatureAction ?: "STOP") }
     var modeExp by remember { mutableStateOf(false) }
     var catExp by remember { mutableStateOf(false) }
     var devExp by remember { mutableStateOf(false) }
     var simExp by remember { mutableStateOf(false) }
     var signatureExp by remember { mutableStateOf(false) }
-    var modeTouched by remember {
+    var modeTouched by remember(existing?.id, initialMode, initialCategory) {
         mutableStateOf(existing != null && initialMode != defaultExecutionModeForCategory(initialCategory))
     }
     val learnedSteps = existing?.learnedSignature.orEmpty()
