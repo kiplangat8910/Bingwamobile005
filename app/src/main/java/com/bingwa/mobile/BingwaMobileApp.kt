@@ -10,6 +10,7 @@ class BingwaMobileApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        ScratchCardRechargeManager.initialize(this)
         registerActivityLifecycleCallbacks(Tracker)
     }
 
@@ -46,4 +47,3 @@ class BingwaMobileApp : Application() {
         override fun onActivityDestroyed(activity: Activity) = Unit
     }
 }
-

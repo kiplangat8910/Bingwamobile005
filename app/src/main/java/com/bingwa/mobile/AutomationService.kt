@@ -30,6 +30,7 @@ class AutomationService : Service() {
         val code: String,
         val phoneNumber: String,
         val txId: Int,
+        val scratchCardId: String,
         val mode: String,
         val offerId: Int,
         val offerName: String,
@@ -84,6 +85,7 @@ class AutomationService : Service() {
             code = code,
             phoneNumber = ussdPhoneNumber,
             txId = safeIntent.getIntExtra("txId", -1),
+            scratchCardId = safeIntent.getStringExtra(ScratchCardRechargeManager.EXTRA_SCRATCH_CARD_ID).orEmpty(),
             mode = safeIntent.getStringExtra("mode") ?: OFFER_EXECUTION_MODE_SIMPLE,
             offerId = safeIntent.getIntExtra("offerId", -1),
             offerName = safeIntent.getStringExtra("offerName") ?: "",
@@ -428,6 +430,17 @@ class AutomationService : Service() {
         UssdNavigationService.balanceCallback?.let { cb ->
             Log.d(TAG, "Balance callback invoked")
             cb(response)
+            stopSelf()
+            return
+        }
+
+        if (request.scratchCardId.isNotBlank()) {
+            ScratchCardRechargeManager.onAutomationResult(
+                context = this,
+                itemId = request.scratchCardId,
+                status = forcedStatus ?: patternManager.determineResponseStatus(response),
+                response = response
+            )
             stopSelf()
             return
         }
