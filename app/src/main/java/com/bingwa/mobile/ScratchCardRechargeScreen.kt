@@ -107,10 +107,12 @@ private data class ScratchCardBillingPreview(
     val freeCardsRemaining: Int,
     val resetAtMillis: Long,
     val nextWindowStartedAt: Long,
-    val nextFreeCardsUsed: Int
+    val nextFreeCardsUsed: Int,
+    val runnableCards: Int,
+    val skippedCards: Int
 ) {
-    val hasEnoughTokens: Boolean
-        get() = unlimitedActive || tokenCost <= 0 || tokenBalance >= tokenCost
+    val canStartBatch: Boolean
+        get() = runnableCards > 0
 }
 
 @Composable
@@ -127,17 +129,13 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
         previewScratchCardBilling(ctx, scratchCards.size)
     }
 
-    fun resetBatchState() {
-        scratchCards = scratchCards.map { it.copy(status = ScratchCardItemStatus.Pending, note = "Waiting to start") }
-    }
-
     fun startRechargeBatch() {
         if (scratchCards.isEmpty() || isRunning) return
 
         val batchBilling = previewScratchCardBilling(ctx, scratchCards.size)
-        if (!batchBilling.hasEnoughTokens) {
-            statusText = "This batch needs ${batchBilling.tokenCost} tokens for ${batchBilling.chargeableCards} paid cards. You only have ${batchBilling.tokenBalance} tokens."
-            Toast.makeText(ctx, "Not enough tokens for this scratch card batch", Toast.LENGTH_SHORT).show()
+        if (!batchBilling.canStartBatch) {
+            statusText = "No free cards are available right now and you do not have enough tokens to recharge any more scratch cards in this batch."
+            Toast.makeText(ctx, "No free cards or tokens available", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -150,14 +148,24 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
             saveScratchCardBillingUsage(ctx, batchBilling)
         }
 
-        resetBatchState()
+        val runnableCount = batchBilling.runnableCards.coerceAtMost(scratchCards.size)
+        scratchCards = scratchCards.mapIndexed { index, item ->
+            if (index < runnableCount) {
+                item.copy(status = ScratchCardItemStatus.Pending, note = "Waiting to start")
+            } else {
+                item.copy(
+                    status = ScratchCardItemStatus.Pending,
+                    note = "Waiting for tokens or unlimited access before this card can be recharged"
+                )
+            }
+        }
         val batchSummary = buildScratchCardBatchSummary(batchBilling, scratchCards.size)
 
         scope.launch {
             isRunning = true
-            statusText = "$batchSummary Starting ${scratchCards.size} scratch card recharges."
+            statusText = "$batchSummary Starting $runnableCount scratch card recharges."
 
-            for (index in scratchCards.indices) {
+            for (index in 0 until runnableCount) {
                 val pin = scratchCards[index].pin
                 scratchCards = scratchCards.replaceAt(
                     index,
@@ -176,19 +184,24 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
                     )
                 )
 
-                if (index < scratchCards.lastIndex) {
+                if (index < runnableCount - 1) {
                     statusText = if (result.succeeded) {
-                        "Card ${index + 1} of ${scratchCards.size} finished. Next card in 2s."
+                        "Card ${index + 1} of $runnableCount finished. Next card in 2s."
                     } else {
-                        "Card ${index + 1} of ${scratchCards.size} failed. Next card in 2s."
+                        "Card ${index + 1} of $runnableCount failed. Next card in 2s."
                     }
                     delay(SCRATCH_CARD_BATCH_DELAY_MS)
                 }
             }
 
-            val startedCount = scratchCards.count { it.status == ScratchCardItemStatus.Success }
-            val failedCount = scratchCards.count { it.status == ScratchCardItemStatus.Failed }
-            statusText = "Batch finished. Completed $startedCount cards, failed $failedCount."
+            val startedCards = scratchCards.take(runnableCount)
+            val startedCount = startedCards.count { it.status == ScratchCardItemStatus.Success }
+            val failedCount = startedCards.count { it.status == ScratchCardItemStatus.Failed }
+            statusText = if (batchBilling.skippedCards > 0) {
+                "Batch finished. Completed $startedCount cards, failed $failedCount, and left ${batchBilling.skippedCards} cards waiting for tokens or unlimited access."
+            } else {
+                "Batch finished. Completed $startedCount cards, failed $failedCount."
+            }
             vib(ctx, 70L)
             Toast.makeText(ctx, "Scratch card batch finished", Toast.LENGTH_SHORT).show()
             isRunning = false
@@ -576,6 +589,8 @@ private fun List<ScratchCardItem>.replaceAt(index: Int, item: ScratchCardItem): 
 private fun previewScratchCardBilling(context: Context, batchSize: Int, now: Long = System.currentTimeMillis()): ScratchCardBillingPreview {
     val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
     val unlimitedActive = UnlimitedManager(context).isActive()
+    val tokenBalance = TokenManager(context).getBalance()
+    val normalizedBatchSize = batchSize.coerceAtLeast(0)
     val storedWindowStartedAt = prefs.safeGetLong(KEY_SCRATCH_CARD_FREE_WINDOW_STARTED_AT, 0L)
     val windowActive = storedWindowStartedAt > 0L && now - storedWindowStartedAt < SCRATCH_CARD_FREE_WINDOW_MS
     val windowStartedAt = if (windowActive) storedWindowStartedAt else 0L
@@ -585,13 +600,21 @@ private fun previewScratchCardBilling(context: Context, batchSize: Int, now: Lon
         0
     }
     val freeCardsRemaining = (SCRATCH_CARD_FREE_LIMIT - freeUsed).coerceAtLeast(0)
-    val freeCardsApplied = minOf(batchSize.coerceAtLeast(0), freeCardsRemaining)
-    val chargeableCards = (batchSize - freeCardsApplied).coerceAtLeast(0)
-    val tokenCost = if (unlimitedActive) {
+    val freeCardsApplied = minOf(normalizedBatchSize, freeCardsRemaining)
+    val remainingCards = (normalizedBatchSize - freeCardsApplied).coerceAtLeast(0)
+    val coveredChargeableCards = if (unlimitedActive) {
+        remainingCards
+    } else {
+        val affordableBlocks = tokenBalance / SCRATCH_CARD_TOKENS_PER_BLOCK
+        minOf(remainingCards, affordableBlocks * SCRATCH_CARD_PAID_BLOCK_SIZE)
+    }
+    val tokenCost = if (unlimitedActive || coveredChargeableCards <= 0) {
         0
     } else {
-        ((chargeableCards + SCRATCH_CARD_PAID_BLOCK_SIZE - 1) / SCRATCH_CARD_PAID_BLOCK_SIZE) * SCRATCH_CARD_TOKENS_PER_BLOCK
+        ((coveredChargeableCards + SCRATCH_CARD_PAID_BLOCK_SIZE - 1) / SCRATCH_CARD_PAID_BLOCK_SIZE) * SCRATCH_CARD_TOKENS_PER_BLOCK
     }
+    val runnableCards = freeCardsApplied + coveredChargeableCards
+    val skippedCards = (normalizedBatchSize - runnableCards).coerceAtLeast(0)
     val nextWindowStartedAt = when {
         unlimitedActive -> windowStartedAt
         freeCardsApplied <= 0 -> windowStartedAt
@@ -610,14 +633,16 @@ private fun previewScratchCardBilling(context: Context, batchSize: Int, now: Lon
     }
     return ScratchCardBillingPreview(
         freeCardsApplied = freeCardsApplied,
-        chargeableCards = chargeableCards,
+        chargeableCards = coveredChargeableCards,
         tokenCost = tokenCost,
-        tokenBalance = TokenManager(context).getBalance(),
+        tokenBalance = tokenBalance,
         unlimitedActive = unlimitedActive,
         freeCardsRemaining = freeCardsRemaining,
         resetAtMillis = resetAtMillis,
         nextWindowStartedAt = nextWindowStartedAt,
-        nextFreeCardsUsed = nextFreeCardsUsed
+        nextFreeCardsUsed = nextFreeCardsUsed,
+        runnableCards = runnableCards,
+        skippedCards = skippedCards
     )
 }
 
@@ -633,7 +658,9 @@ private fun saveScratchCardBillingUsage(context: Context, preview: ScratchCardBi
 
 private fun buildScratchCardPolicyLabel(preview: ScratchCardBillingPreview): String {
     val balanceText = if (preview.unlimitedActive) {
-        "Unlimited access is active, so extra scratch card batches do not spend tokens."
+        "Unlimited access is active, so every card after the free 10 also runs without spending tokens."
+    } else if (preview.skippedCards > 0 && preview.runnableCards > 0) {
+        "You have ${preview.tokenBalance} tokens, so only ${preview.runnableCards} cards can run right now. Add more tokens or unlimited access to recharge the remaining ${preview.skippedCards} cards."
     } else {
         "You have ${preview.tokenBalance} tokens. Extra scratch card batches cost 30 tokens per 10 cards."
     }
@@ -649,7 +676,16 @@ private fun buildScratchCardPolicyLabel(preview: ScratchCardBillingPreview): Str
 
 private fun buildScratchCardBatchSummary(preview: ScratchCardBillingPreview, batchSize: Int): String {
     if (preview.unlimitedActive) {
-        return "Unlimited access active. No tokens charged for this $batchSize-card batch."
+        return "Unlimited access active. The first ${preview.freeCardsApplied} cards are free and the remaining ${preview.chargeableCards} cards use unlimited access in this $batchSize-card batch."
+    }
+    if (preview.runnableCards <= 0) {
+        return "No cards can be recharged right now."
+    }
+    if (preview.skippedCards > 0 && preview.tokenCost <= 0) {
+        return "No tokens available. Only the first ${preview.runnableCards} free cards will be recharged from this $batchSize-card upload."
+    }
+    if (preview.skippedCards > 0) {
+        return "This upload recharges ${preview.runnableCards} cards now, using ${preview.freeCardsApplied} free cards and ${preview.tokenCost} tokens for ${preview.chargeableCards} extra cards. ${preview.skippedCards} cards will wait for more tokens or unlimited access."
     }
     if (preview.tokenCost <= 0) {
         return "This $batchSize-card batch uses ${preview.freeCardsApplied} free cards."
