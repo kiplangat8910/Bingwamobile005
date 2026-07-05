@@ -30,6 +30,7 @@ class AutomationService : Service() {
         val code: String,
         val phoneNumber: String,
         val txId: Int,
+        val rechargeQueueId: Long,
         val mode: String,
         val offerId: Int,
         val offerName: String,
@@ -84,6 +85,7 @@ class AutomationService : Service() {
             code = code,
             phoneNumber = ussdPhoneNumber,
             txId = safeIntent.getIntExtra("txId", -1),
+            rechargeQueueId = safeIntent.getLongExtra("rechargeQueueId", -1L),
             mode = safeIntent.getStringExtra("mode") ?: OFFER_EXECUTION_MODE_SIMPLE,
             offerId = safeIntent.getIntExtra("offerId", -1),
             offerName = safeIntent.getStringExtra("offerName") ?: "",
@@ -432,6 +434,22 @@ class AutomationService : Service() {
             return
         }
 
+        if (request.rechargeQueueId > 0L) {
+            val status = if ((forcedStatus ?: patternManager.determineResponseStatus(response)) == "Success") {
+                SCRATCH_CARD_STATUS_SUCCESS
+            } else {
+                SCRATCH_CARD_STATUS_FAILED
+            }
+            ScratchCardRechargeManager.onRechargeResult(
+                context = this,
+                queueId = request.rechargeQueueId,
+                status = status,
+                response = response
+            )
+            stopSelf()
+            return
+        }
+
         // Save transaction with response
         if (request.txId < 0) {
             stopSelf()
@@ -675,6 +693,7 @@ class AutomationService : Service() {
             putExtra("code", request.code)
             putExtra("phoneNumber", request.phoneNumber)
             putExtra("txId", request.txId)
+            putExtra("rechargeQueueId", request.rechargeQueueId)
             putExtra("offerId", request.offerId)
             putExtra("offerName", request.offerName)
             putExtra("simSelection", request.simSelection)

@@ -11,6 +11,7 @@ class BingwaMobileApp : Application() {
     override fun onCreate() {
         super.onCreate()
         registerActivityLifecycleCallbacks(Tracker)
+        ScratchCardRechargeManager.resumePendingQueue(this)
     }
 
     companion object Tracker : Application.ActivityLifecycleCallbacks {
@@ -46,4 +47,3 @@ class BingwaMobileApp : Application() {
         override fun onActivityDestroyed(activity: Activity) = Unit
     }
 }
-
