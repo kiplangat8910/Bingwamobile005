@@ -34,3 +34,34 @@ fun Context.startOfferAutomation(
         }
     })
 }
+
+fun Context.startScratchCardRechargeAutomation(
+    scratchCode: String,
+    txId: Int,
+    rechargeTemplate: String,
+    simSelection: Int,
+    queueCodes: List<String> = listOf(scratchCode),
+    queueIndex: Int = 0,
+    returnToAppAggressively: Boolean = true
+) {
+    val normalizedScratchCode = normalizeScratchCardDigits(scratchCode)
+    val finalCode = buildScratchRechargeCode(rechargeTemplate, normalizedScratchCode)
+    if (finalCode.isBlank()) return
+
+    ServiceLauncher.startAutomationService(this, Intent(this, AutomationService::class.java).apply {
+        putExtra("mode", OFFER_EXECUTION_MODE_ADVANCED)
+        putExtra("code", finalCode)
+        putExtra("phoneNumber", "")
+        putExtra("txId", txId)
+        putExtra("offerId", -1)
+        putExtra("offerName", "Scratch Card Recharge")
+        putExtra("simSelection", simSelection)
+        putExtra("signatureEnabled", false)
+        putExtra("signatureMode", "STOP")
+        putExtra("signatureLearning", false)
+        putExtra("returnToAppAggressively", returnToAppAggressively)
+        putStringArrayListExtra("scratchQueueCodes", ArrayList(queueCodes))
+        putExtra("scratchQueueIndex", queueIndex)
+        putExtra("scratchQueueTemplate", rechargeTemplate)
+    })
+}

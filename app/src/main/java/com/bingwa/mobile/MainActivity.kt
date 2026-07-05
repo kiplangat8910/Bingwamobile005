@@ -25,6 +25,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -77,9 +78,13 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -88,6 +93,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
+import java.io.File
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -104,6 +110,73 @@ private data class StartupFallbackFeatureItem(
     val detail: String,
     val accent: Color
 )
+
+const val SCRATCH_CARD_DIGIT_LENGTH = 16
+const val DEFAULT_SCRATCH_RECHARGE_TEMPLATE = "*141*{code}#"
+
+private const val SCRATCH_RECHARGE_PREFS = "scratch_recharge"
+private const val SCRATCH_RECHARGE_TEMPLATE_KEY = "recharge_template"
+private val SCRATCH_CARD_REGEX = Regex("""(?<!\d)(?:\d[\s-]*){16}(?!\d)""")
+
+fun normalizeScratchCardDigits(raw: String): String = raw.filter(Char::isDigit).take(SCRATCH_CARD_DIGIT_LENGTH)
+
+fun loadScratchRechargeTemplate(context: Context): String {
+    val prefs = context.getSharedPreferences(SCRATCH_RECHARGE_PREFS, Context.MODE_PRIVATE)
+    return prefs.safeGetString(SCRATCH_RECHARGE_TEMPLATE_KEY, DEFAULT_SCRATCH_RECHARGE_TEMPLATE)
+        ?.takeIf { it.isNotBlank() }
+        ?: DEFAULT_SCRATCH_RECHARGE_TEMPLATE
+}
+
+fun saveScratchRechargeTemplate(context: Context, template: String) {
+    context.getSharedPreferences(SCRATCH_RECHARGE_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .putString(SCRATCH_RECHARGE_TEMPLATE_KEY, template.trim().ifBlank { DEFAULT_SCRATCH_RECHARGE_TEMPLATE })
+        .apply()
+}
+
+fun buildScratchRechargeCode(template: String, scratchCode: String): String {
+    val digits = normalizeScratchCardDigits(scratchCode)
+    if (digits.length != SCRATCH_CARD_DIGIT_LENGTH) return ""
+
+    val rawTemplate = template.trim().ifBlank { DEFAULT_SCRATCH_RECHARGE_TEMPLATE }
+    val replaced = when {
+        rawTemplate.contains("{code}", ignoreCase = true) ->
+            rawTemplate.replace("{code}", digits, ignoreCase = true)
+        rawTemplate.contains("%s") ->
+            rawTemplate.replace("%s", digits)
+        Regex("""(?i)\bsd\b""").containsMatchIn(rawTemplate) ->
+            rawTemplate.replace(Regex("""(?i)\bsd\b"""), digits)
+        rawTemplate.endsWith("#") ->
+            rawTemplate.dropLast(1) + digits + "#"
+        else ->
+            "$rawTemplate$digits#"
+    }
+    return UssdHelper.normalizeUssdCode(replaced)
+}
+
+fun extractScratchCardCodes(rawText: String): List<String> {
+    if (rawText.isBlank()) return emptyList()
+    return SCRATCH_CARD_REGEX.findAll(rawText)
+        .map { normalizeScratchCardDigits(it.value) }
+        .filter { it.length == SCRATCH_CARD_DIGIT_LENGTH }
+        .distinct()
+        .toList()
+}
+
+fun buildScratchQueueTransactionLabel(index: Int, total: Int): String =
+    "Scratch Card ${index + 1}/$total"
+
+fun scratchQueueSimLabel(simSelection: Int): String =
+    when (normalizeOfferSimSelection(simSelection)) {
+        USSD_SIM_SELECTION_SLOT_2 -> "SIM 2"
+        else -> "SIM 1"
+    }
+
+private fun createScratchCardCaptureUri(context: Context): Uri? = runCatching {
+    val imageDir = File(context.cacheDir, "scratch_cards").apply { mkdirs() }
+    val file = File.createTempFile("scratch_card_", ".jpg", imageDir)
+    FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+}.getOrNull()
 
 private fun formatStartupFallbackErrorLabel(raw: String): String {
     val cleaned = raw.trim().ifBlank { "Startup issue" }
@@ -6585,6 +6658,13 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
     var selectedHistoryTxId by rememberSaveable { mutableIntStateOf(-1) }
     var smsSearchContacts by remember { mutableStateOf<List<SavedContact>>(emptyList()) }
     var smsSearchLoading by remember { mutableStateOf(false) }
+    var scratchTemplate by rememberSaveable { mutableStateOf(loadScratchRechargeTemplate(ctx)) }
+    var scratchSimSelection by rememberSaveable { mutableIntStateOf(USSD_SIM_SELECTION_SLOT_1) }
+    var scratchScanBusy by remember { mutableStateOf(false) }
+    var scratchScanStatus by remember { mutableStateOf<String?>(null) }
+    var scratchReviewCodes by remember { mutableStateOf<List<String>>(emptyList()) }
+    var scratchCaptureUri by remember { mutableStateOf<Uri?>(null) }
+    val scratchRecognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
     val fallbackResolvedClientName = remember(phone, allTxns.size) { resolveClientNameByPhone(ctx, phone) }
     val enabledOffers by remember {
         derivedStateOf {
@@ -6617,6 +6697,140 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
         animationSpec = infiniteRepeatable(tween(1400, easing = EaseInOutSine), RepeatMode.Reverse),
         label = "console_dispatch_scale"
     )
+
+    DisposableEffect(scratchRecognizer) {
+        onDispose { scratchRecognizer.close() }
+    }
+
+    LaunchedEffect(scratchTemplate) {
+        saveScratchRechargeTemplate(ctx, scratchTemplate)
+    }
+
+    val processScratchImage: (Uri) -> Unit = remember(ctx, scratchRecognizer) {
+        { imageUri ->
+            scratchScanBusy = true
+            scratchScanStatus = "Scanning scratch card image..."
+            runCatching { InputImage.fromFilePath(ctx, imageUri) }
+                .onFailure {
+                    scratchScanBusy = false
+                    scratchScanStatus = "Unable to open the selected image."
+                }
+                .onSuccess { image ->
+                    scratchRecognizer.process(image)
+                        .addOnSuccessListener { result ->
+                            scratchScanBusy = false
+                            val codes = extractScratchCardCodes(result.text)
+                            if (codes.isEmpty()) {
+                                scratchScanStatus = "No 16-digit scratch card codes found. Try a clearer image."
+                            } else {
+                                scratchReviewCodes = codes
+                                scratchScanStatus = "Found ${codes.size} scratch card code(s). Review before queueing."
+                            }
+                        }
+                        .addOnFailureListener {
+                            scratchScanBusy = false
+                            scratchScanStatus = "OCR failed on this image. Try gallery upload or retake the photo."
+                        }
+                }
+        }
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            processScratchImage(uri)
+        } else if (scratchScanBusy) {
+            scratchScanBusy = false
+        }
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        val uri = scratchCaptureUri
+        scratchCaptureUri = null
+        if (success && uri != null) {
+            processScratchImage(uri)
+        } else if (scratchScanBusy) {
+            scratchScanBusy = false
+        }
+    }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) {
+            scratchScanBusy = false
+            scratchScanStatus = "Camera permission is required to scan scratch cards."
+            return@rememberLauncherForActivityResult
+        }
+        val uri = createScratchCardCaptureUri(ctx)
+        if (uri == null) {
+            scratchScanBusy = false
+            scratchScanStatus = "Unable to prepare camera capture."
+            return@rememberLauncherForActivityResult
+        }
+        scratchCaptureUri = uri
+        cameraLauncher.launch(uri)
+    }
+    val launchScratchCamera = {
+        scratchScanStatus = null
+        scratchScanBusy = true
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            val uri = createScratchCardCaptureUri(ctx)
+            if (uri == null) {
+                scratchScanBusy = false
+                scratchScanStatus = "Unable to prepare camera capture."
+            } else {
+                scratchCaptureUri = uri
+                cameraLauncher.launch(uri)
+            }
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+    val launchScratchGallery = {
+        scratchScanStatus = null
+        galleryLauncher.launch("image/*")
+    }
+    val queueScratchCards = queue@{
+        val cleanedCodes = scratchReviewCodes
+            .map(::normalizeScratchCardDigits)
+            .filter { it.length == SCRATCH_CARD_DIGIT_LENGTH }
+            .distinct()
+        val templatePreview = buildScratchRechargeCode(scratchTemplate, "1234567890123456")
+        if (templatePreview.isBlank()) {
+            scratchScanStatus = "Recharge template is invalid. Use {code}, %s, or sd as the placeholder."
+            return@queue
+        }
+        if (cleanedCodes.isEmpty()) {
+            scratchScanStatus = "Enter at least one valid 16-digit scratch card code."
+            return@queue
+        }
+        val firstCode = cleanedCodes.first()
+        val txId = createPendingTransaction(
+            ctx,
+            description = buildScratchQueueTransactionLabel(0, cleanedCodes.size),
+            amount = "Scratch Card",
+            phone = "",
+            ussd = buildScratchRechargeCode(scratchTemplate, firstCode),
+            clientName = scratchQueueSimLabel(scratchSimSelection),
+            status = TransactionStatus.PROCESSING.value,
+            source = TX_SOURCE_MANUAL,
+            showInRecent = false,
+            offerId = -1
+        )
+        if (txId < 0) {
+            scratchScanStatus = "Unable to queue the scanned scratch cards right now."
+            return@queue
+        }
+        pendingTxId = txId
+        bannerState = "pending"
+        scratchReviewCodes = emptyList()
+        scratchScanStatus = "Queued ${cleanedCodes.size} scratch card(s) on ${scratchQueueSimLabel(scratchSimSelection)}."
+        startScratchCardRechargeAutomation(
+            scratchCode = firstCode,
+            txId = txId,
+            rechargeTemplate = scratchTemplate,
+            simSelection = scratchSimSelection,
+            queueCodes = cleanedCodes,
+            queueIndex = 0,
+            returnToAppAggressively = true
+        )
+    }
 
     DisposableEffect(Unit) {
         val receiver = object : android.content.BroadcastReceiver() {
@@ -6876,7 +7090,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                             letterSpacing = (-0.4).sp
                         )
                         Text(
-                            "Manual execution & history",
+                            "Manual execution, scratch-card scan & history",
                             color = C.t2,
                             fontSize = 13.sp,
                             lineHeight = 18.sp
@@ -6893,6 +7107,12 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                             text = "Manual",
                             active = manualTab == "DISPATCH",
                             onClick = { manualTab = "DISPATCH" },
+                            modifier = Modifier.weight(1f)
+                        )
+                        ManualTerminalTabButton(
+                            text = "Scanner",
+                            active = manualTab == "SCANNER",
+                            onClick = { manualTab = "SCANNER" },
                             modifier = Modifier.weight(1f)
                         )
                         ManualTerminalTabButton(
@@ -7182,6 +7402,184 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                                     )
                                 }
                             }
+                        } else if (manualTab == "SCANNER") {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 18.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Text(
+                                    "SCRATCH CARD SCANNER",
+                                    color = C.amber,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.4.sp
+                                )
+                                Text(
+                                    "Scan airtime scratch cards with camera or gallery, review the 16-digit codes, then queue them one by one.",
+                                    color = C.t2,
+                                    fontSize = 12.sp,
+                                    lineHeight = 18.sp
+                                )
+
+                                Text(
+                                    "RECHARGE TEMPLATE",
+                                    color = C.t3,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.4.sp
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color(0xFF121617),
+                                    border = BorderStroke(1.dp, Color(0xFF394144))
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 13.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Icon(Icons.Outlined.Dialpad, null, tint = C.t2, modifier = Modifier.size(18.dp))
+                                        BasicTextField(
+                                            value = scratchTemplate,
+                                            onValueChange = {
+                                                scratchTemplate = it.take(40)
+                                                scratchScanStatus = null
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            singleLine = true,
+                                            textStyle = TextStyle(
+                                                color = C.t1,
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontFamily = FontFamily.Monospace
+                                            ),
+                                            cursorBrush = SolidColor(C.cyan),
+                                            decorationBox = { innerTextField ->
+                                                if (scratchTemplate.isBlank()) {
+                                                    Text(
+                                                        DEFAULT_SCRATCH_RECHARGE_TEMPLATE,
+                                                        color = C.t3,
+                                                        fontSize = 16.sp,
+                                                        fontFamily = FontFamily.Monospace
+                                                    )
+                                                }
+                                                innerTextField()
+                                            }
+                                        )
+                                    }
+                                }
+                                Text(
+                                    "Use {code}, %s, or sd as the placeholder for each 16-digit card.",
+                                    color = C.t2,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp
+                                )
+
+                                Text(
+                                    "TARGET SIM",
+                                    color = C.t3,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.4.sp
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    ManualModeToggleButton(
+                                        label = "SIM 1",
+                                        icon = Icons.Outlined.SimCard,
+                                        active = scratchSimSelection == USSD_SIM_SELECTION_SLOT_1,
+                                        onClick = { scratchSimSelection = USSD_SIM_SELECTION_SLOT_1 },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    ManualModeToggleButton(
+                                        label = "SIM 2",
+                                        icon = Icons.Outlined.SimCard,
+                                        active = scratchSimSelection == USSD_SIM_SELECTION_SLOT_2,
+                                        onClick = { scratchSimSelection = USSD_SIM_SELECTION_SLOT_2 },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = launchScratchGallery,
+                                        modifier = Modifier.weight(1f).height(52.dp),
+                                        shape = RoundedCornerShape(14.dp),
+                                        border = BorderStroke(1.dp, C.purple.copy(alpha = 0.36f)),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = C.purple)
+                                    ) {
+                                        Icon(Icons.Outlined.PhotoLibrary, null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Gallery", fontWeight = FontWeight.Bold)
+                                    }
+                                    Button(
+                                        onClick = launchScratchCamera,
+                                        modifier = Modifier.weight(1f).height(52.dp),
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = C.purple,
+                                            contentColor = Color.White
+                                        )
+                                    ) {
+                                        Icon(Icons.Outlined.PhotoCamera, null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Camera", fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                val scratchSummary = when {
+                                    scratchScanBusy -> "Scanning image..."
+                                    scratchReviewCodes.isNotEmpty() -> "Ready to review ${scratchReviewCodes.size} scanned code(s)."
+                                    else -> "Scan one image with multiple cards and the app extracts every 16-digit recharge code it can find."
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color(0xFF121617),
+                                    border = BorderStroke(1.dp, Color(0xFF333B3E))
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(Icons.Outlined.DocumentScanner, null, tint = C.cyan, modifier = Modifier.size(16.dp))
+                                            Text(scratchSummary, color = C.t1, fontSize = 12.sp, lineHeight = 18.sp)
+                                        }
+                                        scratchScanStatus?.let {
+                                            Text(it, color = if (scratchReviewCodes.isEmpty()) C.t2 else C.green, fontSize = 11.sp, lineHeight = 16.sp)
+                                        }
+                                    }
+                                }
+
+                                if (scratchReviewCodes.isNotEmpty()) {
+                                    Button(
+                                        onClick = queueScratchCards,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(54.dp),
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = C.amber,
+                                            contentColor = C.bg
+                                        )
+                                    ) {
+                                        Icon(Icons.Filled.Send, null, tint = C.bg, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(10.dp))
+                                        Text("REVIEW & QUEUE", fontWeight = FontWeight.ExtraBold, letterSpacing = 0.5.sp)
+                                    }
+                                }
+                            }
                         } else {
                             Column(
                                 modifier = Modifier
@@ -7258,6 +7656,23 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
             }
         }
 
+        if (scratchReviewCodes.isNotEmpty()) {
+            ScratchCardReviewDialog(
+                codes = scratchReviewCodes,
+                simSelection = scratchSimSelection,
+                onCodeChange = { index, value ->
+                    scratchReviewCodes = scratchReviewCodes.toMutableList().also { codes ->
+                        if (index in codes.indices) {
+                            codes[index] = value.filter { ch -> ch.isDigit() }.take(SCRATCH_CARD_DIGIT_LENGTH)
+                        }
+                    }
+                },
+                onSimSelectionChange = { scratchSimSelection = it },
+                onDismiss = { scratchReviewCodes = emptyList() },
+                onConfirm = queueScratchCards
+            )
+        }
+
         if (selectedHistoryTx != null) {
             RecentTransactionDetailsDialog(
                 tx = selectedHistoryTx,
@@ -7276,6 +7691,140 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                     }
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun ScratchCardReviewDialog(
+    codes: List<String>,
+    simSelection: Int,
+    onCodeChange: (Int, String) -> Unit,
+    onSimSelectionChange: (Int) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = Color(0xFF2B2734),
+            border = BorderStroke(1.dp, Color(0xFF5D5475))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 22.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    "Review Scanned Cards",
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    "Verify the 16-digit codes and choose the target SIM before the queue starts.",
+                    color = C.t2,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ManualModeToggleButton(
+                        label = "SIM 1",
+                        icon = Icons.Outlined.SimCard,
+                        active = simSelection == USSD_SIM_SELECTION_SLOT_1,
+                        onClick = { onSimSelectionChange(USSD_SIM_SELECTION_SLOT_1) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    ManualModeToggleButton(
+                        label = "SIM 2",
+                        icon = Icons.Outlined.SimCard,
+                        active = simSelection == USSD_SIM_SELECTION_SLOT_2,
+                        onClick = { onSimSelectionChange(USSD_SIM_SELECTION_SLOT_2) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    codes.forEachIndexed { index, code ->
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                "Card ${index + 1}",
+                                color = C.t2,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color(0xFF312D3C),
+                                border = BorderStroke(1.dp, Color(0xFF7E7597))
+                            ) {
+                                BasicTextField(
+                                    value = code,
+                                    onValueChange = { onCodeChange(index, it) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                                    singleLine = true,
+                                    textStyle = TextStyle(
+                                        color = Color.White,
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    cursorBrush = SolidColor(C.purple),
+                                    decorationBox = { innerTextField ->
+                                        if (code.isBlank()) {
+                                            Text(
+                                                "Enter 16 digits",
+                                                color = C.t3,
+                                                fontSize = 16.sp,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                        }
+                                        innerTextField()
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Cancel", color = Color(0xFFD1C7F6), fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = onConfirm,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFB39DFF),
+                            contentColor = Color(0xFF251552)
+                        )
+                    ) {
+                        Text("Queue Airtime", fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+            }
         }
     }
 }

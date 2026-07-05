@@ -37,7 +37,10 @@ class AutomationService : Service() {
         val signatureEnabled: Boolean,
         val signatureMode: String,
         val signatureLearning: Boolean,
-        val returnToAppAggressively: Boolean
+        val returnToAppAggressively: Boolean,
+        val scratchQueueCodes: List<String>,
+        val scratchQueueIndex: Int,
+        val scratchQueueTemplate: String
     )
 
     private val patternManager by lazy { UssdResponsePatternManager(this) }
@@ -93,7 +96,10 @@ class AutomationService : Service() {
             signatureEnabled = safeIntent.getBooleanExtra("signatureEnabled", false),
             signatureMode = (safeIntent.getStringExtra("signatureMode") ?: "STOP").uppercase(),
             signatureLearning = safeIntent.getBooleanExtra("signatureLearning", false),
-            returnToAppAggressively = safeIntent.getBooleanExtra("returnToAppAggressively", true)
+            returnToAppAggressively = safeIntent.getBooleanExtra("returnToAppAggressively", true),
+            scratchQueueCodes = safeIntent.getStringArrayListExtra("scratchQueueCodes").orEmpty(),
+            scratchQueueIndex = safeIntent.getIntExtra("scratchQueueIndex", 0),
+            scratchQueueTemplate = safeIntent.getStringExtra("scratchQueueTemplate") ?: DEFAULT_SCRATCH_RECHARGE_TEMPLATE
         )
     }
 
@@ -465,6 +471,7 @@ class AutomationService : Service() {
             }
             else -> clearMaintenanceRetryCount(request.txId)
         }
+        continueScratchQueueIfNeeded(request, status)
         stopSelf()
     }
 
@@ -682,7 +689,60 @@ class AutomationService : Service() {
             putExtra("signatureMode", request.signatureMode)
             putExtra("signatureLearning", request.signatureLearning)
             putExtra("returnToAppAggressively", request.returnToAppAggressively)
+            putStringArrayListExtra("scratchQueueCodes", ArrayList(request.scratchQueueCodes))
+            putExtra("scratchQueueIndex", request.scratchQueueIndex)
+            putExtra("scratchQueueTemplate", request.scratchQueueTemplate)
         }
+
+    private fun continueScratchQueueIfNeeded(request: AutomationRequest, status: String) {
+        if (request.scratchQueueCodes.isEmpty()) return
+        if (request.scratchQueueIndex >= request.scratchQueueCodes.lastIndex) {
+            OfferNotifications.notify(
+                this,
+                "Scratch Card Queue Complete",
+                "Processed ${request.scratchQueueCodes.size} scratch card(s)."
+            )
+            return
+        }
+        if (status.equals("Pending", ignoreCase = true) || status.equals("UnderMaintenance", ignoreCase = true)) {
+            OfferNotifications.notify(
+                this,
+                "Scratch Card Queue Paused",
+                "Queue stopped after card ${request.scratchQueueIndex + 1} because the network response is still pending."
+            )
+            return
+        }
+
+        val nextIndex = request.scratchQueueIndex + 1
+        val nextCode = normalizeScratchCardDigits(request.scratchQueueCodes[nextIndex])
+        if (nextCode.length != SCRATCH_CARD_DIGIT_LENGTH) return
+
+        val txId = createPendingTransaction(
+            this,
+            description = buildScratchQueueTransactionLabel(nextIndex, request.scratchQueueCodes.size),
+            amount = "Scratch Card",
+            phone = "",
+            ussd = buildScratchRechargeCode(request.scratchQueueTemplate, nextCode),
+            clientName = scratchQueueSimLabel(request.simSelection),
+            status = TransactionStatus.PROCESSING.value,
+            source = TX_SOURCE_MANUAL,
+            showInRecent = false,
+            offerId = -1
+        )
+        if (txId < 0) return
+
+        Handler(Looper.getMainLooper()).postDelayed({
+            startScratchCardRechargeAutomation(
+                scratchCode = nextCode,
+                txId = txId,
+                rechargeTemplate = request.scratchQueueTemplate,
+                simSelection = request.simSelection,
+                queueCodes = request.scratchQueueCodes,
+                queueIndex = nextIndex,
+                returnToAppAggressively = request.returnToAppAggressively
+            )
+        }, 1_500L)
+    }
 
     private fun scheduleMaintenanceRetry(request: AutomationRequest, nextRetryCount: Int): Boolean {
         return runCatching {
