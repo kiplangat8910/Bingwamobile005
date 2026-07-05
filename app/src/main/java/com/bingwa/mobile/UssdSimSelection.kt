@@ -48,13 +48,14 @@ internal fun resolveUssdSimTargets(context: Context, selectionOverride: Int? = n
     val rawSelection = selectionOverride ?: context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
         .safeGetInt("selected_sim_id", USSD_SIM_SELECTION_SLOT_1)
     val explicitSubscription = sims.firstOrNull { it.subscriptionId == rawSelection }
+    val normalizedSelection = normalizeUssdSimSelection(rawSelection, sims)
 
     val resolved = when {
         explicitSubscription != null -> listOf(explicitSubscription)
-        rawSelection == USSD_SIM_SELECTION_SLOT_2 -> listOfNotNull(slot2)
         rawSelection == USSD_SIM_SELECTION_BOTH -> listOfNotNull(slot1, slot2)
-        rawSelection == USSD_SIM_SELECTION_SLOT_1 -> listOfNotNull(slot1)
-        else -> emptyList()
+        normalizedSelection == USSD_SIM_SELECTION_SLOT_2 -> listOfNotNull(slot2 ?: slot1)
+        normalizedSelection == USSD_SIM_SELECTION_SLOT_1 -> listOfNotNull(slot1 ?: slot2)
+        else -> listOfNotNull(slot1 ?: slot2)
     }
 
     return resolved.distinctBy { it.subscriptionId }
