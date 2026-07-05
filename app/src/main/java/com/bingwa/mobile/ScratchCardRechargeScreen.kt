@@ -73,6 +73,15 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+private const val SCRATCH_CARD_DIAL_PREFIX = "*141*"
+private const val SCRATCH_CARD_FREE_LIMIT = 10
+private const val SCRATCH_CARD_PAID_BLOCK_SIZE = 10
+private const val SCRATCH_CARD_TOKENS_PER_BLOCK = 30
+private const val SCRATCH_CARD_FREE_WINDOW_MS = 24L * 60L * 60L * 1_000L
+private const val KEY_SCRATCH_CARD_DELAY_SECONDS = "scratch_card_delay_seconds"
+private const val KEY_SCRATCH_CARD_FREE_WINDOW_STARTED_AT = "scratch_card_free_window_started_at"
+private const val KEY_SCRATCH_CARD_FREE_USED = "scratch_card_free_used"
+
 private enum class ScratchCardItemStatus {
     Pending,
     Running,
@@ -96,6 +105,21 @@ private data class ScratchCardLaunchResult(
     val message: String
 )
 
+private data class ScratchCardBillingPreview(
+    val freeCardsApplied: Int,
+    val chargeableCards: Int,
+    val tokenCost: Int,
+    val tokenBalance: Int,
+    val unlimitedActive: Boolean,
+    val freeCardsRemaining: Int,
+    val resetAtMillis: Long,
+    val nextWindowStartedAt: Long,
+    val nextFreeCardsUsed: Int
+) {
+    val hasEnoughTokens: Boolean
+        get() = unlimitedActive || tokenCost <= 0 || tokenBalance >= tokenCost
+}
+
 @Composable
 fun ScratchCardRechargeSettings(onBack: () -> Unit) {
     val ctx = LocalContext.current
@@ -106,11 +130,14 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
     var scratchCards by remember { mutableStateOf<List<ScratchCardItem>>(emptyList()) }
     var statusText by remember { mutableStateOf("Pick one image to scan for 16-digit scratch card PINs.") }
     var delaySecondsText by remember {
-        mutableStateOf(prefs.safeGetInt("scratch_card_delay_seconds", 12).coerceIn(5, 60).toString())
+        mutableStateOf(prefs.safeGetInt(KEY_SCRATCH_CARD_DELAY_SECONDS, 12).coerceIn(5, 60).toString())
     }
     var isScanning by remember { mutableStateOf(false) }
     var isRunning by remember { mutableStateOf(false) }
     var pendingPermissionStart by remember { mutableStateOf(false) }
+    val billingPreview = remember(scratchCards) {
+        previewScratchCardBilling(ctx, scratchCards.size)
+    }
 
     fun resetBatchState() {
         scratchCards = scratchCards.map { it.copy(status = ScratchCardItemStatus.Pending, note = "Waiting to start") }
@@ -121,12 +148,32 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
 
         val delaySeconds = delaySecondsText.toLongOrNull()?.coerceIn(5L, 60L) ?: 12L
         delaySecondsText = delaySeconds.toString()
-        prefs.edit().putInt("scratch_card_delay_seconds", delaySeconds.toInt()).apply()
+        prefs.edit().putInt(KEY_SCRATCH_CARD_DELAY_SECONDS, delaySeconds.toInt()).apply()
+
+        val batchBilling = previewScratchCardBilling(ctx, scratchCards.size)
+        if (!batchBilling.hasEnoughTokens) {
+            statusText = "This batch needs ${batchBilling.tokenCost} tokens for ${batchBilling.chargeableCards} paid cards. You only have ${batchBilling.tokenBalance} tokens."
+            Toast.makeText(ctx, "Not enough tokens for this scratch card batch", Toast.LENGTH_SHORT).show()
+            pendingPermissionStart = false
+            return
+        }
+
+        if (!batchBilling.unlimitedActive) {
+            if (batchBilling.tokenCost > 0 && !TokenManager(ctx).spendTokens(batchBilling.tokenCost)) {
+                statusText = "This batch needs ${batchBilling.tokenCost} tokens, but your balance changed before the recharge started."
+                Toast.makeText(ctx, "Token balance changed. Try again.", Toast.LENGTH_SHORT).show()
+                pendingPermissionStart = false
+                return
+            }
+            saveScratchCardBillingUsage(ctx, batchBilling)
+        }
+
         resetBatchState()
+        val batchSummary = buildScratchCardBatchSummary(batchBilling, scratchCards.size)
 
         scope.launch {
             isRunning = true
-            statusText = "Starting ${scratchCards.size} scratch card recharges."
+            statusText = "$batchSummary Starting ${scratchCards.size} scratch card recharges."
 
             for (index in scratchCards.indices) {
                 val pin = scratchCards[index].pin
@@ -214,7 +261,7 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
     ) {
         SettingsTopBar(
             title = "Scratch Card Recharge",
-            subtitle = "Scan one image, detect many 16-digit PINs, then run *140*PIN# one by one.",
+            subtitle = "Scan one image, detect many 16-digit PINs, then run *141*PIN# one by one.",
             onBack = onBack
         )
         Column(
@@ -231,7 +278,13 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
                 ScratchCardInfoRow(
                     icon = Icons.Rounded.Phone,
                     title = "2. Recharge Sequentially",
-                    text = "The app dials *140*PIN# for each detected card, waits for your chosen delay, then continues with the next one."
+                    text = "The app dials *141*PIN# for each detected card, waits for your chosen delay, then continues with the next one."
+                )
+                GroupDivider()
+                ScratchCardInfoRow(
+                    icon = Icons.Rounded.CheckCircle,
+                    title = "3. Free Then Paid",
+                    text = "The first 10 scratch cards are free in each 24-hour window. After that, every extra block of up to 10 cards costs 30 tokens."
                 )
                 GroupDivider()
                 ScratchCardInfoRow(
@@ -248,6 +301,21 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
                         .padding(horizontal = 18.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        color = C.surface.copy(alpha = 0.82f),
+                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
+                    ) {
+                        Text(
+                            text = buildScratchCardPolicyLabel(billingPreview),
+                            color = C.t2,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                        )
+                    }
+
                     OutlinedTextField(
                         value = delaySecondsText,
                         onValueChange = { value ->
@@ -560,8 +628,108 @@ private fun formatScratchCardPin(pin: String): String = pin.chunked(4).joinToStr
 private fun List<ScratchCardItem>.replaceAt(index: Int, item: ScratchCardItem): List<ScratchCardItem> =
     mapIndexed { currentIndex, currentItem -> if (currentIndex == index) item else currentItem }
 
+private fun previewScratchCardBilling(context: Context, batchSize: Int, now: Long = System.currentTimeMillis()): ScratchCardBillingPreview {
+    val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+    val unlimitedActive = UnlimitedManager(context).isActive()
+    val storedWindowStartedAt = prefs.safeGetLong(KEY_SCRATCH_CARD_FREE_WINDOW_STARTED_AT, 0L)
+    val windowActive = storedWindowStartedAt > 0L && now - storedWindowStartedAt < SCRATCH_CARD_FREE_WINDOW_MS
+    val windowStartedAt = if (windowActive) storedWindowStartedAt else 0L
+    val freeUsed = if (windowActive) {
+        prefs.safeGetInt(KEY_SCRATCH_CARD_FREE_USED, 0).coerceIn(0, SCRATCH_CARD_FREE_LIMIT)
+    } else {
+        0
+    }
+    val freeCardsRemaining = (SCRATCH_CARD_FREE_LIMIT - freeUsed).coerceAtLeast(0)
+    val freeCardsApplied = minOf(batchSize.coerceAtLeast(0), freeCardsRemaining)
+    val chargeableCards = (batchSize - freeCardsApplied).coerceAtLeast(0)
+    val tokenCost = if (unlimitedActive) {
+        0
+    } else {
+        ((chargeableCards + SCRATCH_CARD_PAID_BLOCK_SIZE - 1) / SCRATCH_CARD_PAID_BLOCK_SIZE) * SCRATCH_CARD_TOKENS_PER_BLOCK
+    }
+    val nextWindowStartedAt = when {
+        unlimitedActive -> windowStartedAt
+        freeCardsApplied <= 0 -> windowStartedAt
+        windowStartedAt > 0L -> windowStartedAt
+        else -> now
+    }
+    val nextFreeCardsUsed = when {
+        unlimitedActive -> freeUsed
+        freeCardsApplied <= 0 -> freeUsed
+        else -> (freeUsed + freeCardsApplied).coerceAtMost(SCRATCH_CARD_FREE_LIMIT)
+    }
+    val resetAtMillis = if (nextWindowStartedAt > 0L) {
+        nextWindowStartedAt + SCRATCH_CARD_FREE_WINDOW_MS
+    } else {
+        0L
+    }
+    return ScratchCardBillingPreview(
+        freeCardsApplied = freeCardsApplied,
+        chargeableCards = chargeableCards,
+        tokenCost = tokenCost,
+        tokenBalance = TokenManager(context).getBalance(),
+        unlimitedActive = unlimitedActive,
+        freeCardsRemaining = freeCardsRemaining,
+        resetAtMillis = resetAtMillis,
+        nextWindowStartedAt = nextWindowStartedAt,
+        nextFreeCardsUsed = nextFreeCardsUsed
+    )
+}
+
+private fun saveScratchCardBillingUsage(context: Context, preview: ScratchCardBillingPreview) {
+    if (preview.unlimitedActive) return
+    if (preview.nextWindowStartedAt <= 0L) return
+    context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+        .edit()
+        .putLong(KEY_SCRATCH_CARD_FREE_WINDOW_STARTED_AT, preview.nextWindowStartedAt)
+        .putInt(KEY_SCRATCH_CARD_FREE_USED, preview.nextFreeCardsUsed.coerceIn(0, SCRATCH_CARD_FREE_LIMIT))
+        .apply()
+}
+
+private fun buildScratchCardPolicyLabel(preview: ScratchCardBillingPreview): String {
+    val balanceText = if (preview.unlimitedActive) {
+        "Unlimited access is active, so extra scratch card batches do not spend tokens."
+    } else {
+        "You have ${preview.tokenBalance} tokens. Extra scratch card batches cost 30 tokens per 10 cards."
+    }
+    val freeText = if (preview.freeCardsRemaining > 0) {
+        "${preview.freeCardsRemaining} of the free $SCRATCH_CARD_FREE_LIMIT cards are still available right now."
+    } else if (preview.resetAtMillis > 0L) {
+        "The free $SCRATCH_CARD_FREE_LIMIT-card allowance resets in ${formatScratchCardRemainingWindow(preview.resetAtMillis - System.currentTimeMillis())}."
+    } else {
+        "The free $SCRATCH_CARD_FREE_LIMIT-card allowance resets 24 hours after you use it."
+    }
+    return "$freeText $balanceText"
+}
+
+private fun buildScratchCardBatchSummary(preview: ScratchCardBillingPreview, batchSize: Int): String {
+    if (preview.unlimitedActive) {
+        return "Unlimited access active. No tokens charged for this $batchSize-card batch."
+    }
+    if (preview.tokenCost <= 0) {
+        return "This $batchSize-card batch uses ${preview.freeCardsApplied} free cards."
+    }
+    return if (preview.freeCardsApplied > 0) {
+        "This batch uses ${preview.freeCardsApplied} free cards and charges ${preview.tokenCost} tokens for ${preview.chargeableCards} extra cards."
+    } else {
+        "This batch charges ${preview.tokenCost} tokens for ${preview.chargeableCards} cards."
+    }
+}
+
+private fun formatScratchCardRemainingWindow(remainingMs: Long): String {
+    val safeMs = remainingMs.coerceAtLeast(0L)
+    val totalMinutes = safeMs / 60_000L
+    val hours = totalMinutes / 60L
+    val minutes = totalMinutes % 60L
+    return when {
+        hours > 0L && minutes > 0L -> "${hours}h ${minutes}m"
+        hours > 0L -> "${hours}h"
+        else -> "${minutes}m"
+    }
+}
+
 private fun startScratchCardRecharge(context: Context, pin: String): ScratchCardLaunchResult {
-    val code = "*140*$pin#"
+    val code = "$SCRATCH_CARD_DIAL_PREFIX$pin#"
     val hasCallPermission = ContextCompat.checkSelfPermission(
         context,
         Manifest.permission.CALL_PHONE
@@ -595,7 +763,7 @@ private fun startScratchCardRecharge(context: Context, pin: String): ScratchCard
 
         ScratchCardLaunchResult(
             started = true,
-            message = "Dialed ${formatScratchCardPin(pin)} with *140*PIN#."
+            message = "Dialed ${formatScratchCardPin(pin)} with ${SCRATCH_CARD_DIAL_PREFIX}PIN#."
         )
     } catch (security: SecurityException) {
         ScratchCardLaunchResult(
