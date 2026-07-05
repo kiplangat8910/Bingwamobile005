@@ -76,6 +76,8 @@ class UssdNavigationService : AccessibilityService() {
         private const val SHOW_RUNNING_OVERLAY   = false
         private const val STEP_DELAY_MS          = 90L
         private const val EVENT_HOT_POLL_MS      = 8L
+        private const val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 16L
+        private const val DUPLICATE_EVENT_WINDOW_MS = 24L
         private const val FAST_VERIFY_POLL_MS    = 12L
         private const val HOT_SEND_RETRY_DELAY_MS = 12L
         private const val SEND_RETRY_DELAY_MS    = 20L
@@ -307,6 +309,8 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingAdvanceKickRunnable: Runnable? = null
     private var uiKeepVisibleRunnable: Runnable? = null
     private var waitingForRootSinceElapsed: Long = 0L
+    private var lastEventFingerprint = ""
+    private var lastEventElapsed = 0L
     private var windowManager: WindowManager? = null
     private var runningOverlayView: View? = null
     private var runningOverlayStatusText: TextView? = null
@@ -342,6 +346,8 @@ class UssdNavigationService : AccessibilityService() {
         lastRelevantEventElapsed = SystemClock.elapsedRealtime()
         pendingProcessToken = lastRelevantEventElapsed
         lastUiReturnElapsed = 0L
+        lastEventFingerprint = ""
+        lastEventElapsed = 0L
         clearRootRecoveryState()
         clearPendingAdvance()
         clearPendingStepAdvance()
@@ -387,8 +393,8 @@ class UssdNavigationService : AccessibilityService() {
                 AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                 AccessibilityServiceInfo.DEFAULT
-            // Keep event delivery immediate so we reduce local UI latency without relaxing verification.
-            notificationTimeout = 0
+            // Small coalescing window trims duplicate bursts without adding perceptible latency.
+            notificationTimeout = ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS
         }
         if (pendingAdvancedArm) {
             pendingAdvancedArm = false
@@ -476,6 +482,7 @@ class UssdNavigationService : AccessibilityService() {
             event.eventType != AccessibilityEvent.TYPE_VIEW_CLICKED &&
             event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED
         ) return
+        if (shouldSkipDuplicateEvent(event)) return
         val pkg = event.packageName?.toString() ?: ""
         if (advancedActive &&
             pkg in LAUNCHER_PACKAGES &&
@@ -647,6 +654,25 @@ class UssdNavigationService : AccessibilityService() {
         return normalizeCollapsedText(parts.distinct().joinToString(" "))
     }
 
+    private fun shouldSkipDuplicateEvent(event: AccessibilityEvent): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        val fingerprint = buildEventFingerprint(event)
+        val isDuplicate = fingerprint.isNotBlank() &&
+            fingerprint == lastEventFingerprint &&
+            now - lastEventElapsed <= DUPLICATE_EVENT_WINDOW_MS
+        lastEventFingerprint = fingerprint
+        lastEventElapsed = now
+        return isDuplicate
+    }
+
+    private fun buildEventFingerprint(event: AccessibilityEvent): String {
+        val pkg = event.packageName?.toString().orEmpty()
+        val cls = event.className?.toString().orEmpty()
+        val text = extractDialogTextFromEvent(event)
+        val contentType = runCatching { event.contentChangeTypes }.getOrDefault(0)
+        return "${event.eventType}|${event.windowId}|$contentType|$pkg|$cls|$text"
+    }
+
     private fun looksLikeUssdDialogFast(allTextLower: String, windowPackageName: String): Boolean {
         val hasUssdLanguage = USSD_HINTS.any { allTextLower.contains(it) } ||
             errorKeywords.any { allTextLower.contains(it) }
@@ -801,8 +827,7 @@ class UssdNavigationService : AccessibilityService() {
                 val shouldPreferTextInput = shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
                     (selectedMenuLabel == null && (dialogSuggestsTextInput(lower) || dialogAllowsPhoneInput))
                 if (inputField == null && shouldPreferTextInput && !dialogSuggestsTextInput(lower) && !dialogAllowsPhoneInput) {
-                    val hasEditableField = captureTreeSnapshot(root).hasEditableField
-                    if (!hasEditableField) {
+                    if (!snapshot.hasEditableField) {
                         isProcessing = false
                         pendingProcessToken = SystemClock.elapsedRealtime()
                         scheduleProcessStep(dialogChanged = false)
@@ -927,11 +952,12 @@ class UssdNavigationService : AccessibilityService() {
         if (pkg != "com.android.systemui") return false
         if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null && !signatureLearningMode && !isForegroundUiActive()) return false
         if (!hasDialogLayout(root)) return false
-        val dialogText = normalizeCollapsedText(extractAllText(root))
+        val summary = scanNodeSummary(root)
+        val dialogText = normalizeCollapsedText(summary.textTokens.joinToString(" "))
         if (dialogText.isBlank()) return false
         val lower = dialogText.lowercase()
         if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return false
-        val hasAction = hasSendOrOkButton(root) || hasDismissButton(root) || hasEditableField(root)
+        val hasAction = summary.hasSendButton || summary.hasDismissButton || summary.hasEditableField
         if (!hasAction) return false
         val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(lower)
         val hasUssdLanguage = USSD_HINTS.any { lower.contains(it) } || errorKeywords.any { lower.contains(it) }
@@ -945,11 +971,12 @@ class UssdNavigationService : AccessibilityService() {
         if (!(pkg.isBlank() || pkg == "android")) return false
         if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null && !isForegroundUiActive()) return false
         if (!hasDialogLayout(root)) return false
-        val dialogText = normalizeCollapsedText(extractAllText(root))
+        val summary = scanNodeSummary(root)
+        val dialogText = normalizeCollapsedText(summary.textTokens.joinToString(" "))
         if (dialogText.isBlank()) return false
         val lower = dialogText.lowercase()
         if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return false
-        val hasAction = hasSendOrOkButton(root) || hasDismissButton(root) || hasEditableField(root)
+        val hasAction = summary.hasSendButton || summary.hasDismissButton || summary.hasEditableField
         if (!hasAction) return false
         val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(lower)
         val hasUssdLanguage = USSD_HINTS.any { lower.contains(it) } || errorKeywords.any { lower.contains(it) }
@@ -1520,7 +1547,7 @@ class UssdNavigationService : AccessibilityService() {
             root.recycle()
             return false
         }
-        val lower = normalizeCollapsedText(extractAllText(root)).lowercase()
+        val lower = captureTreeSnapshot(root).dialogText.lowercase()
         if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) {
             root.recycle()
             return false
@@ -1866,6 +1893,8 @@ class UssdNavigationService : AccessibilityService() {
         lastStepActionKey = ""
         lastStepActionElapsed = 0L
         lastUiReturnElapsed = 0L
+        lastEventFingerprint = ""
+        lastEventElapsed = 0L
         lastWindowId = -1
         lastWindowPkg = ""
         clearRootRecoveryState()
@@ -1967,6 +1996,8 @@ class UssdNavigationService : AccessibilityService() {
         lastWindowPkg       = ""
         lastWindowId        = -1
         lastRelevantEventElapsed = 0L
+        lastEventFingerprint = ""
+        lastEventElapsed = 0L
         hasSeenAdvancedPopup = false
         hasSeenForegroundPopup = false
         lastMenuSignatureKey = ""
@@ -2569,11 +2600,13 @@ class UssdNavigationService : AccessibilityService() {
         var hasDismissButton = false
     }
 
+    private fun scanNodeSummary(node: AccessibilityNodeInfo): TreeScanAccumulator =
+        TreeScanAccumulator().also { collectTreeSnapshot(node, it) }
+
     private fun captureTreeSnapshot(root: AccessibilityNodeInfo): UssdTreeSnapshot {
         val captureRoot = findDialogCaptureRoot(root) ?: AccessibilityNodeInfo.obtain(root)
-        val accumulator = TreeScanAccumulator()
+        val accumulator = scanNodeSummary(captureRoot)
         return try {
-            collectTreeSnapshot(captureRoot, accumulator)
             val dialogText = normalizeCollapsedText(accumulator.textTokens.joinToString(" "))
             UssdTreeSnapshot(
                 dialogText = dialogText,
@@ -2618,7 +2651,8 @@ class UssdNavigationService : AccessibilityService() {
         val areaRatio = if (nodeArea > 0L && rootArea > 0L) nodeArea.toFloat() / rootArea.toFloat() else 1f
         if (nodeArea <= 0L || areaRatio < 0.05f || areaRatio > 0.96f) return false
 
-        val textTokens = extractTextTokens(node)
+        val summary = scanNodeSummary(node)
+        val textTokens = summary.textTokens
             .map(::normalizeCollapsedText)
             .filter { it.isNotBlank() }
             .distinct()
@@ -2627,7 +2661,7 @@ class UssdNavigationService : AccessibilityService() {
         val combinedText = textTokens.joinToString(" ").lowercase()
         if (NON_USSD_DIALOG_HINTS.any { combinedText.contains(it) }) return false
 
-        val hasAction = hasSendOrOkButton(node) || hasDismissButton(node) || hasEditableField(node)
+        val hasAction = summary.hasSendButton || summary.hasDismissButton || summary.hasEditableField
         val hasMenuOptions = buildMenuSignature(textTokens) != null
         val className = node.className?.toString().orEmpty()
         val hasDialogClass = className.contains("Dialog", ignoreCase = true) ||
