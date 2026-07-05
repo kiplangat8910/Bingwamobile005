@@ -453,13 +453,20 @@ private fun ScratchCardItemCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "#${index + 1}",
-                    color = C.t3,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.width(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = C.amber.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, C.amber.copy(alpha = 0.24f))
+                ) {
+                    Text(
+                        text = "Card ${index + 1}",
+                        color = C.amber,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
                 Text(
                     text = formatScratchCardPin(item.pin),
                     color = C.t1,
