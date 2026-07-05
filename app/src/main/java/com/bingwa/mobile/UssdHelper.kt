@@ -52,6 +52,10 @@ object UssdHelper {
         val code = normalizeUssdCode(ussdCode)
         Log.d("UssdHelper", "Dialing: $code")
         val targets = resolveUssdSimTargets(context)
+        if (targets.isEmpty()) {
+            onFailure?.invoke("Selected SIM slot is unavailable")
+            return false
+        }
         return dialUssdAttempt(
             context = context,
             code = code,
@@ -77,6 +81,10 @@ object UssdHelper {
         onFailure: ((String) -> Unit)?
     ): Boolean {
         val target = targets.getOrNull(attemptIndex)
+        if (target == null) {
+            onFailure?.invoke("Selected SIM slot is unavailable")
+            return false
+        }
         val tm = selectedTelephonyManager(context, target?.subId)
         if (tm == null) {
             val reason = "Telephony unavailable on this phone"
@@ -244,9 +252,9 @@ object UssdHelper {
     }
 
     private fun selectedTelephonyManager(context: Context, subIdOverride: Int? = null): TelephonyManager? {
-        val subId = subIdOverride ?: resolvePreferredUssdSubId(context) ?: -1
+        val subId = subIdOverride ?: resolvePreferredUssdSubId(context) ?: return null
         val baseTm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return null
         if (subId != -1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) return baseTm.createForSubscriptionId(subId)
-        return baseTm
+        return null
     }
 }

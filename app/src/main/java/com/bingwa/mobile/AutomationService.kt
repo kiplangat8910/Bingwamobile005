@@ -107,6 +107,10 @@ class AutomationService : Service() {
             context = this,
             selectionOverride = request.simSelection.takeUnless { it == OFFER_SIM_USE_GENERAL }
         )
+        if (simTargets.isEmpty()) {
+            processResponse(request, "Selected SIM slot is unavailable", forcedStatus = "Failed")
+            return
+        }
         attemptSimpleDispatch(
             request = request,
             baseTm = baseTm,
@@ -122,12 +126,20 @@ class AutomationService : Service() {
         attemptIndex: Int
     ) {
         val target = simTargets.getOrNull(attemptIndex)
+        if (target == null) {
+            processResponse(request, "Selected SIM slot is unavailable", forcedStatus = "Failed")
+            return
+        }
         val tm = if (target != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             baseTm.createForSubscriptionId(target.subId)
         } else {
-            baseTm
+            null
         }
         val slotLabel = target?.slotIndex?.let { "slot ${it + 1}" } ?: "default telephony"
+        if (tm == null) {
+            processResponse(request, "Selected SIM slot is unavailable", forcedStatus = "Failed")
+            return
+        }
         val started = SilentUssd.execute(
             telephonyManager = tm,
             ussdCode = request.code,
@@ -210,13 +222,22 @@ class AutomationService : Service() {
         UssdNavigationService.refreshRunningOverlay()
 
         try {
+            val simTargets = resolveUssdSimTargets(
+                context = this,
+                selectionOverride = request.simSelection.takeUnless { it == OFFER_SIM_USE_GENERAL }
+            )
+            if (simTargets.isEmpty()) {
+                UssdNavigationService.advancedSteps = emptyList()
+                UssdNavigationService.advancedActive = false
+                UssdNavigationService.advancedInProgress = false
+                UssdNavigationService.onDispatchComplete = null
+                processResponse(request, "Selected SIM slot is unavailable", forcedStatus = "Failed")
+                return
+            }
             val started = startAdvancedDialAttempt(
                 request = request,
                 dialCode = dialCode,
-                simTargets = resolveUssdSimTargets(
-                    context = this,
-                    selectionOverride = request.simSelection.takeUnless { it == OFFER_SIM_USE_GENERAL }
-                ),
+                simTargets = simTargets,
                 attemptIndex = 0
             )
             if (!started) {
@@ -244,6 +265,7 @@ class AutomationService : Service() {
         attemptIndex: Int
     ): Boolean {
         val target = simTargets.getOrNull(attemptIndex)
+        if (target == null) return false
         val slotLabel = target?.slotIndex?.let { "slot ${it + 1}" } ?: "default telephony"
         val callIntent = UssdHelper.buildCallIntent(this, dialCode, target?.subId)
         if (callIntent.resolveActivity(packageManager) == null) {

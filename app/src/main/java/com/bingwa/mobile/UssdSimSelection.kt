@@ -45,16 +45,19 @@ internal fun resolveUssdSimTargets(context: Context, selectionOverride: Int? = n
 
     val slot1 = sims.firstOrNull { it.simSlotIndex == 0 } ?: sims.getOrNull(0)
     val slot2 = sims.firstOrNull { it.simSlotIndex == 1 } ?: sims.getOrNull(1)
-    val selection = normalizeUssdSimSelection(
-        rawSelection = selectionOverride ?: context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-            .safeGetInt("selected_sim_id", USSD_SIM_SELECTION_SLOT_1),
-        sims = sims
-    )
+    val rawSelection = selectionOverride ?: context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+        .safeGetInt("selected_sim_id", USSD_SIM_SELECTION_SLOT_1)
+    val explicitSubscription = sims.firstOrNull { it.subscriptionId == rawSelection }
 
-    return when (selection) {
-        USSD_SIM_SELECTION_SLOT_2 -> listOfNotNull(slot2 ?: slot1)
-        else -> listOfNotNull(slot1 ?: slot2)
-    }.distinctBy { it.subscriptionId }
+    val resolved = when {
+        explicitSubscription != null -> listOf(explicitSubscription)
+        rawSelection == USSD_SIM_SELECTION_SLOT_2 -> listOfNotNull(slot2)
+        rawSelection == USSD_SIM_SELECTION_BOTH -> listOfNotNull(slot1, slot2)
+        rawSelection == USSD_SIM_SELECTION_SLOT_1 -> listOfNotNull(slot1)
+        else -> emptyList()
+    }
+
+    return resolved.distinctBy { it.subscriptionId }
         .map { UssdSimTarget(subId = it.subscriptionId, slotIndex = it.simSlotIndex) }
 }
 
