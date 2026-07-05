@@ -1,9 +1,6 @@
 package com.bingwa.mobile
 
-import android.Manifest
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
@@ -29,7 +26,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -42,7 +38,6 @@ import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,11 +52,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -78,14 +71,14 @@ private const val SCRATCH_CARD_FREE_LIMIT = 10
 private const val SCRATCH_CARD_PAID_BLOCK_SIZE = 10
 private const val SCRATCH_CARD_TOKENS_PER_BLOCK = 30
 private const val SCRATCH_CARD_FREE_WINDOW_MS = 24L * 60L * 60L * 1_000L
-private const val KEY_SCRATCH_CARD_DELAY_SECONDS = "scratch_card_delay_seconds"
+private const val SCRATCH_CARD_BATCH_DELAY_MS = 2_000L
 private const val KEY_SCRATCH_CARD_FREE_WINDOW_STARTED_AT = "scratch_card_free_window_started_at"
 private const val KEY_SCRATCH_CARD_FREE_USED = "scratch_card_free_used"
 
 private enum class ScratchCardItemStatus {
     Pending,
     Running,
-    Started,
+    Success,
     Failed
 }
 
@@ -101,7 +94,7 @@ private data class ScratchCardScanResult(
 )
 
 private data class ScratchCardLaunchResult(
-    val started: Boolean,
+    val succeeded: Boolean,
     val message: String
 )
 
@@ -123,18 +116,13 @@ private data class ScratchCardBillingPreview(
 @Composable
 fun ScratchCardRechargeSettings(onBack: () -> Unit) {
     val ctx = LocalContext.current
-    val prefs = ctx.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
     val scope = rememberCoroutineScope()
 
     var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var scratchCards by remember { mutableStateOf<List<ScratchCardItem>>(emptyList()) }
     var statusText by remember { mutableStateOf("Pick one image to scan for 16-digit scratch card PINs.") }
-    var delaySecondsText by remember {
-        mutableStateOf(prefs.safeGetInt(KEY_SCRATCH_CARD_DELAY_SECONDS, 12).coerceIn(5, 60).toString())
-    }
     var isScanning by remember { mutableStateOf(false) }
     var isRunning by remember { mutableStateOf(false) }
-    var pendingPermissionStart by remember { mutableStateOf(false) }
     val billingPreview = remember(scratchCards) {
         previewScratchCardBilling(ctx, scratchCards.size)
     }
@@ -146,15 +134,10 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
     fun startRechargeBatch() {
         if (scratchCards.isEmpty() || isRunning) return
 
-        val delaySeconds = delaySecondsText.toLongOrNull()?.coerceIn(5L, 60L) ?: 12L
-        delaySecondsText = delaySeconds.toString()
-        prefs.edit().putInt(KEY_SCRATCH_CARD_DELAY_SECONDS, delaySeconds.toInt()).apply()
-
         val batchBilling = previewScratchCardBilling(ctx, scratchCards.size)
         if (!batchBilling.hasEnoughTokens) {
             statusText = "This batch needs ${batchBilling.tokenCost} tokens for ${batchBilling.chargeableCards} paid cards. You only have ${batchBilling.tokenBalance} tokens."
             Toast.makeText(ctx, "Not enough tokens for this scratch card batch", Toast.LENGTH_SHORT).show()
-            pendingPermissionStart = false
             return
         }
 
@@ -162,7 +145,6 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
             if (batchBilling.tokenCost > 0 && !TokenManager(ctx).spendTokens(batchBilling.tokenCost)) {
                 statusText = "This batch needs ${batchBilling.tokenCost} tokens, but your balance changed before the recharge started."
                 Toast.makeText(ctx, "Token balance changed. Try again.", Toast.LENGTH_SHORT).show()
-                pendingPermissionStart = false
                 return
             }
             saveScratchCardBillingUsage(ctx, batchBilling)
@@ -181,7 +163,7 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
                     index,
                     scratchCards[index].copy(
                         status = ScratchCardItemStatus.Running,
-                        note = "Dialing ${formatScratchCardPin(pin)}"
+                        note = "Running silent recharge for ${formatScratchCardPin(pin)}"
                     )
                 )
 
@@ -189,28 +171,27 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
                 scratchCards = scratchCards.replaceAt(
                     index,
                     scratchCards[index].copy(
-                        status = if (result.started) ScratchCardItemStatus.Started else ScratchCardItemStatus.Failed,
+                        status = if (result.succeeded) ScratchCardItemStatus.Success else ScratchCardItemStatus.Failed,
                         note = result.message
                     )
                 )
 
                 if (index < scratchCards.lastIndex) {
-                    statusText = if (result.started) {
-                        "Card ${index + 1} of ${scratchCards.size} started. Next card in ${delaySeconds}s."
+                    statusText = if (result.succeeded) {
+                        "Card ${index + 1} of ${scratchCards.size} finished. Next card in 2s."
                     } else {
-                        "Card ${index + 1} of ${scratchCards.size} could not start. Next card in ${delaySeconds}s."
+                        "Card ${index + 1} of ${scratchCards.size} failed. Next card in 2s."
                     }
-                    delay(delaySeconds * 1_000L)
+                    delay(SCRATCH_CARD_BATCH_DELAY_MS)
                 }
             }
 
-            val startedCount = scratchCards.count { it.status == ScratchCardItemStatus.Started }
+            val startedCount = scratchCards.count { it.status == ScratchCardItemStatus.Success }
             val failedCount = scratchCards.count { it.status == ScratchCardItemStatus.Failed }
-            statusText = "Batch finished. Started $startedCount cards, failed $failedCount."
+            statusText = "Batch finished. Completed $startedCount cards, failed $failedCount."
             vib(ctx, 70L)
             Toast.makeText(ctx, "Scratch card batch finished", Toast.LENGTH_SHORT).show()
             isRunning = false
-            pendingPermissionStart = false
         }
     }
 
@@ -243,16 +224,6 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
         }
     }
 
-    val callPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted && pendingPermissionStart) {
-            startRechargeBatch()
-        } else if (!granted) {
-            pendingPermissionStart = false
-            statusText = "Allow phone call permission so the app can dial each recharge code automatically."
-            Toast.makeText(ctx, "Call permission is needed for automatic recharge", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     Column(
         Modifier
             .fillMaxSize()
@@ -277,8 +248,8 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
                 GroupDivider()
                 ScratchCardInfoRow(
                     icon = Icons.Rounded.Phone,
-                    title = "2. Recharge Sequentially",
-                    text = "The app dials *141*PIN# for each detected card, waits for your chosen delay, then continues with the next one."
+                    title = "2. Recharge Silently",
+                    text = "The app sends each *141*PIN# request silently in the background, records the final USSD response, then continues to the next card."
                 )
                 GroupDivider()
                 ScratchCardInfoRow(
@@ -290,7 +261,7 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
                 ScratchCardInfoRow(
                     icon = Icons.Rounded.Warning,
                     title = "Before You Start",
-                    text = "Automatic recharge needs phone call permission. USSD accessibility automation should stay enabled for the smoothest flow."
+                    text = "Scratch cards now run with a fixed 2-second gap. Silent USSD must be supported on the phone for the background flow to work."
                 )
             }
 
@@ -316,20 +287,6 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
                         )
                     }
 
-                    OutlinedTextField(
-                        value = delaySecondsText,
-                        onValueChange = { value ->
-                            delaySecondsText = value.filter(Char::isDigit).take(2)
-                        },
-                        label = { Text("Delay Between Cards (seconds)", color = C.t2) },
-                        supportingText = { Text("Use 5 to 60 seconds. Default is 12 seconds.", color = C.t3) },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = fieldColors(),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -347,18 +304,7 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
                         }
 
                         Button(
-                            onClick = {
-                                val hasCallPermission = ContextCompat.checkSelfPermission(
-                                    ctx,
-                                    Manifest.permission.CALL_PHONE
-                                ) == PackageManager.PERMISSION_GRANTED
-                                if (!hasCallPermission) {
-                                    pendingPermissionStart = true
-                                    callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
-                                } else {
-                                    startRechargeBatch()
-                                }
-                            },
+                            onClick = { startRechargeBatch() },
                             enabled = scratchCards.isNotEmpty() && !isScanning && !isRunning,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = C.green,
@@ -375,7 +321,6 @@ fun ScratchCardRechargeSettings(onBack: () -> Unit) {
                             previewBitmap = null
                             scratchCards = emptyList()
                             statusText = "Pick one image to scan for 16-digit scratch card PINs."
-                            pendingPermissionStart = false
                         },
                         enabled = !isScanning && !isRunning && (previewBitmap != null || scratchCards.isNotEmpty()),
                         colors = ButtonDefaults.buttonColors(
@@ -500,7 +445,7 @@ private fun ScratchCardItemCard(
     val (label, color, icon) = when (item.status) {
         ScratchCardItemStatus.Pending -> Triple("Ready", C.amber, Icons.Rounded.Schedule)
         ScratchCardItemStatus.Running -> Triple("Running", C.blue, Icons.Rounded.Phone)
-        ScratchCardItemStatus.Started -> Triple("Started", C.green, Icons.Rounded.CheckCircle)
+        ScratchCardItemStatus.Success -> Triple("Done", C.green, Icons.Rounded.CheckCircle)
         ScratchCardItemStatus.Failed -> Triple("Failed", C.red, Icons.Rounded.Error)
     }
 
@@ -728,52 +673,64 @@ private fun formatScratchCardRemainingWindow(remainingMs: Long): String {
     }
 }
 
-private fun startScratchCardRecharge(context: Context, pin: String): ScratchCardLaunchResult {
+private suspend fun startScratchCardRecharge(context: Context, pin: String): ScratchCardLaunchResult {
     val code = "$SCRATCH_CARD_DIAL_PREFIX$pin#"
-    val hasCallPermission = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.CALL_PHONE
-    ) == PackageManager.PERMISSION_GRANTED
-    if (!hasCallPermission) {
-        return ScratchCardLaunchResult(
-            started = false,
-            message = "Call permission is missing."
-        )
-    }
-
-    return try {
-        val intent = UssdHelper.buildCallIntent(context, code)
-        if (intent.action != Intent.ACTION_CALL) {
-            return ScratchCardLaunchResult(
-                started = false,
-                message = "Automatic dialing needs phone call permission."
-            )
-        }
-        if (intent.resolveActivity(context.packageManager) == null) {
-            return ScratchCardLaunchResult(
-                started = false,
-                message = "No phone app is available to dial the recharge code."
-            )
+    return suspendCancellableCoroutine { continuation ->
+        var resumed = false
+        fun finish(result: ScratchCardLaunchResult) {
+            if (resumed) return
+            resumed = true
+            continuation.resume(result)
         }
 
-        val keepAppUiVisible = BingwaMobileApp.wasInForegroundRecently()
-        if (keepAppUiVisible) UssdNavigationService.armForegroundUi()
-        context.startActivity(intent)
-        if (keepAppUiVisible) UssdHelper.relaunchAppUi(context)
-
-        ScratchCardLaunchResult(
-            started = true,
-            message = "Dialed ${formatScratchCardPin(pin)} with ${SCRATCH_CARD_DIAL_PREFIX}PIN#."
-        )
-    } catch (security: SecurityException) {
-        ScratchCardLaunchResult(
-            started = false,
-            message = security.message ?: "Android blocked the phone call."
-        )
-    } catch (error: Exception) {
-        ScratchCardLaunchResult(
-            started = false,
-            message = error.message ?: "Could not launch the recharge code."
-        )
+        try {
+            val started = UssdHelper.dialUssd(
+                context = context,
+                ussdCode = code,
+                silentOnly = true,
+                onSuccess = { response ->
+                    finish(
+                        ScratchCardLaunchResult(
+                            succeeded = true,
+                            message = "Final response: ${formatScratchCardResponse(response)}"
+                        )
+                    )
+                },
+                onFailure = { error ->
+                    finish(
+                        ScratchCardLaunchResult(
+                            succeeded = false,
+                            message = "Final response failed: ${formatScratchCardResponse(error)}"
+                        )
+                    )
+                }
+            )
+            if (!started) {
+                finish(
+                    ScratchCardLaunchResult(
+                        succeeded = false,
+                        message = "Final response failed: Silent USSD could not start on this phone."
+                    )
+                )
+            }
+        } catch (error: Exception) {
+            finish(
+                ScratchCardLaunchResult(
+                    succeeded = false,
+                    message = "Final response failed: ${formatScratchCardResponse(error.message ?: "Could not start silent USSD.")}"
+                )
+            )
+        }
     }
+}
+
+private fun formatScratchCardResponse(response: String): String {
+    val compact = response
+        .lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .joinToString(" ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+    return compact.ifBlank { "No response text returned." }
 }
