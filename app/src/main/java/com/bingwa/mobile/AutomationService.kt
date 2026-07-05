@@ -62,6 +62,7 @@ class AutomationService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        ScratchCardRechargeManager.handleAutomationStarted(this, request.txId)
         if (intent?.action == ACTION_RETRY_PENDING || intent?.action == ACTION_RETRY_MAINTENANCE) {
             Log.d(TAG, "Retry-pending alarm txId=${request.txId}")
         } else {
@@ -445,6 +446,7 @@ class AutomationService : Service() {
         saveTransactionResponse(request.txId, status, response, transcript)
         // Broadcast update to UI
         sendBroadcastUpdate(request.txId, status, response)
+        ScratchCardRechargeManager.handleTransactionUpdate(this, request.txId, status, response)
 
         when (status) {
             "Pending" -> handleDailyLimitPending(request, response)
