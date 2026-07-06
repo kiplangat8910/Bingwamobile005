@@ -439,6 +439,28 @@ class MpesaReceiver : BroadcastReceiver() {
             val mode = offer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE
             val targetDevice = offer?.targetDevice ?: "PRIMARY"
             val finalCode = code?.replace("pn", phone, ignoreCase = true).orEmpty()
+            val blockedContact = BlacklistStore.findMatch(context, phone, clientName)
+
+            if (blockedContact != null) {
+                val blockedName = blockedContact.name.ifBlank { clientName }.ifBlank { phone }
+                addTransaction(context, Transaction(
+                    description = label,
+                    amount = "KSh $amount",
+                    amountValue = amount.toDouble(),
+                    date = getCurrentDate(),
+                    status = TransactionStatus.FAILED.value,
+                    statusEnum = TransactionStatus.FAILED,
+                    ussdCode = finalCode,
+                    phoneNumber = phone,
+                    clientName = clientName,
+                    ussdResponse = "Blocked: $blockedName is blacklisted, so no bundle was dispatched.",
+                    source = TX_SOURCE_AUTOMATED,
+                    showInRecent = true,
+                    offerId = offer?.id ?: -1
+                ))
+                notify(context, "Blacklisted Contact Blocked", "Ignored KSh $amount payment for $blockedName ($phone).")
+                return
+            }
 
             val tokenMgr = TokenManager(context)
             val tokenBalance = tokenMgr.getBalance()
@@ -702,6 +724,10 @@ class MpesaReceiver : BroadcastReceiver() {
 
     private fun saveContact(context: Context, number: String, name: String = "") {
         try {
+            if (BlacklistStore.contains(context, number, name)) {
+                Log.d(TAG, "Skipping auto-save for blacklisted contact: $name -> $number")
+                return
+            }
             val updated = SavedContactStore.upsert(context, number, name)
             if (updated.any { it.phone == SmsCommandHandler.normalizePhone(number) }) {
                 Log.d(TAG, "Contact saved: $name -> $number")

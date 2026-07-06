@@ -69,6 +69,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Autorenew
 import androidx.compose.material.icons.rounded.BatteryAlert
+import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Circle
 import androidx.compose.material.icons.rounded.Contacts
@@ -155,6 +156,7 @@ private sealed class SettingsDest {
     data object Notifications : SettingsDest()
     data object Automation : SettingsDest()
     data object Contacts : SettingsDest()
+    data object Blacklist : SettingsDest()
     data object Offers : SettingsDest()
     data object Alerts : SettingsDest()
     data object Transactions : SettingsDest()
@@ -182,6 +184,7 @@ fun GroupedSettingsScreen() {
             onOpenNotifications = { dest = SettingsDest.Notifications },
             onOpenAutomation = { dest = SettingsDest.Automation },
             onOpenContacts = { dest = SettingsDest.Contacts },
+            onOpenBlacklist = { dest = SettingsDest.Blacklist },
             onOpenOffers = { dest = SettingsDest.Offers },
             onOpenAlerts = { dest = SettingsDest.Alerts },
             onOpenTransactions = { dest = SettingsDest.Transactions },
@@ -194,6 +197,7 @@ fun GroupedSettingsScreen() {
         SettingsDest.Notifications -> CustomerNotificationSettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Automation -> AutomationSettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Contacts -> ContactsScreen(onBack = { dest = SettingsDest.Home })
+        SettingsDest.Blacklist -> BlacklistScreen(onBack = { dest = SettingsDest.Home })
         SettingsDest.Offers -> OffersScreen(onBack = { dest = SettingsDest.Home })
         SettingsDest.Alerts -> AdminAlertsSettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Transactions -> TransactionSettings(onBack = { dest = SettingsDest.Home })
@@ -210,6 +214,7 @@ private fun SettingsHome(
     onOpenNotifications: () -> Unit,
     onOpenAutomation: () -> Unit,
     onOpenContacts: () -> Unit,
+    onOpenBlacklist: () -> Unit,
     onOpenOffers: () -> Unit,
     onOpenAlerts: () -> Unit,
     onOpenTransactions: () -> Unit,
@@ -251,6 +256,8 @@ private fun SettingsHome(
                 LinkRow(Icons.Rounded.Tag, "Offers & USSD Codes", "Manage available bundles and execution codes", C.amber, onOpenOffers)
                 GroupDivider(C.amber)
                 LinkRow(Icons.Rounded.Contacts, "Contacts", "Keep saved customer names clean and easy to search", C.amber, onOpenContacts)
+                GroupDivider(C.amber)
+                LinkRow(Icons.Rounded.Block, "Blacklist", "Block selected contacts so paid bundles are not dispatched to them", C.amber, onOpenBlacklist)
             }
 
             SettingsGroup("Execution Setup", accent = C.amber) {

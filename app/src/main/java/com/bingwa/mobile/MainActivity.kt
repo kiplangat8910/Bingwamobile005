@@ -8314,6 +8314,232 @@ fun ContactsScreen(onBack: (() -> Unit)? = null) {
 }
 
 @Composable
+fun BlacklistScreen(onBack: (() -> Unit)? = null) {
+    val ctx = LocalContext.current
+    var contacts by remember { mutableStateOf(BlacklistStore.load(ctx)) }
+    var query by remember { mutableStateOf("") }
+    var showAddDlg by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+    var newPhone by remember { mutableStateOf("") }
+    val filtered = contacts.filter { query.isBlank() || it.name.contains(query, true) || it.phone.contains(query) }
+
+    DisposableEffect(ctx) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == BlacklistStore.ACTION_BLACKLIST_UPDATED) {
+                    contacts = BlacklistStore.load(ctx)
+                }
+            }
+        }
+        val registered = registerAppReceiver(
+            ctx,
+            receiver,
+            android.content.IntentFilter(BlacklistStore.ACTION_BLACKLIST_UPDATED)
+        )
+        onDispose {
+            if (registered) {
+                try { ctx.unregisterReceiver(receiver) } catch (_: Exception) {}
+            }
+        }
+    }
+
+    Column(Modifier.fillMaxSize().background(C.bg)) {
+        if (onBack != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = C.cardHi.copy(alpha = 0.96f),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Rounded.ArrowBack, null, tint = C.t1)
+                    }
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("Blacklist", color = C.t1, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("${contacts.size} blocked contacts", color = C.t2, fontSize = 12.sp)
+                }
+                ContactHeaderAction(Icons.Rounded.Block, C.red) {
+                    showAddDlg = true
+                    newName = ""
+                    newPhone = ""
+                }
+            }
+        } else {
+            PageHeader("Blacklist", "${contacts.size} blocked contacts")
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ActionButton(Modifier.weight(1f), "Add Blocked", Icons.Rounded.Block, C.red) {
+                    showAddDlg = true
+                    newName = ""
+                    newPhone = ""
+                }
+            }
+        }
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            color = C.cardHi.copy(alpha = 0.94f),
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, C.border.copy(alpha = 0.88f))
+        ) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Blocked contacts do not receive any automatic bundle when their payment SMS arrives.",
+                    color = C.t2,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Search name or number…", color = C.t3, fontSize = 13.sp) },
+                    leadingIcon = { Icon(Icons.Outlined.Search, null, tint = C.t2, modifier = Modifier.size(17.dp)) },
+                    trailingIcon = if (query.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(Icons.Filled.Clear, null, tint = C.t2, modifier = Modifier.size(15.dp))
+                            }
+                        }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = fieldColors(),
+                    singleLine = true
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        if (filtered.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = C.card,
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(C.red.copy(alpha = 0.14f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.Block, null, tint = C.red, modifier = Modifier.size(28.dp))
+                        }
+                        Text(
+                            if (query.isBlank()) "No blocked contacts yet" else "No matching blocked contacts",
+                            color = C.t1,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            if (query.isBlank()) "Add any number you want the app to ignore during automatic bundle dispatch." else "Try another name or phone number.",
+                            color = C.t2,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(filtered, key = { it.phone }) { c ->
+                    BlacklistCard(
+                        c = c,
+                        onRemove = {
+                            contacts = BlacklistStore.delete(ctx, c.phone)
+                            vib(ctx)
+                        }
+                    )
+                }
+                item { Spacer(Modifier.height(16.dp)) }
+            }
+        }
+
+        if (showAddDlg) {
+            AlertDialog(
+                containerColor = C.card,
+                shape = RoundedCornerShape(18.dp),
+                onDismissRequest = { showAddDlg = false },
+                title = { Text("Add To Blacklist", color = C.t1, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            value = newName,
+                            onValueChange = { newName = it },
+                            label = { Text("Name (optional)") },
+                            singleLine = true,
+                            colors = dialogFieldColors(),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = newPhone,
+                            onValueChange = { newPhone = it },
+                            label = { Text("Phone number") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            colors = dialogFieldColors(),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (newPhone.isNotBlank()) {
+                                contacts = BlacklistStore.upsert(ctx, newPhone.trim(), newName.trim())
+                                showAddDlg = false
+                                vib(ctx)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = C.red)
+                    ) {
+                        Text("Block", color = C.bg, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddDlg = false }) {
+                        Text("Cancel", color = C.t2)
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
 private fun ContactHeaderAction(icon: ImageVector, accent: Color, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(16.dp),
@@ -8322,6 +8548,55 @@ private fun ContactHeaderAction(icon: ImageVector, accent: Color, onClick: () ->
     ) {
         IconButton(onClick = onClick) {
             Icon(icon, null, tint = accent, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+fun BlacklistCard(c: SavedContact, onRemove: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = C.card,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(C.red.copy(alpha = 0.14f))
+                    .border(1.dp, C.red.copy(alpha = 0.24f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.Block, null, tint = C.red, modifier = Modifier.size(20.dp))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    c.name.ifBlank { "Unnamed contact" },
+                    color = C.t1,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Outlined.Phone, null, tint = C.t3, modifier = Modifier.size(12.dp))
+                    Text(c.phone, color = C.t2, fontSize = 12.sp)
+                }
+            }
+            Button(
+                onClick = onRemove,
+                colors = ButtonDefaults.buttonColors(containerColor = C.red.copy(alpha = 0.16f)),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text("Remove", color = C.red, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
         }
     }
 }
