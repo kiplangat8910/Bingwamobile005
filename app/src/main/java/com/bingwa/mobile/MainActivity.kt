@@ -10009,6 +10009,7 @@ fun OfferDialog(
         val normalizedMode = normalizeOfferExecutionMode(mode, normalizedCategory)
         return OfferItem(
             id = existing?.id ?: (System.currentTimeMillis() % 100000).toInt(),
+            catalogKey = existing?.catalogKey.orEmpty(),
             name = name.trim(),
             price = p,
             ussdCode = code.trim(),

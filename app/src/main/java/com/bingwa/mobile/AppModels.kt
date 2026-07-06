@@ -64,6 +64,7 @@ fun offerSimSelectionLabel(selection: Int): String {
 
 data class OfferItem(
     val id: Int,
+    val catalogKey: String = "",
     val name: String,
     val price: Int,
     val ussdCode: String,

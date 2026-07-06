@@ -10,7 +10,7 @@ object OfferRepository {
     private const val PREFS_NAME = "DataOffers"
     private const val KEY_OFFERS = "offers"
     private const val KEY_CATALOG_VERSION = "catalog_version"
-    private const val CURRENT_CATALOG_VERSION = 4
+    private const val CURRENT_CATALOG_VERSION = 5
     const val ACTION_OFFERS_UPDATED = "com.bingwa.mobile.OFFERS_UPDATED"
     private val gson = Gson()
     private val lock = Any()
@@ -51,7 +51,18 @@ object OfferRepository {
             val rawJson = prefs.safeGetString(KEY_OFFERS, null)
             val cached = cachedOffers
             if (rawJson == cachedRawJson && cached != null) return@synchronized copyOffers(cached)
-            (parse(rawJson)?.let(::sanitize) ?: mutableListOf()).also { updateCache(rawJson, it) }
+            when {
+                rawJson.isNullOrBlank() -> seedDefaults(context, prefs).toMutableList()
+                else -> {
+                    val parsed = parse(rawJson) ?: return@synchronized repair(context).offers.toMutableList()
+                    val cleaned = sanitize(parsed)
+                    if (prefs.getInt(KEY_CATALOG_VERSION, 0) < CURRENT_CATALOG_VERSION) {
+                        migrateCatalog(context, cleaned, prefs).toMutableList()
+                    } else {
+                        cleaned.also { updateCache(rawJson, it) }
+                    }
+                }
+            }
         }
     }
 
@@ -71,17 +82,26 @@ object OfferRepository {
     fun repair(context: Context): RepairResult {
         return synchronized(lock) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val storage = UssdStorage(context)
+            val defaults = defaultOffers(context)
             val current = parse(prefs.safeGetString(KEY_OFFERS, null)).orEmpty()
             val cleaned = sanitize(current)
             val existingKeys = cleaned.mapTo(mutableSetOf(), ::offerKey)
-            val managedPrices = UssdStorage(context).managedCatalogPrices()
+            val managedPrices = storage.managedCatalogPrices()
+            val defaultIds = defaults.mapTo(mutableSetOf()) { it.id }
             val existingManagedPrices = cleaned.mapTo(mutableSetOf()) { it.price }.intersect(managedPrices)
+            val existingManagedIds = cleaned.mapTo(mutableSetOf()) { it.id }.intersect(defaultIds)
+            val existingManagedCatalogKeys = cleaned.mapNotNullTo(mutableSetOf()) {
+                it.catalogKey.takeIf { key -> key.isNotBlank() }
+            }
             val merged = cleaned.toMutableList()
             var nextId = ((merged.maxOfOrNull { it.id } ?: 0).coerceAtLeast(0)) + 1
             var restoredDefaultOffers = 0
 
-            defaultOffers(context).forEach { offer ->
-                if (offer.price in existingManagedPrices) return@forEach
+            defaults.forEach { offer ->
+                if (offer.catalogKey in existingManagedCatalogKeys || offer.id in existingManagedIds || offer.price in existingManagedPrices) {
+                    return@forEach
+                }
                 if (existingKeys.add(offerKey(offer))) {
                     merged += offer.copy(id = nextId++)
                     restoredDefaultOffers++
@@ -217,23 +237,35 @@ object OfferRepository {
         val storage = UssdStorage(context)
         val defaults = defaultOffers(context)
         val managedPrices = storage.managedCatalogPrices() + storage.legacyManagedCatalogPrices()
-        val existingByPrice = currentOffers.associateBy { it.price }
+        val managedKeys = storage.managedCatalogKeys()
+        val defaultIds = defaults.mapTo(mutableSetOf()) { it.id }
+        val existingByCatalogKey = currentOffers
+            .filter { it.catalogKey.isNotBlank() }
+            .associateBy { it.catalogKey }
+        val legacyManagedById = currentOffers
+            .filter { it.catalogKey.isBlank() }
+            .associateBy { it.id }
+        val legacyManagedByPrice = currentOffers
+            .filter { it.catalogKey.isBlank() && it.price in managedPrices }
+            .associateBy { it.price }
         val migrated = mutableListOf<OfferItem>()
         var nextId = ((currentOffers.maxOfOrNull { it.id } ?: 0).coerceAtLeast(0)) + 1
 
         defaults.forEach { default ->
-            val existing = existingByPrice[default.price]
+            val existing = existingByCatalogKey[default.catalogKey]
+                ?: legacyManagedById[default.id]
+                ?: legacyManagedByPrice[default.price]
             migrated += if (existing != null) {
                 // Preserve the user's saved offer exactly as edited instead of
                 // overwriting fields like name or USSD code from catalog defaults.
-                existing
+                existing.copy(catalogKey = default.catalogKey)
             } else {
                 default.copy(id = nextId++)
             }
         }
 
         currentOffers
-            .filterNot { it.price in managedPrices }
+            .filterNot { it.catalogKey in managedKeys || (it.catalogKey.isBlank() && (it.id in defaultIds || it.price in managedPrices)) }
             .forEach { offer ->
                 migrated += if (migrated.any { it.id == offer.id }) {
                     offer.copy(id = nextId++)
@@ -265,6 +297,7 @@ object OfferRepository {
             val category = normalizeOfferCategory(offer.category)
             val mode = normalizeOfferExecutionMode(offer.executionMode, category)
             var normalized = offer.copy(
+                catalogKey = offer.catalogKey.trim(),
                 name = trimmedName,
                 ussdCode = trimmedCode,
                 executionMode = mode,
@@ -285,17 +318,18 @@ object OfferRepository {
 
     private fun defaultOffers(context: Context): List<OfferItem> {
         val storage = UssdStorage(context)
-        return storage.getLabels()
-            .toList()
-            .sortedBy { it.first }
-            .mapIndexed { index, (price, label) ->
+        return storage.getCatalogOffers()
+            .sortedBy { it.price }
+            .map { entry ->
+                val category = inferCategoryFromLabel(entry.label)
                 OfferItem(
-                    id = index,
-                    name = label,
-                    price = price.toInt(),
-                    ussdCode = storage.getUssdForAmount(price).orEmpty(),
-                    category = inferCategoryFromLabel(label),
-                    executionMode = defaultExecutionModeForCategory(inferCategoryFromLabel(label))
+                    id = entry.legacyId,
+                    catalogKey = entry.key,
+                    name = entry.label,
+                    price = entry.price.toInt(),
+                    ussdCode = entry.ussdCode,
+                    category = category,
+                    executionMode = defaultExecutionModeForCategory(category)
                 )
             }
             .filter { it.ussdCode.isNotBlank() }
