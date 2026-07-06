@@ -262,6 +262,12 @@ object DailyLimitPolicy {
         originalTx: Transaction,
         alternativePhone: String
     ): AlternativeDispatchResult {
+        if (BlacklistedContactStore.isBlacklisted(context, alternativePhone)) {
+            return AlternativeDispatchResult(
+                success = false,
+                message = "Blocked: $alternativePhone is blacklisted and cannot receive bundles."
+            )
+        }
         val offer = OfferRepository.findByName(context, originalTx.description)
             ?: originalTx.amountValue.toInt().takeIf { it > 0 }?.let { OfferRepository.findByPrice(context, it) }
 

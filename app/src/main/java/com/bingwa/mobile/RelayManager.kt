@@ -442,6 +442,7 @@ object RelayManager {
         }.getOrNull()
 
     fun executeBuyAmountLocal(context: Context, phone: String, amount: Int, resultDestPhone: String?): Int? {
+        if (BlacklistedContactStore.isBlacklisted(context, phone)) return null
         val offer = findOfferByPrice(context, amount) ?: return null
         val finalCode = offer.ussdCode.replace("pn", phone, ignoreCase = true)
         val txId = createPendingTransaction(

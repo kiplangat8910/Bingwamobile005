@@ -113,6 +113,17 @@ class AutomationService : Service() {
                 sendBroadcastUpdate(request.txId, TransactionStatus.PROCESSING.value, msg)
             }
         }
+
+        // Global safety check: block dispatches to blacklisted numbers (even if scheduled earlier).
+        if (request.phoneNumber.isNotBlank() && BlacklistedContactStore.isBlacklisted(this, request.phoneNumber)) {
+            processResponse(
+                request = request,
+                response = "Blocked: this phone number is blacklisted and cannot receive data bundles.",
+                forcedStatus = TransactionStatus.CANCELLED.value
+            )
+            stopSelf()
+            return START_NOT_STICKY
+        }
         when {
             usesAdvancedFlow(request) -> startAdvanced(request)
             else -> handleSimple(request)

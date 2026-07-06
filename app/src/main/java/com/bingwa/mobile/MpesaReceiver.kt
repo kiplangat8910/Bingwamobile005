@@ -440,6 +440,26 @@ class MpesaReceiver : BroadcastReceiver() {
             val targetDevice = offer?.targetDevice ?: "PRIMARY"
             val finalCode = code?.replace("pn", phone, ignoreCase = true).orEmpty()
 
+            if (BlacklistedContactStore.isBlacklisted(context, phone)) {
+                addTransaction(context, Transaction(
+                    description = label,
+                    amount = "KSh $amount",
+                    amountValue = amount.toDouble(),
+                    date = getCurrentDate(),
+                    status = TransactionStatus.CANCELLED.value,
+                    statusEnum = TransactionStatus.CANCELLED,
+                    ussdCode = finalCode,
+                    phoneNumber = phone,
+                    clientName = clientName,
+                    ussdResponse = "Cancelled: recipient is blacklisted.",
+                    source = TX_SOURCE_AUTOMATED,
+                    showInRecent = true,
+                    offerId = offer?.id ?: -1
+                ))
+                notify(context, "Blocked recipient", "$phone is blacklisted; bundle will not be sent.")
+                return
+            }
+
             val tokenMgr = TokenManager(context)
             val tokenBalance = tokenMgr.getBalance()
             val unlimited = UnlimitedManager(context).isActive()

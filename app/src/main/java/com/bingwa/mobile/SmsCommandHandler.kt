@@ -428,6 +428,10 @@ object SmsCommandHandler {
         if (args.size < 2) { sendSms(context, replyTo, "Usage: BUY <phone> <offer-number>", replySubId); return }
         val phone = normalizePhone(args[0])
         if (!phone.matches(LOCAL_PHONE_REGEX)) { sendSms(context, replyTo, "Invalid phone number. Use 10 digits (e.g. 0712345678) or +254712345678.", replySubId); return }
+        if (BlacklistedContactStore.isBlacklisted(context, phone)) {
+            sendSms(context, replyTo, "Blocked: $phone is blacklisted and cannot receive bundles.", replySubId)
+            return
+        }
         val offers = OfferRepository.load(context).toList()
         val offerIndex = resolveOfferIndex(args[1], offers)
         val offer = offers.getOrNull(offerIndex)?.takeIf { it.enabled }
@@ -472,6 +476,10 @@ object SmsCommandHandler {
         if (args.size < 2) { sendSms(context, replyTo, "Usage: BUYAMT <phone> <amount>", replySubId); return }
         val phone = normalizePhone(args[0])
         if (!phone.matches(LOCAL_PHONE_REGEX)) { sendSms(context, replyTo, "Invalid phone number. Use 10 digits (e.g. 0712345678) or +254712345678.", replySubId); return }
+        if (BlacklistedContactStore.isBlacklisted(context, phone)) {
+            sendSms(context, replyTo, "Blocked: $phone is blacklisted and cannot receive bundles.", replySubId)
+            return
+        }
         val amount = args[1].toIntOrNull() ?: run { sendSms(context, replyTo, "Invalid amount.", replySubId); return }
 
         val offer = RelayManager.findOfferByPrice(context, amount)

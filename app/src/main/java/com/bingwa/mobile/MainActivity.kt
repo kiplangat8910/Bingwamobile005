@@ -6706,6 +6706,11 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
             else -> null
         }
         if (phoneErr == null && selectedOffer != null) {
+            if (BlacklistedContactStore.isBlacklisted(ctx, finalPhone)) {
+                bannerState = "failed"
+                Toast.makeText(ctx, "Blocked: this phone number is blacklisted", Toast.LENGTH_SHORT).show()
+                return@let
+            }
             vib(ctx, 70L)
             phone = finalPhone
             upsertSavedContact(ctx, finalPhone, resolvedClientName)
