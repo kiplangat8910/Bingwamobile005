@@ -48,10 +48,17 @@ object UssdHelper {
         return v
     }
 
-    fun dialUssd(context: Context, ussdCode: String, silentOnly: Boolean = false, onSuccess: ((String) -> Unit)? = null, onFailure: ((String) -> Unit)? = null): Boolean {
+    fun dialUssd(
+        context: Context,
+        ussdCode: String,
+        silentOnly: Boolean = false,
+        subIdOverride: Int? = null,
+        onSuccess: ((String) -> Unit)? = null,
+        onFailure: ((String) -> Unit)? = null
+    ): Boolean {
         val code = normalizeUssdCode(ussdCode)
         Log.d("UssdHelper", "Dialing: $code")
-        val targets = resolveUssdSimTargets(context)
+        val targets = resolveUssdSimTargets(context, selectionOverride = subIdOverride)
         if (targets.isEmpty()) {
             onFailure?.invoke("Selected SIM slot is unavailable")
             return false
@@ -68,7 +75,7 @@ object UssdHelper {
     }
 
     fun dialUssd(context: Context, ussdCode: String) {
-        dialUssd(context, ussdCode, silentOnly = false, onSuccess = null, onFailure = null)
+        dialUssd(context, ussdCode, silentOnly = false, subIdOverride = null, onSuccess = null, onFailure = null)
     }
 
     private fun dialUssdAttempt(
