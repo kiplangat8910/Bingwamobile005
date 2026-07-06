@@ -56,6 +56,7 @@ class UssdNavigationService : AccessibilityService() {
         var advancedInProgress      : Boolean      = false
         var currentStep             : Int          = 0
         var retryCount              : Int          = 0
+        var retryWindowStartedAt    : Long         = 0L
         var lastRedialElapsed       : Long         = 0L
         var signatureGuardEnabled   : Boolean      = false
         var signatureAction         : String       = "STOP"
@@ -72,7 +73,7 @@ class UssdNavigationService : AccessibilityService() {
         @Volatile
         private var uiReturnSuppressed: Boolean = false
 
-        private const val MAX_RETRIES            = 5
+        private const val MAX_RETRY_WINDOW_MS    = 60_000L
         private const val SHOW_RUNNING_OVERLAY   = false
         private const val STEP_DELAY_MS          = 90L
         private const val EVENT_HOT_POLL_MS      = 8L
@@ -330,11 +331,12 @@ class UssdNavigationService : AccessibilityService() {
         "connection problem", "invalid mmi", "mmi code", "network error", "invalid", "failed",
         "cancelled", "try again", "unavailable", "problem", "request timeout",
         "busy", "sim error", "not available", "service unavailable", "temporary error",
-        "session expired", "not registered"
+        "session expired", "not registered", "maintenance", "maintainance"
     )
 
     private fun handleAdvancedSessionArmed() {
         if (!advancedActive || advancedSteps.isEmpty()) return
+        if (retryWindowStartedAt <= 0L) retryWindowStartedAt = SystemClock.elapsedRealtime()
         hasSeenAdvancedPopup = false
         hasSeenForegroundPopup = false
         isProcessing = false
@@ -1950,8 +1952,10 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun restartFromBeginning() {
-        if (retryCount >= MAX_RETRIES) {
-            val failMsg = if (lastFinalResponse.isNotBlank()) lastFinalResponse else "FAILED after $MAX_RETRIES retries"
+        val now = SystemClock.elapsedRealtime()
+        if (retryWindowStartedAt <= 0L) retryWindowStartedAt = now
+        if (now - retryWindowStartedAt >= MAX_RETRY_WINDOW_MS) {
+            val failMsg = if (lastFinalResponse.isNotBlank()) lastFinalResponse else "FAILED after 1 minute of retries"
             onDispatchComplete?.invoke(buildDispatchResult(failMsg))
             tokenPurchaseCallback?.invoke(false)
             tokenPurchaseCallback = null
@@ -2055,6 +2059,7 @@ class UssdNavigationService : AccessibilityService() {
         advancedDialCode    = ""
         advancedOfferId     = -1
         advancedOfferName   = ""
+        retryWindowStartedAt = 0L
         advancedActive      = false
         advancedInProgress  = false
         hideRunningOverlay()
@@ -2365,7 +2370,7 @@ class UssdNavigationService : AccessibilityService() {
             else -> detailParts += "Step ${currentStep + 1} of ${advancedSteps.size}"
         }
         if (retryCount > 0) {
-            detailParts += "Retry $retryCount of $MAX_RETRIES"
+            detailParts += "Retry $retryCount within 1-minute window"
         }
         return detailParts.joinToString("  |  ")
             .ifBlank { "USSD session is still active while Bingwa stays visible here" }

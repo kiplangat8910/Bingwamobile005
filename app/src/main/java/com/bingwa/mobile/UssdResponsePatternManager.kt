@@ -43,10 +43,29 @@ class UssdResponsePatternManager(private val context: Context) {
         val DEFAULT_MAINTENANCE_PATTERNS: List<String> = listOf(
             "Service is currently under maintenance",
             "under maintenance",
+            "under maintainance",
             "please try again later",
             "temporarily unavailable",
             "service unavailable",
             "technical problem"
+        )
+        val DEFAULT_RETRIABLE_FINAL_PATTERNS: List<String> = listOf(
+            "connection problem",
+            "invalid mmi",
+            "mmi code",
+            "network error",
+            "temporary error",
+            "request timeout",
+            "timeout",
+            "service unavailable",
+            "temporarily unavailable",
+            "technical problem",
+            "under maintenance",
+            "under maintainance",
+            "maintenance",
+            "maintainance",
+            "session expired",
+            "error"
         )
         val DEFAULT_ALREADY_RECOMMENDED_PATTERNS: List<String> = listOf(
             "has already been recommended the same product today",
@@ -80,6 +99,7 @@ class UssdResponsePatternManager(private val context: Context) {
     fun getSuccessPatterns() = DEFAULT_SUCCESS_PATTERNS
     fun getFailedPatterns() = DEFAULT_FAILED_PATTERNS
     fun getMaintenancePatterns() = DEFAULT_MAINTENANCE_PATTERNS
+    fun getRetriableFinalPatterns() = DEFAULT_RETRIABLE_FINAL_PATTERNS
     fun getAlreadyRecommendedPatterns() = DEFAULT_ALREADY_RECOMMENDED_PATTERNS
     fun getFailedRetryPatterns() = DEFAULT_FAILED_RETRY_PATTERNS
     fun getMaxMaintenanceRetries() = DEFAULT_MAX_MAINTENANCE_RETRIES
@@ -88,6 +108,7 @@ class UssdResponsePatternManager(private val context: Context) {
     fun matchesSuccessPattern(response: CharSequence?) = matchAny(response, getSuccessPatterns())
     fun matchesFailedPattern(response: CharSequence?) = matchAny(response, getFailedPatterns())
     fun matchesMaintenancePattern(response: CharSequence?) = matchAny(response, getMaintenancePatterns())
+    fun matchesRetriableFinalPattern(response: CharSequence?) = matchAny(response, getRetriableFinalPatterns())
     fun matchesAlreadyRecommendedPattern(response: CharSequence?) = matchAny(response, getAlreadyRecommendedPatterns())
     fun matchesFailedRetryPattern(response: CharSequence?) = matchAny(response, getFailedRetryPatterns())
 

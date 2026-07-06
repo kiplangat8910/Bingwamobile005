@@ -22,8 +22,32 @@ class AutomationService : Service() {
         private const val TAG = "AutomationService"
         const val ACTION_RETRY_PENDING = "com.bingwa.mobile.ACTION_RETRY_PENDING"
         private const val ACTION_RETRY_MAINTENANCE = "com.bingwa.mobile.ACTION_RETRY_MAINTENANCE"
+        private const val ACTION_RETRY_RETRIABLE_RESPONSE = "com.bingwa.mobile.ACTION_RETRY_RETRIABLE_RESPONSE"
         private const val CHANNEL_ID = "automation_service"
         private const val NOTIFICATION_ID = 2014
+        private const val RETRIABLE_RESPONSE_PREFS = "retriable_ussd_response_retry"
+        private const val ACTIVE_RETRY_WINDOW_MS = 60_000L
+        private const val ACTIVE_RETRY_INTERVAL_MS = 5_000L
+        private const val FIRST_BACKOFF_MS = 5 * 60_000L
+        private const val REPEATED_BACKOFF_MS = 10 * 60_000L
+
+        fun cancelRetriableResponseRetry(context: Context, txId: Int) {
+            if (txId < 0) return
+            runCatching {
+                val intent = Intent(context, AutomationService::class.java).apply {
+                    action = ACTION_RETRY_RETRIABLE_RESPONSE
+                }
+                val pi = PendingIntent.getService(
+                    context,
+                    txId,
+                    intent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                val alarm = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+                alarm?.cancel(pi)
+                pi.cancel()
+            }
+        }
     }
 
     private data class AutomationRequest(
@@ -38,6 +62,13 @@ class AutomationService : Service() {
         val signatureMode: String,
         val signatureLearning: Boolean,
         val returnToAppAggressively: Boolean
+    )
+
+    private data class RetriableResponseRetryState(
+        val windowStartAtMillis: Long,
+        val completedWindows: Int,
+        val nextAttemptStartsNewWindow: Boolean,
+        val totalAttempts: Int
     )
 
     private val patternManager by lazy { UssdResponsePatternManager(this) }
@@ -62,10 +93,16 @@ class AutomationService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (intent?.action == ACTION_RETRY_PENDING || intent?.action == ACTION_RETRY_MAINTENANCE) {
+        if (intent?.action == ACTION_RETRY_PENDING ||
+            intent?.action == ACTION_RETRY_MAINTENANCE ||
+            intent?.action == ACTION_RETRY_RETRIABLE_RESPONSE
+        ) {
             Log.d(TAG, "Retry-pending alarm txId=${request.txId}")
         } else {
             Log.d(TAG, "onStartCommand mode=${request.mode} code=${request.code} txId=${request.txId}")
+        }
+        if (intent?.action == ACTION_RETRY_RETRIABLE_RESPONSE) {
+            armRetriableResponseWindow(request.txId)
         }
         when {
             usesAdvancedFlow(request) -> startAdvanced(request)
@@ -208,6 +245,7 @@ class AutomationService : Service() {
         UssdNavigationService.advancedPhoneNumber = request.phoneNumber
         UssdNavigationService.advancedDialCode = dialCode
         UssdNavigationService.retryCount = 0
+        UssdNavigationService.retryWindowStartedAt = 0L
         UssdNavigationService.advancedActive = true
         UssdNavigationService.advancedInProgress = true
         UssdNavigationService.currentStep = 0
@@ -441,6 +479,14 @@ class AutomationService : Service() {
         val status = forcedStatus ?: patternManager.determineResponseStatus(response)
         Log.d(TAG, "Status='$status' for txId=${request.txId}")
 
+        if (shouldRetryRetriableFinalResponse(status, response)) {
+            handleRetriableFinalResponse(request, response, status, transcript)
+            stopSelf()
+            return
+        }
+
+        clearRetriableResponseRetryState(request.txId)
+
         // Save to storage
         saveTransactionResponse(request.txId, status, response, transcript)
         // Broadcast update to UI
@@ -449,21 +495,7 @@ class AutomationService : Service() {
         when (status) {
             "Pending" -> handleDailyLimitPending(request, response)
             "Failed" -> handleFailedWithFallback(request, response)
-            "UnderMaintenance" -> {
-                val retries = getMaintenanceRetryCount(request.txId)
-                if (retries < patternManager.getMaxMaintenanceRetries()) {
-                    val nextRetryCount = retries + 1
-                    val scheduled = scheduleMaintenanceRetry(request, nextRetryCount)
-                    if (!scheduled) {
-                        Log.w(TAG, "Maintenance retry scheduling failed for txId=${request.txId}")
-                    } else {
-                        incrementMaintenanceRetryCount(request.txId)
-                    }
-                } else {
-                    clearMaintenanceRetryCount(request.txId)
-                }
-            }
-            else -> clearMaintenanceRetryCount(request.txId)
+            else -> Unit
         }
         stopSelf()
     }
@@ -652,22 +684,6 @@ class AutomationService : Service() {
         }
     }
 
-    private fun getMaintenanceRetryCount(txId: Int): Int =
-        getSharedPreferences("maint_retries", Context.MODE_PRIVATE).getInt("tx_$txId", 0)
-
-    private fun incrementMaintenanceRetryCount(txId: Int) {
-        getSharedPreferences("maint_retries", Context.MODE_PRIVATE)
-            .edit().putInt("tx_$txId", getMaintenanceRetryCount(txId) + 1).apply()
-    }
-
-    private fun clearMaintenanceRetryCount(txId: Int) {
-        if (txId < 0) return
-        getSharedPreferences("maint_retries", Context.MODE_PRIVATE)
-            .edit()
-            .remove("tx_$txId")
-            .apply()
-    }
-
     private fun buildAutomationIntent(context: Context, request: AutomationRequest, action: String? = null): Intent =
         Intent(context, AutomationService::class.java).apply {
             this.action = action
@@ -684,11 +700,10 @@ class AutomationService : Service() {
             putExtra("returnToAppAggressively", request.returnToAppAggressively)
         }
 
-    private fun scheduleMaintenanceRetry(request: AutomationRequest, nextRetryCount: Int): Boolean {
+    private fun scheduleRetriableResponseRetry(request: AutomationRequest, delayMs: Long): Boolean {
         return runCatching {
-            val retryDelayMs = patternManager.getMaintenanceRetryDelayMs().coerceAtLeast(5_000L)
-            val triggerAt = System.currentTimeMillis() + retryDelayMs
-            val intent = buildAutomationIntent(this, request, ACTION_RETRY_MAINTENANCE)
+            val triggerAt = System.currentTimeMillis() + delayMs
+            val intent = buildAutomationIntent(this, request, ACTION_RETRY_RETRIABLE_RESPONSE)
             val pi = PendingIntent.getService(
                 this,
                 request.txId,
@@ -705,13 +720,171 @@ class AutomationService : Service() {
             if (scheduled) {
                 Log.d(
                     TAG,
-                    "Scheduled maintenance retry #$nextRetryCount for txId=${request.txId} in ${retryDelayMs}ms"
+                    "Scheduled retriable-response retry for txId=${request.txId} in ${delayMs}ms"
                 )
             }
             scheduled
         }.getOrElse { error ->
-            Log.e(TAG, "scheduleMaintenanceRetry failed for txId=${request.txId}", error)
+            Log.e(TAG, "scheduleRetriableResponseRetry failed for txId=${request.txId}", error)
             false
+        }
+    }
+
+    private fun shouldRetryRetriableFinalResponse(status: String, response: String): Boolean {
+        if (response.isBlank()) return false
+        if (status.equals(TransactionStatus.SUCCESS.value, ignoreCase = true) ||
+            status.equals(TransactionStatus.PENDING.value, ignoreCase = true) ||
+            status.equals(TransactionStatus.CANCELLED.value, ignoreCase = true)
+        ) {
+            return false
+        }
+        return patternManager.matchesRetriableFinalPattern(response)
+    }
+
+    private fun handleRetriableFinalResponse(
+        request: AutomationRequest,
+        response: String,
+        originalStatus: String,
+        transcript: String?
+    ) {
+        val now = System.currentTimeMillis()
+        val currentState = loadRetriableResponseRetryState(request.txId)
+            ?: RetriableResponseRetryState(
+                windowStartAtMillis = now,
+                completedWindows = 0,
+                nextAttemptStartsNewWindow = false,
+                totalAttempts = 0
+            )
+        val windowStart = currentState.windowStartAtMillis.takeIf { it > 0L } ?: now
+        val elapsedInWindow = (now - windowStart).coerceAtLeast(0L)
+        val withinActiveWindow = elapsedInWindow < ACTIVE_RETRY_WINDOW_MS
+        val delayMs = if (withinActiveWindow) {
+            ACTIVE_RETRY_INTERVAL_MS
+        } else if (currentState.completedWindows == 0) {
+            FIRST_BACKOFF_MS
+        } else {
+            REPEATED_BACKOFF_MS
+        }
+        val nextState = if (withinActiveWindow) {
+            currentState.copy(
+                windowStartAtMillis = windowStart,
+                nextAttemptStartsNewWindow = false,
+                totalAttempts = currentState.totalAttempts + 1
+            )
+        } else {
+            currentState.copy(
+                completedWindows = currentState.completedWindows + 1,
+                nextAttemptStartsNewWindow = true,
+                totalAttempts = currentState.totalAttempts + 1
+            )
+        }
+        if (!scheduleRetriableResponseRetry(request, delayMs)) {
+            clearRetriableResponseRetryState(request.txId)
+            saveTransactionResponse(request.txId, originalStatus, response, transcript)
+            sendBroadcastUpdate(request.txId, originalStatus, response)
+            if (originalStatus == TransactionStatus.FAILED.value) {
+                handleFailedWithFallback(request, response)
+            }
+            return
+        }
+        saveRetriableResponseRetryState(request.txId, nextState)
+        val retryMessage = buildRetriableResponseMessage(
+            response = response,
+            withinActiveWindow = withinActiveWindow,
+            delayMs = delayMs,
+            state = nextState,
+            elapsedInWindow = elapsedInWindow
+        )
+        saveTransactionResponse(request.txId, TransactionStatus.RETRYING.value, retryMessage, transcript)
+        sendBroadcastUpdate(request.txId, TransactionStatus.RETRYING.value, retryMessage)
+    }
+
+    private fun buildRetriableResponseMessage(
+        response: String,
+        withinActiveWindow: Boolean,
+        delayMs: Long,
+        state: RetriableResponseRetryState,
+        elapsedInWindow: Long
+    ): String {
+        val timingNote = if (withinActiveWindow) {
+            val remainingSeconds = ((ACTIVE_RETRY_WINDOW_MS - elapsedInWindow).coerceAtLeast(0L) + 999L) / 1_000L
+            "Automatic retry is still active. Next retry in ${formatRetryDelay(delayMs)}. Active retry window remaining: ${remainingSeconds}s."
+        } else {
+            val backoffLabel = if (state.completedWindows == 1) "5 minutes" else "10 minutes"
+            "Automatic retry window was exhausted. Waiting $backoffLabel before starting another 1-minute retry window."
+        }
+        return "$response\n\n$timingNote"
+    }
+
+    private fun formatRetryDelay(delayMs: Long): String = when {
+        delayMs % (60_000L) == 0L -> {
+            val minutes = delayMs / 60_000L
+            if (minutes == 1L) "1 minute" else "$minutes minutes"
+        }
+        delayMs % 1_000L == 0L -> {
+            val seconds = delayMs / 1_000L
+            if (seconds == 1L) "1 second" else "$seconds seconds"
+        }
+        else -> "${delayMs}ms"
+    }
+
+    private fun armRetriableResponseWindow(txId: Int) {
+        if (txId < 0) return
+        val current = loadRetriableResponseRetryState(txId) ?: return
+        if (!current.nextAttemptStartsNewWindow && current.windowStartAtMillis > 0L) return
+        saveRetriableResponseRetryState(
+            txId,
+            current.copy(
+                windowStartAtMillis = System.currentTimeMillis(),
+                nextAttemptStartsNewWindow = false
+            )
+        )
+    }
+
+    private fun retriableResponsePrefs() =
+        getSharedPreferences(RETRIABLE_RESPONSE_PREFS, Context.MODE_PRIVATE)
+
+    private fun loadRetriableResponseRetryState(txId: Int): RetriableResponseRetryState? {
+        if (txId < 0) return null
+        val prefs = retriableResponsePrefs()
+        if (!prefs.contains("tx_${txId}_windowStart")) return null
+        return RetriableResponseRetryState(
+            windowStartAtMillis = prefs.getLong("tx_${txId}_windowStart", 0L),
+            completedWindows = prefs.getInt("tx_${txId}_completedWindows", 0),
+            nextAttemptStartsNewWindow = prefs.getBoolean("tx_${txId}_nextWindow", false),
+            totalAttempts = prefs.getInt("tx_${txId}_attempts", 0)
+        )
+    }
+
+    private fun saveRetriableResponseRetryState(txId: Int, state: RetriableResponseRetryState) {
+        if (txId < 0) return
+        retriableResponsePrefs()
+            .edit()
+            .putLong("tx_${txId}_windowStart", state.windowStartAtMillis)
+            .putInt("tx_${txId}_completedWindows", state.completedWindows)
+            .putBoolean("tx_${txId}_nextWindow", state.nextAttemptStartsNewWindow)
+            .putInt("tx_${txId}_attempts", state.totalAttempts)
+            .apply()
+    }
+
+    private fun clearRetriableResponseRetryState(txId: Int) {
+        if (txId < 0) return
+        cancelRetriableResponseRetryAlarm(txId)
+        retriableResponsePrefs()
+            .edit()
+            .remove("tx_${txId}_windowStart")
+            .remove("tx_${txId}_completedWindows")
+            .remove("tx_${txId}_nextWindow")
+            .remove("tx_${txId}_attempts")
+            .apply()
+    }
+
+    private fun cancelRetriableResponseRetryAlarm(txId: Int) {
+        if (txId < 0) return
+        runCatching {
+            cancelRetriableResponseRetry(this, txId)
+        }.onFailure {
+            Log.w(TAG, "cancelRetriableResponseRetry failed for txId=$txId", it)
         }
     }
 

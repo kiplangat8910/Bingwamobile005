@@ -447,6 +447,7 @@ fun cancelScheduledRetry(context: Context, txId: Int) {
         am?.cancel(pi)
         pi.cancel()
     }
+    AutomationService.cancelRetriableResponseRetry(context, txId)
 }
 
 fun scheduleRetryTomorrowForTransaction(context: Context, tx: Transaction, offer: OfferItem? = null) {
