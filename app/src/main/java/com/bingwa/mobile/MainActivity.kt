@@ -5,6 +5,8 @@ package com.bingwa.mobile
 
 import android.Manifest
 import android.app.Activity
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -6681,6 +6683,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
         "failed" -> C.red
         "pending" -> C.amber
         "relayed" -> C.blue
+        "scheduled" -> C.cyan
         else -> null
     }
     val bannerMessage = when (bannerState) {
@@ -6688,6 +6691,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
         "failed" -> "Manual run failed. Check USSD logs."
         "pending" -> "Running manually now. Waiting for USSD response."
         "relayed" -> "Forwarded to Relay phone for execution"
+        "scheduled" -> "Bundle scheduled successfully"
         else -> null
     }
     val commandPhone = if (normalizedPhone.matches(Regex("^0\\d{9}$"))) normalizedPhone else "0712345678"
@@ -6755,6 +6759,107 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                     mode = mode,
                     returnToAppAggressively = true
                 )
+            }
+        }
+    }
+
+    fun showSchedulePicker(onPicked: (Long) -> Unit) {
+        val now = Calendar.getInstance()
+        DatePickerDialog(
+            ctx,
+            { _, year, month, day ->
+                val base = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, year)
+                    set(Calendar.MONTH, month)
+                    set(Calendar.DAY_OF_MONTH, day)
+                }
+                TimePickerDialog(
+                    ctx,
+                    { _, hour, minute ->
+                        val picked = base.apply {
+                            set(Calendar.HOUR_OF_DAY, hour)
+                            set(Calendar.MINUTE, minute)
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }.timeInMillis
+                        onPicked(picked)
+                    },
+                    now.get(Calendar.HOUR_OF_DAY),
+                    now.get(Calendar.MINUTE),
+                    true
+                ).show()
+            },
+            now.get(Calendar.YEAR),
+            now.get(Calendar.MONTH),
+            now.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
+    val scheduleManualRun = schedule@{
+        val selectedOffer = selOffer
+        val finalPhone = SmsCommandHandler.normalizePhone(phone)
+        phoneErr = when {
+            phone.isBlank() -> "Phone number required"
+            !finalPhone.matches(Regex("^0\\d{9}$")) -> "Enter a valid phone number"
+            selectedOffer == null -> "Choose an offer"
+            else -> null
+        }
+        if (phoneErr != null || selectedOffer == null) return@schedule
+
+        vib(ctx, 70L)
+        phone = finalPhone
+        upsertSavedContact(ctx, finalPhone, resolvedClientName)
+
+        showSchedulePicker { triggerAtMillis ->
+            val now = System.currentTimeMillis()
+            if (triggerAtMillis <= now + 5_000L) {
+                bannerState = "failed"
+                Toast.makeText(ctx, "Choose a future time", Toast.LENGTH_SHORT).show()
+                return@showSchedulePicker
+            }
+            val finalCode = selectedOffer.ussdCode.replace("pn", finalPhone, true)
+            val txId = createPendingTransaction(
+                ctx,
+                selectedOffer.name,
+                "KSh ${selectedOffer.price}",
+                finalPhone,
+                finalCode,
+                clientName = resolvedClientName,
+                status = TransactionStatus.PENDING.value,
+                source = TX_SOURCE_AUTOMATED,
+                showInRecent = false,
+                offerId = selectedOffer.id
+            )
+            if (txId < 0) {
+                bannerState = "failed"
+                Toast.makeText(ctx, "Could not create schedule", Toast.LENGTH_SHORT).show()
+                return@showSchedulePicker
+            }
+            val dispatch = ScheduledOfferDispatchStore.ScheduledDispatch(
+                txId = txId,
+                triggerAtMillis = triggerAtMillis,
+                mode = mode,
+                code = finalCode,
+                phoneNumber = finalPhone,
+                offerId = selectedOffer.id,
+                offerName = selectedOffer.name,
+                simSelection = selectedOffer.simSelection,
+                signatureEnabled = selectedOffer.signatureDetectionEnabled,
+                signatureMode = selectedOffer.signatureAction,
+                returnToAppAggressively = false
+            )
+            val ok = ScheduledOfferDispatchStore.schedule(ctx, dispatch)
+            val whenLabel = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()).format(Date(triggerAtMillis))
+            if (ok) {
+                bannerState = "scheduled"
+                saveTransactionOutcome(ctx, txId, TransactionStatus.PENDING.value, "Scheduled for $whenLabel.")
+                broadcastTransactionUpdated(ctx, txId)
+                Toast.makeText(ctx, "Scheduled for $whenLabel", Toast.LENGTH_SHORT).show()
+            } else {
+                bannerState = "failed"
+                saveTransactionOutcome(ctx, txId, TransactionStatus.FAILED.value, "Failed to schedule for $whenLabel.")
+                broadcastTransactionUpdated(ctx, txId)
+                Toast.makeText(ctx, "Failed to schedule", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -7179,6 +7284,31 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 15.sp,
                                         letterSpacing = 0.6.sp
+                                    )
+                                }
+
+                                Spacer(Modifier.height(10.dp))
+
+                                OutlinedButton(
+                                    onClick = scheduleManualRun,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(52.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = C.cyan
+                                    ),
+                                    border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.55f)),
+                                    enabled = dispatchReady && bannerState != "pending"
+                                ) {
+                                    Icon(Icons.Outlined.Schedule, null, tint = C.cyan, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        "SCHEDULE",
+                                        color = C.cyan,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 14.sp,
+                                        letterSpacing = 0.8.sp
                                     )
                                 }
                             }
