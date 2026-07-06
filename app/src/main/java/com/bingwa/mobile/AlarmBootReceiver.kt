@@ -18,6 +18,7 @@ class AlarmBootReceiver : BroadcastReceiver() {
             if (prefs.safeGetBoolean("auto_retry", false)) {
                 UnderMaintenanceRetryReceiver.schedule(context)
             }
+            ScheduledOfferDispatchStore.rescheduleAll(context)
             val cfg = RelayManager.load(context)
             if (allowBootForegroundRestart && cfg.enabled && cfg.role == "RELAY" && cfg.method == "HOTSPOT") {
                 RelayManager.startRelayHotspotService(context)

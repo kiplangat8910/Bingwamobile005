@@ -23,6 +23,7 @@ class AutomationService : Service() {
         const val ACTION_RETRY_PENDING = "com.bingwa.mobile.ACTION_RETRY_PENDING"
         private const val ACTION_RETRY_MAINTENANCE = "com.bingwa.mobile.ACTION_RETRY_MAINTENANCE"
         private const val ACTION_RETRY_RETRIABLE_RESPONSE = "com.bingwa.mobile.ACTION_RETRY_RETRIABLE_RESPONSE"
+        const val ACTION_RUN_SCHEDULED = "com.bingwa.mobile.ACTION_RUN_SCHEDULED"
         private const val CHANNEL_ID = "automation_service"
         private const val NOTIFICATION_ID = 2014
         private const val RETRIABLE_RESPONSE_PREFS = "retriable_ussd_response_retry"
@@ -103,6 +104,14 @@ class AutomationService : Service() {
         }
         if (intent?.action == ACTION_RETRY_RETRIABLE_RESPONSE) {
             armRetriableResponseWindow(request.txId)
+        }
+        if (intent?.action == ACTION_RUN_SCHEDULED) {
+            ScheduledOfferDispatchStore.markExecuted(this, request.txId)
+            if (request.txId >= 0) {
+                val msg = "Scheduled dispatch started."
+                saveTransactionResponse(request.txId, TransactionStatus.PROCESSING.value, msg)
+                sendBroadcastUpdate(request.txId, TransactionStatus.PROCESSING.value, msg)
+            }
         }
         when {
             usesAdvancedFlow(request) -> startAdvanced(request)
