@@ -22,6 +22,7 @@ class AlarmBootReceiver : BroadcastReceiver() {
             if (allowBootForegroundRestart && cfg.enabled && cfg.role == "RELAY" && cfg.method == "HOTSPOT") {
                 RelayManager.startRelayHotspotService(context)
             }
+            ScheduledUssdStore.restoreAlarms(context)
         }
     }
 }
