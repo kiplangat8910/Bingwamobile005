@@ -79,14 +79,16 @@ class UssdNavigationService : AccessibilityService() {
         private const val EVENT_HOT_POLL_MS      = 8L
         private const val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 16L
         private const val DUPLICATE_EVENT_WINDOW_MS = 24L
-        private const val FAST_VERIFY_POLL_MS    = 12L
-        private const val HOT_SEND_RETRY_DELAY_MS = 12L
-        private const val SEND_RETRY_DELAY_MS    = 20L
+        private const val FAST_VERIFY_POLL_MS    = 8L
+        private const val HOT_SEND_RETRY_DELAY_MS = 8L
+        private const val SEND_RETRY_DELAY_MS    = 14L
+        private const val POST_WRITE_VERIFY_POLL_MS = 4L
+        private const val POST_WRITE_SEND_RETRY_MS = 6L
         private const val STEP_TIMEOUT_MS        = 25_000L
-        private const val VERIFY_POLL_MS         = 20L
-        private const val RAPID_POST_POPUP_POLL_MS = 10L
-        private const val RAPID_POST_POPUP_VERIFY_MS = 8L
-        private const val RAPID_POST_POPUP_SEND_RETRY_MS = 12L
+        private const val VERIFY_POLL_MS         = 14L
+        private const val RAPID_POST_POPUP_POLL_MS = 6L
+        private const val RAPID_POST_POPUP_VERIFY_MS = 4L
+        private const val RAPID_POST_POPUP_SEND_RETRY_MS = 8L
         private const val MAX_VERIFY_ATTEMPTS    = 24
         private const val MAX_SEND_ATTEMPTS      = 10
         private const val NO_FIELD_PATIENCE      = 4
@@ -100,9 +102,9 @@ class UssdNavigationService : AccessibilityService() {
         private const val TAP_GESTURE_DURATION_MS = 20L
         private const val REDIAL_COOLDOWN_MS     = 550L
         private const val PENDING_ADVANCE_TIMEOUT_MS = 7_500L
-        private const val PENDING_ADVANCE_KICK_MS = 36L
+        private const val PENDING_ADVANCE_KICK_MS = 16L
         private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 6_000L
-        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 48L
+        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 24L
         private const val ROOT_REACQUIRE_TIMEOUT_MS = 3_000L
         private const val DIALOG_DISMISS_SETTLE_MS = 80L
         private const val UI_KEEP_VISIBLE_INTERVAL_MS = 1_500L
@@ -1054,12 +1056,11 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun verificationPollDelay(expected: String, noFieldCount: Int = 0): Long =
         when {
-            hasSeenAdvancedPopup && hasRecentExpectedInput(expected) -> RAPID_POST_POPUP_VERIFY_MS
+            hasRecentExpectedInput(expected) && hasRecentUssdUiEvent() -> POST_WRITE_VERIFY_POLL_MS
+            hasRecentExpectedInput(expected) -> POST_WRITE_VERIFY_POLL_MS
             hasSeenAdvancedPopup && noFieldCount > 0 -> RAPID_POST_POPUP_VERIFY_MS
             hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> RAPID_POST_POPUP_VERIFY_MS
-            hasRecentUssdUiEvent() && hasRecentExpectedInput(expected) -> EVENT_HOT_POLL_MS
             hasRecentUssdUiEvent() && noFieldCount > 0 -> EVENT_HOT_POLL_MS
-            hasRecentExpectedInput(expected) -> FAST_VERIFY_POLL_MS
             noFieldCount > 0 -> FAST_VERIFY_POLL_MS
             hasRecentUssdUiEvent() -> FAST_VERIFY_POLL_MS
             else -> VERIFY_POLL_MS
@@ -1068,15 +1069,22 @@ class UssdNavigationService : AccessibilityService() {
     private fun hasRecentUssdUiEvent(): Boolean =
         SystemClock.elapsedRealtime() - lastRelevantEventElapsed <= RECENT_UI_EVENT_GRACE_MS
 
-    private fun sendRetryDelay(attempt: Int): Long {
+    private fun sendRetryDelay(attempt: Int, expectedValue: String? = null): Long {
+        val hasRecentWrite = expectedValue?.let { hasRecentExpectedInput(it) } == true
+        val hasRecentVerification = expectedValue?.let { hasRecentVerifiedInput(it) } == true
         val base = when {
+            hasRecentVerification || hasRecentWrite -> POST_WRITE_SEND_RETRY_MS
             hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> RAPID_POST_POPUP_SEND_RETRY_MS
             hasSeenAdvancedPopup -> HOT_SEND_RETRY_DELAY_MS
             hasRecentUssdUiEvent() -> HOT_SEND_RETRY_DELAY_MS
             else -> SEND_RETRY_DELAY_MS
         }
-        val increment = if (hasSeenAdvancedPopup) 2L else 4L
-        return minOf(base + (attempt.toLong() * increment), 36L)
+        val increment = when {
+            hasRecentVerification || hasRecentWrite -> 2L
+            hasSeenAdvancedPopup -> 2L
+            else -> 4L
+        }
+        return minOf(base + (attempt.toLong() * increment), 28L)
     }
 
     private fun captureSignatureStepIfNeeded(
@@ -1852,7 +1860,7 @@ class UssdNavigationService : AccessibilityService() {
                     }
                     handler.postDelayed(
                         { clickSendButton(expectedValue, attempt + 1, skipFieldVerification) },
-                        sendRetryDelay(attempt)
+                        sendRetryDelay(attempt, expectedValue)
                     )
                 }
             } else {
@@ -1868,7 +1876,7 @@ class UssdNavigationService : AccessibilityService() {
                 }
                 handler.postDelayed(
                     { clickSendButton(expectedValue, attempt + 1, skipFieldVerification) },
-                    sendRetryDelay(attempt) + HOT_SEND_RETRY_DELAY_MS
+                    sendRetryDelay(attempt, expectedValue) + HOT_SEND_RETRY_DELAY_MS
                 )
             }
         } finally {
@@ -2105,10 +2113,10 @@ class UssdNavigationService : AccessibilityService() {
         when {
             phase == PendingPhase.WAIT_SEND && hasRecentVerifiedInput(expectedValue) -> 0L
             hasSeenAdvancedPopup && hasRecentVerifiedInput(expectedValue) -> 0L
-            hasSeenAdvancedPopup && hasRecentExpectedInput(expectedValue) -> RAPID_POST_POPUP_VERIFY_MS
+            hasRecentExpectedInput(expectedValue) && hasRecentUssdUiEvent() -> POST_WRITE_VERIFY_POLL_MS
+            hasRecentExpectedInput(expectedValue) -> POST_WRITE_VERIFY_POLL_MS
             hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> RAPID_POST_POPUP_VERIFY_MS
             hasRecentVerifiedInput(expectedValue) -> HOT_SEND_RETRY_DELAY_MS
-            hasRecentExpectedInput(expectedValue) -> FAST_VERIFY_POLL_MS
             hasRecentUssdUiEvent() -> FAST_VERIFY_POLL_MS
             else -> PENDING_ADVANCE_KICK_MS
         }
