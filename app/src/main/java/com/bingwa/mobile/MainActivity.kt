@@ -6696,7 +6696,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
     }
     val commandPhone = if (normalizedPhone.matches(Regex("^0\\d{9}$"))) normalizedPhone else "0712345678"
     val commandCode = selOffer?.ussdCode?.replace("pn", commandPhone, true) ?: "*544*1*1#"
-    val executeManualRun = {
+    val executeManualRun = executeManualRun@{
         val selectedOffer = selOffer
         val finalPhone = SmsCommandHandler.normalizePhone(phone)
         phoneErr = when {
@@ -6709,7 +6709,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
             if (BlacklistedContactStore.isBlacklisted(ctx, finalPhone)) {
                 bannerState = "failed"
                 Toast.makeText(ctx, "Blocked: this phone number is blacklisted", Toast.LENGTH_SHORT).show()
-                return@let
+                return@executeManualRun
             }
             vib(ctx, 70L)
             phone = finalPhone
