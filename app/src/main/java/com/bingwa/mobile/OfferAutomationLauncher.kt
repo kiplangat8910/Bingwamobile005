@@ -13,11 +13,13 @@ fun Context.startOfferAutomation(
     returnToAppAggressively: Boolean = true
 ) {
     val requestedMode = mode.ifBlank { offer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE }
-    val effectiveMode = if (signatureLearning || offer?.signatureDetectionEnabled == true) {
-        OFFER_EXECUTION_MODE_ADVANCED
-    } else {
-        requestedMode
-    }
+    // Speed rule:
+    // - When caller requests SIMPLE, do not force ADVANCED just because signature detection is enabled.
+    // - Signature learning always needs ADVANCED.
+    val effectiveMode = if (signatureLearning) OFFER_EXECUTION_MODE_ADVANCED else requestedMode
+    val effectiveSignatureEnabled = (offer?.signatureDetectionEnabled == true) &&
+        effectiveMode.equals(OFFER_EXECUTION_MODE_ADVANCED, ignoreCase = true) &&
+        !signatureLearning
     ServiceLauncher.startAutomationService(this, Intent(this, AutomationService::class.java).apply {
         putExtra("mode", effectiveMode)
         putExtra("code", finalCode)
@@ -29,7 +31,7 @@ fun Context.startOfferAutomation(
             putExtra("offerId", offer.id)
             putExtra("offerName", offer.name)
             putExtra("simSelection", offer.simSelection)
-            putExtra("signatureEnabled", offer.signatureDetectionEnabled)
+            putExtra("signatureEnabled", effectiveSignatureEnabled)
             putExtra("signatureMode", offer.signatureAction)
         }
     })

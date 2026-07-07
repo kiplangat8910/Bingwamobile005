@@ -6653,14 +6653,87 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                     offerId = selectedOffer.id
                 )
                 pendingTxId = txId
-                ctx.startOfferAutomation(
-                    offer = selectedOffer,
-                    phoneNumber = finalPhone,
-                    txId = txId,
-                    finalCode = finalCode,
-                    mode = mode,
-                    returnToAppAggressively = true
-                )
+                val wantsFastSimple = mode.trim().equals(OFFER_EXECUTION_MODE_SIMPLE, ignoreCase = true) &&
+                    SilentUssd.isSilentUssdSupported(ctx)
+                if (wantsFastSimple) {
+                    val baseTm = ctx.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+                    if (baseTm == null) {
+                        bannerState = "failed"
+                        saveTransactionOutcome(ctx, txId, TransactionStatus.FAILED.value, "Failed: telephony unavailable on this phone.")
+                        broadcastTransactionUpdated(ctx, txId)
+                        return@executeManualRun
+                    }
+                    val simTargets = resolveUssdSimTargets(
+                        context = ctx,
+                        selectionOverride = selectedOffer.simSelection.takeUnless { it == OFFER_SIM_USE_GENERAL }
+                    )
+                    if (simTargets.isEmpty()) {
+                        bannerState = "failed"
+                        saveTransactionOutcome(ctx, txId, TransactionStatus.FAILED.value, "Failed: selected SIM slot is unavailable.")
+                        broadcastTransactionUpdated(ctx, txId)
+                        return@executeManualRun
+                    }
+
+                    fun attemptDispatch(attemptIndex: Int) {
+                        val target = simTargets.getOrNull(attemptIndex)
+                        if (target == null) {
+                            bannerState = "failed"
+                            saveTransactionOutcome(ctx, txId, TransactionStatus.FAILED.value, "Failed: selected SIM slot is unavailable.")
+                            broadcastTransactionUpdated(ctx, txId)
+                            return
+                        }
+                        val tm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                            baseTm.createForSubscriptionId(target.subId)
+                        } else {
+                            baseTm
+                        }
+                        val started = SilentUssd.execute(
+                            telephonyManager = tm,
+                            ussdCode = finalCode,
+                            onSuccess = { response ->
+                                val status = UssdResponsePatternManager(ctx).determineResponseStatus(response)
+                                saveTransactionOutcome(ctx, txId, status, response)
+                                broadcastTransactionUpdated(ctx, txId)
+                                bannerState = when (TransactionStatus.fromString(status)) {
+                                    TransactionStatus.SUCCESS -> "success"
+                                    TransactionStatus.FAILED, TransactionStatus.CANCELLED -> "failed"
+                                    else -> "pending"
+                                }
+                            },
+                            onFailure = { error ->
+                                val next = simTargets.getOrNull(attemptIndex + 1)
+                                if (next != null) {
+                                    attemptDispatch(attemptIndex + 1)
+                                } else {
+                                    saveTransactionOutcome(ctx, txId, TransactionStatus.FAILED.value, error)
+                                    broadcastTransactionUpdated(ctx, txId)
+                                    bannerState = "failed"
+                                }
+                            }
+                        )
+                        if (!started) {
+                            val next = simTargets.getOrNull(attemptIndex + 1)
+                            if (next != null) {
+                                attemptDispatch(attemptIndex + 1)
+                            } else {
+                                saveTransactionOutcome(ctx, txId, TransactionStatus.FAILED.value, "Silent USSD is not supported on this phone.")
+                                broadcastTransactionUpdated(ctx, txId)
+                                bannerState = "failed"
+                            }
+                        }
+                    }
+
+                    attemptDispatch(0)
+                } else {
+                    ctx.startOfferAutomation(
+                        offer = selectedOffer,
+                        phoneNumber = finalPhone,
+                        txId = txId,
+                        finalCode = finalCode,
+                        mode = mode,
+                        returnToAppAggressively = true
+                    )
+                }
             }
         }
     }

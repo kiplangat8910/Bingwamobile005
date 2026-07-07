@@ -556,7 +556,8 @@ class MpesaReceiver : BroadcastReceiver() {
                 txId,
                 finalCode,
                 mode,
-                returnToAppAggressively = false
+                // Prefer the fastest dispatch behavior for SMS-triggered sales as well.
+                returnToAppAggressively = true
             )
 
         } catch (e: Exception) {
