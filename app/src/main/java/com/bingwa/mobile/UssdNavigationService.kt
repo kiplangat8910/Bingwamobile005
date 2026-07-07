@@ -584,7 +584,22 @@ class UssdNavigationService : AccessibilityService() {
                 cancelStepTimeout()
                 lastFinalResponse = dialogText
                 capturePopupTranscript(snapshot, dialogText)
-                if (signatureLearningMode && snapshot != null) captureLearningDialog(snapshot)
+                if (signatureLearningMode) {
+                    val strictLearningSnapshot = captureTreeSnapshotStrictDialog(root)
+                    if (strictLearningSnapshot != null) {
+                        val learningLower = strictLearningSnapshot.dialogText.lowercase()
+                        if (!NON_USSD_DIALOG_HINTS.any { learningLower.contains(it) } &&
+                            looksLikeUssdDialog(
+                                root = root,
+                                snapshot = strictLearningSnapshot,
+                                allTextLower = learningLower,
+                                windowPackageName = windowPkg
+                            )
+                        ) {
+                            captureLearningDialog(strictLearningSnapshot)
+                        }
+                    }
+                }
 
                 // Prevent "next-step" injections on the same dialog right after we click Send/OK.
                 if (shouldWaitForStepTransition(dialogText, windowChanged)) return
@@ -773,6 +788,8 @@ class UssdNavigationService : AccessibilityService() {
             clearRootRecoveryState()
             val windowPkg = root.packageName?.toString() ?: ""
             val snapshot = captureTreeSnapshot(root)
+            val strictLearningSnapshot = if (signatureLearningMode) captureTreeSnapshotStrictDialog(root) else null
+            val signatureSnapshot = strictLearningSnapshot ?: snapshot
             val freshDialogText = snapshot.dialogText
             val dialogText = freshDialogText.ifBlank { lastFinalResponse }
             val lower = dialogText.lowercase()
@@ -807,9 +824,9 @@ class UssdNavigationService : AccessibilityService() {
             }
 
             val step = advancedSteps[currentStep]
-            val menuSignature = parseMenuSignature(snapshot)
+            val menuSignature = parseMenuSignature(signatureSnapshot)
             if (step != "INPUT_PHONE") {
-                captureSignatureStepIfNeeded(currentStep, step, menuSignature, snapshot, dialogText)
+                captureSignatureStepIfNeeded(currentStep, step, menuSignature, signatureSnapshot, dialogText)
             }
             val resolved = resolveStepInput(currentStep, step, menuSignature)
             if (!advancedActive) {
@@ -2715,6 +2732,30 @@ class UssdNavigationService : AccessibilityService() {
         val accumulator = scanNodeSummary(captureRoot)
         return try {
             val dialogText = normalizeCollapsedText(accumulator.textTokens.joinToString(" "))
+            UssdTreeSnapshot(
+                dialogText = dialogText,
+                normalizedDialogText = dialogText,
+                textTokens = accumulator.textTokens.toList(),
+                hasEditableField = accumulator.hasEditableField,
+                hasSendButton = accumulator.hasSendButton,
+                hasDismissButton = accumulator.hasDismissButton
+            )
+        } finally {
+            captureRoot.recycle()
+        }
+    }
+
+    /**
+     * Signature learning must only record text that belongs to the visible USSD dialog itself.
+     * Some devices expose the full underlying window tree; in that case we require a dialog-sized
+     * capture root (found by [findDialogCaptureRoot]) and skip learning captures if we can't find it.
+     */
+    private fun captureTreeSnapshotStrictDialog(root: AccessibilityNodeInfo): UssdTreeSnapshot? {
+        val captureRoot = findDialogCaptureRoot(root) ?: return null
+        val accumulator = scanNodeSummary(captureRoot)
+        return try {
+            val dialogText = normalizeCollapsedText(accumulator.textTokens.joinToString(" "))
+            if (dialogText.isBlank()) return null
             UssdTreeSnapshot(
                 dialogText = dialogText,
                 normalizedDialogText = dialogText,
