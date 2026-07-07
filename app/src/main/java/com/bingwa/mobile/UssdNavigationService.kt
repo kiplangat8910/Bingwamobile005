@@ -1674,9 +1674,9 @@ class UssdNavigationService : AccessibilityService() {
 
         if (fieldText == null) {
             val newCount = noFieldCount + 1
-            if (hasRecentVerifiedInput(expected) && newCount >= 2) {
+            if ((hasRecentVerifiedInput(expected) || hasRecentExpectedInput(expected)) && newCount >= 2) {
                 handler.post { clickSendButton(expected, 0, skipFieldVerification = true) }
-            } else if (newCount >= NO_FIELD_PATIENCE && hasRecentVerifiedInput(expected)) {
+            } else if (newCount >= NO_FIELD_PATIENCE && (hasRecentVerifiedInput(expected) || hasRecentExpectedInput(expected))) {
                 handler.post { clickSendButton(expected, 0) }
             }
             else handler.postDelayed(
@@ -1735,7 +1735,7 @@ class UssdNavigationService : AccessibilityService() {
         when {
             fieldText == null -> {
                 val newCount = noFieldCount + 1
-                if (hasRecentVerifiedInput(expected) && newCount >= 1) {
+                if ((hasRecentVerifiedInput(expected) || hasRecentExpectedInput(expected)) && newCount >= 1) {
                     handler.post { finishLearningWithoutFinalSubmission() }
                 } else if (newCount >= NO_FIELD_PATIENCE) {
                     isProcessing = false
@@ -1780,7 +1780,7 @@ class UssdNavigationService : AccessibilityService() {
         }
         when {
             fieldText == null -> {
-                if (hasRecentVerifiedInput(expected)) {
+                if (hasRecentVerifiedInput(expected) || hasRecentExpectedInput(expected)) {
                     handler.post { clickSendButton(expected, 0, skipFieldVerification = true) }
                 }
                 else handler.postDelayed(
@@ -1808,7 +1808,7 @@ class UssdNavigationService : AccessibilityService() {
         if (attempt >= MAX_SEND_ATTEMPTS) {
             isProcessing = false; handler.post { dismissErrorAndRestart() }; return
         }
-        if (skipFieldVerification && !hasRecentVerifiedInput(expectedValue)) {
+        if (skipFieldVerification && !hasRecentVerifiedInput(expectedValue) && !hasRecentExpectedInput(expectedValue)) {
             handler.post { verifyThenSend(expectedValue, 0) }
             return
         }
@@ -2195,7 +2195,7 @@ class UssdNavigationService : AccessibilityService() {
                             existingField = field
                         )
                     } else {
-                        hasRecentVerifiedInput(expected)
+                        hasRecentVerifiedInput(expected) || hasRecentExpectedInput(expected)
                     }
                 } finally {
                     runCatching { field?.recycle() }
@@ -2996,7 +2996,7 @@ class UssdNavigationService : AccessibilityService() {
             root = root,
             expectedValue = expectedValue,
             existingField = field
-        ) || hasRecentVerifiedInput(expectedValue)
+        ) || hasRecentVerifiedInput(expectedValue) || (field == null && hasRecentExpectedInput(expectedValue))
         if (!verified) return false
         val fieldText = field?.let(::readFieldText)
         val sendBtn = findBestSendActionButton(root)
@@ -3425,13 +3425,9 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun isLikelyDirectWriteVerified(node: AccessibilityNodeInfo, expectedValue: String): Boolean {
+        runCatching { node.refresh() }
         val readBack = readFieldText(node)
-        return when {
-            matchesExpectedInput(readBack, expectedValue) -> true
-            readBack.isNullOrBlank() -> true
-            isLikelyPromptText(readBack) -> true
-            else -> false
-        }
+        return matchesExpectedInput(readBack, expectedValue)
     }
 
     private fun pasteTextIntoNode(node: AccessibilityNodeInfo, value: String): Boolean {
