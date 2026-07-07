@@ -51,7 +51,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -555,39 +554,17 @@ private fun RecentActivityShowcase() {
 
 @Composable
 private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
-    val context = LocalContext.current
-    val executionCopy = remember(
-        tx.id,
-        tx.status,
-        tx.offerId,
-        tx.ussdCode,
-        tx.ussdTranscript,
-        tx.ussdResponse
-    ) {
-        transactionExecutionCopy(context, tx)
-    }
     val liveExecution = isTransactionActivelyExecuting(tx)
     val title = tx.clientName.ifBlank {
         tx.description.ifBlank { "Transaction" }
     }
-    val shouldShowReason = tx.statusEnum == TransactionStatus.FAILED ||
-        tx.statusEnum == TransactionStatus.CANCELLED ||
-        DailyLimitPolicy.isDailyLimitHold(tx)
-    val reason = if (shouldShowReason) transactionReasonShort(tx) else ""
-    val subtitle = buildList {
-        reason.takeIf { it.isNotBlank() }?.let(::add)
-        tx.description
-            .takeIf { it.isNotBlank() && !it.equals(title, ignoreCase = true) }
-            ?.let(::add)
-        tx.phoneNumber
-            .takeIf { it.isNotBlank() }
-            ?.let { add(maskActivityPhone(it)) }
-        if (tx.executionDurationMs > 0L) {
-            formatExecutionMs(tx.executionDurationMs).takeIf { it.isNotBlank() }?.let { add("$it run") }
-        } else if (tx.date.isNotBlank()) {
-            add(tx.date)
-        }
-    }.take(2).joinToString(" • ").ifBlank { "Latest automated transaction" }
+    val phoneLabel = tx.phoneNumber
+        .takeIf { it.isNotBlank() }
+        ?.let(::maskActivityPhone)
+        ?: "Number not captured"
+    val amountLabel = formatActivityAmount(tx.amount)
+    val timeLabel = formatActivityTime(tx)
+    val relativeLabel = formatActivityRelativeTime(tx)
     val statusColor = when (tx.statusEnum) {
         TransactionStatus.SUCCESS -> C.green
         TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
@@ -655,41 +632,49 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    subtitle,
+                    phoneLabel,
                     color = C.t3,
                     fontSize = 11.sp,
-                    lineHeight = 16.sp
+                    lineHeight = 16.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                if (liveExecution) {
-                    Spacer(Modifier.height(6.dp))
-                    ActivityProcessingPill(
-                        accent = statusColor,
-                        label = executionCopy.processingLabel
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        timeLabel,
+                        color = C.t3,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
                     )
+                    if (relativeLabel.isNotBlank()) {
+                        Text(
+                            "•",
+                            color = C.t3.copy(alpha = 0.7f),
+                            fontSize = 11.sp
+                        )
+                        Text(
+                            relativeLabel,
+                            color = statusColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
             Spacer(Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.End) {
-                Text(tx.amount.ifBlank { "-" }, color = C.t1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(2.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    if (liveExecution) {
-                        Box(
-                            Modifier.size(6.dp)
-                                .clip(CircleShape)
-                                .background(statusColor.copy(alpha = liveDotAlpha))
-                        )
-                    }
-                    Text(
-                        executionCopy.statusLabel,
-                        color = statusColor,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+                Text(
+                    amountLabel,
+                    color = C.t1,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -791,6 +776,37 @@ private fun maskActivityPhone(phone: String): String {
     val digits = phone.filter(Char::isDigit)
     if (digits.length < 7) return phone
     return digits.take(4) + "..." + digits.takeLast(2)
+}
+
+private fun formatActivityAmount(amount: String): String {
+    val normalized = amount.trim().removePrefix("+").removePrefix("-").trim()
+    if (normalized.isBlank()) return "KSh -"
+    return when {
+        normalized.startsWith("ksh", ignoreCase = true) -> "KSh " + normalized.substring(3).trim()
+        normalized.startsWith("kes", ignoreCase = true) -> "KSh " + normalized.substring(3).trim()
+        normalized.firstOrNull()?.isDigit() == true -> "KSh $normalized"
+        else -> normalized
+    }
+}
+
+private fun formatActivityTime(tx: Transaction): String {
+    val timestamp = transactionTimestamp(tx)
+    if (timestamp <= 0L) return tx.date.ifBlank { "--:--" }
+    return android.text.format.DateFormat.format("h:mm a", timestamp).toString().uppercase()
+}
+
+private fun formatActivityRelativeTime(tx: Transaction): String {
+    val timestamp = transactionTimestamp(tx)
+    if (timestamp <= 0L) return ""
+    val delta = (System.currentTimeMillis() - timestamp).coerceAtLeast(0L)
+    val minutes = delta / 60_000L
+    val hours = delta / 3_600_000L
+    return when {
+        minutes < 1L -> "Just now"
+        minutes < 60L -> "${minutes}m ago"
+        hours < 24L -> "${hours}h ago"
+        else -> ""
+    }
 }
 
 private fun formatActivityDuration(durationMs: Long): String {

@@ -4231,30 +4231,20 @@ private fun HomeDispatchRow(
     val statusColor = transactionStatusColor(tx)
     val titleColor = Color(0xFFF2F6F7)
     val phoneColor = Color(0xFF8B979B)
-    val offerColor = Color(0xFF9FD8FF)
     val timeColor = Color(0xFFC9D4DB)
-    val dividerColor = Color(0xFF11181B)
     val metaDotColor = Color(0xFF647279)
     val title = tx.clientName.ifBlank { tx.description.ifBlank { "Recent automation" } }
     val phone = tx.phoneNumber.ifBlank { "Phone not available" }
-    val serviceLabel = tx.description.ifBlank { "Offer not captured" }
     val avatarLabel = recentActivityInitials(title)
     val amountLabel = recentActivityAmountLabel(tx.amount)
     val timeLabel = recentActivityTimeLabel(tx)
     val relativeLabel = recentActivityRelativeLabel(tx)
-    val serviceIcon = recentActivityServiceIcon(serviceLabel)
     val rowAnim = rememberInfiniteTransition(label = "home_dispatch_row")
     val liveBeam by rowAnim.animateFloat(
         initialValue = -0.30f,
         targetValue = 1.10f,
         animationSpec = infiniteRepeatable(tween(if (liveExecution) 1500 else 3000, easing = LinearEasing)),
         label = "home_dispatch_row_beam"
-    )
-    val liveDotAlpha by rowAnim.animateFloat(
-        initialValue = 0.38f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(900, easing = EaseInOutSine), RepeatMode.Reverse),
-        label = "home_dispatch_row_dot"
     )
     val liveAvatarScale by rowAnim.animateFloat(
         initialValue = 0.96f,
@@ -4372,104 +4362,6 @@ private fun HomeDispatchRow(
                         fontFamily = FontFamily.Monospace,
                         maxLines = 1
                     )
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = statusColor.copy(alpha = if (liveExecution) 0.14f else 0.10f),
-                        border = BorderStroke(1.dp, statusColor.copy(alpha = if (liveExecution) 0.28f else 0.18f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            if (liveExecution) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(statusColor.copy(alpha = liveDotAlpha))
-                                )
-                            }
-                            Text(
-                                transactionStatusLabel(tx),
-                                color = statusColor.copy(alpha = 0.96f),
-                                fontSize = 10.5.sp,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(dividerColor)
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                serviceIcon,
-                                null,
-                                tint = offerColor,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                serviceLabel,
-                                color = offerColor,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                lineHeight = 15.sp
-                            )
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                Icons.Outlined.Schedule,
-                                null,
-                                tint = timeColor,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                timeLabel,
-                                color = timeColor,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Medium,
-                                fontFamily = FontFamily.Monospace,
-                                maxLines = 1
-                            )
-                            if (relativeLabel.isNotBlank()) {
-                                Text(
-                                    "•",
-                                    color = metaDotColor,
-                                    fontSize = 11.sp
-                                )
-                                Text(
-                                    relativeLabel,
-                                    color = statusColor.copy(alpha = 0.96f),
-                                    fontSize = 11.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    }
                     IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                         Icon(
                             Icons.Outlined.Delete,
@@ -4479,33 +4371,38 @@ private fun HomeDispatchRow(
                         )
                     }
                 }
-                Spacer(Modifier.height(10.dp))
-                AnimatedContent(
-                    targetState = liveExecution,
-                    transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
-                    label = "home_dispatch_status_hint"
-                ) { executing ->
-                    if (executing) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            HomeExecutionDots(accent = statusColor)
-                            Text(
-                                "Execution taking place. Final status appears automatically when it finishes.",
-                                color = statusColor.copy(alpha = 0.92f),
-                                fontSize = 11.sp,
-                                lineHeight = 15.sp,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    } else {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Outlined.Schedule,
+                        null,
+                        tint = timeColor,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        timeLabel,
+                        color = timeColor,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1
+                    )
+                    if (relativeLabel.isNotBlank()) {
                         Text(
-                            transactionCompletionSummary(tx),
-                            color = statusColor.copy(alpha = 0.92f),
+                            "•",
+                            color = metaDotColor,
+                            fontSize = 11.sp
+                        )
+                        Text(
+                            relativeLabel,
+                            color = statusColor.copy(alpha = 0.96f),
                             fontSize = 11.sp,
-                            lineHeight = 15.sp
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
                         )
                     }
                 }
