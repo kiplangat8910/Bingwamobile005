@@ -9159,7 +9159,7 @@ fun OffersScreen(onBack: () -> Unit) {
                 title = { Text("Repair Bundle Catalog", color = C.t1, fontWeight = FontWeight.Bold) },
                 text = {
                     Text(
-                        "Restore missing built-in bundles, remove broken entries, and keep your custom offers. Use this if the console has no bundles or offer data became corrupted.",
+                        "Reset built-in bundle offers back to their original USSD codes, restore any missing default bundles, remove broken entries, and keep your custom offers.",
                         color = C.t2,
                         fontSize = 13.sp,
                         lineHeight = 19.sp

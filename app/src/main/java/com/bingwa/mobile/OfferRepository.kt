@@ -74,6 +74,7 @@ object OfferRepository {
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putString(KEY_OFFERS, json)
+                .putInt(KEY_CATALOG_VERSION, CURRENT_CATALOG_VERSION)
                 .apply()
         }
         context.sendBroadcast(Intent(ACTION_OFFERS_UPDATED).setPackage(context.packageName))
@@ -86,25 +87,56 @@ object OfferRepository {
             val defaults = defaultOffers(context)
             val current = parse(prefs.safeGetString(KEY_OFFERS, null)).orEmpty()
             val cleaned = sanitize(current)
-            val existingKeys = cleaned.mapTo(mutableSetOf(), ::offerKey)
             val managedPrices = storage.managedCatalogPrices()
+            val allManagedPrices = managedPrices + storage.legacyManagedCatalogPrices()
+            val managedKeys = storage.managedCatalogKeys()
             val defaultIds = defaults.mapTo(mutableSetOf()) { it.id }
-            val existingManagedPrices = cleaned.mapTo(mutableSetOf()) { it.price }.intersect(managedPrices)
-            val existingManagedIds = cleaned.mapTo(mutableSetOf()) { it.id }.intersect(defaultIds)
-            val existingManagedCatalogKeys = cleaned.mapNotNullTo(mutableSetOf()) {
-                it.catalogKey.takeIf { key -> key.isNotBlank() }
+            val existingByCatalogKey = cleaned
+                .filter { it.catalogKey.isNotBlank() }
+                .associateBy { it.catalogKey }
+            val legacyManagedById = cleaned
+                .filter { it.catalogKey.isBlank() }
+                .associateBy { it.id }
+            val legacyManagedByPrice = cleaned
+                .filter { it.catalogKey.isBlank() && it.price in allManagedPrices }
+                .associateBy { it.price }
+            val customOffers = cleaned.filterNot { offer ->
+                offer.catalogKey in managedKeys ||
+                    (offer.catalogKey.isBlank() && (offer.id in defaultIds || offer.price in allManagedPrices))
             }
-            val merged = cleaned.toMutableList()
-            var nextId = ((merged.maxOfOrNull { it.id } ?: 0).coerceAtLeast(0)) + 1
+            val merged = mutableListOf<OfferItem>()
+            var nextId = ((cleaned.maxOfOrNull { it.id } ?: 0).coerceAtLeast(0)) + 1
             var restoredDefaultOffers = 0
 
-            defaults.forEach { offer ->
-                if (offer.catalogKey in existingManagedCatalogKeys || offer.id in existingManagedIds || offer.price in existingManagedPrices) {
+            defaults.forEach { default ->
+                val existing = existingByCatalogKey[default.catalogKey]
+                    ?: legacyManagedById[default.id]
+                    ?: legacyManagedByPrice[default.price]
+                if (existing == null) {
+                    merged += default.copy(id = nextId++)
+                    restoredDefaultOffers++
                     return@forEach
                 }
-                if (existingKeys.add(offerKey(offer))) {
-                    merged += offer.copy(id = nextId++)
-                    restoredDefaultOffers++
+
+                val codeChanged = !existing.ussdCode.trim().equals(default.ussdCode.trim(), ignoreCase = true)
+                if (codeChanged) restoredDefaultOffers++
+                merged += existing.copy(
+                    catalogKey = default.catalogKey,
+                    ussdCode = default.ussdCode,
+                    learnedSignature = if (codeChanged) emptyList() else existing.learnedSignature,
+                    signatureLearnedAt = if (codeChanged) 0L else existing.signatureLearnedAt,
+                    signatureLearningCaptures = if (codeChanged) emptyList() else existing.signatureLearningCaptures,
+                    pendingLearnedSignature = if (codeChanged) emptyList() else existing.pendingLearnedSignature,
+                    pendingSignatureLearnedAt = if (codeChanged) 0L else existing.pendingSignatureLearnedAt,
+                    pendingSignatureLearningCaptures = if (codeChanged) emptyList() else existing.pendingSignatureLearningCaptures
+                )
+            }
+
+            customOffers.forEach { offer ->
+                merged += if (merged.any { it.id == offer.id }) {
+                    offer.copy(id = nextId++)
+                } else {
+                    offer
                 }
             }
 
