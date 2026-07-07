@@ -13,6 +13,7 @@ class UssdResponsePatternManager(private val context: Context) {
 
         val DEFAULT_SUCCESS_PATTERNS: List<String> = listOf(
             "You have successfully purchased",
+            "You have successfuly purchased",
             "Kindly wait as we process your request. Thank you",
             "Kindly wait while we process your request",
             "Keep selling",
