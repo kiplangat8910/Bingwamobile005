@@ -27,7 +27,10 @@ class UssdResponsePatternManager(private val context: Context) {
             "delivered",
             "activated",
             "confirmed",
-            "bundle activated"
+            "bundle activated",
+            "transaction successful",
+            "thank you",
+            "confirmed. Thank you"
         )
         val DEFAULT_FAILED_PATTERNS: List<String> = listOf(
             "USSD failure",
@@ -93,8 +96,21 @@ class UssdResponsePatternManager(private val context: Context) {
             matchesSuccessPattern(normalized) -> "Success"
             matchesMaintenancePattern(normalized) -> "UnderMaintenance"
             matchesFailedPattern(normalized) -> "Failed"
+            // Instead of defaulting to Failed for unknown responses, be more lenient
+            looksLikeValidResponse(normalized) -> "Success"
             else -> "Failed"
         }
+    }
+
+    /**
+     * Check if the response looks like a valid USSD response (not empty/truncated content)
+     */
+    private fun looksLikeValidResponse(normalized: String): Boolean {
+        if (normalized.length < 3) return false
+        // If it has actual message content that's not just punctuation, treat it as valid
+        val hasContent = normalized.any { it.isLetterOrDigit() }
+        val hasMultipleWords = normalized.split("\\s+".toRegex()).size > 2
+        return hasContent && hasMultipleWords
     }
 
     fun getSuccessPatterns() = DEFAULT_SUCCESS_PATTERNS
