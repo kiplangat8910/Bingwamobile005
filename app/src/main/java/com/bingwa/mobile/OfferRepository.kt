@@ -118,17 +118,11 @@ object OfferRepository {
                     return@forEach
                 }
 
-                val codeChanged = !existing.ussdCode.trim().equals(default.ussdCode.trim(), ignoreCase = true)
-                if (codeChanged) restoredDefaultOffers++
                 merged += existing.copy(
                     catalogKey = default.catalogKey,
-                    ussdCode = default.ussdCode,
-                    learnedSignature = if (codeChanged) emptyList() else existing.learnedSignature,
-                    signatureLearnedAt = if (codeChanged) 0L else existing.signatureLearnedAt,
-                    signatureLearningCaptures = if (codeChanged) emptyList() else existing.signatureLearningCaptures,
-                    pendingLearnedSignature = if (codeChanged) emptyList() else existing.pendingLearnedSignature,
-                    pendingSignatureLearnedAt = if (codeChanged) 0L else existing.pendingSignatureLearnedAt,
-                    pendingSignatureLearningCaptures = if (codeChanged) emptyList() else existing.pendingSignatureLearningCaptures
+                    // Keep the user's current code and learned flow exactly as saved.
+                    // Repair should only restore missing defaults or remove broken items.
+                    ussdCode = existing.ussdCode
                 )
             }
 

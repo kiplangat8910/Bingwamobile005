@@ -9129,7 +9129,7 @@ fun OffersScreen(onBack: () -> Unit) {
                 title = { Text("Repair Bundle Catalog", color = C.t1, fontWeight = FontWeight.Bold) },
                 text = {
                     Text(
-                        "Reset built-in bundle offers back to their original USSD codes, restore any missing default bundles, remove broken entries, and keep your custom offers.",
+                        "Restore any missing default bundles, remove broken entries, and keep your saved bundle edits and custom offers exactly as they are.",
                         color = C.t2,
                         fontSize = 13.sp,
                         lineHeight = 19.sp
@@ -9142,7 +9142,7 @@ fun OffersScreen(onBack: () -> Unit) {
                         showRepairDialog = false
                         Toast.makeText(
                             ctx,
-                            "Catalog repaired. Restored ${result.restoredDefaultOffers} default offers and removed ${result.removedBrokenOffers} broken entries.",
+                            "Catalog repaired. Restored ${result.restoredDefaultOffers} missing default offers and removed ${result.removedBrokenOffers} broken entries.",
                             Toast.LENGTH_LONG
                         ).show()
                     }) {
