@@ -496,7 +496,7 @@ class AutomationService : Service() {
             return
         }
 
-        val status = forcedStatus ?: patternManager.determineResponseStatus(response)
+        val status = forcedStatus ?: determineFinalStatus(request, response, transcript)
         Log.d(TAG, "Status='$status' for txId=${request.txId}")
 
         if (shouldRetryRetriableFinalResponse(status, response)) {
@@ -518,6 +518,28 @@ class AutomationService : Service() {
             else -> Unit
         }
         stopSelf()
+    }
+
+    private fun determineFinalStatus(
+        request: AutomationRequest,
+        response: String,
+        transcript: String?
+    ): String {
+        val combined = when {
+            transcript.isNullOrBlank() -> response
+            response.isBlank() -> transcript
+            else -> "$response\n$transcript"
+        }
+        if (combined.isBlank()) return "Failed"
+        return when {
+            patternManager.matchesFailedRetryPattern(combined) -> "Failed"
+            patternManager.matchesAlreadyRecommendedPattern(combined) -> "Pending"
+            patternManager.matchesSuccessPattern(combined) -> "Success"
+            patternManager.matchesMaintenancePattern(combined) -> "UnderMaintenance"
+            patternManager.matchesFailedPattern(combined) -> "Failed"
+            request.mode.equals(OFFER_EXECUTION_MODE_ADVANCED, ignoreCase = true) -> "Pending"
+            else -> "Failed"
+        }
     }
 
     private fun handleFailedWithFallback(request: AutomationRequest, response: String) {
