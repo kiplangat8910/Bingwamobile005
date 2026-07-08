@@ -83,7 +83,9 @@ object SilentUssd {
                     response: CharSequence
                 ) {
                     Log.d(TAG, "publicApi onReceiveUssdResponse: $response")
-                    deliverSuccess(response.toString())
+                    // Extract only the popup response, not screen content
+                    val cleanResponse = extractUssdPopupResponse(response.toString())
+                    deliverSuccess(cleanResponse)
                 }
 
                 override fun onReceiveUssdResponseFailed(
@@ -173,7 +175,8 @@ object SilentUssd {
                             val response = args?.lastOrNull { it is CharSequence } as? CharSequence
                                 ?: args?.getOrNull(2) as? CharSequence
                                 ?: args?.getOrNull(1) as? CharSequence
-                            deliverSuccess(response?.toString() ?: "")
+                            val cleanResponse = extractUssdPopupResponse(response?.toString() ?: "")
+                            deliverSuccess(cleanResponse)
                         }
                         "onReceiveUssdResponseFailed" -> {
                             val code = args?.filterIsInstance<Int>()?.firstOrNull() ?: -1
@@ -184,6 +187,36 @@ object SilentUssd {
                 }
             }
         )
+    }
+
+    /**
+     * Extract the USSD popup response text, filtering out screen content.
+     * This focuses on what the USSD popup actually displays, not what's on the screen.
+     */
+    private fun extractUssdPopupResponse(rawResponse: String): String {
+        if (rawResponse.isBlank()) return ""
+        
+        val trimmed = rawResponse.trim()
+        
+        // If it looks like a menu/list (multiple lines with numbers), it's likely popup content
+        val isMenuPopup = trimmed.contains(Regex("""\d+\s*[\)\].:\-]"""))
+        
+        // If it contains typical USSD response keywords, keep it
+        val hasUssdKeywords = listOf(
+            "success", "failed", "error", "balance", "ksh", "kes",
+            "thank you", "wait", "enter", "confirm", "please", "option",
+            "try again", "maintained", "process", "received", "activated"
+        ).any { keyword -> trimmed.lowercase().contains(keyword) }
+        
+        // Prefer single-line responses or menu popups over multi-paragraph content
+        val lines = trimmed.split("\n")
+        
+        return if (lines.size <= 2 || isMenuPopup || hasUssdKeywords) {
+            trimmed
+        } else {
+            // Multi-paragraph - extract first meaningful paragraph
+            lines.firstOrNull { it.trim().isNotEmpty() }?.trim() ?: trimmed
+        }
     }
 
     private fun hasReflectionMethod(tm: TelephonyManager): Boolean {
