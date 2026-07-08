@@ -12,7 +12,7 @@ import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.util.concurrent.atomic.AtomicBoolean
 
-object SilentUssd {
+object SilentUssdOptimized {
     private const val TAG = "SilentUssd"
     private const val TIMEOUT_MS = 12_000L  // was 20_000L - faster timeout
 

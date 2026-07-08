@@ -8,7 +8,7 @@ internal object TransactionStore {
     private const val PREFS_NAME = "transactions"
     private const val KEY_LIST = "list"
     private const val MAX_RECENT_TRANSACTIONS = 100
-    private val AMOUNT_REGEX = Regex("""\d+(?:\.\d+)?"""))
+    private val AMOUNT_REGEX = Regex("""\d+(?:\.\d+)?""")
     private val lock = Any()
 
     @Volatile

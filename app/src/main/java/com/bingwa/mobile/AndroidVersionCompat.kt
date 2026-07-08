@@ -10,7 +10,7 @@ import android.util.Log
  * Ensures app functions reliably on Android 5.0+ (API 21+)
  */
 object AndroidVersionCompat {
-    private const val TAG = "AndroidVersionCompat"
+    const val TAG = "AndroidVersionCompat"
 
     /**
      * Check if device supports silent USSD execution.
@@ -68,8 +68,8 @@ object AndroidVersionCompat {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             subId
         } else {
-            // Pre-N: subscription ID may not be fully supported
-            TelephonyManager.getDefault().subscriptionId
+            // Pre-N: keep the provided ID because newer static helpers are unavailable.
+            subId
         }
     }
 
