@@ -1,17 +1,8 @@
 package com.bingwa.mobile
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.ImageDecoder
-import android.net.Uri
-import android.os.Build
-import android.provider.MediaStore
-import android.telephony.SubscriptionInfo
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,25 +18,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.DeleteSweep
-import androidx.compose.material.icons.rounded.Error
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Phone
-import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.SimCard
-import androidx.compose.material.icons.rounded.Warning
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,1386 +43,461 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
-private const val SCRATCH_CARD_DIAL_PREFIX = "*141*"
-private const val SCRATCH_CARD_FREE_LIMIT = 10
-private const val SCRATCH_CARD_PAID_BLOCK_SIZE = 10
-private const val SCRATCH_CARD_TOKENS_PER_BLOCK = 30
-private const val SCRATCH_CARD_FREE_WINDOW_MS = 24L * 60L * 60L * 1_000L
-private const val SCRATCH_CARD_BATCH_DELAY_MS = 2_000L
-private const val KEY_SCRATCH_CARD_FREE_WINDOW_STARTED_AT = "scratch_card_free_window_started_at"
-private const val KEY_SCRATCH_CARD_FREE_USED = "scratch_card_free_used"
-
-private enum class ScratchCardItemStatus {
-    Pending,
-    Running,
-    Success,
-    Failed
-}
-
-private data class ScratchCardItem(
-    val pin: String,
-    val status: ScratchCardItemStatus = ScratchCardItemStatus.Pending,
-    val note: String = "Waiting to start"
-)
-
-private data class ScratchCardScanResult(
-    val bitmap: Bitmap,
-    val pins: List<String>
-)
-
-private data class ScratchCardLaunchResult(
-    val succeeded: Boolean,
-    val message: String
-)
-
-private data class ScratchCardBillingPreview(
-    val freeCardsApplied: Int,
-    val chargeableCards: Int,
-    val tokenCost: Int,
-    val tokenBalance: Int,
-    val unlimitedActive: Boolean,
-    val freeCardsRemaining: Int,
-    val resetAtMillis: Long,
-    val nextWindowStartedAt: Long,
-    val nextFreeCardsUsed: Int,
-    val runnableCards: Int,
-    val skippedCards: Int
-) {
-    val canStartBatch: Boolean
-        get() = runnableCards > 0
-}
+private const val PREFS_SCRATCH_CARD = "scratch_card_prefs"
+private const val KEY_RECENT_PINS = "recent_pins"
+private const val MAX_RECENT_PINS = 5
 
 @Composable
-fun ScratchCardRechargeSettings(onBack: () -> Unit) {
+fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    val availableSims = getAvailableSims(ctx).sortedBy { it.simSlotIndex }
-    val defaultBatchSimSubId = resolvePreferredUssdSubId(ctx)
-    val defaultSimLabel = if (availableSims.isNotEmpty()) {
-        describeScratchCardSimSelection(defaultBatchSimSubId, availableSims)
-    } else {
-        "Current SIM setting"
+    
+    var pin by remember { mutableStateOf("") }
+    var isProcessing by remember { mutableStateOf(false) }
+    var recentPins by remember { mutableStateOf(loadRecentPins(ctx)) }
+    
+    // PIN is masked for display (show •••• groups)
+    val displayPin = pin.chunked(4).joinToString(" ").padEnd(19, '•').replace(" ", " •") 
+    
+    fun onDigitPress(digit: String) {
+        if (pin.length < 16 && !isProcessing) {
+            pin += digit
+        }
     }
-
-    var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var scratchCards by remember { mutableStateOf<List<ScratchCardItem>>(emptyList()) }
-    var statusText by remember { mutableStateOf("Pick one image to scan for 16-digit scratch card PINs.") }
-    var isScanning by remember { mutableStateOf(false) }
-    var isRunning by remember { mutableStateOf(false) }
-    var showSimPicker by remember { mutableStateOf(false) }
-    var selectedBatchSimSubId by remember { mutableStateOf<Int?>(defaultBatchSimSubId) }
-    val billingPreview = remember(scratchCards) {
-        previewScratchCardBilling(ctx, scratchCards.size)
+    
+    fun onClear() {
+        pin = ""
     }
-    val activeSimLabel = describeScratchCardSimSelection(
-        selectedBatchSimSubId ?: defaultBatchSimSubId,
-        availableSims
-    )
-    val completedCount = scratchCards.count { it.status == ScratchCardItemStatus.Success }
-    val failedCount = scratchCards.count { it.status == ScratchCardItemStatus.Failed }
-    val runningCount = scratchCards.count { it.status == ScratchCardItemStatus.Running }
-
-    fun startRechargeBatch(selectedSubId: Int?, selectedSimLabel: String) {
-        if (scratchCards.isEmpty() || isRunning) return
-
-        val batchBilling = previewScratchCardBilling(ctx, scratchCards.size)
-        if (!batchBilling.canStartBatch) {
-            statusText = "No free cards are available right now and you do not have enough tokens to recharge any more scratch cards in this batch."
-            Toast.makeText(ctx, "No free cards or tokens available", Toast.LENGTH_SHORT).show()
+    
+    fun onBackspace() {
+        if (pin.isNotEmpty()) {
+            pin = pin.dropLast(1)
+        }
+    }
+    
+    fun onTopUp() {
+        if (pin.length != 16) {
+            Toast.makeText(ctx, "Please enter a complete 16-digit PIN", Toast.LENGTH_SHORT).show()
             return
         }
-
-        if (!batchBilling.unlimitedActive) {
-            if (batchBilling.tokenCost > 0 && !TokenManager(ctx).spendTokens(batchBilling.tokenCost)) {
-                statusText = "This batch needs ${batchBilling.tokenCost} tokens, but your balance changed before the recharge started."
-                Toast.makeText(ctx, "Token balance changed. Try again.", Toast.LENGTH_SHORT).show()
-                return
-            }
-            saveScratchCardBillingUsage(ctx, batchBilling)
-        }
-
-        val runnableCount = batchBilling.runnableCards.coerceAtMost(scratchCards.size)
-        scratchCards = scratchCards.mapIndexed { index, item ->
-            if (index < runnableCount) {
-                item.copy(status = ScratchCardItemStatus.Pending, note = "Waiting to start")
-            } else {
-                item.copy(
-                    status = ScratchCardItemStatus.Pending,
-                    note = "Waiting for tokens or unlimited access before this card can be recharged"
-                )
-            }
-        }
-        val batchSummary = buildScratchCardBatchSummary(batchBilling, scratchCards.size)
-
+        
         scope.launch {
-            isRunning = true
-            statusText = "$batchSummary Starting $runnableCount scratch card recharges on $selectedSimLabel."
-
-            for (index in 0 until runnableCount) {
-                val pin = scratchCards[index].pin
-                scratchCards = scratchCards.replaceAt(
-                    index,
-                    scratchCards[index].copy(
-                        status = ScratchCardItemStatus.Running,
-                        note = "Running silent recharge for ${formatScratchCardPin(pin)}"
-                    )
-                )
-
-                val result = startScratchCardRecharge(ctx, pin, selectedSubId)
-                scratchCards = scratchCards.replaceAt(
-                    index,
-                    scratchCards[index].copy(
-                        status = if (result.succeeded) ScratchCardItemStatus.Success else ScratchCardItemStatus.Failed,
-                        note = result.message
-                    )
-                )
-
-                if (index < runnableCount - 1) {
-                    statusText = if (result.succeeded) {
-                        "Card ${index + 1} of $runnableCount finished. Next card in 2s."
-                    } else {
-                        "Card ${index + 1} of $runnableCount failed. Next card in 2s."
-                    }
-                    delay(SCRATCH_CARD_BATCH_DELAY_MS)
-                }
-            }
-
-            val startedCards = scratchCards.take(runnableCount)
-            val startedCount = startedCards.count { it.status == ScratchCardItemStatus.Success }
-            val failedCount = startedCards.count { it.status == ScratchCardItemStatus.Failed }
-            statusText = if (batchBilling.skippedCards > 0) {
-                "Batch finished. Completed $startedCount cards, failed $failedCount, and left ${batchBilling.skippedCards} cards waiting for tokens or unlimited access."
+            isProcessing = true
+            val result = startScratchCardRecharge(ctx, pin)
+            
+            if (result) {
+                // Save to recent
+                saveRecentPin(ctx, pin)
+                recentPins = loadRecentPins(ctx)
+                pin = ""
+                Toast.makeText(ctx, "Recharge successful!", Toast.LENGTH_SHORT).show()
             } else {
-                "Batch finished. Completed $startedCount cards, failed $failedCount."
+                Toast.makeText(ctx, "Recharge failed. Please try again.", Toast.LENGTH_SHORT).show()
             }
-            vib(ctx, 70L)
-            Toast.makeText(ctx, "Scratch card batch finished", Toast.LENGTH_SHORT).show()
-            isRunning = false
+            isProcessing = false
         }
     }
-
-    val pickImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-
-        scope.launch {
-            isScanning = true
-            statusText = "Scanning image for scratch card PINs..."
-            try {
-                val result = scanScratchCardImage(ctx, uri)
-                previewBitmap = result.bitmap
-                scratchCards = result.pins.map {
-                    ScratchCardItem(pin = it, status = ScratchCardItemStatus.Pending, note = "Ready to recharge")
-                }
-                statusText = if (result.pins.isEmpty()) {
-                    "No 16-digit scratch card PINs were found in the selected image."
-                } else {
-                    "Found ${result.pins.size} scratch card PINs. Review them, then start the batch."
-                }
-                if (result.pins.isNotEmpty()) vib(ctx)
-            } catch (e: Exception) {
-                previewBitmap = null
-                scratchCards = emptyList()
-                statusText = "Could not scan that image. ${e.message ?: "Try another image."}"
-                Toast.makeText(ctx, "Image scan failed", Toast.LENGTH_SHORT).show()
-            } finally {
-                isScanning = false
-            }
-        }
-    }
-
+    
     Column(
-        Modifier
+        modifier = Modifier
             .fillMaxSize()
             .background(C.bg)
             .verticalScroll(rememberScrollState())
     ) {
-        if (showSimPicker) {
-            ScratchCardSimPickerDialog(
-                sims = availableSims,
-                selectedSubId = selectedBatchSimSubId,
-                defaultSimLabel = defaultSimLabel,
-                onSelect = { selectedBatchSimSubId = it },
-                onDismiss = { showSimPicker = false },
-                onConfirm = {
-                    val effectiveSubId = selectedBatchSimSubId ?: defaultBatchSimSubId
-                    val simLabel = describeScratchCardSimSelection(effectiveSubId, availableSims)
-                    showSimPicker = false
-                    startRechargeBatch(effectiveSubId, simLabel)
-                }
-            )
-        }
-        SettingsTopBar(
-            title = "Scratch Card Recharge",
-            subtitle = "Scan one image, detect many 16-digit PINs, then run *141*PIN# one by one.",
-            onBack = onBack
-        )
-        Column(
-            modifier = Modifier.padding(horizontal = UiDimens.ScreenPaddingHorizontal),
-            verticalArrangement = Arrangement.spacedBy(UiDimens.SpacingLg)
+        // Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            ScratchCardSignalStrip(
-                activeSimLabel = activeSimLabel,
-                cardCount = scratchCards.size,
-                isScanning = isScanning,
-                isRunning = isRunning
-            )
-
-            ScratchCardHeroCard(
-                cardCount = scratchCards.size,
-                billingPreview = billingPreview,
-                activeSimLabel = activeSimLabel,
-                statusText = statusText,
-                completedCount = completedCount,
-                failedCount = failedCount,
-                runningCount = runningCount,
-                isRunning = isRunning
-            )
-
-            SettingsGroup("How It Works") {
-                ScratchCardInfoRow(
-                    icon = Icons.Rounded.Search,
-                    title = "1. Scan One Image",
-                    text = "Pick one photo from your phone. The app extracts every 16-digit scratch PIN it can find and removes duplicates."
-                )
-                GroupDivider()
-                ScratchCardInfoRow(
-                    icon = Icons.Rounded.Phone,
-                    title = "2. Recharge Quietly",
-                    text = "Each *141*PIN# request runs silently in the background, then the final USSD response is saved before the next card starts."
-                )
-                GroupDivider()
-                ScratchCardInfoRow(
-                    icon = Icons.Rounded.CheckCircle,
-                    title = "3. Free Then Paid",
-                    text = "The first 10 scratch cards are free in each 24-hour window. Every extra block of up to 10 cards costs 30 tokens unless unlimited access is active."
-                )
-                GroupDivider()
-                ScratchCardInfoRow(
-                    icon = Icons.Rounded.Warning,
-                    title = "Before You Start",
-                    text = "The batch uses a fixed 2-second gap between cards. Silent USSD must work on this phone or unattended recharge will fail."
+            IconButton(onClick = onBack) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "Back",
+                    tint = C.t1
                 )
             }
-
-            SettingsGroup("Batch Controls") {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "Scratch Card Recharge",
+                color = C.t1,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        
+        // Main Card
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = C.cardHi,
+            border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "Enter your scratch card PIN",
+                    color = C.t2,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                
+                Spacer(Modifier.height(20.dp))
+                
+                // PIN Display
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        color = C.surface.copy(alpha = 0.82f),
-                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
-                    ) {
-                        Text(
-                            text = buildScratchCardPolicyLabel(billingPreview),
-                            color = C.t2,
-                            fontSize = 12.sp,
-                            lineHeight = 18.sp,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
-                        )
-                    }
-
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
-                        color = C.cardHi.copy(alpha = 0.92f),
-                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.78f))
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                    // Show 4 groups of 4 digits
+                    repeat(4) { groupIndex ->
+                        val startIndex = groupIndex * 4
+                        val endIndex = minOf(startIndex + 4, pin.length)
+                        val groupValue = if (startIndex < pin.length) {
+                            pin.substring(startIndex, endIndex)
+                        } else ""
+                        
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = C.surface.copy(alpha = 0.6f),
+                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.4f)),
+                            modifier = Modifier.width(60.dp)
                         ) {
-                            Text(
-                                text = "SIM for this batch",
-                                color = C.t1,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Default route: $defaultSimLabel. Active route: $activeSimLabel. When the batch starts, the selected SIM is used for every card in the run.",
-                                color = C.t2,
-                                fontSize = 12.sp,
-                                lineHeight = 18.sp
-                            )
-                        }
-                    }
-
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
-                        color = C.surface.copy(alpha = 0.88f),
-                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = "Batch coverage",
-                                color = C.t1,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = buildScratchCardBatchSummary(billingPreview, scratchCards.size),
-                                color = C.t2,
-                                fontSize = 12.sp,
-                                lineHeight = 18.sp
-                            )
-                            Text(
-                                text = buildScratchCardCoverageLabel(billingPreview),
-                                color = C.t3,
-                                fontSize = 11.sp,
-                                lineHeight = 16.sp
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Button(
-                            onClick = { pickImageLauncher.launch("image/*") },
-                            enabled = !isScanning && !isRunning,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = C.amber,
-                                contentColor = Color(0xFF10131A)
-                            ),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(if (isScanning) "Scanning..." else "Pick Scan Image", fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = {
-                                selectedBatchSimSubId = defaultBatchSimSubId ?: availableSims.firstOrNull()?.subscriptionId
-                                showSimPicker = true
-                            },
-                            enabled = scratchCards.isNotEmpty() && !isScanning && !isRunning,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = C.green,
-                                contentColor = Color(0xFF08130F)
-                            ),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            Box(
+                                modifier = Modifier.padding(vertical = 16.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Rounded.SimCard, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Text(if (isRunning) "Running..." else "Choose SIM & Start", fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = groupValue.padEnd(4, '•').replace(Regex("."), "•"),
+                                    color = C.t1,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 2.sp
+                                )
                             }
                         }
                     }
-
+                }
+                
+                Spacer(Modifier.height(24.dp))
+                
+                // Numpad
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Row 1: 1 2 3
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                    ) {
+                        listOf("1", "2", "3").forEach { digit ->
+                            NumpadButton(
+                                digit = digit,
+                                onClick = { onDigitPress(digit) }
+                            )
+                        }
+                    }
+                    // Row 2: 4 5 6
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                    ) {
+                        listOf("4", "5", "6").forEach { digit ->
+                            NumpadButton(
+                                digit = digit,
+                                onClick = { onDigitPress(digit) }
+                            )
+                        }
+                    }
+                    // Row 3: 7 8 9
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                    ) {
+                        listOf("7", "8", "9").forEach { digit ->
+                            NumpadButton(
+                                digit = digit,
+                                onClick = { onDigitPress(digit) }
+                            )
+                        }
+                    }
+                    // Row 4: Clear 0 Backspace
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                    ) {
+                        // Clear button
+                        Surface(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clickable(onClick = onClear),
+                            shape = CircleShape,
+                            color = C.surface.copy(alpha = 0.6f),
+                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.4f))
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Rounded.DeleteSweep,
+                                    contentDescription = "Clear",
+                                    tint = C.t2,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                        
+                        // 0 button
+                        NumpadButton(
+                            digit = "0",
+                            onClick = { onDigitPress("0") }
+                        )
+                        
+                        // Backspace button
+                        Surface(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clickable(onClick = onBackspace),
+                            shape = CircleShape,
+                            color = C.surface.copy(alpha = 0.6f),
+                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.4f))
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    "⌫",
+                                    color = C.t2,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(Modifier.height(20.dp))
+                
+                // Action Buttons Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Clear Button
                     Button(
-                        onClick = {
-                            previewBitmap = null
-                            scratchCards = emptyList()
-                            statusText = "Pick one image to scan for 16-digit scratch card PINs."
-                        },
-                        enabled = !isScanning && !isRunning && (previewBitmap != null || scratchCards.isNotEmpty()),
+                        onClick = onClear,
+                        enabled = pin.isNotEmpty() && !isProcessing,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = C.surface,
-                            contentColor = C.t1
+                            contentColor = C.t1,
+                            disabledContainerColor = C.surface.copy(alpha = 0.3f),
+                            disabledContentColor = C.t3
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(Icons.Rounded.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Text("Clear Scan", fontWeight = FontWeight.Bold)
+                        Icon(
+                            Icons.Rounded.DeleteSweep,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Clear", fontWeight = FontWeight.Bold)
+                    }
+                    
+                    // Top Up Button
+                    Button(
+                        onClick = onTopUp,
+                        enabled = pin.length == 16 && !isProcessing,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = C.green,
+                            contentColor = Color.White,
+                            disabledContainerColor = C.green.copy(alpha = 0.3f),
+                            disabledContentColor = Color.White.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Phone,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (isProcessing) "Processing..." else "Top up",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+        
+        Spacer(Modifier.height(16.dp))
+        
+        // Recents Section
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = C.cardHi,
+            border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.History,
+                        contentDescription = null,
+                        tint = C.t2,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        "Recents",
+                        color = C.t1,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                Spacer(Modifier.height(12.dp))
+                
+                if (recentPins.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "No recent recharges",
+                            color = C.t3,
+                            fontSize = 14.sp
+                        )
+                    }
+                } else {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        recentPins.forEach { recentPin ->
+                            RecentPinItem(
+                                pin = recentPin,
+                                onClick = { pin = recentPin }
+                            )
                         }
                     }
                 }
             }
-
-            ScratchCardConsolePanel(
-                statusText = statusText,
-                completedCount = completedCount,
-                failedCount = failedCount,
-                runningCount = runningCount,
-                isScanning = isScanning,
-                isRunning = isRunning
-            )
-
-            if (previewBitmap != null) {
-                SettingsGroup("Selected Image") {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 16.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .border(1.dp, C.border.copy(alpha = 0.72f), RoundedCornerShape(18.dp))
-                    ) {
-                        Image(
-                            bitmap = previewBitmap!!.asImageBitmap(),
-                            contentDescription = "Selected scratch card image",
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-
-            SettingsGroup("Card Queue") {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = if (scratchCards.isEmpty()) {
-                            "Scan an image to fill the queue. Free slots are shown first, then paid or unlimited coverage, then waiting cards."
-                        } else {
-                            "${scratchCards.size} scratch card PINs detected. ${billingPreview.runnableCards} can run right now."
-                        },
-                        color = C.t2,
-                        fontSize = 12.sp
-                    )
-
-                    Text(
-                        text = buildScratchCardQueueLegend(billingPreview),
-                        color = C.t3,
-                        fontSize = 11.sp,
-                        lineHeight = 16.sp
-                    )
-
-                    ScratchCardQueueBoard(
-                        scratchCards = scratchCards,
-                        billingPreview = billingPreview
-                    )
-                }
-            }
         }
-        Spacer(Modifier.height(UiDimens.Spacing2xl))
+        
+        Spacer(Modifier.height(24.dp))
     }
 }
 
 @Composable
-private fun ScratchCardSignalStrip(
-    activeSimLabel: String,
-    cardCount: Int,
-    isScanning: Boolean,
-    isRunning: Boolean
-) {
-    val modeText = when {
-        isScanning -> "SCANNING"
-        isRunning -> "RUNNING"
-        cardCount > 0 -> "READY"
-        else -> "IDLE"
-    }
-    val dotColor = when {
-        isScanning -> C.blue
-        isRunning -> C.green
-        cardCount > 0 -> C.amber
-        else -> C.t3
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = C.surface.copy(alpha = 0.72f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f))
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(9.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(dotColor)
-            )
-            Text("AGT-042", color = C.amber, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
-            Text("·", color = C.t3, fontSize = 11.sp)
-            Text(modeText, color = C.t3, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.weight(1f))
-            Text(activeSimLabel, color = C.t2, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-        }
-    }
-}
-
-@Composable
-private fun ScratchCardHeroCard(
-    cardCount: Int,
-    billingPreview: ScratchCardBillingPreview,
-    activeSimLabel: String,
-    statusText: String,
-    completedCount: Int,
-    failedCount: Int,
-    runningCount: Int,
-    isRunning: Boolean
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = C.cardHi.copy(alpha = 0.96f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(C.amber.copy(alpha = 0.15f))
-                        .border(1.dp, C.amber.copy(alpha = 0.24f), RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Rounded.SimCard, contentDescription = null, tint = C.amber)
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Bulk scratch recharge", color = C.t1, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                    Text(
-                        "Scan once, review the queue, choose one SIM, then push the whole batch through with live status and billing visibility.",
-                        color = C.t2,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                ScratchCardStatChip(
-                    label = "Detected",
-                    value = cardCount.toString().padStart(2, '0'),
-                    accentColor = C.t1,
-                    modifier = Modifier.weight(1f)
-                )
-                ScratchCardStatChip(
-                    label = "Free left",
-                    value = billingPreview.freeCardsRemaining.toString(),
-                    accentColor = C.green,
-                    modifier = Modifier.weight(1f)
-                )
-                ScratchCardStatChip(
-                    label = "Run now",
-                    value = billingPreview.runnableCards.toString(),
-                    accentColor = C.amber,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                ScratchCardStatChip(
-                    label = "Running",
-                    value = runningCount.toString(),
-                    accentColor = if (runningCount > 0) C.blue else C.t1,
-                    modifier = Modifier.weight(1f)
-                )
-                ScratchCardStatChip(
-                    label = "Done",
-                    value = completedCount.toString(),
-                    accentColor = if (completedCount > 0) C.green else C.t1,
-                    modifier = Modifier.weight(1f)
-                )
-                ScratchCardStatChip(
-                    label = if (billingPreview.unlimitedActive) "Access" else "Tokens",
-                    value = if (billingPreview.unlimitedActive) "OPEN" else billingPreview.tokenCost.toString(),
-                    accentColor = if (billingPreview.unlimitedActive || billingPreview.tokenCost > 0) C.amber else C.t1,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                color = C.surface.copy(alpha = 0.72f),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(Icons.Rounded.Phone, contentDescription = null, tint = C.green, modifier = Modifier.size(18.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            if (isRunning) "Batch is using" else "Batch will use",
-                            color = C.t3,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(activeSimLabel, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                color = C.surface.copy(alpha = 0.72f),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("Batch readout", color = C.t3, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        buildScratchCardBatchSummary(billingPreview, cardCount),
-                        color = C.t1,
-                        fontSize = 13.sp,
-                        lineHeight = 19.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        statusText,
-                        color = C.t2,
-                        fontSize = 11.sp,
-                        lineHeight = 17.sp
-                    )
-                    if (failedCount > 0) {
-                        Text(
-                            "$failedCount card${if (failedCount == 1) "" else "s"} need attention after this run.",
-                            color = C.red,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScratchCardStatChip(
-    label: String,
-    value: String,
-    accentColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(18.dp),
-        color = C.surface.copy(alpha = 0.78f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.76f))
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(label, color = C.t3, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            Text(value, color = accentColor, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
-        }
-    }
-}
-
-@Composable
-private fun ScratchCardConsolePanel(
-    statusText: String,
-    completedCount: Int,
-    failedCount: Int,
-    runningCount: Int,
-    isScanning: Boolean,
-    isRunning: Boolean
-) {
-    val stateLabel = when {
-        isScanning -> "SCANNING"
-        isRunning -> "RUNNING"
-        completedCount > 0 || failedCount > 0 -> "LAST RUN"
-        else -> "STANDBY"
-    }
-    val dotColor = when {
-        isScanning -> C.blue
-        isRunning -> C.green
-        failedCount > 0 -> C.red
-        else -> C.t3
-    }
-
-    SettingsGroup("Live Console") {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                color = C.surface.copy(alpha = 0.86f),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.82f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(dotColor)
-                        )
-                        Text(stateLabel, color = C.t1, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
-                    }
-                    Text(
-                        text = statusText,
-                        color = C.t2,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                ScratchCardStatChip(
-                    label = "Running",
-                    value = runningCount.toString(),
-                    accentColor = if (runningCount > 0) C.blue else C.t1,
-                    modifier = Modifier.weight(1f)
-                )
-                ScratchCardStatChip(
-                    label = "Success",
-                    value = completedCount.toString(),
-                    accentColor = if (completedCount > 0) C.green else C.t1,
-                    modifier = Modifier.weight(1f)
-                )
-                ScratchCardStatChip(
-                    label = "Failed",
-                    value = failedCount.toString(),
-                    accentColor = if (failedCount > 0) C.red else C.t1,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScratchCardInfoRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    text: String
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 15.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(C.cardHi)
-                .border(1.dp, C.border.copy(alpha = 0.72f), RoundedCornerShape(14.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, contentDescription = null, tint = C.amber)
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, color = C.t1, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Text(text, color = C.t2, fontSize = 12.sp, lineHeight = 18.sp)
-        }
-    }
-}
-
-@Composable
-private fun ScratchCardSimPickerDialog(
-    sims: List<SubscriptionInfo>,
-    selectedSubId: Int?,
-    defaultSimLabel: String,
-    onSelect: (Int?) -> Unit,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = C.cardHi,
-        title = {
-            Text("Choose SIM for this batch", color = C.t1)
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    "The SIM you choose here will be used for every scratch card in this bulk recharge.",
-                    color = C.t2,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp
-                )
-
-                if (sims.isEmpty()) {
-                    ScratchCardSimOptionRow(
-                        label = defaultSimLabel,
-                        detail = "The app will use its current SIM setting for this batch.",
-                        selected = true,
-                        onClick = { onSelect(null) }
-                    )
-                } else {
-                    sims.forEach { sim ->
-                        ScratchCardSimOptionRow(
-                            label = formatScratchCardSimLabel(sim),
-                            detail = buildScratchCardSimDetail(sim),
-                            selected = selectedSubId == sim.subscriptionId,
-                            onClick = { onSelect(sim.subscriptionId) }
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("Start recharge", color = C.green)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = C.t2)
-            }
-        }
-    )
-}
-
-@Composable
-private fun ScratchCardSimOptionRow(
-    label: String,
-    detail: String,
-    selected: Boolean,
+private fun NumpadButton(
+    digit: String,
     onClick: () -> Unit
 ) {
-    val borderColor = if (selected) C.green.copy(alpha = 0.54f) else C.border.copy(alpha = 0.72f)
-    val backgroundColor = if (selected) C.green.copy(alpha = 0.10f) else C.surface.copy(alpha = 0.74f)
+    Surface(
+        modifier = Modifier
+            .size(64.dp)
+            .clickable(onClick = onClick),
+        shape = CircleShape,
+        color = C.surface.copy(alpha = 0.6f),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.4f))
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = digit,
+                color = C.t1,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
 
+@Composable
+private fun RecentPinItem(
+    pin: String,
+    onClick: () -> Unit
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        color = backgroundColor,
-        border = BorderStroke(1.dp, borderColor)
+        shape = RoundedCornerShape(12.dp),
+        color = C.surface.copy(alpha = 0.5f),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.3f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background((if (selected) C.green else C.amber).copy(alpha = 0.14f))
-                    .border(
-                        1.dp,
-                        (if (selected) C.green else C.amber).copy(alpha = 0.28f),
-                        RoundedCornerShape(14.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Rounded.SimCard,
-                    contentDescription = null,
-                    tint = if (selected) C.green else C.amber,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(label, color = C.t1, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Text(detail, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
-            }
-
-            if (selected) {
-                Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = C.green, modifier = Modifier.size(18.dp))
-            }
-        }
-    }
-}
-
-private fun formatScratchCardSimLabel(sim: SubscriptionInfo): String {
-    val slotNumber = (sim.simSlotIndex + 1).coerceAtLeast(1)
-    val displayName = sim.displayName?.toString()?.trim().orEmpty()
-    return if (displayName.isBlank()) {
-        "SIM $slotNumber"
-    } else {
-        "SIM $slotNumber · $displayName"
-    }
-}
-
-private fun buildScratchCardSimDetail(sim: SubscriptionInfo): String {
-    val carrierName = sim.carrierName?.toString()?.trim().orEmpty()
-    return if (carrierName.isBlank()) {
-        "Use this SIM for every card in the batch."
-    } else {
-        "$carrierName will be used for every card in the batch."
-    }
-}
-
-private fun describeScratchCardSimSelection(selectedSubId: Int?, sims: List<SubscriptionInfo>): String {
-    val selectedSim = selectedSubId?.let { chosenId -> sims.firstOrNull { it.subscriptionId == chosenId } }
-    return when {
-        selectedSim != null -> formatScratchCardSimLabel(selectedSim)
-        sims.isNotEmpty() -> formatScratchCardSimLabel(sims.first())
-        else -> "Current SIM setting"
-    }
-}
-
-@Composable
-private fun ScratchCardQueueBoard(
-    scratchCards: List<ScratchCardItem>,
-    billingPreview: ScratchCardBillingPreview
-) {
-    val totalSlots = maxOf(SCRATCH_CARD_FREE_LIMIT, scratchCards.size)
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        for (index in 0 until totalSlots) {
-            ScratchCardQueueRow(
-                index = index,
-                item = scratchCards.getOrNull(index),
-                billingPreview = billingPreview
-            )
-        }
-    }
-}
-
-private enum class ScratchCardQueueTone {
-    Empty,
-    Free,
-    Paid,
-    Waiting
-}
-
-@Composable
-private fun ScratchCardQueueRow(
-    index: Int,
-    item: ScratchCardItem?,
-    billingPreview: ScratchCardBillingPreview
-) {
-    val queueTone = when {
-        item == null -> ScratchCardQueueTone.Empty
-        index < billingPreview.freeCardsApplied -> ScratchCardQueueTone.Free
-        index < billingPreview.runnableCards -> ScratchCardQueueTone.Paid
-        else -> ScratchCardQueueTone.Waiting
-    }
-    val queueColor = when (queueTone) {
-        ScratchCardQueueTone.Empty -> C.t3
-        ScratchCardQueueTone.Free -> C.green
-        ScratchCardQueueTone.Paid -> C.amber
-        ScratchCardQueueTone.Waiting -> C.red
-    }
-    val queueLabel = when (queueTone) {
-        ScratchCardQueueTone.Empty -> "EMPTY"
-        ScratchCardQueueTone.Free -> "FREE"
-        ScratchCardQueueTone.Paid -> if (billingPreview.unlimitedActive) "OPEN" else "PAID"
-        ScratchCardQueueTone.Waiting -> "HOLD"
-    }
-    val (label, color, icon) = when (item?.status) {
-        null -> Triple("Empty", C.t3, Icons.Rounded.Schedule)
-        ScratchCardItemStatus.Pending -> Triple("Ready", C.amber, Icons.Rounded.Schedule)
-        ScratchCardItemStatus.Running -> Triple("Running", C.blue, Icons.Rounded.Phone)
-        ScratchCardItemStatus.Success -> Triple("Done", C.green, Icons.Rounded.CheckCircle)
-        ScratchCardItemStatus.Failed -> Triple("Failed", C.red, Icons.Rounded.Error)
-    }
-
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = C.surface.copy(alpha = 0.78f),
-        border = BorderStroke(1.dp, queueColor.copy(alpha = 0.26f)),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = String.format("%02d", index + 1),
-                color = C.t3,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold
+                text = formatPinForDisplay(pin),
+                color = C.t1,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.sp
             )
-            Box(
-                modifier = Modifier
-                    .size(14.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(queueColor.copy(alpha = 0.14f))
-                    .border(1.dp, queueColor.copy(alpha = 0.32f), RoundedCornerShape(999.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(queueColor)
-                )
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
-            ) {
-                Text(
-                    text = item?.let { formatScratchCardPin(it.pin) } ?: "•••• •••• •••• ••••",
-                    color = C.t1,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    lineHeight = 18.sp
-                )
-                Text(
-                    text = item?.note ?: "Scan an image to fill this slot.",
-                    color = C.t2,
-                    fontSize = 11.sp,
-                    lineHeight = 16.sp
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = queueColor.copy(alpha = 0.12f),
-                        border = BorderStroke(1.dp, queueColor.copy(alpha = 0.24f))
-                    ) {
-                        Text(
-                            queueLabel,
-                            color = queueColor,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = color.copy(alpha = 0.12f),
-                        border = BorderStroke(1.dp, color.copy(alpha = 0.24f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
-                            Text(label, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
         }
     }
 }
 
-private fun buildScratchCardCoverageLabel(preview: ScratchCardBillingPreview): String = when {
-    preview.unlimitedActive ->
-        "${preview.freeCardsApplied} free now, ${preview.chargeableCards} more covered by unlimited access."
-    preview.runnableCards <= 0 ->
-        "No cards can run yet. Add tokens or wait for the next free window."
-    preview.skippedCards > 0 ->
-        "${preview.freeCardsApplied} free, ${preview.chargeableCards} paid now, ${preview.skippedCards} waiting."
-    preview.tokenCost > 0 ->
-        "${preview.freeCardsApplied} free, ${preview.chargeableCards} paid now for ${preview.tokenCost} tokens."
-    else ->
-        "${preview.freeCardsApplied} free cards are available in this batch."
+private fun formatPinForDisplay(pin: String): String {
+    if (pin.length != 16) return pin
+    return pin.chunked(4).joinToString(" ")
 }
 
-private fun buildScratchCardQueueLegend(preview: ScratchCardBillingPreview): String = when {
-    preview.unlimitedActive ->
-        "Green slots use the free allowance. Amber slots still run because unlimited access is active. Red slots appear only when a card cannot be covered."
-    preview.skippedCards > 0 ->
-        "Green slots use the free allowance. Amber slots are covered by tokens. Red slots wait for more tokens or unlimited access."
-    else ->
-        "Green slots use the free allowance. Amber slots are paid or ready after the free allowance is used."
+// Data persistence for recent pins
+private fun loadRecentPins(context: Context): List<String> {
+    val prefs = context.getSharedPreferences(PREFS_SCRATCH_CARD, Context.MODE_PRIVATE)
+    val pinsString = prefs.getString(KEY_RECENT_PINS, "") ?: ""
+    return pinsString.split(",").filter { it.length == 16 }.take(MAX_RECENT_PINS)
 }
 
-private suspend fun scanScratchCardImage(context: Context, uri: Uri): ScratchCardScanResult {
-    val bitmap = loadScratchCardBitmap(context, uri)
-    val text = recognizeScratchCardText(bitmap)
-    return ScratchCardScanResult(
-        bitmap = bitmap,
-        pins = extractScratchCardPins(text)
-    )
+private fun saveRecentPin(context: Context, pin: String) {
+    if (pin.length != 16) return
+    val prefs = context.getSharedPreferences(PREFS_SCRATCH_CARD, Context.MODE_PRIVATE)
+    val currentPins = loadRecentPins(context).toMutableList()
+    
+    // Remove if already exists (to move to top)
+    currentPins.remove(pin)
+    // Add to top
+    currentPins.add(0, pin)
+    // Keep only max
+    val newPins = currentPins.take(MAX_RECENT_PINS)
+    
+    prefs.edit().putString(KEY_RECENT_PINS, newPins.joinToString(",")).apply()
 }
 
-private suspend fun loadScratchCardBitmap(context: Context, uri: Uri): Bitmap = withContext(Dispatchers.IO) {
-    val rawBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        val source = ImageDecoder.createSource(context.contentResolver, uri)
-        ImageDecoder.decodeBitmap(source)
-    } else {
-        @Suppress("DEPRECATION")
-        MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
-    }
-    scaleScratchCardBitmap(rawBitmap)
-}
-
-private fun scaleScratchCardBitmap(bitmap: Bitmap, maxSide: Int = 2200): Bitmap {
-    val width = bitmap.width
-    val height = bitmap.height
-    val largestSide = maxOf(width, height)
-    if (largestSide <= maxSide) {
-        return if (bitmap.config == Bitmap.Config.HARDWARE) {
-            bitmap.copy(Bitmap.Config.ARGB_8888, false)
-        } else {
-            bitmap
-        }
-    }
-
-    val scale = maxSide.toFloat() / largestSide.toFloat()
-    val scaledWidth = (width * scale).toInt().coerceAtLeast(1)
-    val scaledHeight = (height * scale).toInt().coerceAtLeast(1)
-    return Bitmap.createScaledBitmap(bitmap, scaledWidth, scaledHeight, true)
-        .copy(Bitmap.Config.ARGB_8888, false)
-}
-
-private suspend fun recognizeScratchCardText(bitmap: Bitmap): String {
-    val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+// Scratch card recharge function
+private suspend fun startScratchCardRecharge(context: Context, pin: String): Boolean {
     return try {
-        suspendCancellableCoroutine { continuation ->
-            recognizer.process(InputImage.fromBitmap(bitmap, 0))
-                .addOnSuccessListener { result ->
-                    continuation.resume(result.text)
-                }
-                .addOnFailureListener { error ->
-                    continuation.resumeWithException(error)
-                }
-        }
-    } finally {
-        recognizer.close()
+        val ussdCode = "*141*$pin#"
+        // Use silent USSD
+        SilentUssd.dial(
+            context = context,
+            ussdCode = ussdCode,
+            onResult = { /* Result handled by caller */ }
+        )
+        true
+    } catch (e: Exception) {
+        false
     }
-}
-
-private fun extractScratchCardPins(text: String): List<String> {
-    // Match only 16-digit runs, allowing spaces or hyphens between groups.
-    val pattern = Regex("""(?<!\d)(?:\d[\s-]*){16}(?!\d)""")
-    val orderedPins = LinkedHashSet<String>()
-    pattern.findAll(text).forEach { match ->
-        val digits = match.value.filter(Char::isDigit)
-        if (digits.length == 16) {
-            orderedPins.add(digits)
-        }
-    }
-    return orderedPins.toList()
-}
-
-private fun formatScratchCardPin(pin: String): String = pin.chunked(4).joinToString(" ")
-
-private fun List<ScratchCardItem>.replaceAt(index: Int, item: ScratchCardItem): List<ScratchCardItem> =
-    mapIndexed { currentIndex, currentItem -> if (currentIndex == index) item else currentItem }
-
-private fun previewScratchCardBilling(context: Context, batchSize: Int, now: Long = System.currentTimeMillis()): ScratchCardBillingPreview {
-    val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-    val unlimitedActive = UnlimitedManager(context).isActive()
-    val tokenBalance = TokenManager(context).getBalance()
-    val normalizedBatchSize = batchSize.coerceAtLeast(0)
-    val storedWindowStartedAt = prefs.safeGetLong(KEY_SCRATCH_CARD_FREE_WINDOW_STARTED_AT, 0L)
-    val windowActive = storedWindowStartedAt > 0L && now - storedWindowStartedAt < SCRATCH_CARD_FREE_WINDOW_MS
-    val windowStartedAt = if (windowActive) storedWindowStartedAt else 0L
-    val freeUsed = if (windowActive) {
-        prefs.safeGetInt(KEY_SCRATCH_CARD_FREE_USED, 0).coerceIn(0, SCRATCH_CARD_FREE_LIMIT)
-    } else {
-        0
-    }
-    val freeCardsRemaining = (SCRATCH_CARD_FREE_LIMIT - freeUsed).coerceAtLeast(0)
-    val freeCardsApplied = minOf(normalizedBatchSize, freeCardsRemaining)
-    val remainingCards = (normalizedBatchSize - freeCardsApplied).coerceAtLeast(0)
-    val coveredChargeableCards = if (unlimitedActive) {
-        remainingCards
-    } else {
-        val affordableBlocks = tokenBalance / SCRATCH_CARD_TOKENS_PER_BLOCK
-        minOf(remainingCards, affordableBlocks * SCRATCH_CARD_PAID_BLOCK_SIZE)
-    }
-    val tokenCost = if (unlimitedActive || coveredChargeableCards <= 0) {
-        0
-    } else {
-        ((coveredChargeableCards + SCRATCH_CARD_PAID_BLOCK_SIZE - 1) / SCRATCH_CARD_PAID_BLOCK_SIZE) * SCRATCH_CARD_TOKENS_PER_BLOCK
-    }
-    val runnableCards = freeCardsApplied + coveredChargeableCards
-    val skippedCards = (normalizedBatchSize - runnableCards).coerceAtLeast(0)
-    val nextWindowStartedAt = when {
-        unlimitedActive -> windowStartedAt
-        freeCardsApplied <= 0 -> windowStartedAt
-        windowStartedAt > 0L -> windowStartedAt
-        else -> now
-    }
-    val nextFreeCardsUsed = when {
-        unlimitedActive -> freeUsed
-        freeCardsApplied <= 0 -> freeUsed
-        else -> (freeUsed + freeCardsApplied).coerceAtMost(SCRATCH_CARD_FREE_LIMIT)
-    }
-    val resetAtMillis = if (nextWindowStartedAt > 0L) {
-        nextWindowStartedAt + SCRATCH_CARD_FREE_WINDOW_MS
-    } else {
-        0L
-    }
-    return ScratchCardBillingPreview(
-        freeCardsApplied = freeCardsApplied,
-        chargeableCards = coveredChargeableCards,
-        tokenCost = tokenCost,
-        tokenBalance = tokenBalance,
-        unlimitedActive = unlimitedActive,
-        freeCardsRemaining = freeCardsRemaining,
-        resetAtMillis = resetAtMillis,
-        nextWindowStartedAt = nextWindowStartedAt,
-        nextFreeCardsUsed = nextFreeCardsUsed,
-        runnableCards = runnableCards,
-        skippedCards = skippedCards
-    )
-}
-
-private fun saveScratchCardBillingUsage(context: Context, preview: ScratchCardBillingPreview) {
-    if (preview.unlimitedActive) return
-    if (preview.nextWindowStartedAt <= 0L) return
-    context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-        .edit()
-        .putLong(KEY_SCRATCH_CARD_FREE_WINDOW_STARTED_AT, preview.nextWindowStartedAt)
-        .putInt(KEY_SCRATCH_CARD_FREE_USED, preview.nextFreeCardsUsed.coerceIn(0, SCRATCH_CARD_FREE_LIMIT))
-        .apply()
-}
-
-private fun buildScratchCardPolicyLabel(preview: ScratchCardBillingPreview): String {
-    val balanceText = if (preview.unlimitedActive) {
-        "Unlimited access is active, so every card after the free 10 also runs without spending tokens."
-    } else if (preview.skippedCards > 0 && preview.runnableCards > 0) {
-        "You have ${preview.tokenBalance} tokens, so only ${preview.runnableCards} cards can run right now. Add more tokens or unlimited access to recharge the remaining ${preview.skippedCards} cards."
-    } else {
-        "You have ${preview.tokenBalance} tokens. Extra scratch card batches cost 30 tokens per 10 cards."
-    }
-    val freeText = if (preview.freeCardsRemaining > 0) {
-        "${preview.freeCardsRemaining} of the free $SCRATCH_CARD_FREE_LIMIT cards are still available right now."
-    } else if (preview.resetAtMillis > 0L) {
-        "The free $SCRATCH_CARD_FREE_LIMIT-card allowance resets in ${formatScratchCardRemainingWindow(preview.resetAtMillis - System.currentTimeMillis())}."
-    } else {
-        "The free $SCRATCH_CARD_FREE_LIMIT-card allowance resets 24 hours after you use it."
-    }
-    return "$freeText $balanceText"
-}
-
-private fun buildScratchCardBatchSummary(preview: ScratchCardBillingPreview, batchSize: Int): String {
-    if (preview.unlimitedActive) {
-        return "Unlimited access active. The first ${preview.freeCardsApplied} cards are free and the remaining ${preview.chargeableCards} cards use unlimited access in this $batchSize-card batch."
-    }
-    if (preview.runnableCards <= 0) {
-        return "No cards can be recharged right now."
-    }
-    if (preview.skippedCards > 0 && preview.tokenCost <= 0) {
-        return "No tokens available. Only the first ${preview.runnableCards} free cards will be recharged from this $batchSize-card upload."
-    }
-    if (preview.skippedCards > 0) {
-        return "This upload recharges ${preview.runnableCards} cards now, using ${preview.freeCardsApplied} free cards and ${preview.tokenCost} tokens for ${preview.chargeableCards} extra cards. ${preview.skippedCards} cards will wait for more tokens or unlimited access."
-    }
-    if (preview.tokenCost <= 0) {
-        return "This $batchSize-card batch uses ${preview.freeCardsApplied} free cards."
-    }
-    return if (preview.freeCardsApplied > 0) {
-        "This batch uses ${preview.freeCardsApplied} free cards and charges ${preview.tokenCost} tokens for ${preview.chargeableCards} extra cards."
-    } else {
-        "This batch charges ${preview.tokenCost} tokens for ${preview.chargeableCards} cards."
-    }
-}
-
-private fun formatScratchCardRemainingWindow(remainingMs: Long): String {
-    val safeMs = remainingMs.coerceAtLeast(0L)
-    val totalMinutes = safeMs / 60_000L
-    val hours = totalMinutes / 60L
-    val minutes = totalMinutes % 60L
-    return when {
-        hours > 0L && minutes > 0L -> "${hours}h ${minutes}m"
-        hours > 0L -> "${hours}h"
-        else -> "${minutes}m"
-    }
-}
-
-private suspend fun startScratchCardRecharge(context: Context, pin: String, subIdOverride: Int? = null): ScratchCardLaunchResult {
-    val code = "$SCRATCH_CARD_DIAL_PREFIX$pin#"
-    return suspendCancellableCoroutine { continuation ->
-        var resumed = false
-        fun finish(result: ScratchCardLaunchResult) {
-            if (resumed) return
-            resumed = true
-            continuation.resume(result)
-        }
-
-        try {
-            val started = UssdHelper.dialUssd(
-                context = context,
-                ussdCode = code,
-                silentOnly = true,
-                subIdOverride = subIdOverride,
-                onSuccess = { response ->
-                    finish(
-                        ScratchCardLaunchResult(
-                            succeeded = true,
-                            message = "Final response: ${formatScratchCardResponse(response)}"
-                        )
-                    )
-                },
-                onFailure = { error ->
-                    finish(
-                        ScratchCardLaunchResult(
-                            succeeded = false,
-                            message = "Final response failed: ${formatScratchCardResponse(error)}"
-                        )
-                    )
-                }
-            )
-            if (!started) {
-                finish(
-                    ScratchCardLaunchResult(
-                        succeeded = false,
-                        message = "Final response failed: Silent USSD could not start on this phone."
-                    )
-                )
-            }
-        } catch (error: Exception) {
-            finish(
-                ScratchCardLaunchResult(
-                    succeeded = false,
-                    message = "Final response failed: ${formatScratchCardResponse(error.message ?: "Could not start silent USSD.")}"
-                )
-            )
-        }
-    }
-}
-
-private fun formatScratchCardResponse(response: String): String {
-    val compact = response
-        .lineSequence()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-        .joinToString(" ")
-        .replace(Regex("\\s+"), " ")
-        .trim()
-    return compact.ifBlank { "No response text returned." }
 }
