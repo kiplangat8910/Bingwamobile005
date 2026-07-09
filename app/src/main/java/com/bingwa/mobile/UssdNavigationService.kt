@@ -20,6 +20,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.os.SystemClock
 import android.util.TypedValue
@@ -75,20 +76,19 @@ class UssdNavigationService : AccessibilityService() {
 
         private const val MAX_RETRY_WINDOW_MS    = 60_000L
         private const val SHOW_RUNNING_OVERLAY   = false
-        private const val STEP_DELAY_MS          = 90L
-        private const val EVENT_HOT_POLL_MS      = 8L
-        private const val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 16L
-        private const val DUPLICATE_EVENT_WINDOW_MS = 24L
-        private const val FAST_VERIFY_POLL_MS    = 8L
-        private const val HOT_SEND_RETRY_DELAY_MS = 8L
-        private const val SEND_RETRY_DELAY_MS    = 14L
-        private const val POST_WRITE_VERIFY_POLL_MS = 4L
-        private const val POST_WRITE_SEND_RETRY_MS = 6L
-        private const val STEP_TIMEOUT_MS        = 25_000L
-        private const val VERIFY_POLL_MS         = 14L
-        private const val RAPID_POST_POPUP_POLL_MS = 6L
-        private const val RAPID_POST_POPUP_VERIFY_MS = 4L
-        private const val RAPID_POST_POPUP_SEND_RETRY_MS = 8L
+        private const val STEP_DELAY_MS          = 45L
+        private const val EVENT_HOT_POLL_MS      = 4L
+        private const val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 8L
+        private const val DUPLICATE_EVENT_WINDOW_MS = 12L
+        private const val FAST_VERIFY_POLL_MS    = 4L
+        private const val HOT_SEND_RETRY_DELAY_MS = 4L
+        private const val SEND_RETRY_DELAY_MS    = 7L
+        private const val POST_WRITE_VERIFY_POLL_MS = 2L
+        private const val POST_WRITE_SEND_RETRY_MS = 3L
+        private const val VERIFY_POLL_MS         = 7L
+        private const val RAPID_POST_POPUP_POLL_MS = 3L
+        private const val RAPID_POST_POPUP_VERIFY_MS = 2L
+        private const val RAPID_POST_POPUP_SEND_RETRY_MS = 4L
         private const val MAX_VERIFY_ATTEMPTS    = 24
         private const val MAX_SEND_ATTEMPTS      = 10
         private const val NO_FIELD_PATIENCE      = 4
@@ -96,22 +96,17 @@ class UssdNavigationService : AccessibilityService() {
         private const val RECENT_INPUT_GRACE_MS  = 4_000L
         private const val RECENT_VERIFIED_INPUT_GRACE_MS = 6_500L
         private const val RECENT_UI_EVENT_GRACE_MS = 1_200L
-        private const val GESTURE_SETTLE_MS      = 12L
-        private const val POST_GESTURE_WAIT_MS   = 8L
-        private const val POPUP_STABILITY_DELAY_MS = 8L
-        private const val TAP_GESTURE_DURATION_MS = 20L
-        private const val REDIAL_COOLDOWN_MS     = 550L
-        private const val PENDING_ADVANCE_TIMEOUT_MS = 7_500L
-        private const val PENDING_ADVANCE_KICK_MS = 16L
-        private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 6_000L
-        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 24L
-        private const val ROOT_REACQUIRE_TIMEOUT_MS = 3_000L
-        private const val DIALOG_DISMISS_SETTLE_MS = 80L
-        private const val UI_KEEP_VISIBLE_INTERVAL_MS = 1_500L
-        private const val STARTUP_UI_KEEP_VISIBLE_MS = 12_000L
-        // Some devices emit extra events on the same USSD dialog after we click "Send".
-        // If we process those events immediately, we can inject the NEXT step into the PREVIOUS screen.
-        private const val STEP_TRANSITION_GUARD_MS = 480L
+        private const val GESTURE_SETTLE_MS      = 6L
+        private const val POST_GESTURE_WAIT_MS   = 4L
+        private const val POPUP_STABILITY_DELAY_MS = 4L
+        private const val TAP_GESTURE_DURATION_MS = 10L
+        private const val REDIAL_COOLDOWN_MS     = 350L
+        private const val PENDING_ADVANCE_KICK_MS = 8L
+        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 12L
+        private const val DIALOG_DISMISS_SETTLE_MS = 40L
+        private const val UI_KEEP_VISIBLE_INTERVAL_MS = 800L
+        private const val STARTUP_UI_KEEP_VISIBLE_MS = 8_000L
+        private const val STEP_TRANSITION_GUARD_MS = 240L
         private const val CHANNEL_ID             = "bingwa_ussd"
         private const val NOTIFICATION_ID        = 2001
         private val MULTI_SPACE_REGEX = Regex("\\s+")
@@ -285,6 +280,8 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private val handler            = Handler(Looper.getMainLooper())
+    private lateinit var bgHandler: Handler
+    private lateinit var bgThread: HandlerThread
     private var isProcessing       = false
     private var lastDialogText     = ""
     private var stepTimeoutRunnable: Runnable? = null
@@ -371,6 +368,8 @@ class UssdNavigationService : AccessibilityService() {
     override fun onCreate() {
         super.onCreate()
         activeInstance = this
+        bgThread = HandlerThread("UssdNavigationBg").apply { start() }
+        bgHandler = Handler(bgThread.looper)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
         createNotificationChannel()
         startForegroundCompat(
@@ -415,6 +414,7 @@ class UssdNavigationService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         stopForegroundCompat()
+        runCatching { bgThread.quitSafely() }
         if (activeInstance === this) activeInstance = null
         cleanupAdvanced()
         clearCallbacks()
@@ -1101,7 +1101,7 @@ class UssdNavigationService : AccessibilityService() {
             hasSeenAdvancedPopup -> 2L
             else -> 4L
         }
-        return minOf(base + (attempt.toLong() * increment), 28L)
+        return minOf(base + (attempt.toLong() * increment), 20L)
     }
 
     private fun captureSignatureStepIfNeeded(
@@ -1228,18 +1228,25 @@ class UssdNavigationService : AccessibilityService() {
         cleanupAdvanced()
     }
 
-    private fun buildDispatchResult(finalResponse: String): AdvancedDispatchResult =
-        AdvancedDispatchResult(
+    private fun buildDispatchResult(finalResponse: String): AdvancedDispatchResult {
+        val sigList: List<UssdSignatureStep>
+        val capList: List<UssdLearningCapture>
+        val transcript: List<String>
+        sigList = learnedSignatureSteps.toList()
+        capList = learningCaptures.toList()
+        transcript = popupTranscript.toList()
+        return AdvancedDispatchResult(
             finalResponse = finalResponse,
             changeDetected = signatureChangeDetected,
             autoAdjusted = signatureAutoAdjusted,
-            learningCompleted = signatureLearningMode && (learnedSignatureSteps.isNotEmpty() || learningCaptures.isNotEmpty()),
+            learningCompleted = signatureLearningMode && (sigList.isNotEmpty() || capList.isNotEmpty()),
             suggestedCode = if (signatureChangeDetected) buildSuggestedCode() else "",
             changeSummary = detectedChangeNotes.joinToString(". "),
-            learnedSignature = learnedSignatureSteps.toList(),
-            learningCaptures = learningCaptures.toList(),
-            popupTranscript = popupTranscript.toList()
+            learnedSignature = sigList,
+            learningCaptures = capList,
+            popupTranscript = transcript
         )
+    }
 
     private fun capturePopupTranscript(snapshot: UssdTreeSnapshot?, dialogText: String) {
         val recordedText = formatRecordedDialogText(snapshot?.textTokens.orEmpty(), dialogText)

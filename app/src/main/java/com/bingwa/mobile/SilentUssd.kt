@@ -13,7 +13,7 @@ import java.lang.reflect.Proxy
 
 object SilentUssd {
     private const val TAG             = "SilentUssd"
-    private const val TIMEOUT_MS      = 20_000L
+    private const val TIMEOUT_MS      = 3_000L
 
     private var successCb : ((String) -> Unit)? = null
     private var failureCb : ((String) -> Unit)? = null
