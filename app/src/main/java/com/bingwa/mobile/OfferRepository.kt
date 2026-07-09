@@ -118,11 +118,17 @@ object OfferRepository {
                     return@forEach
                 }
 
+                // Check if the USSD code differs from the catalog default
+                // (user has edited it) - preserve user's edited code
                 val codeChanged = !existing.ussdCode.trim().equals(default.ussdCode.trim(), ignoreCase = true)
-                if (codeChanged) restoredDefaultOffers++
+                // Only count as "restored" if the stored code matched the default and we're resetting it
+                // (which we no longer do - we preserve user edits)
+                val wasRestored = !codeChanged && existing.catalogKey.isBlank()
+                if (wasRestored) restoredDefaultOffers++
                 merged += existing.copy(
                     catalogKey = default.catalogKey,
-                    ussdCode = default.ussdCode,
+                    // Preserve user's edited USSD code - don't overwrite with default
+                    ussdCode = existing.ussdCode,
                     learnedSignature = if (codeChanged) emptyList() else existing.learnedSignature,
                     signatureLearnedAt = if (codeChanged) 0L else existing.signatureLearnedAt,
                     signatureLearningCaptures = if (codeChanged) emptyList() else existing.signatureLearningCaptures,
