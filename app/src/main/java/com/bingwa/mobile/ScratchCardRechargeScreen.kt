@@ -22,7 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Phone
@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 private const val PREFS_SCRATCH_CARD = "scratch_card_prefs"
 private const val KEY_RECENT_PINS = "recent_pins"
@@ -120,7 +121,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         ) {
             IconButton(onClick = onBack) {
                 Icon(
-                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    Icons.Rounded.ArrowBack,
                     contentDescription = "Back",
                     tint = C.t1
                 )
@@ -490,13 +491,21 @@ private fun saveRecentPin(context: Context, pin: String) {
 private suspend fun startScratchCardRecharge(context: Context, pin: String): Boolean {
     return try {
         val ussdCode = "*141*$pin#"
-        // Use silent USSD
-        SilentUssd.dial(
-            context = context,
-            ussdCode = ussdCode,
-            onResult = { /* Result handled by caller */ }
-        )
-        true
+        suspendCancellableCoroutine { cont ->
+            val executed = SilentUssd.execute(
+                context = context,
+                ussdCode = ussdCode,
+                onSuccess = {
+                    if (cont.isActive) cont.resumeWith(Result.success(true))
+                },
+                onFailure = {
+                    if (cont.isActive) cont.resumeWith(Result.success(false))
+                }
+            )
+            if (!executed && cont.isActive) {
+                cont.resumeWith(Result.success(false))
+            }
+        }
     } catch (e: Exception) {
         false
     }

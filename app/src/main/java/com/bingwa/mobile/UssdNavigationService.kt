@@ -85,6 +85,10 @@ class UssdNavigationService : AccessibilityService() {
         private const val SEND_RETRY_DELAY_MS    = 7L
         private const val POST_WRITE_VERIFY_POLL_MS = 2L
         private const val POST_WRITE_SEND_RETRY_MS = 3L
+        private const val STEP_TIMEOUT_MS           = 3_000L
+        private const val PENDING_ADVANCE_TIMEOUT_MS = 5_000L
+        private const val ROOT_REACQUIRE_TIMEOUT_MS  = 5_000L
+        private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 4_000L
         private const val VERIFY_POLL_MS         = 7L
         private const val RAPID_POST_POPUP_POLL_MS = 3L
         private const val RAPID_POST_POPUP_VERIFY_MS = 2L

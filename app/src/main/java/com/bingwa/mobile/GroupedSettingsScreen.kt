@@ -188,7 +188,7 @@ fun GroupedSettingsScreen() {
             onOpenDiagnostics = { dest = SettingsDest.Diagnostics }
         )
         SettingsDest.Sim -> SimSettings(onBack = { dest = SettingsDest.Home })
-        SettingsDest.ScratchCards -> ScratchCardRechargeSettings(onBack = { dest = SettingsDest.Home })
+        SettingsDest.ScratchCards -> ScratchCardRechargeScreen(onBack = { dest = SettingsDest.Home })
         SettingsDest.Relay -> RelaySettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Remote -> RemoteControlSettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Notifications -> CustomerNotificationSettings(onBack = { dest = SettingsDest.Home })
