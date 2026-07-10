@@ -9,20 +9,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
         java-version: '21'
         distribution: 'temurin'
+
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
+
     - name: Build Release APK
       run: ./gradlew assembleRelease
+
     - name: Upload APK to Artifact
       uses: actions/upload-artifact@v4
       with:
         name: app-release
         path: app/build/outputs/apk/release/*.apk
+
     - name: Create GitHub Release
       uses: ncipollo/release-action@v1
       with:
