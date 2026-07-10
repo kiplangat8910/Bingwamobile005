@@ -10,20 +10,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up JDK 21
+    - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
-        java-version: '21'
+        java-version: '17'
         distribution: 'temurin'
-
-    - name: Clean Gradle Cache
-      run: rm -rf ~/.gradle/caches/
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
     - name: Build Release APK
-      run: ./gradlew assembleRelease
+      run: ./gradlew --stacktrace assembleRelease
 
     - name: Upload APK to Artifact
       uses: actions/upload-artifact@v4

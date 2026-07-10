@@ -19,8 +19,8 @@ android {
         applicationId = "com.bingwa.mobile"
         minSdk = 21
         targetSdk = 34
-        versionCode = 281
-        versionName = "3.2.52"
+        versionCode = 282
+        versionName = "3.2.53"
     }
 
     signingConfigs {
@@ -70,6 +70,9 @@ dependencies {
     constraints {
         implementation("org.bouncycastle:bcprov-jdk15on:1.76") {
             because("downgraded from 1.79 to resolve compatibility issues")
+        }
+        implementation("org.bouncycastle:bcprov-jdk18on:1.78.1") {
+            because("avoids Gradle/CI classpath instrumentation failures on multi-release Java 21 classes")
         }
     }
     implementation("androidx.core:core-ktx:1.12.0")
