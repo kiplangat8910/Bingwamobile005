@@ -35,3 +35,4 @@ jobs:
         tag: "v${{ github.run_number }}"
         name: "Release v${{ github.run_number }}"
         body: "Automated APK release from commit ${{ github.sha }}"
+# Updated to trigger new build
