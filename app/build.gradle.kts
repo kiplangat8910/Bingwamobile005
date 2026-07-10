@@ -67,6 +67,11 @@ android {
 }
 
 dependencies {
+    constraints {
+        implementation("org.bouncycastle:bcprov-jdk15on:1.76") {
+            because("downgraded from 1.79 to resolve compatibility issues")
+        }
+    }
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.activity:activity-compose:1.8.0")
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))

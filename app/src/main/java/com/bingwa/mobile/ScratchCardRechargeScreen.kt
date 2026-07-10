@@ -86,23 +86,21 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     val onTopUp: () -> Unit = {
         if (pin.length != 16) {
             Toast.makeText(ctx, "Please enter a complete 16-digit PIN", Toast.LENGTH_SHORT).show()
-            return@onTopUp
-        }
-        
-        scope.launch {
-            isProcessing = true
-            val result = startScratchCardRecharge(ctx, pin)
-            
-            if (result) {
-                // Save to recent
-                saveRecentPin(ctx, pin)
-                recentPins = loadRecentPins(ctx)
-                pin = ""
-                Toast.makeText(ctx, "Recharge successful!", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(ctx, "Recharge failed. Please try again.", Toast.LENGTH_SHORT).show()
+        } else {
+            scope.launch {
+                isProcessing = true
+                val result = startScratchCardRecharge(ctx, pin)
+                
+                if (result) {
+                    saveRecentPin(ctx, pin)
+                    recentPins = loadRecentPins(ctx)
+                    pin = ""
+                    Toast.makeText(ctx, "Recharge successful!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(ctx, "Recharge failed. Please try again.", Toast.LENGTH_SHORT).show()
+                }
+                isProcessing = false
             }
-            isProcessing = false
         }
     }
     
