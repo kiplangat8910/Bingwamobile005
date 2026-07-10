@@ -73,20 +73,20 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         }
     }
     
-    fun onClear() {
+    val onClear: () -> Unit = {
         pin = ""
     }
     
-    fun onBackspace() {
+    val onBackspace: () -> Unit = {
         if (pin.isNotEmpty()) {
             pin = pin.dropLast(1)
         }
     }
     
-    fun onTopUp() {
+    val onTopUp: () -> Unit = {
         if (pin.length != 16) {
             Toast.makeText(ctx, "Please enter a complete 16-digit PIN", Toast.LENGTH_SHORT).show()
-            return
+            return@onTopUp
         }
         
         scope.launch {
@@ -243,7 +243,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                         Surface(
                             modifier = Modifier
                                 .size(64.dp)
-                                .clickable(onClick = onClear),
+                                .clickable(onClick = { onClear() }),
                             shape = CircleShape,
                             color = C.surface.copy(alpha = 0.6f),
                             border = BorderStroke(1.dp, C.border.copy(alpha = 0.4f))
@@ -268,7 +268,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                         Surface(
                             modifier = Modifier
                                 .size(64.dp)
-                                .clickable(onClick = onBackspace),
+                                .clickable(onClick = { onBackspace() }),
                             shape = CircleShape,
                             color = C.surface.copy(alpha = 0.6f),
                             border = BorderStroke(1.dp, C.border.copy(alpha = 0.4f))
@@ -294,7 +294,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 ) {
                     // Clear Button
                     Button(
-                        onClick = onClear,
+                        onClick = { onClear() },
                         enabled = pin.isNotEmpty() && !isProcessing,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = C.surface,
@@ -316,7 +316,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                     
                     // Top Up Button
                     Button(
-                        onClick = onTopUp,
+                        onClick = { onTopUp() },
                         enabled = pin.length == 16 && !isProcessing,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = C.green,
