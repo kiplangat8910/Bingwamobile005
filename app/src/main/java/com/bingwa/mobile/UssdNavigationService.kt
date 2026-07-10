@@ -547,7 +547,7 @@ class UssdNavigationService : AccessibilityService() {
             lastWindowPkg = windowPkg
 
             val eventDialogText = extractDialogTextFromEvent(event)
-            val snapshot = if (
+            val baseSnapshot = if (
                 eventDialogText.isBlank() ||
                 signatureLearningMode ||
                 advancedActive ||
@@ -559,6 +559,12 @@ class UssdNavigationService : AccessibilityService() {
             } else {
                 null
             }
+            val strictLearningSnapshot = if (signatureLearningMode) {
+                captureTreeSnapshotStrictDialog(root)
+            } else {
+                null
+            }
+            val snapshot = strictLearningSnapshot ?: baseSnapshot
             val dialogText = snapshot?.dialogText ?: normalizeCollapsedText(eventDialogText)
             if (dialogText.isBlank()) return
             val lower = dialogText.lowercase()
@@ -589,7 +595,6 @@ class UssdNavigationService : AccessibilityService() {
                 lastFinalResponse = dialogText
                 capturePopupTranscript(snapshot, dialogText)
                 if (signatureLearningMode) {
-                    val strictLearningSnapshot = captureTreeSnapshotStrictDialog(root)
                     if (strictLearningSnapshot != null) {
                         val learningLower = strictLearningSnapshot.dialogText.lowercase()
                         if (!NON_USSD_DIALOG_HINTS.any { learningLower.contains(it) } &&
@@ -793,8 +798,8 @@ class UssdNavigationService : AccessibilityService() {
             val windowPkg = root.packageName?.toString() ?: ""
             val snapshot = captureTreeSnapshot(root)
             val strictLearningSnapshot = if (signatureLearningMode) captureTreeSnapshotStrictDialog(root) else null
-            val signatureSnapshot = strictLearningSnapshot ?: snapshot
-            val freshDialogText = snapshot.dialogText
+            val effectiveSnapshot = strictLearningSnapshot ?: snapshot
+            val freshDialogText = effectiveSnapshot.dialogText.ifBlank { snapshot.dialogText }
             val dialogText = freshDialogText.ifBlank { lastFinalResponse }
             val lower = dialogText.lowercase()
             if (shouldWaitForStepTransition(dialogText, windowChanged = false)) {
@@ -815,7 +820,7 @@ class UssdNavigationService : AccessibilityService() {
                 return
             }
             if (currentStep >= advancedSteps.size) {
-                if (shouldWaitForFinalResponse(snapshot, dialogText)) {
+                if (shouldWaitForFinalResponse(effectiveSnapshot, dialogText)) {
                     isProcessing = false
                     pendingProcessToken = SystemClock.elapsedRealtime()
                     scheduleProcessStep(dialogChanged = false, overrideDelayMs = RAPID_POST_POPUP_POLL_MS)
@@ -828,9 +833,9 @@ class UssdNavigationService : AccessibilityService() {
             }
 
             val step = advancedSteps[currentStep]
-            val menuSignature = parseMenuSignature(signatureSnapshot)
+            val menuSignature = parseMenuSignature(effectiveSnapshot)
             if (step != "INPUT_PHONE") {
-                captureSignatureStepIfNeeded(currentStep, step, menuSignature, signatureSnapshot, dialogText)
+                captureSignatureStepIfNeeded(currentStep, step, menuSignature, effectiveSnapshot, dialogText)
             }
             val resolved = resolveStepInput(currentStep, step, menuSignature)
             if (!advancedActive) {
