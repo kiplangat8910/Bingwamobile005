@@ -36,3 +36,4 @@ jobs:
         name: "Release v${{ github.run_number }}"
         body: "Automated APK release from commit ${{ github.sha }}"
 # Updated to trigger new build
+# Updated to trigger new build
