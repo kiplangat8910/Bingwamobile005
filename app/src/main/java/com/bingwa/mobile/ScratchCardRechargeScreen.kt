@@ -1,10 +1,13 @@
 package com.bingwa.mobile
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,7 +36,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,13 +43,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.TextRecognizer
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import java.util.LinkedHashSet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 
@@ -55,62 +60,110 @@ private const val PREFS_SCRATCH_CARD = "scratch_card_prefs"
 private const val KEY_RECENT_PINS = "recent_pins"
 private const val MAX_RECENT_PINS = 5
 
+private sealed interface ScratchCardRechargeResult {
+    data object StartedSilently : ScratchCardRechargeResult
+    data object StartedInDialer : ScratchCardRechargeResult
+    data class Failed(val message: String) : ScratchCardRechargeResult
+}
+
 @Composable
 fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    
+
     var pin by remember { mutableStateOf("") }
     var isProcessing by remember { mutableStateOf(false) }
+    var isScanningImage by remember { mutableStateOf(false) }
     var recentPins by remember { mutableStateOf(loadRecentPins(ctx)) }
-    
-    // PIN is masked for display (show •••• groups)
-    val displayPin = pin.chunked(4).joinToString(" ").padEnd(19, '•').replace(" ", " •") 
-    
+    var detectedPins by remember { mutableStateOf<List<String>>(emptyList()) }
+    var scanMessage by remember {
+        mutableStateOf("Upload one scratch-card image and Bingwa will extract the 16-digit PIN automatically.")
+    }
+
+    fun startRecharge(targetPin: String, sourceLabel: String) {
+        if (targetPin.length != 16) {
+            Toast.makeText(ctx, "Please enter a complete 16-digit PIN", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (isProcessing || isScanningImage) return
+
+        pin = targetPin
+        scope.launch {
+            isProcessing = true
+            when (val result = startScratchCardRecharge(ctx, targetPin)) {
+                ScratchCardRechargeResult.StartedSilently -> {
+                    saveRecentPin(ctx, targetPin)
+                    recentPins = loadRecentPins(ctx)
+                    pin = ""
+                    Toast.makeText(ctx, "$sourceLabel recharge started.", Toast.LENGTH_SHORT).show()
+                }
+                ScratchCardRechargeResult.StartedInDialer -> {
+                    saveRecentPin(ctx, targetPin)
+                    recentPins = loadRecentPins(ctx)
+                    pin = ""
+                    Toast.makeText(ctx, "Recharge opened in your dialer to complete automatically.", Toast.LENGTH_LONG).show()
+                }
+                is ScratchCardRechargeResult.Failed -> {
+                    Toast.makeText(ctx, result.message, Toast.LENGTH_LONG).show()
+                }
+            }
+            isProcessing = false
+        }
+    }
+
     fun onDigitPress(digit: String) {
-        if (pin.length < 16 && !isProcessing) {
+        if (pin.length < 16 && !isProcessing && !isScanningImage) {
             pin += digit
         }
     }
-    
+
     val onClear: () -> Unit = {
-        pin = ""
+        if (!isProcessing && !isScanningImage) {
+            pin = ""
+        }
     }
-    
+
     val onBackspace: () -> Unit = {
-        if (pin.isNotEmpty()) {
+        if (pin.isNotEmpty() && !isProcessing && !isScanningImage) {
             pin = pin.dropLast(1)
         }
     }
-    
-    val onTopUp: () -> Unit = {
-        if (pin.length != 16) {
-            Toast.makeText(ctx, "Please enter a complete 16-digit PIN", Toast.LENGTH_SHORT).show()
-        } else {
-            scope.launch {
-                isProcessing = true
-                val result = startScratchCardRecharge(ctx, pin)
-                
-                if (result) {
-                    saveRecentPin(ctx, pin)
-                    recentPins = loadRecentPins(ctx)
-                    pin = ""
-                    Toast.makeText(ctx, "Recharge successful!", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(ctx, "Recharge failed. Please try again.", Toast.LENGTH_SHORT).show()
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            isScanningImage = true
+            detectedPins = emptyList()
+            scanMessage = "Scanning image for scratch-card PIN..."
+            val extractedPins = runCatching { scanScratchCardPins(ctx, uri) }
+                .getOrElse {
+                    emptyList()
                 }
-                isProcessing = false
+            isScanningImage = false
+
+            if (extractedPins.isEmpty()) {
+                pin = ""
+                scanMessage = "No 16-digit scratch-card PIN was found in that image."
+                Toast.makeText(ctx, "No 16-digit PIN found in the selected image.", Toast.LENGTH_LONG).show()
+            } else {
+                detectedPins = extractedPins
+                pin = extractedPins.first()
+                scanMessage = if (extractedPins.size == 1) {
+                    "Detected 1 PIN. Recharge is starting automatically."
+                } else {
+                    "Detected ${extractedPins.size} PINs. The first PIN is starting automatically."
+                }
+                startRecharge(extractedPins.first(), "Scanned")
             }
         }
     }
-    
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(C.bg)
             .verticalScroll(rememberScrollState())
     ) {
-        // Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -132,8 +185,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 fontWeight = FontWeight.Bold
             )
         }
-        
-        // Main Card
+
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -147,27 +199,71 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    "Enter your scratch card PIN",
+                    "Upload an image or enter your scratch card PIN",
                     color = C.t2,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
-                
+
+                Spacer(Modifier.height(16.dp))
+
+                Button(
+                    onClick = { imagePickerLauncher.launch("image/*") },
+                    enabled = !isProcessing && !isScanningImage,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = C.cyan,
+                        contentColor = Color.White,
+                        disabledContainerColor = C.cyan.copy(alpha = 0.3f),
+                        disabledContentColor = Color.White.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        if (isScanningImage) "Scanning image..." else "Upload Scratch Card Image",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                Text(
+                    text = scanMessage,
+                    color = if (detectedPins.isEmpty()) C.t3 else C.green,
+                    fontSize = 13.sp,
+                    fontWeight = if (detectedPins.isEmpty()) FontWeight.Normal else FontWeight.Medium
+                )
+
+                if (detectedPins.isNotEmpty()) {
+                    Spacer(Modifier.height(16.dp))
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        detectedPins.forEach { detectedPin ->
+                            RecentPinItem(
+                                pin = detectedPin,
+                                onClick = { pin = detectedPin }
+                            )
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(20.dp))
-                
-                // PIN Display
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    // Show 4 groups of 4 digits
                     repeat(4) { groupIndex ->
                         val startIndex = groupIndex * 4
                         val endIndex = minOf(startIndex + 4, pin.length)
                         val groupValue = if (startIndex < pin.length) {
                             pin.substring(startIndex, endIndex)
-                        } else ""
-                        
+                        } else {
+                            ""
+                        }
+
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = C.surface.copy(alpha = 0.6f),
@@ -189,14 +285,12 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                         }
                     }
                 }
-                
+
                 Spacer(Modifier.height(24.dp))
-                
-                // Numpad
+
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Row 1: 1 2 3
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
@@ -204,11 +298,11 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                         listOf("1", "2", "3").forEach { digit ->
                             NumpadButton(
                                 digit = digit,
+                                enabled = !isProcessing && !isScanningImage,
                                 onClick = { onDigitPress(digit) }
                             )
                         }
                     }
-                    // Row 2: 4 5 6
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
@@ -216,11 +310,11 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                         listOf("4", "5", "6").forEach { digit ->
                             NumpadButton(
                                 digit = digit,
+                                enabled = !isProcessing && !isScanningImage,
                                 onClick = { onDigitPress(digit) }
                             )
                         }
                     }
-                    // Row 3: 7 8 9
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
@@ -228,20 +322,19 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                         listOf("7", "8", "9").forEach { digit ->
                             NumpadButton(
                                 digit = digit,
+                                enabled = !isProcessing && !isScanningImage,
                                 onClick = { onDigitPress(digit) }
                             )
                         }
                     }
-                    // Row 4: Clear 0 Backspace
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
                     ) {
-                        // Clear button
                         Surface(
                             modifier = Modifier
                                 .size(64.dp)
-                                .clickable(onClick = { onClear() }),
+                                .clickable(enabled = !isProcessing && !isScanningImage, onClick = { onClear() }),
                             shape = CircleShape,
                             color = C.surface.copy(alpha = 0.6f),
                             border = BorderStroke(1.dp, C.border.copy(alpha = 0.4f))
@@ -255,18 +348,17 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                                 )
                             }
                         }
-                        
-                        // 0 button
+
                         NumpadButton(
                             digit = "0",
+                            enabled = !isProcessing && !isScanningImage,
                             onClick = { onDigitPress("0") }
                         )
-                        
-                        // Backspace button
+
                         Surface(
                             modifier = Modifier
                                 .size(64.dp)
-                                .clickable(onClick = { onBackspace() }),
+                                .clickable(enabled = !isProcessing && !isScanningImage, onClick = { onBackspace() }),
                             shape = CircleShape,
                             color = C.surface.copy(alpha = 0.6f),
                             border = BorderStroke(1.dp, C.border.copy(alpha = 0.4f))
@@ -282,18 +374,16 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                         }
                     }
                 }
-                
+
                 Spacer(Modifier.height(20.dp))
-                
-                // Action Buttons Row
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Clear Button
                     Button(
                         onClick = { onClear() },
-                        enabled = pin.isNotEmpty() && !isProcessing,
+                        enabled = pin.isNotEmpty() && !isProcessing && !isScanningImage,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = C.surface,
                             contentColor = C.t1,
@@ -311,11 +401,10 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                         Spacer(Modifier.width(8.dp))
                         Text("Clear", fontWeight = FontWeight.Bold)
                     }
-                    
-                    // Top Up Button
+
                     Button(
-                        onClick = { onTopUp() },
-                        enabled = pin.length == 16 && !isProcessing,
+                        onClick = { startRecharge(pin, "Manual") },
+                        enabled = pin.length == 16 && !isProcessing && !isScanningImage,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = C.green,
                             contentColor = Color.White,
@@ -339,10 +428,9 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 }
             }
         }
-        
+
         Spacer(Modifier.height(16.dp))
-        
-        // Recents Section
+
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -371,9 +459,9 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                         fontWeight = FontWeight.Bold
                     )
                 }
-                
+
                 Spacer(Modifier.height(12.dp))
-                
+
                 if (recentPins.isEmpty()) {
                     Box(
                         modifier = Modifier
@@ -401,7 +489,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 }
             }
         }
-        
+
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -409,14 +497,15 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
 @Composable
 private fun NumpadButton(
     digit: String,
+    enabled: Boolean,
     onClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier
             .size(64.dp)
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         shape = CircleShape,
-        color = C.surface.copy(alpha = 0.6f),
+        color = C.surface.copy(alpha = if (enabled) 0.6f else 0.3f),
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.4f))
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -463,7 +552,6 @@ private fun formatPinForDisplay(pin: String): String {
     return pin.chunked(4).joinToString(" ")
 }
 
-// Data persistence for recent pins
 private fun loadRecentPins(context: Context): List<String> {
     val prefs = context.getSharedPreferences(PREFS_SCRATCH_CARD, Context.MODE_PRIVATE)
     val pinsString = prefs.getString(KEY_RECENT_PINS, "") ?: ""
@@ -474,37 +562,135 @@ private fun saveRecentPin(context: Context, pin: String) {
     if (pin.length != 16) return
     val prefs = context.getSharedPreferences(PREFS_SCRATCH_CARD, Context.MODE_PRIVATE)
     val currentPins = loadRecentPins(context).toMutableList()
-    
-    // Remove if already exists (to move to top)
     currentPins.remove(pin)
-    // Add to top
     currentPins.add(0, pin)
-    // Keep only max
     val newPins = currentPins.take(MAX_RECENT_PINS)
-    
     prefs.edit().putString(KEY_RECENT_PINS, newPins.joinToString(",")).apply()
 }
 
-// Scratch card recharge function
-private suspend fun startScratchCardRecharge(context: Context, pin: String): Boolean {
+private suspend fun scanScratchCardPins(context: Context, imageUri: Uri): List<String> {
+    val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     return try {
-        val ussdCode = "*141*$pin#"
+        val image = InputImage.fromFilePath(context, imageUri)
+        val text = recognizer.awaitRecognition(image)
+        extractScratchPins(text)
+    } finally {
+        recognizer.close()
+    }
+}
+
+private suspend fun TextRecognizer.awaitRecognition(image: InputImage): String =
+    suspendCancellableCoroutine { cont ->
+        process(image)
+            .addOnSuccessListener { result ->
+                if (cont.isActive) cont.resumeWith(Result.success(result.text))
+            }
+            .addOnFailureListener { error ->
+                if (cont.isActive) cont.resumeWith(Result.failure(error))
+            }
+    }
+
+private fun extractScratchPins(recognizedText: String): List<String> {
+    if (recognizedText.isBlank()) return emptyList()
+
+    val results = LinkedHashSet<String>()
+    Regex("""(?<![A-Za-z0-9])(?:[0-9OoQqDdIiLlSsBbZzGg][\s-]*){16}(?![A-Za-z0-9])""")
+        .findAll(recognizedText)
+        .forEach { match ->
+            val normalized = buildString {
+                match.value.forEach { ch ->
+                    when {
+                        ch.isWhitespace() || ch == '-' -> Unit
+                        else -> normalizeOcrDigit(ch)?.let(::append)
+                    }
+                }
+            }
+            if (normalized.length == 16) {
+                results += normalized
+            }
+        }
+
+    if (results.isNotEmpty()) return results.toList()
+
+    val flattened = buildString {
+        recognizedText.forEach { ch ->
+            normalizeOcrDigit(ch)?.let(::append)
+        }
+    }
+    if (flattened.length < 16) return emptyList()
+
+    for (index in 0..flattened.length - 16) {
+        results += flattened.substring(index, index + 16)
+    }
+    return results.toList()
+}
+
+private fun normalizeOcrDigit(ch: Char): Char? = when (ch) {
+    in '0'..'9' -> ch
+    'O', 'o', 'Q', 'q', 'D' -> '0'
+    'I', 'l', 'L' -> '1'
+    'S', 's' -> '5'
+    'B' -> '8'
+    'Z', 'z' -> '2'
+    'G', 'g' -> '6'
+    else -> null
+}
+
+private suspend fun startScratchCardRecharge(context: Context, pin: String): ScratchCardRechargeResult {
+    val ussdCode = "*141*$pin#"
+    return try {
         suspendCancellableCoroutine { cont ->
             val executed = SilentUssd.execute(
                 context = context,
                 ussdCode = ussdCode,
                 onSuccess = {
-                    if (cont.isActive) cont.resumeWith(Result.success(true))
+                    if (cont.isActive) {
+                        cont.resumeWith(Result.success(ScratchCardRechargeResult.StartedSilently))
+                    }
                 },
                 onFailure = {
-                    if (cont.isActive) cont.resumeWith(Result.success(false))
+                    val launchedVisible = launchVisibleScratchCardRecharge(context, ussdCode)
+                    if (cont.isActive) {
+                        val result = if (launchedVisible) {
+                            ScratchCardRechargeResult.StartedInDialer
+                        } else {
+                            ScratchCardRechargeResult.Failed("Recharge failed. Please try again.")
+                        }
+                        cont.resumeWith(Result.success(result))
+                    }
                 }
             )
+
             if (!executed && cont.isActive) {
-                cont.resumeWith(Result.success(false))
+                val launchedVisible = launchVisibleScratchCardRecharge(context, ussdCode)
+                val result = if (launchedVisible) {
+                    ScratchCardRechargeResult.StartedInDialer
+                } else {
+                    ScratchCardRechargeResult.Failed("Unable to start recharge on this phone.")
+                }
+                cont.resumeWith(Result.success(result))
             }
         }
-    } catch (e: Exception) {
-        false
+    } catch (_: Exception) {
+        ScratchCardRechargeResult.Failed("Unable to start recharge on this phone.")
     }
+}
+
+private fun launchVisibleScratchCardRecharge(context: Context, ussdCode: String): Boolean {
+    return runCatching {
+        val intent = UssdHelper.buildCallIntent(context, ussdCode)
+        if (intent.resolveActivity(context.packageManager) == null) {
+            false
+        } else {
+            val keepAppUiVisible = BingwaMobileApp.wasInForegroundRecently()
+            if (keepAppUiVisible) {
+                UssdNavigationService.armForegroundUi()
+            }
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            if (keepAppUiVisible) {
+                UssdHelper.relaunchAppUi(context)
+            }
+            true
+        }
+    }.getOrDefault(false)
 }
