@@ -546,36 +546,26 @@ class UssdNavigationService : AccessibilityService() {
             if (windowPkg in BLOCKED_PACKAGES && !allowBlockedWindow) return
             lastWindowPkg = windowPkg
 
-            val eventDialogText = if (signatureLearningMode) {
+            val requireStrictPopupScope = shouldRequireStrictPopupScope()
+            val eventDialogText = if (!shouldUseEventTextFallback()) {
                 ""
             } else {
                 extractDialogTextFromEvent(event)
             }
-            val baseSnapshot = if (
-                !signatureLearningMode && (
-                    eventDialogText.isBlank() ||
-                        advancedActive ||
-                        isForegroundUiActive() ||
-                        balanceCallback != null ||
-                        tokenPurchaseCallback != null
-                    )
+            val snapshot = if (
+                eventDialogText.isBlank() ||
+                advancedActive ||
+                isForegroundUiActive() ||
+                balanceCallback != null ||
+                tokenPurchaseCallback != null
             ) {
-                captureTreeSnapshot(root)
+                capturePreferredPopupSnapshot(root, requireStrictDialog = requireStrictPopupScope)
             } else {
                 null
             }
-            val strictLearningSnapshot = if (signatureLearningMode) {
-                captureTreeSnapshotStrictDialog(root)
-            } else {
-                null
-            }
-            if (signatureLearningMode && strictLearningSnapshot == null) return
-            val snapshot = if (signatureLearningMode) strictLearningSnapshot else baseSnapshot
-            val dialogText = if (signatureLearningMode) {
-                strictLearningSnapshot?.dialogText.orEmpty()
-            } else {
-                snapshot?.dialogText ?: normalizeCollapsedText(eventDialogText)
-            }
+            if (requireStrictPopupScope && snapshot == null) return
+            val dialogText = snapshot?.dialogText
+                ?: normalizeCollapsedText(eventDialogText)
             if (dialogText.isBlank()) return
             val lower = dialogText.lowercase()
             if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return
@@ -605,7 +595,7 @@ class UssdNavigationService : AccessibilityService() {
                 lastFinalResponse = dialogText
                 capturePopupTranscript(snapshot, dialogText)
                 if (signatureLearningMode) {
-                    val learningSnapshot = strictLearningSnapshot ?: return
+                    val learningSnapshot = snapshot ?: return
                     val learningLower = learningSnapshot.dialogText.lowercase()
                     if (!NON_USSD_DIALOG_HINTS.any { learningLower.contains(it) } &&
                         looksLikeUssdDialog(
@@ -753,6 +743,40 @@ class UssdNavigationService : AccessibilityService() {
                 || ((advancedActive || isForegroundUiActive()) && likelyUssdPackage && (hasEditField || hasSendButton || hasDismissButton || hasMenuOptions))
     }
 
+    private fun shouldRequireStrictPopupScope(): Boolean {
+        if (signatureLearningMode) return true
+        if (!advancedActive) return false
+        if (pendingPhase != PendingPhase.NONE || !pendingExpectedValue.isNullOrBlank()) return true
+        val step = advancedSteps.getOrNull(currentStep).orEmpty()
+        return step == "INPUT_PHONE" || (step.isNotBlank() && !step.all(Char::isDigit))
+    }
+
+    private fun shouldUseEventTextFallback(): Boolean =
+        !advancedActive &&
+            !signatureLearningMode &&
+            !isForegroundUiActive() &&
+            balanceCallback == null &&
+            tokenPurchaseCallback == null
+
+    private fun capturePreferredPopupSnapshot(
+        root: AccessibilityNodeInfo,
+        requireStrictDialog: Boolean
+    ): UssdTreeSnapshot? {
+        val strictSnapshot = captureTreeSnapshotStrictDialog(root)
+        if (strictSnapshot != null) return strictSnapshot
+        if (requireStrictDialog) return null
+        return captureTreeSnapshot(root)
+    }
+
+    private fun obtainInteractionRoot(
+        root: AccessibilityNodeInfo,
+        requireStrictDialog: Boolean
+    ): AccessibilityNodeInfo? {
+        findDialogCaptureRoot(root)?.let { return it }
+        if (requireStrictDialog) return null
+        return AccessibilityNodeInfo.obtain(root)
+    }
+
     private fun buildScreenSignatureKey(
         stepIndex: Int,
         windowId: Int,
@@ -805,158 +829,171 @@ class UssdNavigationService : AccessibilityService() {
         try {
             clearRootRecoveryState()
             val windowPkg = root.packageName?.toString() ?: ""
-            val snapshot = if (signatureLearningMode) null else captureTreeSnapshot(root)
-            val strictLearningSnapshot = if (signatureLearningMode) captureTreeSnapshotStrictDialog(root) else null
-            if (signatureLearningMode && strictLearningSnapshot == null) {
+            val requireStrictPopupScope = shouldRequireStrictPopupScope()
+            val effectiveSnapshot = capturePreferredPopupSnapshot(
+                root = root,
+                requireStrictDialog = requireStrictPopupScope
+            )
+            if (effectiveSnapshot == null) {
                 isProcessing = false
                 pendingProcessToken = SystemClock.elapsedRealtime()
                 scheduleProcessStep(dialogChanged = false)
                 return
             }
-            val effectiveSnapshot = strictLearningSnapshot ?: snapshot ?: return
-            val freshDialogText = if (signatureLearningMode) {
-                strictLearningSnapshot?.dialogText.orEmpty()
-            } else {
-                effectiveSnapshot.dialogText.ifBlank { snapshot?.dialogText.orEmpty() }
-            }
-            val dialogText = freshDialogText.ifBlank { lastFinalResponse }
-            val lower = dialogText.lowercase()
-            if (shouldWaitForStepTransition(dialogText, windowChanged = false)) {
+            val interactionRoot = obtainInteractionRoot(
+                root = root,
+                requireStrictDialog = requireStrictPopupScope
+            ) ?: run {
                 isProcessing = false
                 pendingProcessToken = SystemClock.elapsedRealtime()
                 scheduleProcessStep(dialogChanged = false)
                 return
             }
-            if (dialogText.isNotBlank()) {
-                lastFinalResponse = dialogText
-            }
-            if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) {
-                isProcessing = false
-                return
-            }
-            if (!looksLikeUssdDialogFast(allTextLower = lower, windowPackageName = windowPkg)) {
-                isProcessing = false
-                return
-            }
-            if (currentStep >= advancedSteps.size) {
-                if (shouldWaitForFinalResponse(effectiveSnapshot, dialogText)) {
-                    isProcessing = false
-                    pendingProcessToken = SystemClock.elapsedRealtime()
-                    scheduleProcessStep(dialogChanged = false, overrideDelayMs = RAPID_POST_POPUP_POLL_MS)
-                    return
-                }
-                val finalText = lastFinalResponse
-                Log.d(TAG, "All steps complete, finalText='$finalText'")
-                finishAdvancedDispatch(finalText)
-                return
-            }
-
-            val step = advancedSteps[currentStep]
-            val menuSignature = parseMenuSignature(effectiveSnapshot)
-            if (step != "INPUT_PHONE") {
-                captureSignatureStepIfNeeded(currentStep, step, menuSignature, effectiveSnapshot, dialogText)
-            }
-            val resolved = resolveStepInput(currentStep, step, menuSignature)
-            if (!advancedActive) {
-                isProcessing = false
-                return
-            }
-            val valueToEnter = resolved.first
-            val selectedMenuLabel = resolved.second
-
-            val inputField = findEditableFieldForStep(root, step, dialogText)
             try {
-                val dialogAllowsPhoneInput = step == "INPUT_PHONE" && dialogSuggestsPhoneInput(lower)
-                if (step == "INPUT_PHONE" && inputField == null && !dialogAllowsPhoneInput) {
-                    // Wait for the correct prompt/dialog instead of blindly injecting the phone number.
+                val freshDialogText = effectiveSnapshot.dialogText
+                val dialogText = freshDialogText.ifBlank { lastFinalResponse }
+                val lower = dialogText.lowercase()
+                if (shouldWaitForStepTransition(dialogText, windowChanged = false)) {
                     isProcessing = false
                     pendingProcessToken = SystemClock.elapsedRealtime()
                     scheduleProcessStep(dialogChanged = false)
                     return
                 }
-                if (step.all(Char::isDigit) && menuSignature != null && menuSignature.options.isNotEmpty()) {
-                    // If the current screen is a menu, ensure our selection exists on THIS menu.
-                    // This prevents "next step" inputs from being applied to the previous screen.
-                    if (!menuSignature.options.containsKey(valueToEnter)) {
+                if (dialogText.isNotBlank()) {
+                    lastFinalResponse = dialogText
+                }
+                if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) {
+                    isProcessing = false
+                    return
+                }
+                if (!looksLikeUssdDialogFast(allTextLower = lower, windowPackageName = windowPkg)) {
+                    isProcessing = false
+                    return
+                }
+                if (currentStep >= advancedSteps.size) {
+                    if (shouldWaitForFinalResponse(effectiveSnapshot, dialogText)) {
+                        isProcessing = false
+                        pendingProcessToken = SystemClock.elapsedRealtime()
+                        scheduleProcessStep(dialogChanged = false, overrideDelayMs = RAPID_POST_POPUP_POLL_MS)
+                        return
+                    }
+                    val finalText = lastFinalResponse
+                    Log.d(TAG, "All steps complete, finalText='$finalText'")
+                    finishAdvancedDispatch(finalText)
+                    return
+                }
+
+                val step = advancedSteps[currentStep]
+                val menuSignature = parseMenuSignature(effectiveSnapshot)
+                if (step != "INPUT_PHONE") {
+                    captureSignatureStepIfNeeded(currentStep, step, menuSignature, effectiveSnapshot, dialogText)
+                }
+                val resolved = resolveStepInput(currentStep, step, menuSignature)
+                if (!advancedActive) {
+                    isProcessing = false
+                    return
+                }
+                val valueToEnter = resolved.first
+                val selectedMenuLabel = resolved.second
+
+                val inputField = findEditableFieldForStep(interactionRoot, step, dialogText)
+                try {
+                    val dialogAllowsPhoneInput = step == "INPUT_PHONE" && dialogSuggestsPhoneInput(lower)
+                    if (step == "INPUT_PHONE" && inputField == null && !dialogAllowsPhoneInput) {
+                        // Wait for the correct prompt/dialog instead of blindly injecting the phone number.
                         isProcessing = false
                         pendingProcessToken = SystemClock.elapsedRealtime()
                         scheduleProcessStep(dialogChanged = false)
                         return
                     }
-                }
-                val shouldPreferTextInput = shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
-                    (selectedMenuLabel == null && (dialogSuggestsTextInput(lower) || dialogAllowsPhoneInput))
-                if (inputField == null && shouldPreferTextInput && !dialogSuggestsTextInput(lower) && !dialogAllowsPhoneInput) {
-                    if (!effectiveSnapshot.hasEditableField) {
-                        isProcessing = false
-                        pendingProcessToken = SystemClock.elapsedRealtime()
-                        scheduleProcessStep(dialogChanged = false)
-                        return
-                    }
-                }
-                if (inputField != null || shouldPreferTextInput) {
-                    val wroteValue = when {
-                        inputField != null -> tryWriteValueToField(inputField, valueToEnter) || writeValueToField(valueToEnter)
-                        else -> writeValueToField(valueToEnter)
-                    }
-                    val inlineVerified = verifyExpectedInputFromRoot(
-                        root = root,
-                        expectedValue = valueToEnter,
-                        existingField = inputField
-                    )
-                    val recentVerifiedWrite = inlineVerified || hasRecentVerifiedInput(valueToEnter)
-                    if (!isFinalSignatureLearningStep(currentStep) &&
-                        wroteValue &&
-                        recentVerifiedWrite &&
-                        tryImmediateVerifiedSend(root, inputField, valueToEnter)
-                    ) {
-                        markStepAction(dialogText)
-                        startPendingStepAdvance(root, dialogText)
-                        return
-                    }
-                    // Fast path: stop polling loops. Set a pending phase and let the next accessibility
-                    // event drive verification/send immediately (with a short safety kick).
-                    if (isFinalSignatureLearningStep(currentStep)) {
-                        // Keep legacy behavior for learning flows (we don't want to risk changing capture timing).
-                        val delay = when {
-                            wroteValue && hasSeenAdvancedPopup -> RAPID_POST_POPUP_VERIFY_MS
-                            wroteValue -> FAST_VERIFY_POLL_MS
-                            else -> VERIFY_POLL_MS
+                    if (step.all(Char::isDigit) && menuSignature != null && menuSignature.options.isNotEmpty()) {
+                        // If the current screen is a menu, ensure our selection exists on THIS menu.
+                        // This prevents "next step" inputs from being applied to the previous screen.
+                        if (!menuSignature.options.containsKey(valueToEnter)) {
+                            isProcessing = false
+                            pendingProcessToken = SystemClock.elapsedRealtime()
+                            scheduleProcessStep(dialogChanged = false)
+                            return
                         }
-                        if (delay <= 0L) handler.post { verifyLearningFinalInputThenDismiss(valueToEnter, 0, 0) }
-                        else handler.postDelayed({ verifyLearningFinalInputThenDismiss(valueToEnter, 0, 0) }, delay)
-                    } else {
-                        startPendingAdvance(valueToEnter)
                     }
+                    val shouldPreferTextInput = shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
+                        (selectedMenuLabel == null && (dialogSuggestsTextInput(lower) || dialogAllowsPhoneInput))
+                    if (inputField == null && shouldPreferTextInput && !dialogSuggestsTextInput(lower) && !dialogAllowsPhoneInput) {
+                        if (!effectiveSnapshot.hasEditableField) {
+                            isProcessing = false
+                            pendingProcessToken = SystemClock.elapsedRealtime()
+                            scheduleProcessStep(dialogChanged = false)
+                            return
+                        }
+                    }
+                    if (inputField != null || shouldPreferTextInput) {
+                        val wroteValue = when {
+                            inputField != null ->
+                                tryWriteValueToField(inputField, valueToEnter) ||
+                                    writeValueToField(interactionRoot, valueToEnter)
+                            else -> writeValueToField(interactionRoot, valueToEnter)
+                        }
+                        val inlineVerified = verifyExpectedInputFromRoot(
+                            root = interactionRoot,
+                            expectedValue = valueToEnter,
+                            existingField = inputField
+                        )
+                        val recentVerifiedWrite = inlineVerified || hasRecentVerifiedInput(valueToEnter)
+                        if (!isFinalSignatureLearningStep(currentStep) &&
+                            wroteValue &&
+                            recentVerifiedWrite &&
+                            tryImmediateVerifiedSend(interactionRoot, inputField, valueToEnter)
+                        ) {
+                            markStepAction(dialogText)
+                            startPendingStepAdvance(interactionRoot, dialogText)
+                            return
+                        }
+                        // Fast path: stop polling loops. Set a pending phase and let the next accessibility
+                        // event drive verification/send immediately (with a short safety kick).
+                        if (isFinalSignatureLearningStep(currentStep)) {
+                            // Keep legacy behavior for learning flows (we don't want to risk changing capture timing).
+                            val delay = when {
+                                wroteValue && hasSeenAdvancedPopup -> RAPID_POST_POPUP_VERIFY_MS
+                                wroteValue -> FAST_VERIFY_POLL_MS
+                                else -> VERIFY_POLL_MS
+                            }
+                            if (delay <= 0L) handler.post { verifyLearningFinalInputThenDismiss(valueToEnter, 0, 0) }
+                            else handler.postDelayed({ verifyLearningFinalInputThenDismiss(valueToEnter, 0, 0) }, delay)
+                        } else {
+                            startPendingAdvance(valueToEnter)
+                        }
+                        return
+                    }
+                } finally {
+                    inputField?.recycle()
+                }
+
+                val menuBtn = locateMenuButton(interactionRoot, valueToEnter, selectedMenuLabel)
+
+                if (menuBtn != null) {
+                    val clicked = try { performClick(menuBtn) } finally { menuBtn.recycle() }
+                    if (clicked) {
+                        markStepAction(dialogText)
+                        startPendingStepAdvance(interactionRoot, dialogText)
+                        return
+                    }
+                    isProcessing = false
+                    dismissErrorAndRestart()
                     return
                 }
-            } finally {
-                inputField?.recycle()
-            }
 
-            val menuBtn = locateMenuButton(root, valueToEnter, selectedMenuLabel)
-
-            if (menuBtn != null) {
-                val clicked = try { performClick(menuBtn) } finally { menuBtn.recycle() }
-                if (clicked) {
-                    markStepAction(dialogText)
-                    startPendingStepAdvance(root, dialogText)
+                if (menuSignature != null || hasSeenAdvancedPopup) {
+                    isProcessing = false
+                    pendingProcessToken = SystemClock.elapsedRealtime()
+                    scheduleProcessStep(dialogChanged = false)
                     return
                 }
+
                 isProcessing = false
                 dismissErrorAndRestart()
-                return
+            } finally {
+                interactionRoot.recycle()
             }
-
-            if (menuSignature != null || hasSeenAdvancedPopup) {
-                isProcessing = false
-                pendingProcessToken = SystemClock.elapsedRealtime()
-                scheduleProcessStep(dialogChanged = false)
-                return
-            }
-
-            isProcessing = false
-            dismissErrorAndRestart()
         } finally {
             root.recycle()
         }
@@ -1679,14 +1716,23 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun writeValueToField(value: String): Boolean {
         val root = getUssdRoot() ?: return false
+        return try {
+            writeValueToField(root, value)
+        } finally {
+            root.recycle()
+        }
+    }
+
+    private fun writeValueToField(root: AccessibilityNodeInfo, value: String): Boolean {
         val windowPkg = root.packageName?.toString() ?: ""
         if (windowPkg.isNotEmpty() && windowPkg != "android" && !isPotentialUssdPackage(windowPkg)) {
-            root.recycle()
             return false
         }
-        val lower = captureTreeSnapshot(root).dialogText.lowercase()
+        val requireStrictPopupScope = shouldRequireStrictPopupScope()
+        val snapshot = capturePreferredPopupSnapshot(root, requireStrictDialog = requireStrictPopupScope)
+            ?: return false
+        val lower = snapshot.dialogText.lowercase()
         if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) {
-            root.recycle()
             return false
         }
         val fields = mutableListOf<AccessibilityNodeInfo>()
@@ -1697,7 +1743,6 @@ class UssdNavigationService : AccessibilityService() {
             return fields.any { field -> tryWriteValueToField(field, value) }
         } finally {
             fields.forEach { it.recycle() }
-            root.recycle()
         }
     }
 
@@ -2236,58 +2281,71 @@ class UssdNavigationService : AccessibilityService() {
             return
         }
 
-        when (pendingPhase) {
-            PendingPhase.WAIT_VERIFY -> {
-                val field = findEditableField(root)
-                val verified = try {
-                    if (field != null) {
-                        verifyExpectedInputFromRoot(
-                            root = root,
-                            expectedValue = expected,
-                            existingField = field
-                        )
-                    } else {
-                        hasRecentVerifiedInput(expected) || hasRecentExpectedInput(expected)
+        val requireStrictPopupScope = shouldRequireStrictPopupScope()
+        val interactionRoot = obtainInteractionRoot(root, requireStrictDialog = requireStrictPopupScope) ?: run {
+            schedulePendingAdvanceKick(delayMs = pendingAdvanceKickDelay(expected, pendingPhase))
+            isProcessing = false
+            return
+        }
+        try {
+            when (pendingPhase) {
+                PendingPhase.WAIT_VERIFY -> {
+                    val field = findEditableField(interactionRoot)
+                    val verified = try {
+                        if (field != null) {
+                            verifyExpectedInputFromRoot(
+                                root = interactionRoot,
+                                expectedValue = expected,
+                                existingField = field
+                            )
+                        } else {
+                            hasRecentVerifiedInput(expected) || hasRecentExpectedInput(expected)
+                        }
+                    } finally {
+                        runCatching { field?.recycle() }
                     }
-                } finally {
-                    runCatching { field?.recycle() }
-                }
 
-                if (verified) {
-                    pendingPhase = PendingPhase.WAIT_SEND
-                    attemptPendingAdvance(root)
-                    return
-                }
-
-                // One corrective write, then wait for the next event.
-                if (pendingAttempts == 0 && !hasRecentExpectedInput(expected)) {
-                    pendingAttempts++
-                    val wroteValue = writeValueToField(expected)
-                    if (wroteValue && hasRecentVerifiedInput(expected)) {
+                    if (verified) {
                         pendingPhase = PendingPhase.WAIT_SEND
                         attemptPendingAdvance(root)
                         return
                     }
-                }
-                schedulePendingAdvanceKick(delayMs = pendingAdvanceKickDelay(expected, pendingPhase))
-                isProcessing = false
-            }
 
-            PendingPhase.WAIT_SEND -> {
-                val sent = tryImmediateVerifiedSend(root, field = null, expectedValue = expected)
-                if (sent) {
-                    clearPendingAdvance()
-                    val text = extractAllText(root)
-                    markStepAction(text)
-                    startPendingStepAdvance(root, text)
-                } else {
-                    // Let the next event re-try, but avoid expensive work here.
+                    // One corrective write, then wait for the next event.
+                    if (pendingAttempts == 0 && !hasRecentExpectedInput(expected)) {
+                        pendingAttempts++
+                        val wroteValue = writeValueToField(interactionRoot, expected)
+                        if (wroteValue && hasRecentVerifiedInput(expected)) {
+                            pendingPhase = PendingPhase.WAIT_SEND
+                            attemptPendingAdvance(root)
+                            return
+                        }
+                    }
                     schedulePendingAdvanceKick(delayMs = pendingAdvanceKickDelay(expected, pendingPhase))
                     isProcessing = false
                 }
-            }
 
-            PendingPhase.NONE -> Unit
+                PendingPhase.WAIT_SEND -> {
+                    val sent = tryImmediateVerifiedSend(interactionRoot, field = null, expectedValue = expected)
+                    if (sent) {
+                        clearPendingAdvance()
+                        val text = capturePreferredPopupSnapshot(
+                            root = interactionRoot,
+                            requireStrictDialog = requireStrictPopupScope
+                        )?.dialogText.orEmpty()
+                        markStepAction(text)
+                        startPendingStepAdvance(interactionRoot, text)
+                    } else {
+                        // Let the next event re-try, but avoid expensive work here.
+                        schedulePendingAdvanceKick(delayMs = pendingAdvanceKickDelay(expected, pendingPhase))
+                        isProcessing = false
+                    }
+                }
+
+                PendingPhase.NONE -> Unit
+            }
+        } finally {
+            interactionRoot.recycle()
         }
     }
 
