@@ -1,7 +1,6 @@
 package com.bingwa.mobile
 
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -61,8 +59,7 @@ private const val KEY_RECENT_PINS = "recent_pins"
 private const val MAX_RECENT_PINS = 5
 
 private sealed interface ScratchCardRechargeResult {
-    data object StartedSilently : ScratchCardRechargeResult
-    data object StartedInDialer : ScratchCardRechargeResult
+    data class Completed(val response: String) : ScratchCardRechargeResult
     data class Failed(val message: String) : ScratchCardRechargeResult
 }
 
@@ -76,6 +73,9 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     var isScanningImage by remember { mutableStateOf(false) }
     var recentPins by remember { mutableStateOf(loadRecentPins(ctx)) }
     var detectedPins by remember { mutableStateOf<List<String>>(emptyList()) }
+    var finalResponse by remember { mutableStateOf("") }
+    var responseMessage by remember { mutableStateOf("No final USSD response captured yet.") }
+    var responseIsError by remember { mutableStateOf(false) }
     var scanMessage by remember {
         mutableStateOf("Upload one scratch-card image and Bingwa will extract the 16-digit PIN automatically.")
     }
@@ -88,22 +88,23 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         if (isProcessing || isScanningImage) return
 
         pin = targetPin
+        finalResponse = ""
+        responseMessage = "Waiting for final USSD response..."
+        responseIsError = false
         scope.launch {
             isProcessing = true
             when (val result = startScratchCardRecharge(ctx, targetPin)) {
-                ScratchCardRechargeResult.StartedSilently -> {
+                is ScratchCardRechargeResult.Completed -> {
                     saveRecentPin(ctx, targetPin)
                     recentPins = loadRecentPins(ctx)
-                    pin = ""
-                    Toast.makeText(ctx, "$sourceLabel recharge started.", Toast.LENGTH_SHORT).show()
-                }
-                ScratchCardRechargeResult.StartedInDialer -> {
-                    saveRecentPin(ctx, targetPin)
-                    recentPins = loadRecentPins(ctx)
-                    pin = ""
-                    Toast.makeText(ctx, "Recharge opened in your dialer to complete automatically.", Toast.LENGTH_LONG).show()
+                    finalResponse = result.response.ifBlank { "USSD completed but returned an empty response." }
+                    responseMessage = "$sourceLabel recharge completed."
+                    Toast.makeText(ctx, "$sourceLabel recharge completed.", Toast.LENGTH_SHORT).show()
                 }
                 is ScratchCardRechargeResult.Failed -> {
+                    responseIsError = true
+                    finalResponse = result.message
+                    responseMessage = "Recharge failed."
                     Toast.makeText(ctx, result.message, Toast.LENGTH_LONG).show()
                 }
             }
@@ -111,21 +112,9 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         }
     }
 
-    fun onDigitPress(digit: String) {
-        if (pin.length < 16 && !isProcessing && !isScanningImage) {
-            pin += digit
-        }
-    }
-
     val onClear: () -> Unit = {
         if (!isProcessing && !isScanningImage) {
             pin = ""
-        }
-    }
-
-    val onBackspace: () -> Unit = {
-        if (pin.isNotEmpty() && !isProcessing && !isScanningImage) {
-            pin = pin.dropLast(1)
         }
     }
 
@@ -199,7 +188,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    "Upload an image or enter your scratch card PIN",
+                    "Upload an image or select a scratch card PIN",
                     color = C.t2,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
@@ -251,6 +240,15 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
 
                 Spacer(Modifier.height(20.dp))
 
+                Text(
+                    text = if (pin.length == 16) "Selected PIN" else "No PIN selected yet",
+                    color = C.t2,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+
+                Spacer(Modifier.height(12.dp))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
@@ -280,95 +278,6 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 2.sp
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(24.dp))
-
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
-                    ) {
-                        listOf("1", "2", "3").forEach { digit ->
-                            NumpadButton(
-                                digit = digit,
-                                enabled = !isProcessing && !isScanningImage,
-                                onClick = { onDigitPress(digit) }
-                            )
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
-                    ) {
-                        listOf("4", "5", "6").forEach { digit ->
-                            NumpadButton(
-                                digit = digit,
-                                enabled = !isProcessing && !isScanningImage,
-                                onClick = { onDigitPress(digit) }
-                            )
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
-                    ) {
-                        listOf("7", "8", "9").forEach { digit ->
-                            NumpadButton(
-                                digit = digit,
-                                enabled = !isProcessing && !isScanningImage,
-                                onClick = { onDigitPress(digit) }
-                            )
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
-                    ) {
-                        Surface(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clickable(enabled = !isProcessing && !isScanningImage, onClick = { onClear() }),
-                            shape = CircleShape,
-                            color = C.surface.copy(alpha = 0.6f),
-                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.4f))
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Rounded.DeleteSweep,
-                                    contentDescription = "Clear",
-                                    tint = C.t2,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-
-                        NumpadButton(
-                            digit = "0",
-                            enabled = !isProcessing && !isScanningImage,
-                            onClick = { onDigitPress("0") }
-                        )
-
-                        Surface(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clickable(enabled = !isProcessing && !isScanningImage, onClick = { onBackspace() }),
-                            shape = CircleShape,
-                            color = C.surface.copy(alpha = 0.6f),
-                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.4f))
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    "⌫",
-                                    color = C.t2,
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         }
@@ -423,6 +332,42 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                         Text(
                             if (isProcessing) "Processing..." else "Top up",
                             fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (responseIsError) C.surface.copy(alpha = 0.72f) else C.greenDim,
+                    border = BorderStroke(
+                        1.dp,
+                        if (responseIsError) C.border.copy(alpha = 0.5f) else C.green.copy(alpha = 0.35f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "Final USSD Response",
+                            color = C.t1,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            responseMessage,
+                            color = if (responseIsError) C.t2 else C.green,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            if (finalResponse.isBlank()) "No final USSD response captured yet." else finalResponse,
+                            color = C.t2,
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp
                         )
                     }
                 }
@@ -491,31 +436,6 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         }
 
         Spacer(Modifier.height(24.dp))
-    }
-}
-
-@Composable
-private fun NumpadButton(
-    digit: String,
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .size(64.dp)
-            .clickable(enabled = enabled, onClick = onClick),
-        shape = CircleShape,
-        color = C.surface.copy(alpha = if (enabled) 0.6f else 0.3f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.4f))
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = digit,
-                color = C.t1,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
     }
 }
 
@@ -643,54 +563,27 @@ private suspend fun startScratchCardRecharge(context: Context, pin: String): Scr
             val executed = SilentUssd.execute(
                 context = context,
                 ussdCode = ussdCode,
-                onSuccess = {
+                onSuccess = { response ->
                     if (cont.isActive) {
-                        cont.resumeWith(Result.success(ScratchCardRechargeResult.StartedSilently))
+                        cont.resumeWith(Result.success(ScratchCardRechargeResult.Completed(response.trim())))
                     }
                 },
-                onFailure = {
-                    val launchedVisible = launchVisibleScratchCardRecharge(context, ussdCode)
+                onFailure = { error ->
                     if (cont.isActive) {
-                        val result = if (launchedVisible) {
-                            ScratchCardRechargeResult.StartedInDialer
-                        } else {
-                            ScratchCardRechargeResult.Failed("Recharge failed. Please try again.")
-                        }
-                        cont.resumeWith(Result.success(result))
+                        cont.resumeWith(Result.success(ScratchCardRechargeResult.Failed(error)))
                     }
                 }
             )
 
             if (!executed && cont.isActive) {
-                val launchedVisible = launchVisibleScratchCardRecharge(context, ussdCode)
-                val result = if (launchedVisible) {
-                    ScratchCardRechargeResult.StartedInDialer
-                } else {
-                    ScratchCardRechargeResult.Failed("Unable to start recharge on this phone.")
-                }
-                cont.resumeWith(Result.success(result))
+                cont.resumeWith(
+                    Result.success(
+                        ScratchCardRechargeResult.Failed("Unable to start silent scratch-card recharge on this phone.")
+                    )
+                )
             }
         }
     } catch (_: Exception) {
         ScratchCardRechargeResult.Failed("Unable to start recharge on this phone.")
     }
-}
-
-private fun launchVisibleScratchCardRecharge(context: Context, ussdCode: String): Boolean {
-    return runCatching {
-        val intent = UssdHelper.buildCallIntent(context, ussdCode)
-        if (intent.resolveActivity(context.packageManager) == null) {
-            false
-        } else {
-            val keepAppUiVisible = BingwaMobileApp.wasInForegroundRecently()
-            if (keepAppUiVisible) {
-                UssdNavigationService.armForegroundUi()
-            }
-            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            if (keepAppUiVisible) {
-                UssdHelper.relaunchAppUi(context)
-            }
-            true
-        }
-    }.getOrDefault(false)
 }
