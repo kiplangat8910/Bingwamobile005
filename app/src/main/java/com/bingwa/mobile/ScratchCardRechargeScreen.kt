@@ -396,8 +396,7 @@ private fun ScratchBalanceCard(
                 ) {
                     ScratchMetricHeading(text = "AIRTIME BALANCE", accent = C.blue)
                     Surface(
-                        onClick = onRefresh,
-                        enabled = !isRefreshing,
+                        modifier = Modifier.clickable(enabled = !isRefreshing, onClick = onRefresh),
                         color = C.surface.copy(alpha = 0.60f),
                         shape = RoundedCornerShape(18.dp),
                         border = BorderStroke(1.dp, C.border.copy(alpha = 0.40f))
@@ -590,8 +589,7 @@ private fun ScratchBulkCard(
                     ) {
                         Text("Clear selected PIN", color = C.t2, fontSize = 13.sp)
                         Surface(
-                            onClick = onClear,
-                            enabled = !isBusy,
+                            modifier = Modifier.clickable(enabled = !isBusy, onClick = onClear),
                             color = C.surface.copy(alpha = 0.20f),
                             shape = RoundedCornerShape(999.dp),
                             border = BorderStroke(1.dp, C.border.copy(alpha = 0.30f))
@@ -712,8 +710,7 @@ private fun ScratchInlineInfoCard(
             }
             Spacer(Modifier.width(8.dp))
             Surface(
-                onClick = onTrailingClick,
-                enabled = trailingEnabled,
+                modifier = Modifier.clickable(enabled = trailingEnabled, onClick = onTrailingClick),
                 color = if (trailingEnabled) C.greenDim else C.surface.copy(alpha = 0.26f),
                 shape = RoundedCornerShape(999.dp),
                 border = BorderStroke(
