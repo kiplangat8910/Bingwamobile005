@@ -10,7 +10,7 @@ object OfferRepository {
     private const val PREFS_NAME = "DataOffers"
     private const val KEY_OFFERS = "offers"
     private const val KEY_CATALOG_VERSION = "catalog_version"
-    private const val CURRENT_CATALOG_VERSION = 5
+    private const val CURRENT_CATALOG_VERSION = 6
     const val ACTION_OFFERS_UPDATED = "com.bingwa.mobile.OFFERS_UPDATED"
     private val gson = Gson()
     private val lock = Any()
@@ -118,24 +118,11 @@ object OfferRepository {
                     return@forEach
                 }
 
-                // Check if the USSD code differs from the catalog default
-                // (user has edited it) - preserve user's edited code
-                val codeChanged = !existing.ussdCode.trim().equals(default.ussdCode.trim(), ignoreCase = true)
-                // Only count as "restored" if the stored code matched the default and we're resetting it
-                // (which we no longer do - we preserve user edits)
-                val wasRestored = !codeChanged && existing.catalogKey.isBlank()
-                if (wasRestored) restoredDefaultOffers++
-                merged += existing.copy(
-                    catalogKey = default.catalogKey,
-                    // Preserve user's edited USSD code - don't overwrite with default
-                    ussdCode = existing.ussdCode,
-                    learnedSignature = if (codeChanged) emptyList() else existing.learnedSignature,
-                    signatureLearnedAt = if (codeChanged) 0L else existing.signatureLearnedAt,
-                    signatureLearningCaptures = if (codeChanged) emptyList() else existing.signatureLearningCaptures,
-                    pendingLearnedSignature = if (codeChanged) emptyList() else existing.pendingLearnedSignature,
-                    pendingSignatureLearnedAt = if (codeChanged) 0L else existing.pendingSignatureLearnedAt,
-                    pendingSignatureLearningCaptures = if (codeChanged) emptyList() else existing.pendingSignatureLearningCaptures
-                )
+                val mergedOffer = mergeManagedOffer(existing, default)
+                if (!mergedOffer.ussdCode.trim().equals(existing.ussdCode.trim(), ignoreCase = true)) {
+                    restoredDefaultOffers++
+                }
+                merged += mergedOffer
             }
 
             customOffers.forEach { offer ->
@@ -294,9 +281,7 @@ object OfferRepository {
                 ?: legacyManagedById[default.id]
                 ?: legacyManagedByPrice[default.price]
             migrated += if (existing != null) {
-                // Preserve the user's saved offer exactly as edited instead of
-                // overwriting fields like name or USSD code from catalog defaults.
-                existing.copy(catalogKey = default.catalogKey)
+                mergeManagedOffer(existing, default)
             } else {
                 default.copy(id = nextId++)
             }
@@ -338,6 +323,7 @@ object OfferRepository {
                 catalogKey = offer.catalogKey.trim(),
                 name = trimmedName,
                 ussdCode = trimmedCode,
+                catalogDefaultUssdCode = normalizeCatalogDefaultCode(offer.catalogDefaultUssdCode),
                 executionMode = mode,
                 category = category,
                 targetDevice = offer.targetDevice.ifBlank { "PRIMARY" },
@@ -366,11 +352,38 @@ object OfferRepository {
                     name = entry.label,
                     price = entry.price.toInt(),
                     ussdCode = entry.ussdCode,
+                    catalogDefaultUssdCode = entry.ussdCode,
                     category = category,
                     executionMode = defaultExecutionModeForCategory(category)
                 )
             }
             .filter { it.ussdCode.isNotBlank() }
+    }
+
+    private fun normalizeCatalogDefaultCode(rawCode: String?): String =
+        rawCode?.trim().orEmpty()
+
+    private fun isUserEditedManagedOffer(existing: OfferItem, default: OfferItem): Boolean {
+        val recordedDefaultCode = normalizeCatalogDefaultCode(existing.catalogDefaultUssdCode)
+        val baselineCode = if (recordedDefaultCode.isNotBlank()) recordedDefaultCode else default.ussdCode.trim()
+        return !existing.ussdCode.trim().equals(baselineCode, ignoreCase = true)
+    }
+
+    private fun mergeManagedOffer(existing: OfferItem, default: OfferItem): OfferItem {
+        val preserveEditedCode = isUserEditedManagedOffer(existing, default)
+        val mergedCode = if (preserveEditedCode) existing.ussdCode else default.ussdCode
+        return existing.copy(
+            catalogKey = default.catalogKey,
+            name = if (existing.name.isBlank()) default.name else existing.name,
+            ussdCode = mergedCode,
+            catalogDefaultUssdCode = default.ussdCode,
+            learnedSignature = if (preserveEditedCode) emptyList() else existing.learnedSignature,
+            signatureLearnedAt = if (preserveEditedCode) 0L else existing.signatureLearnedAt,
+            signatureLearningCaptures = if (preserveEditedCode) emptyList() else existing.signatureLearningCaptures,
+            pendingLearnedSignature = if (preserveEditedCode) emptyList() else existing.pendingLearnedSignature,
+            pendingSignatureLearnedAt = if (preserveEditedCode) 0L else existing.pendingSignatureLearnedAt,
+            pendingSignatureLearningCaptures = if (preserveEditedCode) emptyList() else existing.pendingSignatureLearningCaptures
+        )
     }
 
     private fun inferCategoryFromLabel(label: String): String {

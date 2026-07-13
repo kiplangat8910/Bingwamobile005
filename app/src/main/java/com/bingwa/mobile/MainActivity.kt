@@ -9129,7 +9129,7 @@ fun OffersScreen(onBack: () -> Unit) {
                 title = { Text("Repair Bundle Catalog", color = C.t1, fontWeight = FontWeight.Bold) },
                 text = {
                     Text(
-                        "Reset built-in bundle offers back to their original USSD codes, restore any missing default bundles, remove broken entries, and keep your custom offers.",
+                        "Refresh built-in bundle offers, restore any missing default bundles, remove broken entries, and keep your custom offers plus any USSD codes you edited manually.",
                         color = C.t2,
                         fontSize = 13.sp,
                         lineHeight = 19.sp
@@ -10118,6 +10118,7 @@ fun OfferDialog(
             name = name.trim(),
             price = p,
             ussdCode = code.trim(),
+            catalogDefaultUssdCode = existing?.catalogDefaultUssdCode.orEmpty(),
             enabled = enabled,
             executionMode = normalizedMode,
             category = normalizedCategory,

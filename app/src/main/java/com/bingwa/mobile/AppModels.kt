@@ -68,6 +68,7 @@ data class OfferItem(
     val name: String,
     val price: Int,
     val ussdCode: String,
+    val catalogDefaultUssdCode: String = "",
     var enabled: Boolean = true,
     val executionMode: String = OFFER_EXECUTION_MODE_SIMPLE,
     val category: String = OFFER_CATEGORY_DATA,
