@@ -41,6 +41,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -72,27 +73,38 @@ import kotlinx.coroutines.delay
 private const val PREFS_SCRATCH_CARD = "scratch_card_prefs"
 private const val KEY_RECENT_PINS = "recent_pins"
 private const val KEY_RECHARGE_HISTORY = "recharge_history"
+private const val KEY_USED_PIN_RECORDS = "used_pin_records"
 private const val MAX_RECENT_PINS = 5
 private const val FREE_RECHARGE_WINDOW_LIMIT = 10
 private const val FREE_RECHARGE_WINDOW_MS = 24 * 60 * 60 * 1000L
+private const val USED_PIN_RECORD_RETENTION_MS = 60 * 60 * 1000L
 
 private sealed interface ScratchCardRechargeResult {
     data class Completed(val response: String) : ScratchCardRechargeResult
     data class Failed(val message: String) : ScratchCardRechargeResult
 }
 
+private data class ScratchUsedPinRecord(
+    val pin: String,
+    val simSelection: Int,
+    val timestamp: Long
+)
+
 @Composable
 fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val sims = remember { getAvailableSims(ctx) }
+    val defaultRechargeSim = remember { currentUssdSimSelection(ctx) }
 
     var pin by remember { mutableStateOf("") }
     var isProcessing by remember { mutableStateOf(false) }
     var isScanningImage by remember { mutableStateOf(false) }
     var isRefreshingBalance by remember { mutableStateOf(false) }
+    var selectedRechargeSim by remember { mutableIntStateOf(defaultRechargeSim) }
     var recentPins by remember { mutableStateOf(loadRecentPins(ctx)) }
     var recentRechargeCount by remember { mutableIntStateOf(loadRecentRechargeCount(ctx)) }
+    var usedPinRecords by remember { mutableStateOf(loadUsedPinRecords(ctx)) }
     var detectedPins by remember { mutableStateOf<List<String>>(emptyList()) }
     var finalResponse by remember { mutableStateOf("") }
     var responseMessage by remember { mutableStateOf("No final USSD response captured yet.") }
@@ -107,8 +119,8 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         mutableStateOf("Scan one scratch card image and Bingwa will extract every 16-digit PIN it can find.")
     }
 
-    val selectedSimLabel = remember(sims) {
-        describeUssdSimSelection(currentUssdSimSelection(ctx), sims)
+    val selectedSimLabel = remember(selectedRechargeSim, sims) {
+        describeUssdSimSelection(selectedRechargeSim, sims)
             .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
     }
     val runNowCount = when {
@@ -126,6 +138,12 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
             return
         }
         if (isProcessing || isScanningImage) return
+        if (sims.isEmpty()) {
+            Toast.makeText(ctx, "No SIM available for scratch recharge.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val rechargeSimForRun = selectedRechargeSim
+        val rechargeSimLabelForRun = selectedSimLabel
 
         pin = targetPin
         finalResponse = ""
@@ -133,15 +151,17 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         responseIsError = false
         scope.launch {
             isProcessing = true
-            when (val result = startScratchCardRecharge(ctx, targetPin)) {
+            when (val result = startScratchCardRecharge(ctx, targetPin, rechargeSimForRun)) {
                 is ScratchCardRechargeResult.Completed -> {
                     saveRecentPin(ctx, targetPin)
                     saveRechargeTimestamp(ctx)
+                    saveUsedPinRecord(ctx, targetPin, rechargeSimForRun)
                     recentPins = loadRecentPins(ctx)
                     recentRechargeCount = loadRecentRechargeCount(ctx)
+                    usedPinRecords = loadUsedPinRecords(ctx)
                     finalResponse = result.response.ifBlank { "USSD completed but returned an empty response." }
-                    responseMessage = "$sourceLabel recharge completed."
-                    Toast.makeText(ctx, "$sourceLabel recharge completed.", Toast.LENGTH_SHORT).show()
+                    responseMessage = "$sourceLabel recharge completed on $rechargeSimLabelForRun."
+                    Toast.makeText(ctx, "$sourceLabel recharge completed on $rechargeSimLabelForRun.", Toast.LENGTH_SHORT).show()
                 }
                 is ScratchCardRechargeResult.Failed -> {
                     responseIsError = true
@@ -151,6 +171,14 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 }
             }
             isProcessing = false
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000L)
+            recentRechargeCount = loadRecentRechargeCount(ctx)
+            usedPinRecords = loadUsedPinRecords(ctx)
         }
     }
 
@@ -198,11 +226,10 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 detectedPins = extractedPins
                 pin = extractedPins.first()
                 scanMessage = if (extractedPins.size == 1) {
-                    "Detected 1 PIN. Recharge is starting automatically."
+                    "Detected 1 PIN. Select the recharge SIM, then tap Top up."
                 } else {
-                    "Detected ${extractedPins.size} PINs. The first PIN is starting automatically."
+                    "Detected ${extractedPins.size} PINs. Select the recharge SIM, then tap Top up."
                 }
-                startRecharge(extractedPins.first(), "Scanned")
             }
         }
     }
@@ -271,10 +298,13 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 freeLeftCount = freeLeftCount,
                 runNowCount = runNowCount,
                 selectedSimLabel = selectedSimLabel,
+                sims = sims,
+                selectedRechargeSim = selectedRechargeSim,
                 selectedPin = pin,
                 scanMessage = scanMessage,
                 detectedPins = detectedPins,
                 isBusy = isProcessing || isScanningImage,
+                onRechargeSimChange = { selectedRechargeSim = it },
                 onPinClick = { pin = it },
                 onClear = onClear,
                 onRecharge = { startRecharge(pin, "Manual") }
@@ -300,6 +330,18 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
             ScratchRecentPinsCard(
                 recentPins = recentPins,
                 onPinClick = { pin = it }
+            )
+
+            Spacer(Modifier.height(28.dp))
+
+            ScratchUsedPinsCard(
+                records = usedPinRecords,
+                sims = sims,
+                onPinClick = { pin = it },
+                onClearAll = {
+                    clearUsedPinRecords(ctx)
+                    usedPinRecords = emptyList()
+                }
             )
 
             Spacer(Modifier.height(28.dp))
@@ -456,10 +498,13 @@ private fun ScratchBulkCard(
     freeLeftCount: Int,
     runNowCount: Int,
     selectedSimLabel: String,
+    sims: List<android.telephony.SubscriptionInfo>,
+    selectedRechargeSim: Int,
     selectedPin: String,
     scanMessage: String,
     detectedPins: List<String>,
     isBusy: Boolean,
+    onRechargeSimChange: (Int) -> Unit,
     onPinClick: (String) -> Unit,
     onClear: () -> Unit,
     onRecharge: () -> Unit
@@ -565,11 +610,18 @@ private fun ScratchBulkCard(
 
             ScratchInlineInfoCard(
                 icon = Icons.Rounded.SimCard,
-                title = "CURRENT DEFAULT SIM",
+                title = "RECHARGE SIM",
                 value = selectedSimLabel,
-                trailingText = "DEFAULT",
+                trailingText = "SELECT",
                 trailingEnabled = false,
                 onTrailingClick = {}
+            )
+
+            UssdSimPickerRow(
+                title = "Recharge SIM",
+                sims = sims,
+                current = selectedRechargeSim,
+                onSelect = onRechargeSimChange
             )
 
             if (selectedPin.isNotEmpty()) {
@@ -762,7 +814,7 @@ private fun ScratchStepsCard(isBusy: Boolean, onPickImage: () -> Unit) {
                 badge = "2",
                 badgeAccent = C.blue,
                 title = "Review detected cards",
-                body = "Choose the right PIN, confirm the default SIM, then let silent USSD handle the recharge.",
+                body = "Choose the right PIN, select the recharge SIM, then let silent USSD handle the recharge.",
                 chip = "silent recharge"
             )
             Spacer(Modifier.height(14.dp))
@@ -937,6 +989,104 @@ private fun ScratchRecentPinsCard(recentPins: List<String>, onPinClick: (String)
 }
 
 @Composable
+private fun ScratchUsedPinsCard(
+    records: List<ScratchUsedPinRecord>,
+    sims: List<android.telephony.SubscriptionInfo>,
+    onPinClick: (String) -> Unit,
+    onClearAll: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = C.cardHi.copy(alpha = 0.96f),
+        shape = RoundedCornerShape(26.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.58f))
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.History, contentDescription = null, tint = C.t2, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("Used PIN records", color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                }
+                Surface(
+                    modifier = Modifier.clickable(enabled = records.isNotEmpty(), onClick = onClearAll),
+                    color = C.surface.copy(alpha = 0.28f),
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.30f))
+                ) {
+                    Text(
+                        "Clear all",
+                        color = if (records.isNotEmpty()) C.red else C.t3,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "These records can be cleared manually and they expire automatically after 1 hour.",
+                color = C.t3,
+                fontSize = 12.sp,
+                lineHeight = 18.sp
+            )
+            Spacer(Modifier.height(12.dp))
+            if (records.isEmpty()) {
+                Text("No used PIN records", color = C.t3, fontSize = 14.sp)
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    records.forEach { record ->
+                        UsedPinRecordItem(
+                            record = record,
+                            simLabel = describeUssdSimSelection(record.simSelection, sims),
+                            onClick = { onPinClick(record.pin) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UsedPinRecordItem(
+    record: ScratchUsedPinRecord,
+    simLabel: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = C.surface.copy(alpha = 0.58f),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.34f))
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Text(
+                text = formatPinForDisplay(record.pin),
+                color = C.t1,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.sp
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "${simLabel.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }}  ·  ${formatUsedPinAgeLabel(record.timestamp)}",
+                color = C.t3,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
 private fun ScratchMetricHeading(text: String, accent: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
@@ -1033,6 +1183,45 @@ private fun saveRechargeTimestamp(context: Context, timestamp: Long = System.cur
     prefs.edit().putString(KEY_RECHARGE_HISTORY, values.joinToString(",")).apply()
 }
 
+private fun loadUsedPinRecords(context: Context, now: Long = System.currentTimeMillis()): List<ScratchUsedPinRecord> {
+    val prefs = context.getSharedPreferences(PREFS_SCRATCH_CARD, Context.MODE_PRIVATE)
+    val cleaned = prefs.getString(KEY_USED_PIN_RECORDS, "").orEmpty()
+        .split(";")
+        .mapNotNull { raw ->
+            val parts = raw.split("|")
+            if (parts.size != 3) return@mapNotNull null
+            val pin = parts[0].takeIf { it.length == 16 } ?: return@mapNotNull null
+            val simSelection = parts[1].toIntOrNull() ?: return@mapNotNull null
+            val timestamp = parts[2].toLongOrNull() ?: return@mapNotNull null
+            if (now - timestamp !in 0..USED_PIN_RECORD_RETENTION_MS) return@mapNotNull null
+            ScratchUsedPinRecord(pin = pin, simSelection = simSelection, timestamp = timestamp)
+        }
+        .sortedByDescending { it.timestamp }
+    prefs.edit().putString(KEY_USED_PIN_RECORDS, cleaned.joinToString(";") { "${it.pin}|${it.simSelection}|${it.timestamp}" }).apply()
+    return cleaned
+}
+
+private fun saveUsedPinRecord(
+    context: Context,
+    pin: String,
+    simSelection: Int,
+    timestamp: Long = System.currentTimeMillis()
+) {
+    val current = loadUsedPinRecords(context, timestamp)
+        .filterNot { it.pin == pin }
+        .toMutableList()
+    current.add(0, ScratchUsedPinRecord(pin = pin, simSelection = simSelection, timestamp = timestamp))
+    val prefs = context.getSharedPreferences(PREFS_SCRATCH_CARD, Context.MODE_PRIVATE)
+    prefs.edit().putString(KEY_USED_PIN_RECORDS, current.joinToString(";") { "${it.pin}|${it.simSelection}|${it.timestamp}" }).apply()
+}
+
+private fun clearUsedPinRecords(context: Context) {
+    context.getSharedPreferences(PREFS_SCRATCH_CARD, Context.MODE_PRIVATE)
+        .edit()
+        .remove(KEY_USED_PIN_RECORDS)
+        .apply()
+}
+
 private fun splitScratchBalance(value: String): Pair<String, String> {
     val normalized = value.trim().ifBlank { "KES --" }
     val parts = normalized.split(Regex("\\s+"), limit = 2)
@@ -1052,6 +1241,16 @@ private fun formatScratchCheckedLabel(timestamp: Long, isRefreshing: Boolean): S
         minutes == 1L -> "Checked 1 min ago"
         minutes < 60L -> "Checked ${minutes} min ago"
         else -> "Checked ${minutes / 60L}h ago"
+    }
+}
+
+private fun formatUsedPinAgeLabel(timestamp: Long): String {
+    val deltaMinutes = ((System.currentTimeMillis() - timestamp).coerceAtLeast(0L)) / 60_000L
+    return when {
+        deltaMinutes < 1L -> "Used just now"
+        deltaMinutes == 1L -> "Used 1 min ago"
+        deltaMinutes < 60L -> "Used ${deltaMinutes} min ago"
+        else -> "Used ${deltaMinutes / 60L}h ago"
     }
 }
 
@@ -1123,13 +1322,19 @@ private fun normalizeOcrDigit(ch: Char): Char? = when (ch) {
     else -> null
 }
 
-private suspend fun startScratchCardRecharge(context: Context, pin: String): ScratchCardRechargeResult {
+private suspend fun startScratchCardRecharge(
+    context: Context,
+    pin: String,
+    simSelection: Int
+): ScratchCardRechargeResult {
     val ussdCode = "*141*$pin#"
     return try {
         suspendCancellableCoroutine { cont ->
-            val executed = SilentUssd.execute(
+            val executed = UssdHelper.dialUssd(
                 context = context,
                 ussdCode = ussdCode,
+                silentOnly = true,
+                subIdOverride = simSelection,
                 onSuccess = { response ->
                     if (cont.isActive) {
                         cont.resumeWith(Result.success(ScratchCardRechargeResult.Completed(response.trim())))
