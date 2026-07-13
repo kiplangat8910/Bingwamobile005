@@ -462,6 +462,7 @@ private fun ScratchScreenHeader(
     }
 }
 
+@Composable
 private fun ScratchBalanceCard(
     currency: String,
     amount: String,
@@ -1291,6 +1292,7 @@ private fun ScratchHeroStat(
     }
 }
 
+@Composable
 private fun ScratchPill(
     text: String,
     tint: Color,
@@ -1366,6 +1368,7 @@ private fun ScratchResponsePreview(
     }
 }
 
+@Composable
 private fun ScratchCardHeader(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
