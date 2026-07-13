@@ -887,7 +887,7 @@ class UssdNavigationService : AccessibilityService() {
                 val shouldPreferTextInput = shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
                     (selectedMenuLabel == null && (dialogSuggestsTextInput(lower) || dialogAllowsPhoneInput))
                 if (inputField == null && shouldPreferTextInput && !dialogSuggestsTextInput(lower) && !dialogAllowsPhoneInput) {
-                    if (!snapshot.hasEditableField) {
+                    if (!effectiveSnapshot.hasEditableField) {
                         isProcessing = false
                         pendingProcessToken = SystemClock.elapsedRealtime()
                         scheduleProcessStep(dialogChanged = false)
