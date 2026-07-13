@@ -87,10 +87,17 @@ private sealed interface ScratchCardRechargeResult {
     data class Failed(val message: String) : ScratchCardRechargeResult
 }
 
+private data class ScratchRecentPinRecord(
+    val pin: String,
+    val finalResponse: String,
+    val timestamp: Long
+)
+
 private data class ScratchUsedPinRecord(
     val pin: String,
     val simSelection: Int,
-    val timestamp: Long
+    val timestamp: Long,
+    val finalResponse: String
 )
 
 @Composable
@@ -134,6 +141,12 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     val freeLeftCount = (FREE_RECHARGE_WINDOW_LIMIT - recentRechargeCount).coerceAtLeast(0)
     val balanceCurrency = splitScratchBalance(balanceDisplay).first
     val balanceAmount = splitScratchBalance(balanceDisplay).second
+    val savedResponsesByPin = remember(recentPins, usedPinRecords) {
+        buildMap {
+            recentPins.forEach { put(it.pin, it.finalResponse) }
+            usedPinRecords.forEach { put(it.pin, it.finalResponse) }
+        }
+    }
 
     fun startRecharge(targetPin: String, sourceLabel: String) {
         if (targetPin.length != 16) {
@@ -156,13 +169,14 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
             isProcessing = true
             when (val result = startScratchCardRecharge(ctx, targetPin, rechargeSimForRun)) {
                 is ScratchCardRechargeResult.Completed -> {
-                    saveRecentPin(ctx, targetPin)
+                    val normalizedResponse = normalizeScratchResponse(result.response)
+                    saveRecentPin(ctx, targetPin, normalizedResponse)
                     saveRechargeTimestamp(ctx)
-                    saveUsedPinRecord(ctx, targetPin, rechargeSimForRun)
+                    saveUsedPinRecord(ctx, targetPin, rechargeSimForRun, normalizedResponse)
                     recentPins = loadRecentPins(ctx)
                     recentRechargeCount = loadRecentRechargeCount(ctx)
                     usedPinRecords = loadUsedPinRecords(ctx)
-                    finalResponse = result.response.ifBlank { "USSD completed but returned an empty response." }
+                    finalResponse = normalizedResponse
                     responseMessage = "$sourceLabel recharge completed on $rechargeSimLabelForRun."
                     Toast.makeText(ctx, "$sourceLabel recharge completed on $rechargeSimLabelForRun.", Toast.LENGTH_SHORT).show()
                 }
@@ -292,17 +306,6 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
 
             Spacer(Modifier.height(16.dp))
 
-            ScratchBalanceCard(
-                currency = balanceCurrency,
-                amount = balanceAmount,
-                simLabel = selectedSimLabel,
-                checkedLabel = formatScratchCheckedLabel(lastBalanceCheckedAt, isRefreshingBalance),
-                isRefreshing = isRefreshingBalance,
-                onRefresh = ::requestBalanceRefresh
-            )
-
-            Spacer(Modifier.height(18.dp))
-
             ScratchBulkCard(
                 freeLeftCount = freeLeftCount,
                 runNowCount = runNowCount,
@@ -312,6 +315,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 selectedPin = pin,
                 scanMessage = scanMessage,
                 detectedPins = detectedPins,
+                savedResponsesByPin = savedResponsesByPin,
                 isBusy = isProcessing || isScanningImage,
                 onRechargeSimChange = { selectedRechargeSim = it },
                 onPinChange = { raw -> pin = raw.filter { it.isDigit() }.take(16) },
@@ -331,6 +335,17 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 message = responseMessage,
                 body = finalResponse.ifBlank { "No final USSD response captured yet." },
                 isError = responseIsError
+            )
+
+            Spacer(Modifier.height(18.dp))
+
+            ScratchBalanceCard(
+                currency = balanceCurrency,
+                amount = balanceAmount,
+                simLabel = selectedSimLabel,
+                checkedLabel = formatScratchCheckedLabel(lastBalanceCheckedAt, isRefreshingBalance),
+                isRefreshing = isRefreshingBalance,
+                onRefresh = ::requestBalanceRefresh
             )
 
             Spacer(Modifier.height(18.dp))
@@ -607,6 +622,7 @@ private fun ScratchBulkCard(
     selectedPin: String,
     scanMessage: String,
     detectedPins: List<String>,
+    savedResponsesByPin: Map<String, String>,
     isBusy: Boolean,
     onRechargeSimChange: (Int) -> Unit,
     onPinChange: (String) -> Unit,
@@ -851,13 +867,15 @@ private fun ScratchBulkCard(
                 Spacer(Modifier.height(16.dp))
                 ScratchSectionHeader(
                     title = "Detected cards",
-                    subtitle = "Tap any OCR result to move it into the recharge field."
+                    subtitle = "Cards stay in OCR order so you can top up them exactly as they appear."
                 )
                 Spacer(Modifier.height(10.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    detectedPins.forEach { detectedPin ->
+                    detectedPins.forEachIndexed { index, detectedPin ->
                         ScratchDetectedPinItem(
+                            index = index + 1,
                             pin = detectedPin,
+                            finalResponse = savedResponsesByPin[detectedPin].orEmpty(),
                             selected = detectedPin == selectedPin,
                             onClick = { onPinClick(detectedPin) }
                         )
@@ -1144,25 +1162,17 @@ private fun ScratchResponseCard(message: String, body: String, isError: Boolean)
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.height(10.dp))
-            Surface(
-                color = C.surface.copy(alpha = 0.44f),
-                shape = RoundedCornerShape(18.dp),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.24f))
-            ) {
-                Text(
-                    body,
-                    color = C.t2,
-                    fontSize = 13.sp,
-                    lineHeight = 20.sp,
-                    modifier = Modifier.padding(14.dp)
-                )
-            }
+            ScratchResponsePreview(
+                response = body,
+                tint = if (isError) C.red else C.green,
+                emptyLabel = "No final USSD response captured yet."
+            )
         }
     }
 }
 
 @Composable
-private fun ScratchRecentPinsCard(recentPins: List<String>, onPinClick: (String) -> Unit) {
+private fun ScratchRecentPinsCard(recentPins: List<ScratchRecentPinRecord>, onPinClick: (String) -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = C.cardHi.copy(alpha = 0.96f),
@@ -1180,8 +1190,12 @@ private fun ScratchRecentPinsCard(recentPins: List<String>, onPinClick: (String)
                 ScratchEmptyState("No recent recharges yet")
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    recentPins.forEach { recentPin ->
-                        RecentPinItem(pin = recentPin, onClick = { onPinClick(recentPin) })
+                    recentPins.forEachIndexed { index, recentPin ->
+                        RecentPinItem(
+                            index = index + 1,
+                            record = recentPin,
+                            onClick = { onPinClick(recentPin.pin) }
+                        )
                     }
                 }
             }
@@ -1242,8 +1256,9 @@ private fun ScratchUsedPinsCard(
                 ScratchEmptyState("No used PIN records")
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    records.forEach { record ->
+                    records.forEachIndexed { index, record ->
                         UsedPinRecordItem(
+                            index = index + 1,
                             record = record,
                             simLabel = describeUssdSimSelection(record.simSelection, sims),
                             onClick = { onPinClick(record.pin) }
@@ -1257,6 +1272,7 @@ private fun ScratchUsedPinsCard(
 
 @Composable
 private fun UsedPinRecordItem(
+    index: Int,
     record: ScratchUsedPinRecord,
     simLabel: String,
     onClick: () -> Unit
@@ -1274,6 +1290,8 @@ private fun UsedPinRecordItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
+                ScratchCardLabel(index = index, tint = C.orange)
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = formatPinForDisplay(record.pin),
                     color = C.t1,
@@ -1288,6 +1306,12 @@ private fun UsedPinRecordItem(
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(10.dp))
+                ScratchResponsePreview(
+                    response = record.finalResponse,
+                    tint = C.orange,
+                    emptyLabel = "No final USSD response saved for this card yet."
                 )
             }
             Spacer(Modifier.width(12.dp))
@@ -1318,7 +1342,8 @@ private fun ScratchMetricHeading(text: String, accent: Color) {
 
 @Composable
 private fun RecentPinItem(
-    pin: String,
+    index: Int,
+    record: ScratchRecentPinRecord,
     onClick: () -> Unit
 ) {
     Surface(
@@ -1334,8 +1359,10 @@ private fun RecentPinItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
+                ScratchCardLabel(index = index, tint = C.cyan)
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    text = formatPinForDisplay(pin),
+                    text = formatPinForDisplay(record.pin),
                     color = C.t1,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -1343,10 +1370,16 @@ private fun RecentPinItem(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Tap to move this PIN back into the recharge field.",
+                    "${formatRecentPinAgeLabel(record.timestamp)}  ·  Tap to move this PIN back into the recharge field.",
                     color = C.t3,
                     fontSize = 12.sp,
                     lineHeight = 18.sp
+                )
+                Spacer(Modifier.height(10.dp))
+                ScratchResponsePreview(
+                    response = record.finalResponse,
+                    tint = C.cyan,
+                    emptyLabel = "No final USSD response saved for this card yet."
                 )
             }
             Spacer(Modifier.width(12.dp))
@@ -1450,6 +1483,58 @@ private fun ScratchPill(
 }
 
 @Composable
+private fun ScratchCardLabel(index: Int, tint: Color) {
+    Surface(
+        color = tint.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.36f))
+    ) {
+        Text(
+            text = "Scratch card $index",
+            color = tint,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+        )
+    }
+}
+
+@Composable
+private fun ScratchResponsePreview(
+    response: String,
+    tint: Color,
+    emptyLabel: String
+) {
+    val normalizedResponse = response.ifBlank { emptyLabel }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = tint.copy(alpha = 0.09f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.18f))
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(
+                text = "Final USSD response",
+                color = tint,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = normalizedResponse,
+                color = C.t2,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
 private fun ScratchSectionHeader(title: String, subtitle: String) {
     Column {
         Text(title, color = C.t1, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -1509,7 +1594,9 @@ private fun ScratchEmptyState(message: String) {
 
 @Composable
 private fun ScratchDetectedPinItem(
+    index: Int,
     pin: String,
+    finalResponse: String,
     selected: Boolean,
     onClick: () -> Unit
 ) {
@@ -1529,6 +1616,8 @@ private fun ScratchDetectedPinItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
+                ScratchCardLabel(index = index, tint = if (selected) C.green else C.blue)
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = formatPinForDisplay(pin),
                     color = C.t1,
@@ -1542,6 +1631,12 @@ private fun ScratchDetectedPinItem(
                     color = if (selected) C.green else C.t3,
                     fontSize = 12.sp,
                     lineHeight = 18.sp
+                )
+                Spacer(Modifier.height(10.dp))
+                ScratchResponsePreview(
+                    response = finalResponse,
+                    tint = if (selected) C.green else C.blue,
+                    emptyLabel = "No final USSD response saved for this card yet."
                 )
             }
             Spacer(Modifier.width(12.dp))
@@ -1558,20 +1653,61 @@ private fun formatPinForDisplay(pin: String): String {
     return pin.chunked(4).joinToString(" ")
 }
 
-private fun loadRecentPins(context: Context): List<String> {
+private fun loadRecentPins(context: Context, now: Long = System.currentTimeMillis()): List<ScratchRecentPinRecord> {
     val prefs = context.getSharedPreferences(PREFS_SCRATCH_CARD, Context.MODE_PRIVATE)
-    val pinsString = prefs.getString(KEY_RECENT_PINS, "") ?: ""
-    return pinsString.split(",").filter { it.length == 16 }.take(MAX_RECENT_PINS)
+    val stored = prefs.getString(KEY_RECENT_PINS, "").orEmpty()
+    val cleaned = when {
+        stored.isBlank() -> emptyList()
+        "|" !in stored && ";" !in stored -> stored.split(",")
+            .mapIndexedNotNull { index, rawPin ->
+                val pin = rawPin.takeIf { it.length == 16 } ?: return@mapIndexedNotNull null
+                ScratchRecentPinRecord(
+                    pin = pin,
+                    finalResponse = "",
+                    timestamp = now - index
+                )
+            }
+        else -> stored.split(";")
+            .mapNotNull { raw ->
+                val parts = raw.split("|")
+                if (parts.size < 2) return@mapNotNull null
+                val pin = parts[0].takeIf { it.length == 16 } ?: return@mapNotNull null
+                val response = Uri.decode(parts[1]).orEmpty()
+                val timestamp = parts.getOrNull(2)?.toLongOrNull() ?: now
+                ScratchRecentPinRecord(
+                    pin = pin,
+                    finalResponse = response,
+                    timestamp = timestamp
+                )
+            }
+    }
+        .distinctBy { it.pin }
+        .sortedByDescending { it.timestamp }
+        .take(MAX_RECENT_PINS)
+    prefs.edit().putString(KEY_RECENT_PINS, encodeRecentPins(cleaned)).apply()
+    return cleaned
 }
 
-private fun saveRecentPin(context: Context, pin: String) {
+private fun saveRecentPin(
+    context: Context,
+    pin: String,
+    finalResponse: String,
+    timestamp: Long = System.currentTimeMillis()
+) {
     if (pin.length != 16) return
     val prefs = context.getSharedPreferences(PREFS_SCRATCH_CARD, Context.MODE_PRIVATE)
-    val currentPins = loadRecentPins(context).toMutableList()
-    currentPins.remove(pin)
-    currentPins.add(0, pin)
-    val newPins = currentPins.take(MAX_RECENT_PINS)
-    prefs.edit().putString(KEY_RECENT_PINS, newPins.joinToString(",")).apply()
+    val currentPins = loadRecentPins(context, timestamp)
+        .filterNot { it.pin == pin }
+        .toMutableList()
+    currentPins.add(
+        0,
+        ScratchRecentPinRecord(
+            pin = pin,
+            finalResponse = normalizeScratchResponse(finalResponse),
+            timestamp = timestamp
+        )
+    )
+    prefs.edit().putString(KEY_RECENT_PINS, encodeRecentPins(currentPins.take(MAX_RECENT_PINS))).apply()
 }
 
 private fun loadRecentRechargeCount(context: Context, now: Long = System.currentTimeMillis()): Int {
@@ -1601,15 +1737,20 @@ private fun loadUsedPinRecords(context: Context, now: Long = System.currentTimeM
         .split(";")
         .mapNotNull { raw ->
             val parts = raw.split("|")
-            if (parts.size != 3) return@mapNotNull null
+            if (parts.size !in 3..4) return@mapNotNull null
             val pin = parts[0].takeIf { it.length == 16 } ?: return@mapNotNull null
             val simSelection = parts[1].toIntOrNull() ?: return@mapNotNull null
             val timestamp = parts[2].toLongOrNull() ?: return@mapNotNull null
             if (now - timestamp !in 0..USED_PIN_RECORD_RETENTION_MS) return@mapNotNull null
-            ScratchUsedPinRecord(pin = pin, simSelection = simSelection, timestamp = timestamp)
+            ScratchUsedPinRecord(
+                pin = pin,
+                simSelection = simSelection,
+                timestamp = timestamp,
+                finalResponse = Uri.decode(parts.getOrNull(3)).orEmpty()
+            )
         }
         .sortedByDescending { it.timestamp }
-    prefs.edit().putString(KEY_USED_PIN_RECORDS, cleaned.joinToString(";") { "${it.pin}|${it.simSelection}|${it.timestamp}" }).apply()
+    prefs.edit().putString(KEY_USED_PIN_RECORDS, encodeUsedPinRecords(cleaned)).apply()
     return cleaned
 }
 
@@ -1617,14 +1758,23 @@ private fun saveUsedPinRecord(
     context: Context,
     pin: String,
     simSelection: Int,
+    finalResponse: String,
     timestamp: Long = System.currentTimeMillis()
 ) {
     val current = loadUsedPinRecords(context, timestamp)
         .filterNot { it.pin == pin }
         .toMutableList()
-    current.add(0, ScratchUsedPinRecord(pin = pin, simSelection = simSelection, timestamp = timestamp))
+    current.add(
+        0,
+        ScratchUsedPinRecord(
+            pin = pin,
+            simSelection = simSelection,
+            timestamp = timestamp,
+            finalResponse = normalizeScratchResponse(finalResponse)
+        )
+    )
     val prefs = context.getSharedPreferences(PREFS_SCRATCH_CARD, Context.MODE_PRIVATE)
-    prefs.edit().putString(KEY_USED_PIN_RECORDS, current.joinToString(";") { "${it.pin}|${it.simSelection}|${it.timestamp}" }).apply()
+    prefs.edit().putString(KEY_USED_PIN_RECORDS, encodeUsedPinRecords(current)).apply()
 }
 
 private fun clearUsedPinRecords(context: Context) {
@@ -1665,6 +1815,25 @@ private fun formatUsedPinAgeLabel(timestamp: Long): String {
         else -> "Used ${deltaMinutes / 60L}h ago"
     }
 }
+
+private fun formatRecentPinAgeLabel(timestamp: Long): String {
+    val deltaMinutes = ((System.currentTimeMillis() - timestamp).coerceAtLeast(0L)) / 60_000L
+    return when {
+        deltaMinutes < 1L -> "Saved just now"
+        deltaMinutes == 1L -> "Saved 1 min ago"
+        deltaMinutes < 60L -> "Saved ${deltaMinutes} min ago"
+        else -> "Saved ${deltaMinutes / 60L}h ago"
+    }
+}
+
+private fun encodeRecentPins(records: List<ScratchRecentPinRecord>): String =
+    records.joinToString(";") { "${it.pin}|${Uri.encode(it.finalResponse)}|${it.timestamp}" }
+
+private fun encodeUsedPinRecords(records: List<ScratchUsedPinRecord>): String =
+    records.joinToString(";") { "${it.pin}|${it.simSelection}|${it.timestamp}|${Uri.encode(it.finalResponse)}" }
+
+private fun normalizeScratchResponse(response: String): String =
+    response.trim().ifBlank { "USSD completed but returned an empty response." }
 
 private suspend fun scanScratchCardPins(context: Context, imageUri: Uri): List<String> {
     val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
