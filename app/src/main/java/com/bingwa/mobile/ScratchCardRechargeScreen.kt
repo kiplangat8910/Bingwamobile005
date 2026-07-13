@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -287,76 +288,86 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 12.dp)
         ) {
-            ScratchScreenHeader(
-                onBack = onBack,
-                simLabel = selectedSimLabel,
-                freeLeftCount = freeLeftCount,
-                readyCount = runNowCount,
-                isBusy = isProcessing || isScanningImage
-            )
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 392.dp)
+                ) {
+                    ScratchScreenHeader(
+                        onBack = onBack,
+                        simLabel = selectedSimLabel,
+                        selectedPin = pin,
+                        isBusy = isProcessing || isScanningImage
+                    )
 
-            Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(14.dp))
 
-            ScratchBulkCard(
-                freeLeftCount = freeLeftCount,
-                runNowCount = runNowCount,
-                selectedSimLabel = selectedSimLabel,
-                sims = sims,
-                selectedRechargeSim = selectedRechargeSim,
-                selectedPin = pin,
-                scanMessage = scanMessage,
-                detectedPins = detectedPins,
-                savedResponsesByPin = savedResponsesByPin,
-                isBusy = isProcessing || isScanningImage,
-                onRechargeSimChange = { selectedRechargeSim = it },
-                onPinChange = { raw -> pin = raw.filter { it.isDigit() }.take(16) },
-                onPinClick = { pin = it },
-                onClear = onClear,
-                onRecharge = { startRecharge(pin, "Manual") },
-                onPickImage = { imagePickerLauncher.launch("image/*") }
-            )
+                    ScratchBalanceCard(
+                        currency = balanceCurrency,
+                        amount = balanceAmount,
+                        simLabel = selectedSimLabel,
+                        checkedLabel = formatScratchCheckedLabel(lastBalanceCheckedAt, isRefreshingBalance),
+                        isRefreshing = isRefreshingBalance,
+                        onRefresh = ::requestBalanceRefresh
+                    )
 
-            Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(14.dp))
 
-            ScratchResponseCard(
-                message = responseMessage,
-                body = finalResponse.ifBlank { "No final USSD response captured yet." },
-                isError = responseIsError
-            )
+                    ScratchBulkCard(
+                        freeLeftCount = freeLeftCount,
+                        runNowCount = runNowCount,
+                        selectedSimLabel = selectedSimLabel,
+                        sims = sims,
+                        selectedRechargeSim = selectedRechargeSim,
+                        selectedPin = pin,
+                        scanMessage = scanMessage,
+                        detectedPins = detectedPins,
+                        savedResponsesByPin = savedResponsesByPin,
+                        isBusy = isProcessing || isScanningImage,
+                        onRechargeSimChange = { selectedRechargeSim = it },
+                        onPinChange = { raw -> pin = raw.filter { it.isDigit() }.take(16) },
+                        onPinClick = { pin = it },
+                        onClear = onClear,
+                        onRecharge = { startRecharge(pin, "Manual") },
+                        onPickImage = { imagePickerLauncher.launch("image/*") }
+                    )
 
-            Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(14.dp))
 
-            ScratchBalanceCard(
-                currency = balanceCurrency,
-                amount = balanceAmount,
-                simLabel = selectedSimLabel,
-                checkedLabel = formatScratchCheckedLabel(lastBalanceCheckedAt, isRefreshingBalance),
-                isRefreshing = isRefreshingBalance,
-                onRefresh = ::requestBalanceRefresh
-            )
+                    ScratchResponseCard(
+                        message = responseMessage,
+                        body = finalResponse.ifBlank { "No final USSD response captured yet." },
+                        isError = responseIsError
+                    )
 
-            Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(14.dp))
 
-            ScratchRecentPinsCard(
-                recentPins = recentPins,
-                onPinClick = { pin = it }
-            )
+                    ScratchRecentPinsCard(
+                        recentPins = recentPins,
+                        onPinClick = { pin = it }
+                    )
 
-            Spacer(Modifier.height(28.dp))
+                    Spacer(Modifier.height(18.dp))
 
-            ScratchUsedPinsCard(
-                records = usedPinRecords,
-                sims = sims,
-                onPinClick = { pin = it },
-                onClearAll = {
-                    clearUsedPinRecords(ctx)
-                    usedPinRecords = emptyList()
+                    ScratchUsedPinsCard(
+                        records = usedPinRecords,
+                        sims = sims,
+                        onPinClick = { pin = it },
+                        onClearAll = {
+                            clearUsedPinRecords(ctx)
+                            usedPinRecords = emptyList()
+                        }
+                    )
+
+                    Spacer(Modifier.height(28.dp))
                 }
-            )
-
-            Spacer(Modifier.height(28.dp))
+            }
         }
     }
 }
@@ -365,103 +376,145 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
 private fun ScratchScreenHeader(
     onBack: () -> Unit,
     simLabel: String,
-    freeLeftCount: Int,
-    readyCount: Int,
+    selectedPin: String,
     isBusy: Boolean
 ) {
-    Surface(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp),
-        color = C.cardHi.copy(alpha = 0.98f),
-        shape = RoundedCornerShape(30.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f))
+            .padding(top = 6.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            C.orange.copy(alpha = 0.18f),
-                            C.cardHi.copy(alpha = 0.96f),
-                            C.surface.copy(alpha = 0.98f)
-                        )
-                    )
-                )
-                .padding(20.dp)
+        ScratchTelemetryStrip(simLabel = simLabel, isBusy = isBusy)
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Surface(
+                modifier = Modifier.clickable(onClick = onBack),
+                color = C.surface.copy(alpha = 0.84f),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.42f))
             ) {
-                Surface(
-                    modifier = Modifier.clickable(onClick = onBack),
-                    color = C.surface.copy(alpha = 0.82f),
-                    shape = RoundedCornerShape(18.dp),
-                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.44f))
+                Box(
+                    modifier = Modifier.size(42.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier.size(48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = C.t1)
-                    }
+                    Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = C.t2)
                 }
-                ScratchPill(
-                    text = if (isBusy) "Recharge running" else "Ready to recharge",
-                    tint = if (isBusy) C.orange else C.green
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Scratch Card Recharge",
+                    color = C.t1,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Scan one image, detect every 16-digit PIN, then recharge them one by one on your selected line.",
+                    color = C.t2,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "*141*PIN#",
+                    color = C.green,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
+        }
+        Spacer(Modifier.height(12.dp))
+        ScratchCodeStrip(
+            selectedPin = selectedPin,
+            isBusy = isBusy
+        )
+    }
+}
 
-            Spacer(Modifier.height(18.dp))
+@Composable
+private fun ScratchTelemetryStrip(simLabel: String, isBusy: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(C.w08)
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = "AGT-042",
+            color = C.orange,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.6.sp
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = if (isBusy) "RUNNING" else "LINKED",
+            color = if (isBusy) C.green else C.t3,
+            fontSize = 10.sp,
+            letterSpacing = 1.6.sp
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = simLabel.uppercase(Locale.getDefault()),
+            color = C.t3,
+            fontSize = 10.sp,
+            letterSpacing = 1.6.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(C.w08)
+        )
+    }
+}
 
+@Composable
+private fun ScratchCodeStrip(selectedPin: String, isBusy: Boolean) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = C.surface.copy(alpha = 0.72f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.28f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                "Scratch Card Recharge",
-                color = C.t1,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.ExtraBold
+                text = if (selectedPin.length == 16) "*141*${formatPinForDisplay(selectedPin)}#" else "*141*0000-0000-0000-0000#",
+                color = C.t3,
+                fontSize = 11.sp,
+                letterSpacing = 0.8.sp,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.width(10.dp))
             Text(
-                "Scan a card photo or enter the PIN manually, choose the recharge line, and finish from one clean workspace.",
-                color = C.t2,
-                fontSize = 14.sp,
-                lineHeight = 22.sp
-            )
-
-            Spacer(Modifier.height(18.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                ScratchHeroStat(
-                    label = "Active SIM",
-                    value = simLabel,
-                    accent = C.blue,
-                    modifier = Modifier.weight(1f)
-                )
-                ScratchHeroStat(
-                    label = "Ready",
-                    value = String.format(Locale.getDefault(), "%02d cards", readyCount),
-                    accent = C.green,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            ScratchHeroStat(
-                label = "Free left today",
-                value = "$freeLeftCount of $FREE_RECHARGE_WINDOW_LIMIT recharges remaining",
-                accent = C.orange,
-                modifier = Modifier.fillMaxWidth()
+                text = if (isBusy) "RUNNING" else if (selectedPin.length == 16) "READY" else "AWAITING SCAN",
+                color = if (isBusy) C.orange else C.green,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.3.sp
             )
         }
     }
 }
 
+@Composable
 private fun ScratchBalanceCard(
     currency: String,
     amount: String,
@@ -473,7 +526,7 @@ private fun ScratchBalanceCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = C.cardHi.copy(alpha = 0.96f),
-        shape = RoundedCornerShape(30.dp),
+        shape = RoundedCornerShape(24.dp),
         border = BorderStroke(1.dp, C.green.copy(alpha = 0.22f))
     ) {
         Column(
@@ -481,92 +534,78 @@ private fun ScratchBalanceCard(
                 .background(
                     Brush.linearGradient(
                         listOf(
-                            Color(0xFF132B20).copy(alpha = 0.84f),
-                            Color(0xFF101821).copy(alpha = 0.94f),
-                            Color(0xFF09110D).copy(alpha = 0.96f)
+                            Color(0xFF20311B).copy(alpha = 0.82f),
+                            Color(0xFF141813).copy(alpha = 0.95f),
+                            Color(0xFF0B120D).copy(alpha = 0.98f)
                         )
                     )
                 )
-                .padding(horizontal = 18.dp, vertical = 18.dp)
+                .padding(horizontal = 16.dp, vertical = 16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    ScratchMetricHeading(text = "AIRTIME BALANCE", accent = C.blue)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Balance checks use the current recharge line so you can verify the result immediately after topping up.",
-                        color = C.t2,
-                        fontSize = 13.sp,
-                        lineHeight = 20.sp
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
+                ScratchMetricHeading(text = "AIRTIME BALANCE", accent = C.green)
                 Surface(
                     modifier = Modifier.clickable(enabled = !isRefreshing, onClick = onRefresh),
-                    color = C.surface.copy(alpha = 0.60f),
-                    shape = RoundedCornerShape(18.dp),
+                    color = C.surface.copy(alpha = 0.44f),
+                    shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, C.border.copy(alpha = 0.40f))
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Box(
+                        modifier = Modifier.size(34.dp),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.Rounded.Autorenew,
                             contentDescription = null,
                             tint = C.green,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            if (isRefreshing) "Checking" else "Refresh",
-                            color = C.t1,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(14.dp))
 
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     currency,
                     color = C.t2,
                     fontSize = 18.sp,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(bottom = 7.dp)
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
                     amount,
                     color = C.green.copy(alpha = 0.96f),
-                    fontSize = 40.sp,
+                    fontSize = 34.sp,
                     fontWeight = FontWeight.ExtraBold,
                     maxLines = 1,
                     overflow = TextOverflow.Clip
                 )
             }
 
-            Spacer(Modifier.height(14.dp))
-
+            Spacer(Modifier.height(10.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                ScratchPill(
+                Text(
                     text = simLabel,
-                    tint = C.blue,
+                    color = C.t3,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                ScratchPill(
+                Spacer(Modifier.width(8.dp))
+                Text(
                     text = checkedLabel,
-                    tint = C.green,
-                    modifier = Modifier.weight(1f)
+                    color = C.t3,
+                    fontSize = 11.sp
                 )
             }
         }
@@ -595,244 +634,263 @@ private fun ScratchBulkCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = C.cardHi.copy(alpha = 0.98f),
-        shape = RoundedCornerShape(30.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.70f))
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.52f))
     ) {
         Column(
             modifier = Modifier
                 .background(
                     Brush.linearGradient(
                         listOf(
-                            Color(0xFF233247).copy(alpha = 0.72f),
-                            Color(0xFF121C2B).copy(alpha = 0.96f),
-                            Color(0xFF101622).copy(alpha = 0.98f)
+                            Color(0xFF212B3A).copy(alpha = 0.92f),
+                            Color(0xFF151C27).copy(alpha = 0.97f),
+                            Color(0xFF10151E).copy(alpha = 0.99f)
                         )
                     )
                 )
-                .padding(20.dp)
+                .padding(16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Clean recharge workspace",
+                        "Batch status",
                         color = C.t1,
-                        fontSize = 20.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
-                    Spacer(Modifier.height(8.dp))
                     Text(
-                        "Everything stays in one place: enter the PIN, scan cards, pick the SIM, and confirm the result without jumping between panels.",
+                        when {
+                            isBusy -> "Running recharge flow on $selectedSimLabel."
+                            detectedPins.isNotEmpty() -> "Ready to build a queue from scanned cards."
+                            else -> "Idle, waiting for a scan to build the queue."
+                        },
                         color = C.t2,
-                        fontSize = 14.sp,
-                        lineHeight = 22.sp
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
                     )
                 }
-                Spacer(Modifier.width(14.dp))
-                ScratchPill(
-                    text = if (isBusy) "Processing" else "Manual + OCR",
-                    tint = if (isBusy) C.orange else C.cyan
-                )
+                Spacer(Modifier.width(12.dp))
+                Surface(
+                    modifier = Modifier.clickable(enabled = !isBusy, onClick = onPickImage),
+                    color = C.surface.copy(alpha = 0.36f),
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.18f))
+                ) {
+                    Box(
+                        modifier = Modifier.size(56.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Rounded.Search,
+                            contentDescription = "Scan image",
+                            tint = C.cyan,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(16.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                ScratchCounterTile(
+                ScratchBatchMetricCard(
                     label = "FREE LEFT",
-                    value = freeLeftCount,
+                    value = String.format(Locale.getDefault(), "%02d", freeLeftCount),
+                    supporting = "today",
                     accent = C.green,
                     modifier = Modifier.weight(1f)
                 )
-                ScratchCounterTile(
+                ScratchBatchMetricCard(
                     label = "RUN NOW",
-                    value = runNowCount,
+                    value = String.format(Locale.getDefault(), "%02d", runNowCount),
+                    supporting = "queued",
                     accent = C.orange,
                     modifier = Modifier.weight(1f)
                 )
             }
 
-            Spacer(Modifier.height(18.dp))
-
-            ScratchInnerPanel(
-                title = "1. Enter or confirm PIN",
-                subtitle = "Paste the code manually or use the scan button below to fill this field."
+            Spacer(Modifier.height(14.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(C.w08)
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedTextField(
-                    value = selectedPin,
-                    onValueChange = onPinChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(20.dp),
-                    placeholder = {
-                        Text("Enter or paste a 16-digit PIN", color = C.t3)
-                    },
-                    supportingText = {
-                        Text(
-                            text = if (selectedPin.isBlank()) {
-                                "OCR results, recent cards, and used cards can all feed this field."
-                            } else {
-                                "${selectedPin.length}/16 digits entered"
-                            },
-                            color = C.t3,
-                            fontSize = 12.sp
-                        )
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Done
-                    ),
-                    colors = fieldColors()
+                Text(
+                    text = "${runNowCount} of ${detectedPins.size.coerceAtLeast(runNowCount)} cards run",
+                    color = C.t3,
+                    fontSize = 11.sp,
+                    modifier = Modifier.weight(1f)
                 )
+                Text(
+                    text = if (detectedPins.isEmpty()) "0%" else "${((runNowCount * 100f) / detectedPins.size.coerceAtLeast(1)).toInt()}%",
+                    color = C.t3,
+                    fontSize = 11.sp
+                )
+            }
 
-                if (selectedPin.isNotEmpty()) {
-                    Spacer(Modifier.height(12.dp))
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = C.surface.copy(alpha = 0.58f),
-                        shape = RoundedCornerShape(18.dp),
-                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.30f))
+            Spacer(Modifier.height(14.dp))
+
+            OutlinedTextField(
+                value = selectedPin,
+                onValueChange = onPinChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(18.dp),
+                placeholder = {
+                    Text("Enter or paste a 16-digit PIN", color = C.t3)
+                },
+                supportingText = {
+                    Text(
+                        text = if (selectedPin.isBlank()) scanMessage else "${selectedPin.length}/16 digits entered",
+                        color = C.t3,
+                        fontSize = 12.sp
+                    )
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                ),
+                colors = fieldColors()
+            )
+
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ScratchPill(
+                    text = selectedSimLabel,
+                    tint = C.blue,
+                    modifier = Modifier.weight(1f)
+                )
+                ScratchPill(
+                    text = if (detectedPins.isEmpty()) "Manual entry" else "${detectedPins.size} scanned",
+                    tint = if (detectedPins.isEmpty()) C.orange else C.green,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            UssdSimPickerRow(
+                title = "Recharge SIM",
+                sims = sims,
+                current = selectedRechargeSim,
+                onSelect = onRechargeSimChange
+            )
+
+            if (selectedPin.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = C.surface.copy(alpha = 0.42f),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.28f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("SELECTED PIN", color = C.t3, fontSize = 10.sp, letterSpacing = 1.3.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                formatPinForDisplay(selectedPin),
+                                color = C.t1,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Surface(
+                            modifier = Modifier.clickable(enabled = !isBusy, onClick = onClear),
+                            color = C.surface.copy(alpha = 0.22f),
+                            shape = RoundedCornerShape(999.dp),
+                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.28f))
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Selected PIN", color = C.t3, fontSize = 11.sp, letterSpacing = 1.sp)
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    formatPinForDisplay(selectedPin),
-                                    color = C.t1,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            Spacer(Modifier.width(10.dp))
-                            Surface(
-                                modifier = Modifier.clickable(enabled = !isBusy, onClick = onClear),
-                                color = C.surface.copy(alpha = 0.20f),
-                                shape = RoundedCornerShape(999.dp),
-                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.30f))
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Rounded.DeleteSweep,
-                                        contentDescription = null,
-                                        tint = C.t2,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Clear", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                }
+                                Icon(
+                                    Icons.Rounded.DeleteSweep,
+                                    contentDescription = null,
+                                    tint = C.t2,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text("Clear", color = C.t2, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
-
-            ScratchInnerPanel(
-                title = "2. Scan, choose line, and recharge",
-                subtitle = "Review the scan result, keep the right card selected, then top up from the chosen SIM."
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                OutlinedButton(
+                    onClick = onPickImage,
+                    enabled = !isBusy,
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.64f)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = C.surface.copy(alpha = 0.42f),
+                        contentColor = C.t1,
+                        disabledContainerColor = C.surface.copy(alpha = 0.22f),
+                        disabledContentColor = C.t3
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp)
                 ) {
-                    OutlinedButton(
-                        onClick = onPickImage,
-                        enabled = !isBusy,
-                        shape = RoundedCornerShape(18.dp),
-                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.64f)),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = C.surface.copy(alpha = 0.42f),
-                            contentColor = C.t1,
-                            disabledContainerColor = C.surface.copy(alpha = 0.22f),
-                            disabledContentColor = C.t3
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(58.dp)
-                    ) {
-                        Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Scan image", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Button(
-                        onClick = onRecharge,
-                        enabled = selectedPin.length == 16 && !isBusy,
-                        shape = RoundedCornerShape(18.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = C.orange,
-                            contentColor = C.bg,
-                            disabledContainerColor = C.orange.copy(alpha = 0.40f),
-                            disabledContentColor = C.bg.copy(alpha = 0.56f)
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(58.dp)
-                    ) {
-                        Icon(Icons.Rounded.Bolt, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            if (isBusy) "Working..." else "Top up now",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                    }
+                    Text("Scan image", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
-
-                Spacer(Modifier.height(14.dp))
-
-                ScratchInlineInfoCard(
-                    icon = Icons.Rounded.Search,
-                    title = if (detectedPins.isEmpty()) "SCAN STATUS" else "OCR RESULTS",
-                    value = scanMessage,
-                    trailingText = if (detectedPins.isEmpty()) "READY" else "${detectedPins.size} FOUND",
-                    trailingEnabled = false,
-                    onTrailingClick = {}
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                ScratchInlineInfoCard(
-                    icon = Icons.Rounded.SimCard,
-                    title = "RECHARGE SIM",
-                    value = selectedSimLabel,
-                    trailingText = "SELECTED",
-                    trailingEnabled = false,
-                    onTrailingClick = {}
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                UssdSimPickerRow(
-                    title = "Recharge SIM",
-                    sims = sims,
-                    current = selectedRechargeSim,
-                    onSelect = onRechargeSimChange
-                )
+                Button(
+                    onClick = onRecharge,
+                    enabled = selectedPin.length == 16 && !isBusy,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = C.orange,
+                        contentColor = C.bg,
+                        disabledContainerColor = C.orange.copy(alpha = 0.40f),
+                        disabledContentColor = C.bg.copy(alpha = 0.56f)
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp)
+                ) {
+                    Text(
+                        if (isBusy) "Running..." else "Run now",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
             }
 
             if (detectedPins.isNotEmpty()) {
                 Spacer(Modifier.height(16.dp))
                 ScratchInnerPanel(
-                    title = "3. Detected scratch cards",
+                    title = "Detected scratch cards",
                     subtitle = "Cards stay in scan order so they match the way they appear on the image."
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -888,31 +946,38 @@ private fun ScratchInnerPanel(
 }
 
 @Composable
-private fun ScratchCounterTile(
+private fun ScratchBatchMetricCard(
     label: String,
-    value: Int,
+    value: String,
+    supporting: String,
     accent: Color,
     modifier: Modifier = Modifier
 ) {
     Surface(
         modifier = modifier,
-        color = C.surface.copy(alpha = 0.55f),
-        shape = RoundedCornerShape(18.dp),
+        color = C.surface.copy(alpha = 0.58f),
+        shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, accent.copy(alpha = 0.14f))
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 18.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
             Text(label, color = C.t3, fontSize = 12.sp, letterSpacing = 1.6.sp)
+            Spacer(Modifier.height(8.dp))
             Text(
-                String.format(Locale.getDefault(), "%02d", value),
+                value,
                 color = accent,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.ExtraBold
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                supporting.uppercase(Locale.getDefault()),
+                color = C.t3,
+                fontSize = 10.sp,
+                letterSpacing = 1.2.sp
             )
         }
     }
@@ -991,11 +1056,23 @@ private fun ScratchInlineInfoCard(
 private fun ScratchResponseCard(message: String, body: String, isError: Boolean) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = if (isError) C.cardHi.copy(alpha = 0.90f) else C.greenDim.copy(alpha = 0.92f),
-        shape = RoundedCornerShape(28.dp),
-        border = BorderStroke(1.dp, if (isError) C.red.copy(alpha = 0.26f) else C.green.copy(alpha = 0.30f))
+        color = if (isError) C.cardHi.copy(alpha = 0.94f) else C.cardHi.copy(alpha = 0.94f),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, if (isError) C.red.copy(alpha = 0.26f) else C.border.copy(alpha = 0.36f))
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+        Column(
+            modifier = Modifier
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            if (isError) C.red.copy(alpha = 0.08f) else C.cyan.copy(alpha = 0.06f),
+                            C.cardHi,
+                            C.surface
+                        )
+                    )
+                )
+                .padding(16.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1003,14 +1080,13 @@ private fun ScratchResponseCard(message: String, body: String, isError: Boolean)
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Final USSD response",
+                        "Latest response",
                         color = C.t1,
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
-                    Spacer(Modifier.height(6.dp))
                     Text(
-                        "The final device response appears here after each recharge attempt.",
+                        message,
                         color = C.t3,
                         fontSize = 12.sp,
                         lineHeight = 18.sp
@@ -1023,14 +1099,6 @@ private fun ScratchResponseCard(message: String, body: String, isError: Boolean)
                 )
             }
 
-            Spacer(Modifier.height(14.dp))
-
-            Text(
-                message,
-                color = if (isError) C.red else C.green,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
-            )
             Spacer(Modifier.height(10.dp))
             ScratchResponsePreview(
                 response = body,
