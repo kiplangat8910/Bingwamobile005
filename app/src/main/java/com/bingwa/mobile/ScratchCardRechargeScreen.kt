@@ -12,7 +12,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,14 +24,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Autorenew
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.DeleteSweep
-import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SimCard
 import androidx.compose.material3.Button
@@ -41,7 +38,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -61,8 +57,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -147,6 +141,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     var activeQueuePin by remember { mutableStateOf<String?>(null) }
     var completedQueuePins by remember { mutableStateOf<Set<String>>(emptySet()) }
     var failedQueuePins by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var queueResponses by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var showSimMenu by remember { mutableStateOf(false) }
 
     val selectedSimLabel = remember(selectedRechargeSim, sims) {
@@ -205,13 +200,21 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         append(if (queueTargetPins == 0) "BATCH IDLE" else "$processedCount OF $queueTargetPins RUN")
         append("  ·  ")
     }
+    val savedResponsesByPin = remember(recentPins, usedPinRecords) {
+        buildMap {
+            recentPins.forEach { put(it.pin, it.finalResponse) }
+            usedPinRecords.forEach { put(it.pin, it.finalResponse) }
+        }
+    }
     fun resetQueueUi(clearPin: Boolean = false) {
         detectedPins = emptyList()
         completedQueuePins = emptySet()
         failedQueuePins = emptySet()
         activeQueuePin = null
+        queueResponses = emptyMap()
         queueFreeSnapshot = freeLeftCount
         scanMessage = SCRATCH_DEFAULT_SCAN_MESSAGE
+        if (clearPin) pin = ""
         if (clearPin) pin = ""
         if (!isProcessing) {
             finalResponse = ""
@@ -236,6 +239,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         queueFreeSnapshot = freeLeftCount
         completedQueuePins = emptySet()
         failedQueuePins = emptySet()
+        queueResponses = emptyMap()
         activeQueuePin = null
         finalResponse = ""
         responseMessage = if (sanitizedPins.size > 1) {
@@ -265,6 +269,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                         recentRechargeCount = loadRecentRechargeCount(ctx)
                         usedPinRecords = loadUsedPinRecords(ctx)
                         completedQueuePins = completedQueuePins + targetPin
+                        queueResponses = queueResponses + (targetPin to normalizedResponse)
                         finalResponse = normalizedResponse
                         responseMessage = if (sanitizedPins.size > 1) {
                             "Card ${index + 1} of ${sanitizedPins.size} completed on $rechargeSimLabelForRun."
@@ -276,6 +281,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                     }
                     is ScratchCardRechargeResult.Failed -> {
                         failedQueuePins = failedQueuePins + targetPin
+                        queueResponses = queueResponses + (targetPin to result.message)
                         responseIsError = true
                         finalResponse = result.message
                         responseMessage = if (sanitizedPins.size > 1) {
@@ -500,50 +506,10 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                     activeQueuePin = activeQueuePin,
                     completedQueuePins = completedQueuePins,
                     failedQueuePins = failedQueuePins,
+                    responsesByPin = savedResponsesByPin + queueResponses,
                     onPinClick = { pin = it }
                 )
             }
-
-            Spacer(Modifier.height(18.dp))
-
-            ScratchManualPinCard(
-                selectedPin = pin,
-                isBusy = isProcessing || isScanningImage,
-                onPinChange = { raw -> pin = raw.filter { it.isDigit() }.take(16) },
-                onRun = { runRechargeBatch(listOf(pin)) },
-                onClear = {
-                    if (!isProcessing && !isScanningImage) {
-                        pin = ""
-                    }
-                }
-            )
-
-            Spacer(Modifier.height(18.dp))
-
-            ScratchResponseCard(
-                message = responseMessage,
-                body = finalResponse.ifBlank { "No final USSD response captured yet." },
-                isError = responseIsError
-            )
-
-            Spacer(Modifier.height(18.dp))
-
-            ScratchRecentPinsCard(
-                recentPins = recentPins,
-                onPinClick = { pin = it }
-            )
-
-            Spacer(Modifier.height(28.dp))
-
-            ScratchUsedPinsCard(
-                records = usedPinRecords,
-                sims = sims,
-                onPinClick = { pin = it },
-                onClearAll = {
-                    clearUsedPinRecords(ctx)
-                    usedPinRecords = emptyList()
-                }
-            )
 
             Spacer(Modifier.height(28.dp))
         }
@@ -1209,6 +1175,7 @@ private fun ScratchQueueSection(
     activeQueuePin: String?,
     completedQueuePins: Set<String>,
     failedQueuePins: Set<String>,
+    responsesByPin: Map<String, String>,
     onPinClick: (String) -> Unit
 ) {
     Column {
@@ -1265,6 +1232,7 @@ private fun ScratchQueueSection(
                         pin = queuePin,
                         state = state,
                         selected = queuePin != null && queuePin == selectedPin,
+                        response = queuePin?.let { responsesByPin[it].orEmpty() }.orEmpty(),
                         onClick = { queuePin?.let(onPinClick) }
                     )
                 }
@@ -1293,6 +1261,7 @@ private fun ScratchQueueStub(
     pin: String?,
     state: ScratchQueueVisualState,
     selected: Boolean,
+    response: String,
     onClick: () -> Unit
 ) {
     val tint = when (state) {
@@ -1310,146 +1279,73 @@ private fun ScratchQueueStub(
         ScratchQueueVisualState.FAILED -> "FAILED"
     }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .clickable(enabled = pin != null, onClick = onClick)
             .background(
                 if (selected && pin != null) tint.copy(alpha = 0.08f) else Color.Transparent,
-                RoundedCornerShape(12.dp)
+                RoundedCornerShape(14.dp)
             )
-            .padding(horizontal = 2.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 2.dp, vertical = 8.dp)
     ) {
-        Text(
-            String.format(Locale.getDefault(), "%02d", index),
-            color = C.t3,
-            fontSize = 10.sp,
-            fontFamily = FontFamily.Monospace,
-            modifier = Modifier.width(20.dp)
-        )
-        Surface(
-            color = C.surface.copy(alpha = 0.92f),
-            shape = CircleShape,
-            border = BorderStroke(1.dp, tint.copy(alpha = if (pin == null) 0.3f else 0.6f))
+        Row(
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier.size(16.dp),
-                contentAlignment = Alignment.Center
+            Text(
+                String.format(Locale.getDefault(), "%02d", index),
+                color = C.t3,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.width(20.dp)
+            )
+            Surface(
+                color = C.surface.copy(alpha = 0.92f),
+                shape = CircleShape,
+                border = BorderStroke(1.dp, tint.copy(alpha = if (pin == null) 0.3f else 0.6f))
             ) {
                 Box(
-                    modifier = Modifier
-                        .size(5.dp)
-                        .clip(CircleShape)
-                        .background(tint.copy(alpha = if (pin == null) 0.45f else 1f))
-                )
+                    modifier = Modifier.size(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(tint.copy(alpha = if (pin == null) 0.45f else 1f))
+                    )
+                }
             }
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = pin?.let(::maskScratchPin) ?: "•••• •••• •••• ••••",
-            color = if (pin == null) C.t3 else tint,
-            fontSize = 12.sp,
-            fontFamily = FontFamily.Monospace,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            label,
-            color = tint,
-            fontSize = 9.sp,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.7.sp
-        )
-    }
-}
-
-@Composable
-private fun ScratchManualPinCard(
-    selectedPin: String,
-    isBusy: Boolean,
-    onPinChange: (String) -> Unit,
-    onRun: () -> Unit,
-    onClear: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = C.card.copy(alpha = 0.98f),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.58f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+            Spacer(Modifier.width(12.dp))
             Text(
-                "Manual PIN fallback",
-                color = C.t1,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Paste a 16-digit PIN directly if you do not want to scan an image.",
-                color = C.t3,
+                text = pin?.let(::maskScratchPin) ?: "•••• •••• •••• ••••",
+                color = if (pin == null) C.t3 else tint,
                 fontSize = 12.sp,
-                lineHeight = 18.sp
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = selectedPin,
-                onValueChange = onPinChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                placeholder = { Text("Enter or paste a 16-digit PIN", color = C.t3) },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Done
-                ),
-                colors = fieldColors()
+            Spacer(Modifier.width(8.dp))
+            Text(
+                label,
+                color = tint,
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.7.sp
             )
-            Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Button(
-                    onClick = onRun,
-                    enabled = selectedPin.length == 16 && !isBusy,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = C.orange,
-                        contentColor = C.bg,
-                        disabledContainerColor = C.orange.copy(alpha = 0.35f),
-                        disabledContentColor = C.bg.copy(alpha = 0.6f)
-                    )
-                ) {
-                    Icon(Icons.Rounded.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Run Recharge", fontWeight = FontWeight.Bold)
-                }
-                OutlinedButton(
-                    onClick = onClear,
-                    enabled = !isBusy,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.7f)),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = C.surface.copy(alpha = 0.42f),
-                        contentColor = C.t1
-                    )
-                ) {
-                    Icon(Icons.Rounded.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Clear", fontWeight = FontWeight.SemiBold)
-                }
+        }
+
+        if (pin != null) {
+            Spacer(Modifier.height(10.dp))
+            Box(modifier = Modifier.padding(start = 32.dp)) {
+                ScratchResponsePreview(
+                    response = response,
+                    tint = tint,
+                    emptyLabel = "No final USSD response captured yet."
+                )
             }
         }
     }
@@ -1460,158 +1356,6 @@ private fun maskScratchPin(pin: String): String {
     return "•••• •••• •••• ${pin.takeLast(4)}"
 }
 
-@Composable
-private fun ScratchResponseCard(message: String, body: String, isError: Boolean) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = if (isError) C.cardHi.copy(alpha = 0.90f) else C.greenDim.copy(alpha = 0.92f),
-        shape = RoundedCornerShape(28.dp),
-        border = BorderStroke(1.dp, if (isError) C.red.copy(alpha = 0.26f) else C.green.copy(alpha = 0.30f))
-    ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Final USSD response",
-                        color = C.t1,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "The final device response appears here after each recharge attempt.",
-                        color = C.t3,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                ScratchPill(
-                    text = if (isError) "Attention" else "Latest result",
-                    tint = if (isError) C.red else C.green
-                )
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            Text(
-                message,
-                color = if (isError) C.red else C.green,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(Modifier.height(10.dp))
-            ScratchResponsePreview(
-                response = body,
-                tint = if (isError) C.red else C.green,
-                emptyLabel = "No final USSD response captured yet."
-            )
-        }
-    }
-}
-
-@Composable
-private fun ScratchRecentPinsCard(recentPins: List<ScratchRecentPinRecord>, onPinClick: (String) -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = C.cardHi.copy(alpha = 0.96f),
-        shape = RoundedCornerShape(26.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.58f))
-    ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            ScratchCardHeader(
-                icon = Icons.Rounded.History,
-                title = "Recent recharges",
-                subtitle = "Reuse the most recent successful scratch PINs."
-            )
-            Spacer(Modifier.height(12.dp))
-            if (recentPins.isEmpty()) {
-                ScratchEmptyState("No recent recharges yet")
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    recentPins.forEachIndexed { index, recentPin ->
-                        RecentPinItem(
-                            index = index + 1,
-                            record = recentPin,
-                            onClick = { onPinClick(recentPin.pin) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScratchUsedPinsCard(
-    records: List<ScratchUsedPinRecord>,
-    sims: List<android.telephony.SubscriptionInfo>,
-    onPinClick: (String) -> Unit,
-    onClearAll: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = C.cardHi.copy(alpha = 0.96f),
-        shape = RoundedCornerShape(26.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.58f))
-    ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                ScratchCardHeader(
-                    icon = Icons.Rounded.History,
-                    title = "Used PIN records",
-                    subtitle = "Recent usage history for the selected scratch cards.",
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(12.dp))
-                Surface(
-                    modifier = Modifier.clickable(enabled = records.isNotEmpty(), onClick = onClearAll),
-                    color = C.surface.copy(alpha = 0.28f),
-                    shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.30f))
-                ) {
-                    Text(
-                        "Clear all",
-                        color = if (records.isNotEmpty()) C.red else C.t3,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "These records can be cleared manually and they expire automatically after 1 hour.",
-                color = C.t3,
-                fontSize = 12.sp,
-                lineHeight = 18.sp
-            )
-            Spacer(Modifier.height(12.dp))
-            if (records.isEmpty()) {
-                ScratchEmptyState("No used PIN records")
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    records.forEachIndexed { index, record ->
-                        UsedPinRecordItem(
-                            index = index + 1,
-                            record = record,
-                            simLabel = describeUssdSimSelection(record.simSelection, sims),
-                            onClick = { onPinClick(record.pin) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun UsedPinRecordItem(
