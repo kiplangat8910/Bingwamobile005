@@ -2,6 +2,7 @@ package com.bingwa.mobile
 
 import android.content.Context
 import android.net.Uri
+import android.telephony.SubscriptionInfo
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,10 +18,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,16 +34,20 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Autorenew
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SimCard
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -124,6 +132,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     var recentPins by remember { mutableStateOf(loadRecentPins(ctx)) }
     var recentRechargeCount by remember { mutableIntStateOf(loadRecentRechargeCount(ctx)) }
     var usedPinRecords by remember { mutableStateOf(loadUsedPinRecords(ctx)) }
+    var showRecentRecharges by remember { mutableStateOf(false) }
     var detectedPins by remember { mutableStateOf<List<String>>(emptyList()) }
     var finalResponse by remember { mutableStateOf("") }
     var responseMessage by remember { mutableStateOf("No final USSD response captured yet.") }
@@ -507,12 +516,21 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                     completedQueuePins = completedQueuePins,
                     failedQueuePins = failedQueuePins,
                     responsesByPin = savedResponsesByPin + queueResponses,
-                    onPinClick = { pin = it }
+                    onPinClick = { pin = it },
+                    onShowRecentRecharges = { showRecentRecharges = true }
                 )
             }
 
             Spacer(Modifier.height(28.dp))
         }
+    }
+
+    if (showRecentRecharges) {
+        ScratchRecentRechargesDialog(
+            records = usedPinRecords,
+            sims = sims,
+            onDismiss = { showRecentRecharges = false }
+        )
     }
 }
 
@@ -1176,7 +1194,8 @@ private fun ScratchQueueSection(
     completedQueuePins: Set<String>,
     failedQueuePins: Set<String>,
     responsesByPin: Map<String, String>,
-    onPinClick: (String) -> Unit
+    onPinClick: (String) -> Unit,
+    onShowRecentRecharges: () -> Unit
 ) {
     Column {
         Row(
@@ -1233,7 +1252,8 @@ private fun ScratchQueueSection(
                         state = state,
                         selected = queuePin != null && queuePin == selectedPin,
                         response = queuePin?.let { responsesByPin[it].orEmpty() }.orEmpty(),
-                        onClick = { queuePin?.let(onPinClick) }
+                        onClick = { queuePin?.let(onPinClick) },
+                        onShowRecentRecharges = onShowRecentRecharges
                     )
                 }
             }
@@ -1262,7 +1282,8 @@ private fun ScratchQueueStub(
     state: ScratchQueueVisualState,
     selected: Boolean,
     response: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onShowRecentRecharges: () -> Unit
 ) {
     val tint = when (state) {
         ScratchQueueVisualState.EMPTY -> C.t3
@@ -1336,6 +1357,20 @@ private fun ScratchQueueStub(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.7.sp
             )
+            if (pin != null) {
+                Spacer(Modifier.width(6.dp))
+                IconButton(
+                    onClick = onShowRecentRecharges,
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.MoreVert,
+                        contentDescription = "More",
+                        tint = C.t3,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
 
         if (pin != null) {
@@ -1354,6 +1389,43 @@ private fun ScratchQueueStub(
 private fun maskScratchPin(pin: String): String {
     if (pin.length != 16) return pin.ifBlank { "•••• •••• •••• ••••" }
     return "•••• •••• •••• ${pin.takeLast(4)}"
+}
+
+@Composable
+private fun ScratchRecentRechargesDialog(
+    records: List<ScratchUsedPinRecord>,
+    sims: List<SubscriptionInfo>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Recent recharges") },
+        text = {
+            if (records.isEmpty()) {
+                Text("No recent recharges in the last hour.")
+            } else {
+                LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                    itemsIndexed(records) { index, record ->
+                        val simLabel = describeUssdSimSelection(record.simSelection, sims)
+                        UsedPinRecordItem(
+                            index = index + 1,
+                            record = record,
+                            simLabel = simLabel,
+                            onClick = {}
+                        )
+                        if (index != records.lastIndex) {
+                            Spacer(Modifier.height(12.dp))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }
 
 
