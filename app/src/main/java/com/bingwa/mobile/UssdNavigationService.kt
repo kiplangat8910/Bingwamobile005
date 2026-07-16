@@ -921,8 +921,10 @@ class UssdNavigationService : AccessibilityService() {
                             return
                         }
                     }
-                    val shouldPreferTextInput = shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
-                        (selectedMenuLabel == null && (dialogSuggestsTextInput(lower) || dialogAllowsPhoneInput))
+                    val shouldPreferTextInput = inputField != null ||
+                        shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
+                        dialogSuggestsTextInput(lower) ||
+                        dialogAllowsPhoneInput
                     if (inputField == null && shouldPreferTextInput && !dialogSuggestsTextInput(lower) && !dialogAllowsPhoneInput) {
                         if (!effectiveSnapshot.hasEditableField) {
                             isProcessing = false
@@ -3657,9 +3659,7 @@ class UssdNavigationService : AccessibilityService() {
         if (alreadyFocused) return
         val focusReady = runCatching { node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) }.getOrDefault(false) ||
             runCatching { node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) }.getOrDefault(false) ||
-            runCatching { node.performAction(AccessibilityNodeInfo.ACTION_CLICK) }.getOrDefault(false) ||
-            runCatching { node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK) }.getOrDefault(false) ||
-            runCatching { node.performAction(AccessibilityNodeInfo.ACTION_SELECT) }.getOrDefault(false)
+            runCatching { node.performAction(AccessibilityNodeInfo.ACTION_CLICK) }.getOrDefault(false)
         if (!focusReady) {
             runCatching { performTapGesture(node) }
         }
@@ -3701,13 +3701,25 @@ class UssdNavigationService : AccessibilityService() {
         val originalClip = runCatching { clipboard.primaryClip }.getOrNull()
         return try {
             focusInputTarget(node)
-            clearNodeText(node)
             clipboard.setPrimaryClip(ClipData.newPlainText("ussd_input", value))
+            var pasted = pasteIntoNode(node)
+            if (pasted && matchesExpectedInput(readFieldText(node), value)) {
+                moveCursorToEnd(node, value)
+                return true
+            }
+
+            clearNodeText(node)
+            pasted = pasteIntoNode(node)
+            if (pasted && matchesExpectedInput(readFieldText(node), value)) {
+                moveCursorToEnd(node, value)
+                return true
+            }
+
             selectAllNodeText(node)
-            var pasted = runCatching { node.performAction(AccessibilityNodeInfo.ACTION_PASTE) }.getOrDefault(false)
+            pasted = pasteIntoNode(node)
             if (!pasted) {
-                runCatching { node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK) }
-                pasted = runCatching { node.performAction(AccessibilityNodeInfo.ACTION_PASTE) }.getOrDefault(false)
+                runCatching { performTapGesture(node) }
+                pasted = pasteIntoNode(node)
             }
             if (pasted) moveCursorToEnd(node, value)
             pasted
@@ -3731,6 +3743,9 @@ class UssdNavigationService : AccessibilityService() {
         selectAllNodeText(node)
         runCatching { node.performAction(AccessibilityNodeInfo.ACTION_CUT) }
     }
+
+    private fun pasteIntoNode(node: AccessibilityNodeInfo): Boolean =
+        runCatching { node.performAction(AccessibilityNodeInfo.ACTION_PASTE) }.getOrDefault(false)
 
     private fun selectAllNodeText(node: AccessibilityNodeInfo) {
         val length = readFieldText(node)?.length ?: 0

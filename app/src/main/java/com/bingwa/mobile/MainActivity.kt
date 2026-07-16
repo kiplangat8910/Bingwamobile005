@@ -9508,16 +9508,14 @@ private fun OfferCodeBlock(label: String, value: String) {
                 color = C.surface.copy(alpha = 0.42f),
                 border = BorderStroke(1.dp, C.border.copy(alpha = 0.65f))
             ) {
-                SelectionContainer {
-                    Text(
-                        value,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
-                        color = C.t1,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
+                Text(
+                    value,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+                    color = C.t1,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    fontFamily = FontFamily.Monospace
+                )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Info, null, tint = C.t3, modifier = Modifier.size(14.dp))
@@ -9750,14 +9748,12 @@ private fun SignatureLearningRecordCard(
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 0.8.sp
                                 )
-                                SelectionContainer {
-                                    Text(
-                                        popupText,
-                                        color = C.t1,
-                                        fontSize = 11.sp,
-                                        lineHeight = 17.sp
-                                    )
-                                }
+                                Text(
+                                    popupText,
+                                    color = C.t1,
+                                    fontSize = 11.sp,
+                                    lineHeight = 17.sp
+                                )
                             }
                         }
                     }
