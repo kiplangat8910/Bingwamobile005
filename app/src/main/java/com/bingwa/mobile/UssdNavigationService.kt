@@ -2813,7 +2813,6 @@ class UssdNavigationService : AccessibilityService() {
         if (try { node.isEditable } catch (_: Exception) { false }) score += 500
         if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) score += 320
         if (supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)) score += 140
-        if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_SELECTION)) score += 80
         if (EDITABLE_CLASS_HINTS.any { className.equals(it, ignoreCase = true) || className.contains(it, ignoreCase = true) }) score += 300
         if (className.contains("EditText", ignoreCase = true)) score += 240
         if (className.contains("Text", ignoreCase = true)) score += 90
@@ -3416,9 +3415,7 @@ class UssdNavigationService : AccessibilityService() {
         val looksLikeButton = className.contains("Button", ignoreCase = true) ||
             className.contains("ImageButton", ignoreCase = true)
         val hasWritableAction = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
-            supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE) ||
-            supportsAction(node, AccessibilityNodeInfo.ACTION_SET_SELECTION) ||
-            supportsAction(node, AccessibilityNodeInfo.ACTION_CUT)
+            supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
         val hasInputHints = INPUT_FIELD_HINTS.any {
             label.contains(it) || desc.contains(it) || hint.contains(it)
         } || INPUT_VIEW_ID_HINTS.any { viewId.contains(it) }
@@ -3628,7 +3625,11 @@ class UssdNavigationService : AccessibilityService() {
         var current: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
         var depth = 0
         while (current != null && depth < INPUT_TARGET_DEPTH) {
-            targets += current
+            if (supportsDirectInput(current)) {
+                targets += current
+            } else {
+                current.recycle()
+            }
             current = try { current.parent?.let { AccessibilityNodeInfo.obtain(it) } } catch (_: Exception) { null }
             depth++
         }
@@ -3642,10 +3643,7 @@ class UssdNavigationService : AccessibilityService() {
     ) {
         if (depth > 2) return
         try {
-            val supportsDirectInput = isTextEntryNode(node) ||
-                supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
-                supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
-            if (supportsDirectInput) into += AccessibilityNodeInfo.obtain(node)
+            if (supportsDirectInput(node)) into += AccessibilityNodeInfo.obtain(node)
             for (i in 0 until node.childCount) {
                 val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
                 collectPreferredInputTargets(child, into, depth + 1)
@@ -3653,6 +3651,11 @@ class UssdNavigationService : AccessibilityService() {
             }
         } catch (_: Exception) {}
     }
+
+    private fun supportsDirectInput(node: AccessibilityNodeInfo): Boolean =
+        isTextEntryNode(node) ||
+            supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
+            supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
 
     private fun focusInputTarget(node: AccessibilityNodeInfo) {
         val alreadyFocused = try { node.isFocused } catch (_: Exception) { false }
@@ -3715,12 +3718,8 @@ class UssdNavigationService : AccessibilityService() {
                 return true
             }
 
-            selectAllNodeText(node)
+            runCatching { performTapGesture(node) }
             pasted = pasteIntoNode(node)
-            if (!pasted) {
-                runCatching { performTapGesture(node) }
-                pasted = pasteIntoNode(node)
-            }
             if (pasted) moveCursorToEnd(node, value)
             pasted
         } finally {
@@ -3738,28 +3737,11 @@ class UssdNavigationService : AccessibilityService() {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
                 })
             }
-            return
         }
-        selectAllNodeText(node)
-        runCatching { node.performAction(AccessibilityNodeInfo.ACTION_CUT) }
     }
 
     private fun pasteIntoNode(node: AccessibilityNodeInfo): Boolean =
         runCatching { node.performAction(AccessibilityNodeInfo.ACTION_PASTE) }.getOrDefault(false)
-
-    private fun selectAllNodeText(node: AccessibilityNodeInfo) {
-        val length = readFieldText(node)?.length ?: 0
-        if (length < 0) return
-        runCatching {
-            node.performAction(
-                AccessibilityNodeInfo.ACTION_SET_SELECTION,
-                Bundle().apply {
-                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 0)
-                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, length)
-                }
-            )
-        }
-    }
 
     private fun moveCursorToEnd(node: AccessibilityNodeInfo, value: String) {
         val length = value.length
