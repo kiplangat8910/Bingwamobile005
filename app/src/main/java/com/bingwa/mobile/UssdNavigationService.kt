@@ -89,6 +89,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val PENDING_ADVANCE_TIMEOUT_MS = 5_000L
         private const val ROOT_REACQUIRE_TIMEOUT_MS  = 5_000L
         private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 4_000L
+        private const val PENDING_STEP_ADVANCE_KICK_MS = 12L
         private const val VERIFY_POLL_MS         = 7L
         private const val RAPID_POST_POPUP_POLL_MS = 3L
         private const val RAPID_POST_POPUP_VERIFY_MS = 2L
@@ -314,6 +315,7 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingStepAdvanceFromKey: String = ""
     private var pendingStepAdvanceSinceElapsed: Long = 0L
     private var pendingStepAdvanceTimeoutRunnable: Runnable? = null
+    private var pendingStepAdvanceKickRunnable: Runnable? = null
     private var pendingAdvanceKickRunnable: Runnable? = null
     private var uiKeepVisibleRunnable: Runnable? = null
     private var waitingForRootSinceElapsed: Long = 0L
@@ -1313,7 +1315,11 @@ class UssdNavigationService : AccessibilityService() {
         )
     }
 
+    private fun shouldRecordPopupTranscript(): Boolean =
+        signatureLearningMode || signatureGuardEnabled
+
     private fun capturePopupTranscript(snapshot: UssdTreeSnapshot?, dialogText: String) {
+        if (!shouldRecordPopupTranscript()) return
         val recordedText = formatRecordedDialogText(snapshot?.textTokens.orEmpty(), dialogText)
         if (recordedText.isBlank()) return
         if (popupTranscript.lastOrNull() == recordedText) return
@@ -2506,6 +2512,8 @@ class UssdNavigationService : AccessibilityService() {
         pendingStepAdvanceSinceElapsed = 0L
         pendingStepAdvanceTimeoutRunnable?.let { handler.removeCallbacks(it) }
         pendingStepAdvanceTimeoutRunnable = null
+        pendingStepAdvanceKickRunnable?.let { handler.removeCallbacks(it) }
+        pendingStepAdvanceKickRunnable = null
     }
 
     private fun shouldWaitForRootRecovery(): Boolean {
@@ -2554,7 +2562,77 @@ class UssdNavigationService : AccessibilityService() {
         }
         pendingStepAdvanceTimeoutRunnable = timeoutTask
         handler.postDelayed(timeoutTask, PENDING_STEP_ADVANCE_TIMEOUT_MS)
+        schedulePendingStepAdvanceKick()
         isProcessing = false
+    }
+
+    private fun schedulePendingStepAdvanceKick(delayMs: Long = PENDING_STEP_ADVANCE_KICK_MS) {
+        if (!advancedActive || pendingStepAdvanceFromKey.isBlank()) return
+        pendingStepAdvanceKickRunnable?.let { handler.removeCallbacks(it) }
+        val task = Runnable {
+            pendingStepAdvanceKickRunnable = null
+            attemptPendingStepAdvanceWithRoot(null)
+        }
+        pendingStepAdvanceKickRunnable = task
+        if (delayMs <= 0L) handler.post(task) else handler.postDelayed(task, delayMs)
+    }
+
+    private fun attemptPendingStepAdvanceWithRoot(existingRoot: AccessibilityNodeInfo?) {
+        if (!advancedActive) {
+            clearPendingStepAdvance()
+            isProcessing = false
+            return
+        }
+        val fromKey = pendingStepAdvanceFromKey
+        if (fromKey.isBlank()) {
+            isProcessing = false
+            return
+        }
+        pendingStepAdvanceKickRunnable?.let { handler.removeCallbacks(it) }
+        pendingStepAdvanceKickRunnable = null
+
+        val elapsed = SystemClock.elapsedRealtime() - pendingStepAdvanceSinceElapsed
+        if (elapsed > PENDING_STEP_ADVANCE_TIMEOUT_MS) {
+            clearPendingStepAdvance()
+            isProcessing = false
+            dismissErrorAndRestart()
+            return
+        }
+
+        val root = existingRoot ?: getUssdRoot() ?: run {
+            schedulePendingStepAdvanceKick()
+            isProcessing = false
+            return
+        }
+        try {
+            val requireStrictPopupScope = shouldRequireStrictPopupScope()
+            val snapshot = capturePreferredPopupSnapshot(root, requireStrictDialog = requireStrictPopupScope)
+            val dialogText = snapshot?.dialogText
+                ?: normalizeCollapsedText(extractAllText(root))
+            if (dialogText.isBlank()) {
+                schedulePendingStepAdvanceKick()
+                isProcessing = false
+                return
+            }
+            val currentKey = buildTransitionSignatureKey(
+                windowId = lastWindowId,
+                windowPkg = root.packageName?.toString().orEmpty(),
+                root = root,
+                snapshot = snapshot,
+                dialogText = dialogText
+            )
+            if (currentKey == fromKey) {
+                schedulePendingStepAdvanceKick()
+                isProcessing = false
+                return
+            }
+            clearPendingStepAdvance()
+            advanceStep()
+            pendingProcessToken = SystemClock.elapsedRealtime()
+            scheduleProcessStep(dialogChanged = true)
+        } finally {
+            if (existingRoot == null) runCatching { root.recycle() }
+        }
     }
 
     private fun handlePendingStepAdvance(
@@ -2580,7 +2658,10 @@ class UssdNavigationService : AccessibilityService() {
             snapshot = snapshot,
             dialogText = dialogText
         )
-        if (currentKey == fromKey) return true
+        if (currentKey == fromKey) {
+            schedulePendingStepAdvanceKick()
+            return true
+        }
         clearPendingStepAdvance()
         advanceStep()
         pendingProcessToken = SystemClock.elapsedRealtime()
