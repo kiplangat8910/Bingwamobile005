@@ -7,8 +7,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -3596,25 +3594,11 @@ class UssdNavigationService : AccessibilityService() {
                 likelyVerified = isLikelyDirectWriteVerified(node, value)
             )
         }
-        if (pasteTextIntoNode(node, value)) {
+        if (supportsSilentSetText(node) && refocusInputTarget(node) && setTextOnNode(node, value)) {
             return InputWriteResult(
                 wroteValue = true,
-                likelyVerified = matchesExpectedInput(readFieldText(node), value)
+                likelyVerified = isLikelyDirectWriteVerified(node, value)
             )
-        }
-        if (performTapGesture(node)) {
-            if (setTextOnNode(node, value)) {
-                return InputWriteResult(
-                    wroteValue = true,
-                    likelyVerified = isLikelyDirectWriteVerified(node, value)
-                )
-            }
-            if (pasteTextIntoNode(node, value)) {
-                return InputWriteResult(
-                    wroteValue = true,
-                    likelyVerified = matchesExpectedInput(readFieldText(node), value)
-                )
-            }
         }
         return InputWriteResult(wroteValue = false, likelyVerified = false)
     }
@@ -3654,18 +3638,12 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun supportsDirectInput(node: AccessibilityNodeInfo): Boolean =
         isTextEntryNode(node) ||
-            supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
-            supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
+            supportsSilentSetText(node)
 
     private fun focusInputTarget(node: AccessibilityNodeInfo) {
         val alreadyFocused = try { node.isFocused } catch (_: Exception) { false }
         if (alreadyFocused) return
-        val focusReady = runCatching { node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) }.getOrDefault(false) ||
-            runCatching { node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) }.getOrDefault(false) ||
-            runCatching { node.performAction(AccessibilityNodeInfo.ACTION_CLICK) }.getOrDefault(false)
-        if (!focusReady) {
-            runCatching { performTapGesture(node) }
-        }
+        refocusInputTarget(node)
     }
 
     private fun setTextOnNode(node: AccessibilityNodeInfo, value: String): Boolean {
@@ -3675,10 +3653,7 @@ class UssdNavigationService : AccessibilityService() {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
             })
         }.getOrDefault(false)
-        if (replacedDirectly) {
-            moveCursorToEnd(node, value)
-            return true
-        }
+        if (replacedDirectly) return true
         runCatching {
             node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
@@ -3689,7 +3664,6 @@ class UssdNavigationService : AccessibilityService() {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
             })
         }.getOrDefault(false)
-        if (replaced) moveCursorToEnd(node, value)
         return replaced
     }
 
@@ -3699,62 +3673,12 @@ class UssdNavigationService : AccessibilityService() {
         return matchesExpectedInput(readBack, expectedValue)
     }
 
-    private fun pasteTextIntoNode(node: AccessibilityNodeInfo, value: String): Boolean {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return false
-        val originalClip = runCatching { clipboard.primaryClip }.getOrNull()
-        return try {
-            focusInputTarget(node)
-            clipboard.setPrimaryClip(ClipData.newPlainText("ussd_input", value))
-            var pasted = pasteIntoNode(node)
-            if (pasted && matchesExpectedInput(readFieldText(node), value)) {
-                moveCursorToEnd(node, value)
-                return true
-            }
+    private fun refocusInputTarget(node: AccessibilityNodeInfo): Boolean =
+        runCatching { node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) }.getOrDefault(false) ||
+            runCatching { node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) }.getOrDefault(false)
 
-            clearNodeText(node)
-            pasted = pasteIntoNode(node)
-            if (pasted && matchesExpectedInput(readFieldText(node), value)) {
-                moveCursorToEnd(node, value)
-                return true
-            }
-
-            runCatching { performTapGesture(node) }
-            pasted = pasteIntoNode(node)
-            if (pasted) moveCursorToEnd(node, value)
-            pasted
-        } finally {
-            runCatching {
-                if (originalClip != null) clipboard.setPrimaryClip(originalClip)
-                else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
-            }
-        }
-    }
-
-    private fun clearNodeText(node: AccessibilityNodeInfo) {
-        if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) {
-            runCatching {
-                node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
-                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
-                })
-            }
-        }
-    }
-
-    private fun pasteIntoNode(node: AccessibilityNodeInfo): Boolean =
-        runCatching { node.performAction(AccessibilityNodeInfo.ACTION_PASTE) }.getOrDefault(false)
-
-    private fun moveCursorToEnd(node: AccessibilityNodeInfo, value: String) {
-        val length = value.length
-        runCatching {
-            node.performAction(
-                AccessibilityNodeInfo.ACTION_SET_SELECTION,
-                Bundle().apply {
-                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, length)
-                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, length)
-                }
-            )
-        }
-    }
+    private fun supportsSilentSetText(node: AccessibilityNodeInfo): Boolean =
+        supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)
 
     private fun findEditableFieldMatchingExpectedInput(
         root: AccessibilityNodeInfo,
