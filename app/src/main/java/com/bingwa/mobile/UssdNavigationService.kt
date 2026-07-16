@@ -2821,6 +2821,15 @@ class UssdNavigationService : AccessibilityService() {
         if (try { node.isFocused } catch (_: Exception) { false }) score += 90
         if (try { node.isFocusable } catch (_: Exception) { false }) score += 70
         if (try { node.isClickable } catch (_: Exception) { false }) score += 40
+        val currentValue = readFieldText(node)?.trim().orEmpty()
+        when {
+            currentValue.isBlank() -> score += 120
+            isLikelyPromptText(currentValue) -> score -= 180
+            currentValue.length <= 24 -> score += 30
+            else -> score -= 45
+        }
+        if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS) score -= 280
+        if (label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS) score -= 280
         if (bounds.right > 0 || bounds.bottom > 0) {
             score += bounds.bottom / 24
             score += bounds.right / 36
@@ -3222,7 +3231,7 @@ class UssdNavigationService : AccessibilityService() {
         expectedValue: String,
         existingField: AccessibilityNodeInfo?
     ): Boolean {
-        val field = existingField ?: findEditableField(root) ?: return false
+        val field = existingField ?: findEditableFieldMatchingExpectedInput(root, expectedValue) ?: return false
         return try {
             val currentValue = readFieldText(field)?.trim().orEmpty()
             if (currentValue.isNotEmpty() &&
@@ -3411,11 +3420,14 @@ class UssdNavigationService : AccessibilityService() {
         val hasInputHints = INPUT_FIELD_HINTS.any {
             label.contains(it) || desc.contains(it) || hint.contains(it)
         } || INPUT_VIEW_ID_HINTS.any { viewId.contains(it) }
+        val sendOrDismissLabel = label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS ||
+            label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS
         val hasShortText = label.isBlank() || label.length <= 24
         return enabled &&
             visible &&
             !editable &&
             !looksLikeButton &&
+            !sendOrDismissLabel &&
             hasShortText &&
             (hasWritableAction || (hasInputHints && (focusable || clickable)))
     }
@@ -3525,16 +3537,19 @@ class UssdNavigationService : AccessibilityService() {
             rememberVerifiedInput(expectedValue)
             return true
         }
-        var rescannedField: AccessibilityNodeInfo? = null
+        val candidates = mutableListOf<AccessibilityNodeInfo>()
         return try {
-            rescannedField = findEditableField(root)
-            val verified = rescannedField != null &&
-                isVerifiedFieldValue(readFieldText(rescannedField), expectedValue)
+            collectTextEntryCandidates(root, candidates)
+            val verified = candidates.any { candidate ->
+                isVerifiedFieldValue(readFieldText(candidate), expectedValue)
+            }
             if (verified) rememberVerifiedInput(expectedValue)
             verified
         } finally {
-            if (rescannedField !== existingField) {
-                runCatching { rescannedField?.recycle() }
+            candidates.forEach { candidate ->
+                if (candidate !== existingField) {
+                    runCatching { candidate.recycle() }
+                }
             }
         }
     }
@@ -3643,6 +3658,7 @@ class UssdNavigationService : AccessibilityService() {
         val focusReady = runCatching { node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) }.getOrDefault(false) ||
             runCatching { node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) }.getOrDefault(false) ||
             runCatching { node.performAction(AccessibilityNodeInfo.ACTION_CLICK) }.getOrDefault(false) ||
+            runCatching { node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK) }.getOrDefault(false) ||
             runCatching { node.performAction(AccessibilityNodeInfo.ACTION_SELECT) }.getOrDefault(false)
         if (!focusReady) {
             runCatching { performTapGesture(node) }
@@ -3684,10 +3700,15 @@ class UssdNavigationService : AccessibilityService() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return false
         val originalClip = runCatching { clipboard.primaryClip }.getOrNull()
         return try {
+            focusInputTarget(node)
             clearNodeText(node)
             clipboard.setPrimaryClip(ClipData.newPlainText("ussd_input", value))
             selectAllNodeText(node)
-            val pasted = runCatching { node.performAction(AccessibilityNodeInfo.ACTION_PASTE) }.getOrDefault(false)
+            var pasted = runCatching { node.performAction(AccessibilityNodeInfo.ACTION_PASTE) }.getOrDefault(false)
+            if (!pasted) {
+                runCatching { node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK) }
+                pasted = runCatching { node.performAction(AccessibilityNodeInfo.ACTION_PASTE) }.getOrDefault(false)
+            }
             if (pasted) moveCursorToEnd(node, value)
             pasted
         } finally {
@@ -3737,6 +3758,25 @@ class UssdNavigationService : AccessibilityService() {
             )
         }
     }
+
+    private fun findEditableFieldMatchingExpectedInput(
+        root: AccessibilityNodeInfo,
+        expectedValue: String
+    ): AccessibilityNodeInfo? =
+        mutableListOf<AccessibilityNodeInfo>().let { candidates ->
+            collectTextEntryCandidates(root, candidates)
+            val verifiedMatch = candidates.firstOrNull { candidate ->
+                isVerifiedFieldValue(readFieldText(candidate), expectedValue)
+            }
+            val preferred = verifiedMatch
+                ?: candidates.maxByOrNull { candidate ->
+                    scoreTextEntryCandidate(candidate) +
+                        if (matchesExpectedInput(readFieldText(candidate), expectedValue)) 700 else 0
+                }
+            val result = preferred?.let { AccessibilityNodeInfo.obtain(it) }
+            candidates.forEach { it.recycle() }
+            result
+        }
 
     private fun obtainActionTarget(node: AccessibilityNodeInfo): AccessibilityNodeInfo {
         var current: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
