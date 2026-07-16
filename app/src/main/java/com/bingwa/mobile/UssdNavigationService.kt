@@ -3726,8 +3726,7 @@ class UssdNavigationService : AccessibilityService() {
             runCatching { activeNode.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) }
             runCatching { activeNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS) }
             val clicked = try {
-                activeNode.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
-                    activeNode.performAction(AccessibilityNodeInfo.ACTION_SELECT)
+                activeNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             } catch (_: Exception) {
                 false
             }
