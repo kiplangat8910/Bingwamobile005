@@ -85,7 +85,10 @@ class UssdNavigationService : AccessibilityService() {
         private const val SEND_RETRY_DELAY_MS    = 7L
         private const val POST_WRITE_VERIFY_POLL_MS = 2L
         private const val POST_WRITE_SEND_RETRY_MS = 3L
-        private const val STEP_TIMEOUT_MS           = 3_000L
+        private const val STEP_TIMEOUT_MS           = 4_500L
+        private const val STARTUP_STEP_TIMEOUT_MS   = 7_000L
+        private const val FINAL_RESPONSE_TIMEOUT_MS = 6_500L
+        private const val PENDING_STEP_TIMEOUT_MS   = 6_000L
         private const val PENDING_ADVANCE_TIMEOUT_MS = 5_000L
         private const val ROOT_REACQUIRE_TIMEOUT_MS  = 5_000L
         private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 4_000L
@@ -2145,17 +2148,49 @@ class UssdNavigationService : AccessibilityService() {
     private fun startStepTimeout() {
         cancelStepTimeout()
         val timeout = Runnable {
+            if (shouldExtendStepTimeoutWindow()) {
+                startStepTimeout()
+                return@Runnable
+            }
             val dismissed = closeCurrentUssdUi()
             val delay = if (dismissed) DIALOG_DISMISS_SETTLE_MS else 0L
             handler.postDelayed({ restartFromBeginning() }, delay)
         }
         stepTimeoutRunnable = timeout
-        handler.postDelayed(timeout, STEP_TIMEOUT_MS)
+        handler.postDelayed(timeout, currentStepTimeoutMs())
     }
 
     private fun cancelStepTimeout() {
         stepTimeoutRunnable?.let { handler.removeCallbacks(it) }
         stepTimeoutRunnable = null
+    }
+
+    private fun currentStepTimeoutMs(): Long {
+        val now = SystemClock.elapsedRealtime()
+        return when {
+            pendingPhase != PendingPhase.NONE || pendingStepAdvanceFromKey.isNotBlank() -> PENDING_STEP_TIMEOUT_MS
+            currentStep >= advancedSteps.size -> FINAL_RESPONSE_TIMEOUT_MS
+            !hasSeenAdvancedPopup -> STARTUP_STEP_TIMEOUT_MS
+            hasRecentUssdUiEvent() -> FINAL_RESPONSE_TIMEOUT_MS
+            retryWindowStartedAt > 0L && (now - retryWindowStartedAt) <= STARTUP_UI_KEEP_VISIBLE_MS -> STARTUP_STEP_TIMEOUT_MS
+            else -> STEP_TIMEOUT_MS
+        }
+    }
+
+    private fun shouldExtendStepTimeoutWindow(): Boolean {
+        if (!advancedActive) return false
+        if (pendingPhase != PendingPhase.NONE || pendingStepAdvanceFromKey.isNotBlank()) return true
+        if (!hasSeenAdvancedPopup) {
+            return retryWindowStartedAt <= 0L ||
+                (SystemClock.elapsedRealtime() - retryWindowStartedAt) <= STARTUP_UI_KEEP_VISIBLE_MS
+        }
+        if (currentStep >= advancedSteps.size) {
+            val normalizedFinal = normalizeMenuText(lastFinalResponse)
+            return normalizedFinal.isBlank() ||
+                isTransientResponseText(normalizedFinal) ||
+                hasRecentUssdUiEvent()
+        }
+        return hasRecentUssdUiEvent()
     }
 
     private fun cleanupAdvanced() {
