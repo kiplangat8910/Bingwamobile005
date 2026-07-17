@@ -3765,8 +3765,6 @@ class UssdNavigationService : AccessibilityService() {
         var depth = 0
         while (current != null && depth < 6) {
             val activeNode = current
-            runCatching { activeNode.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) }
-            runCatching { activeNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS) }
             val clicked = try {
                 activeNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             } catch (_: Exception) {
