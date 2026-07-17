@@ -56,6 +56,10 @@ object UssdHelper {
         onSuccess: ((String) -> Unit)? = null,
         onFailure: ((String) -> Unit)? = null
     ): Boolean {
+        if (!isAutomationEnabled(context)) {
+            onFailure?.invoke("Automation is off. Turn automation on to continue.")
+            return false
+        }
         val code = normalizeUssdCode(ussdCode)
         Log.d("UssdHelper", "Dialing: $code")
         val targets = resolveUssdSimTargets(context, selectionOverride = subIdOverride)

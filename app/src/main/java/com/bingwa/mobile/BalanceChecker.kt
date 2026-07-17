@@ -37,6 +37,10 @@ class BalanceChecker : Service() {
         )
 
         fun requestBalanceCheck(context: Context) {
+            if (!isAutomationEnabled(context)) {
+                Handler(Looper.getMainLooper()).post { balanceCallback?.invoke("") }
+                return
+            }
             if (checking) { Log.d(TAG, "check already in flight — skipping"); return }
             checking = true
             armTimeout()
@@ -72,20 +76,22 @@ class BalanceChecker : Service() {
                 },
                 onFailure = { error ->
                     Log.e(TAG, "UssdHelper failed: $error, trying AutomationService")
-                    ServiceLauncher.startAutomationService(context, Intent(context, AutomationService::class.java).apply {
+                    val started = ServiceLauncher.startAutomationService(context, Intent(context, AutomationService::class.java).apply {
                         putExtra("mode", "SIMPLE")
                         putExtra("code", BALANCE_USSD)
                         putExtra("phoneNumber", "")
                     })
+                    if (!started) onBalanceCheckFailed()
                 }
             )
             if (!helperSuccess) {
                 Log.w(TAG, "UssdHelper returned false, using AutomationService")
-                ServiceLauncher.startAutomationService(context, Intent(context, AutomationService::class.java).apply {
+                val started = ServiceLauncher.startAutomationService(context, Intent(context, AutomationService::class.java).apply {
                     putExtra("mode", "SIMPLE")
                     putExtra("code", BALANCE_USSD)
                     putExtra("phoneNumber", "")
                 })
+                if (!started) onBalanceCheckFailed()
             }
         }
 

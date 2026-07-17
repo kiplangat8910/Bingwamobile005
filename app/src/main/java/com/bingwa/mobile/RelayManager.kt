@@ -267,6 +267,7 @@ object RelayManager {
     }
 
     fun forwardBuyAmount(context: Context, phone: String, amount: Int): Boolean {
+        if (!isAutomationEnabled(context)) return false
         val cfg = load(context)
         if (!cfg.enabled || cfg.role != "PRIMARY") return false
         if (cfg.method != "HOTSPOT" && cfg.pairedPhone.isBlank()) return false
@@ -456,7 +457,7 @@ object RelayManager {
             showInRecent = false,
             offerId = offer.id
         )
-        context.startOfferAutomation(
+        val started = context.startOfferAutomation(
             offer,
             phone,
             txId,
@@ -464,6 +465,7 @@ object RelayManager {
             offer.executionMode,
             returnToAppAggressively = false
         )
+        if (!started) return null
         if (resultDestPhone != null) RelayResultTracker.trackAndReply(context, txId, resultDestPhone)
         return txId
     }

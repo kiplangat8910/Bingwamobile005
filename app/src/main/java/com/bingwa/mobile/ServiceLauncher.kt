@@ -17,6 +17,10 @@ object ServiceLauncher {
     }
 
     fun startAutomationService(context: Context, intent: Intent): Boolean {
+        if (!isAutomationEnabled(context)) {
+            Log.i(TAG, "Skipping USSD automation start because automation is off")
+            return false
+        }
         return startForegroundServiceSafely(
             context = context,
             intent = intent,

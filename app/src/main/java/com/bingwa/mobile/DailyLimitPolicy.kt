@@ -262,6 +262,12 @@ object DailyLimitPolicy {
         originalTx: Transaction,
         alternativePhone: String
     ): AlternativeDispatchResult {
+        if (!isAutomationEnabled(context)) {
+            return AlternativeDispatchResult(
+                success = false,
+                message = "Automation is off. Turn it on before starting a dispatch."
+            )
+        }
         if (BlacklistedContactStore.isBlacklisted(context, alternativePhone)) {
             return AlternativeDispatchResult(
                 success = false,
@@ -318,7 +324,7 @@ object DailyLimitPolicy {
             )
         }
 
-        context.startOfferAutomation(
+        val started = context.startOfferAutomation(
             offer = offer,
             phoneNumber = alternativePhone,
             txId = txId,
@@ -326,6 +332,16 @@ object DailyLimitPolicy {
             mode = offer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE,
             returnToAppAggressively = false
         )
+        if (!started) {
+            return AlternativeDispatchResult(
+                success = false,
+                message = if (!isAutomationEnabled(context)) {
+                    "Automation is off. Turn it on before starting a dispatch."
+                } else {
+                    "The dispatch could not be started. Please try again."
+                }
+            )
+        }
         val offerLabel = offer?.name ?: originalTx.description
         return AlternativeDispatchResult(
             success = true,

@@ -88,6 +88,22 @@ class UssdNavigationService : AccessibilityService() {
         private const val FINAL_RESPONSE_TIMEOUT_MS = 6_500L
         private const val PENDING_STEP_TIMEOUT_MS   = 6_000L
         private const val PENDING_ADVANCE_TIMEOUT_MS = 5_000L
+
+        fun abortActiveSession() {
+            pendingAdvancedArm = false
+            balanceCallback = null
+            tokenPurchaseCallback = null
+            onDispatchComplete = null
+            advancedActive = false
+            advancedInProgress = false
+            activeInstance?.let { service ->
+                Handler(Looper.getMainLooper()).post {
+                    runCatching { service.closeCurrentUssdUi() }
+                    service.cleanupAdvanced()
+                    service.clearCallbacks()
+                }
+            }
+        }
         private const val ROOT_REACQUIRE_TIMEOUT_MS  = 5_000L
         private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 4_000L
         private const val PENDING_STEP_ADVANCE_KICK_MS = 12L

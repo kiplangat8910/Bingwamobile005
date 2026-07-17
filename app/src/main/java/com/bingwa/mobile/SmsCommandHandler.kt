@@ -2,7 +2,6 @@ package com.bingwa.mobile
 
 import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.SystemClock
@@ -411,13 +410,28 @@ object SmsCommandHandler {
             if (obj.optInt("id") == txId) {
                 val ussdCode = obj.optString("ussdCode")
                 val phone = obj.optString("phoneNumber")
-                val intent = Intent(context, AutomationService::class.java)
-                intent.putExtra("mode", "ADVANCED")
-                intent.putExtra("code", ussdCode)
-                intent.putExtra("phoneNumber", phone)
-                intent.putExtra("txId", txId)
-                ServiceLauncher.startAutomationService(context, intent)
-                sendSms(context, replyTo, "Retry started for transaction #$txId.", replySubId)
+                val started = context.startOfferAutomation(
+                    offer = null,
+                    phoneNumber = phone,
+                    txId = txId,
+                    finalCode = ussdCode,
+                    mode = OFFER_EXECUTION_MODE_ADVANCED,
+                    returnToAppAggressively = false
+                )
+                if (started) {
+                    sendSms(context, replyTo, "Retry started for transaction #$txId.", replySubId)
+                } else {
+                    sendSms(
+                        context,
+                        replyTo,
+                        if (!isAutomationEnabled(context)) {
+                            "Automation is OFF. Turn it on before retrying transaction #$txId."
+                        } else {
+                            "Retry could not be started for transaction #$txId."
+                        },
+                        replySubId
+                    )
+                }
                 return
             }
         }
@@ -425,6 +439,10 @@ object SmsCommandHandler {
     }
 
     private fun manualBuy(context: Context, replyTo: String, replySubId: Int?, args: List<String>) {
+        if (!isAutomationEnabled(context)) {
+            sendSms(context, replyTo, "Automation is OFF. Turn it on before starting a dispatch.", replySubId)
+            return
+        }
         if (args.size < 2) { sendSms(context, replyTo, "Usage: BUY <phone> <offer-number>", replySubId); return }
         val phone = normalizePhone(args[0])
         if (!phone.matches(LOCAL_PHONE_REGEX)) { sendSms(context, replyTo, "Invalid phone number. Use 10 digits (e.g. 0712345678) or +254712345678.", replySubId); return }
@@ -461,7 +479,7 @@ object SmsCommandHandler {
             showInRecent = false,
             offerId = offer.id
         )
-        context.startOfferAutomation(
+        val started = context.startOfferAutomation(
             offer,
             phone,
             txId,
@@ -469,10 +487,27 @@ object SmsCommandHandler {
             offer.executionMode,
             returnToAppAggressively = false
         )
-        sendSms(context, replyTo, "Dispatch started: ${offer.name} → $phone (transaction #$txId).", replySubId)
+        if (started) {
+            sendSms(context, replyTo, "Dispatch started: ${offer.name} → $phone (transaction #$txId).", replySubId)
+        } else {
+            sendSms(
+                context,
+                replyTo,
+                if (!isAutomationEnabled(context)) {
+                    "Automation is OFF. Turn it on before starting a dispatch."
+                } else {
+                    "Dispatch could not be started on this phone."
+                },
+                replySubId
+            )
+        }
     }
 
     private fun buyByAmount(context: Context, replyTo: String, replySubId: Int?, args: List<String>) {
+        if (!isAutomationEnabled(context)) {
+            sendSms(context, replyTo, "Automation is OFF. Turn it on before starting a dispatch.", replySubId)
+            return
+        }
         if (args.size < 2) { sendSms(context, replyTo, "Usage: BUYAMT <phone> <amount>", replySubId); return }
         val phone = normalizePhone(args[0])
         if (!phone.matches(LOCAL_PHONE_REGEX)) { sendSms(context, replyTo, "Invalid phone number. Use 10 digits (e.g. 0712345678) or +254712345678.", replySubId); return }
@@ -499,7 +534,16 @@ object SmsCommandHandler {
 
         val txId = RelayManager.executeBuyAmountLocal(context, phone, amount, replyTo)
         if (txId == null) {
-            sendSms(context, replyTo, "No enabled offer found for KSh $amount.", replySubId)
+            sendSms(
+                context,
+                replyTo,
+                if (!isAutomationEnabled(context)) {
+                    "Automation is OFF. Turn it on before starting a dispatch."
+                } else {
+                    "Dispatch could not be started on this phone."
+                },
+                replySubId
+            )
         } else {
             sendSms(context, replyTo, "Dispatch started on this phone: ${offer.name} → $phone (transaction #$txId).", replySubId)
         }
@@ -526,6 +570,10 @@ object SmsCommandHandler {
     }
 
     private fun buyTokensRemote(context: Context, replyTo: String, replySubId: Int?, args: List<String>) {
+        if (!isAutomationEnabled(context)) {
+            sendSms(context, replyTo, "Automation is OFF. Turn it on before buying tokens.", replySubId)
+            return
+        }
         if (args.isEmpty()) { sendSms(context, replyTo, "Usage: BT <amount>", replySubId); return }
         val amount = args[0].toIntOrNull() ?: run { sendSms(context, replyTo, "Invalid amount.", replySubId); return }
         sendSms(context, replyTo, "Starting airtime purchase for KSh $amount. Please wait…", replySubId)

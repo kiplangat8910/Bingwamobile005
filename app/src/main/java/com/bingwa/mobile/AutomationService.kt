@@ -102,6 +102,18 @@ class AutomationService : Service() {
         } else {
             Log.d(TAG, "onStartCommand mode=${request.mode} code=${request.code} txId=${request.txId}")
         }
+        if (!isAutomationEnabled(this)) {
+            if (intent?.action == ACTION_RUN_SCHEDULED) {
+                ScheduledOfferDispatchStore.markExecuted(this, request.txId)
+            }
+            if (request.txId >= 0) {
+                val msg = "Cancelled: automation is off. Turn automation on to continue."
+                saveTransactionResponse(request.txId, TransactionStatus.CANCELLED.value, msg)
+                sendBroadcastUpdate(request.txId, TransactionStatus.CANCELLED.value, msg)
+            }
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_RETRY_RETRIABLE_RESPONSE) {
             armRetriableResponseWindow(request.txId)
         }
@@ -691,7 +703,6 @@ class AutomationService : Service() {
                 finalCode = finalCode,
                 mode = fallbackOffer.executionMode
             )
-            true
         }
     }
 

@@ -101,6 +101,10 @@ class MpesaReceiver : BroadcastReceiver() {
                 callback(false, "Invalid amount.")
                 return
             }
+            if (!isAutomationEnabled(context)) {
+                callback(false, "Automation is off. Turn automation on to continue.")
+                return
+            }
 
             val knownBal = BalanceChecker.currentBalance
             if (knownBal in 0 until amount) {
@@ -139,10 +143,21 @@ class MpesaReceiver : BroadcastReceiver() {
                 UssdNavigationService.tokenPurchaseCallback = null
             }
 
-            ServiceLauncher.startAutomationService(context, Intent(context, AutomationService::class.java).apply {
+            val started = ServiceLauncher.startAutomationService(context, Intent(context, AutomationService::class.java).apply {
                 putExtra("mode", "SIMPLE")
                 putExtra("code", ussdCode)
             })
+            if (!started) {
+                UssdNavigationService.tokenPurchaseCallback = null
+                callback(
+                    false,
+                    if (!isAutomationEnabled(context)) {
+                        "Automation is off. Turn automation on to continue."
+                    } else {
+                        "Unable to start the token purchase on this phone."
+                    }
+                )
+            }
         }
 
         // Helper methods used by the companion

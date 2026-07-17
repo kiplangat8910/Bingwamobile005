@@ -2779,7 +2779,7 @@ fun BingwaApp() {
     val toggleRunning = {
         running = !running
         appPrefs.edit().putBoolean("automation_enabled", running).apply()
-        if (!running) ctx.stopService(Intent(ctx, BalanceChecker::class.java))
+        if (!running) stopAutomationActivities(ctx)
         else if (canUsePhoneAutomation(ctx)) ServiceLauncher.startBalanceChecker(ctx)
         vib(ctx, if (running) 140L else 120L)
     }
@@ -4986,6 +4986,9 @@ private fun resolveOfferForRetry(context: Context, tx: Transaction): OfferItem? 
 }
 
 private fun retryRecentTransaction(context: Context, tx: Transaction): TransactionRetryResult {
+    if (!isAutomationEnabled(context)) {
+        return TransactionRetryResult(false, "Automation is off. Turn it on before retrying transactions.")
+    }
     val phone = SmsCommandHandler.normalizePhone(tx.phoneNumber).ifBlank { tx.phoneNumber.trim() }
     if (phone.isBlank()) {
         return TransactionRetryResult(false, "Phone number is missing for this transaction.")
@@ -5017,13 +5020,23 @@ private fun retryRecentTransaction(context: Context, tx: Transaction): Transacti
         return TransactionRetryResult(false, "Retry could not be queued. Please try again.")
     }
 
-    context.startOfferAutomation(
+    val started = context.startOfferAutomation(
         offer = matchedOffer,
         phoneNumber = phone,
         txId = newTxId,
         finalCode = finalCode,
         mode = matchedOffer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE
     )
+    if (!started) {
+        return TransactionRetryResult(
+            false,
+            if (!isAutomationEnabled(context)) {
+                "Automation is off. Turn it on before retrying transactions."
+            } else {
+                "Retry could not be started. Please try again."
+            }
+        )
+    }
     return TransactionRetryResult(
         success = true,
         message = "Retry started for ${matchedOffer?.name ?: tx.description.ifBlank { "this transaction" }}.",
@@ -6603,6 +6616,11 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
             else -> null
         }
         if (phoneErr == null && selectedOffer != null) {
+            if (!isAutomationEnabled(ctx)) {
+                bannerState = "failed"
+                Toast.makeText(ctx, "Automation is off. Turn it on to continue.", Toast.LENGTH_SHORT).show()
+                return@executeManualRun
+            }
             if (BlacklistedContactStore.isBlacklisted(ctx, finalPhone)) {
                 bannerState = "failed"
                 Toast.makeText(ctx, "Blocked: this phone number is blacklisted", Toast.LENGTH_SHORT).show()
@@ -6627,15 +6645,19 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                     offerId = selectedOffer.id
                 )
                 pendingTxId = txId
-                saveTransactionOutcome(ctx, txId, TransactionStatus.PROCESSING.value, "Forwarded to Relay phone for execution.")
-                broadcastTransactionUpdated(ctx, txId)
-
                 val sent = RelayManager.forwardBuyAmount(ctx, finalPhone, selectedOffer.price)
                 if (sent) {
+                    saveTransactionOutcome(ctx, txId, TransactionStatus.PROCESSING.value, "Forwarded to Relay phone for execution.")
+                    broadcastTransactionUpdated(ctx, txId)
                     bannerState = "relayed"
                 } else {
                     bannerState = "failed"
-                    saveTransactionOutcome(ctx, txId, TransactionStatus.FAILED.value, "Failed: Relay forwarding failed.")
+                    saveTransactionOutcome(
+                        ctx,
+                        txId,
+                        TransactionStatus.CANCELLED.value,
+                        "Cancelled: automation is off or relay forwarding failed."
+                    )
                     broadcastTransactionUpdated(ctx, txId)
                 }
             } else {
@@ -6725,7 +6747,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
 
                     attemptDispatch(0)
                 } else {
-                    ctx.startOfferAutomation(
+                    val started = ctx.startOfferAutomation(
                         offer = selectedOffer,
                         phoneNumber = finalPhone,
                         txId = txId,
@@ -6733,6 +6755,13 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                         mode = mode,
                         returnToAppAggressively = true
                     )
+                    if (!started) {
+                        bannerState = "failed"
+                        if (isAutomationEnabled(ctx)) {
+                            saveTransactionOutcome(ctx, txId, TransactionStatus.FAILED.value, "Failed: dispatch could not be started.")
+                            broadcastTransactionUpdated(ctx, txId)
+                        }
+                    }
                 }
             }
         }
@@ -8600,7 +8629,12 @@ fun SettingsScreen() {
             )
 
             SettingsGroup("Automation") {
-                ToggleRow(Icons.Outlined.Bolt, "Enable Automation", "Auto-run bundles on payment", autoEnabled) { autoEnabled = it; prefs.edit().putBoolean("automation_enabled", it).apply() }
+                ToggleRow(Icons.Outlined.Bolt, "Enable Automation", "Auto-run bundles on payment", autoEnabled) {
+                    autoEnabled = it
+                    prefs.edit().putBoolean("automation_enabled", it).apply()
+                    if (!it) stopAutomationActivities(ctx)
+                    else if (canUsePhoneAutomation(ctx)) ServiceLauncher.startBalanceChecker(ctx)
+                }
                 GroupDivider()
                 ToggleRow(Icons.Rounded.Autorenew, "Auto-Retry on Failure", "Retry failed USSD up to 3 times", autoRetry) { autoRetry = it; prefs.edit().putBoolean("auto_retry", it).apply() }
                 GroupDivider()
@@ -9022,6 +9056,10 @@ fun OffersScreen(onBack: () -> Unit) {
     }
 
     fun launchSignatureLearning(offer: OfferItem) {
+        if (!isAutomationEnabled(ctx)) {
+            Toast.makeText(ctx, "Automation is off. Turn it on to continue.", Toast.LENGTH_SHORT).show()
+            return
+        }
         val cleanOffer = offer.clearPendingSignatureReview()
         val list = offers.toMutableList()
         val index = list.indexOfFirst { it.id == cleanOffer.id }
@@ -9030,7 +9068,7 @@ fun OffersScreen(onBack: () -> Unit) {
         Toast.makeText(ctx, "Learning USSD signature for ${cleanOffer.name}", Toast.LENGTH_SHORT).show()
         val learnPhone = "0700000000"
         val learnCode = cleanOffer.ussdCode.replace("pn", learnPhone, ignoreCase = true)
-        ctx.startOfferAutomation(
+        val started = ctx.startOfferAutomation(
             offer = cleanOffer,
             phoneNumber = learnPhone,
             txId = -1,
@@ -9038,6 +9076,14 @@ fun OffersScreen(onBack: () -> Unit) {
             mode = cleanOffer.executionMode,
             signatureLearning = true
         )
+        if (!started) {
+            Toast.makeText(
+                ctx,
+                if (!isAutomationEnabled(ctx)) "Automation is off. Turn it on to continue."
+                else "Signature learning could not be started.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     DisposableEffect(Unit) {
