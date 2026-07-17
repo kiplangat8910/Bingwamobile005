@@ -3350,6 +3350,13 @@ class UssdNavigationService : AccessibilityService() {
             (allTextLower.contains("254") && (allTextLower.contains("phone") || allTextLower.contains("mobile"))) ||
             (allTextLower.contains("07") && (allTextLower.contains("phone") || allTextLower.contains("number")))
 
+    private fun hasInputViewHint(viewId: String, hint: String): Boolean =
+        INPUT_VIEW_ID_HINTS.any { viewId.contains(it) } ||
+            INPUT_FIELD_HINTS.any { hint.contains(it) }
+
+    private fun hasInputLabelHint(label: String, desc: String): Boolean =
+        INPUT_FIELD_HINTS.any { label.contains(it) || desc.contains(it) }
+
     private fun isTextEntryNode(node: AccessibilityNodeInfo): Boolean {
         val className = node.className?.toString().orEmpty()
         val label = normalizeActionLabel(node.text?.toString())
@@ -3375,9 +3382,8 @@ class UssdNavigationService : AccessibilityService() {
                 (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) || supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)))
         val looksLikeButton = className.contains("Button", ignoreCase = true) ||
             className.contains("ImageButton", ignoreCase = true)
-        val hasInputHints = INPUT_FIELD_HINTS.any {
-            label.contains(it) || desc.contains(it) || hint.contains(it)
-        } || INPUT_VIEW_ID_HINTS.any { viewId.contains(it) }
+        val hasViewHint = hasInputViewHint(viewId, hint)
+        val hasLabelHint = hasInputLabelHint(label, desc)
         val hasSetTextAction = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)
         val hasPasteAction = supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
         val sendOrDismissLabel = label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS ||
@@ -3386,8 +3392,9 @@ class UssdNavigationService : AccessibilityService() {
             editable ||
                 looksLikeInputClass ||
                 hasSetTextAction ||
-                hasPasteAction ||
-                (hasInputHints && (focusable || clickable))
+                (hasPasteAction && (looksLikeInputClass || hasViewHint)) ||
+                (hasViewHint && (focusable || clickable)) ||
+                (hasLabelHint && (editable || hasSetTextAction))
             )
     }
 
@@ -3412,11 +3419,12 @@ class UssdNavigationService : AccessibilityService() {
         val editable = try { node.isEditable } catch (_: Exception) { false }
         val looksLikeButton = className.contains("Button", ignoreCase = true) ||
             className.contains("ImageButton", ignoreCase = true)
+        val looksLikeInputClass = EDITABLE_CLASS_HINTS.any { className.contains(it, ignoreCase = true) } ||
+            className.contains("TextInput", ignoreCase = true) ||
+            className.contains("Edit", ignoreCase = true)
         val hasWritableAction = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
             supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
-        val hasInputHints = INPUT_FIELD_HINTS.any {
-            label.contains(it) || desc.contains(it) || hint.contains(it)
-        } || INPUT_VIEW_ID_HINTS.any { viewId.contains(it) }
+        val hasViewHint = hasInputViewHint(viewId, hint)
         val sendOrDismissLabel = label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS ||
             label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS
         val hasShortText = label.isBlank() || label.length <= 24
@@ -3426,7 +3434,8 @@ class UssdNavigationService : AccessibilityService() {
             !looksLikeButton &&
             !sendOrDismissLabel &&
             hasShortText &&
-            (hasWritableAction || (hasInputHints && (focusable || clickable)))
+            ((hasWritableAction && (looksLikeInputClass || hasViewHint || focusable)) ||
+                (hasViewHint && (focusable || clickable)))
     }
 
     private fun supportsAction(node: AccessibilityNodeInfo, actionId: Int): Boolean =
@@ -3594,7 +3603,7 @@ class UssdNavigationService : AccessibilityService() {
                 likelyVerified = isLikelyDirectWriteVerified(node, value)
             )
         }
-        if (supportsSilentSetText(node) && refocusInputTarget(node) && setTextOnNode(node, value)) {
+        if (supportsSilentSetText(node) && activateInputTarget(node) && setTextOnNode(node, value)) {
             return InputWriteResult(
                 wroteValue = true,
                 likelyVerified = isLikelyDirectWriteVerified(node, value)
@@ -3643,7 +3652,8 @@ class UssdNavigationService : AccessibilityService() {
     private fun focusInputTarget(node: AccessibilityNodeInfo) {
         val alreadyFocused = try { node.isFocused } catch (_: Exception) { false }
         if (alreadyFocused) return
-        refocusInputTarget(node)
+        if (refocusInputTarget(node)) return
+        activateInputTarget(node)
     }
 
     private fun setTextOnNode(node: AccessibilityNodeInfo, value: String): Boolean {
@@ -3677,8 +3687,40 @@ class UssdNavigationService : AccessibilityService() {
         runCatching { node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) }.getOrDefault(false) ||
             runCatching { node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) }.getOrDefault(false)
 
+    private fun activateInputTarget(node: AccessibilityNodeInfo): Boolean {
+        if (!isSafeInputActivationCandidate(node)) return false
+        return runCatching { node.performAction(AccessibilityNodeInfo.ACTION_CLICK) }.getOrDefault(false) ||
+            performTapGesture(node)
+    }
+
     private fun supportsSilentSetText(node: AccessibilityNodeInfo): Boolean =
         supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)
+
+    private fun isSafeInputActivationCandidate(node: AccessibilityNodeInfo): Boolean {
+        val className = node.className?.toString().orEmpty()
+        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
+        } else {
+            ""
+        }
+        val editable = try { node.isEditable } catch (_: Exception) { false }
+        val enabled = try { node.isEnabled } catch (_: Exception) { true }
+        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            try { node.isVisibleToUser } catch (_: Exception) { true }
+        } else {
+            true
+        }
+        val looksLikeInputClass = EDITABLE_CLASS_HINTS.any { className.contains(it, ignoreCase = true) } ||
+            className.contains("TextInput", ignoreCase = true) ||
+            className.contains("Edit", ignoreCase = true)
+        return enabled && visible && (
+            editable ||
+                supportsSilentSetText(node) ||
+                looksLikeInputClass ||
+                hasInputViewHint(viewId, hint)
+            )
+    }
 
     private fun findEditableFieldMatchingExpectedInput(
         root: AccessibilityNodeInfo,
