@@ -36,7 +36,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -5415,14 +5414,12 @@ private fun RecentTransactionDetailsDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text("LAST RESPONSE", color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
-                        SelectionContainer {
-                            Text(
-                                tx.ussdResponse.ifBlank { "No final response captured yet." },
-                                color = C.t2,
-                                fontSize = 12.sp,
-                                lineHeight = 18.sp
-                            )
-                        }
+                        Text(
+                            tx.ussdResponse.ifBlank { "No final response captured yet." },
+                            color = C.t2,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp
+                        )
                     }
                 }
                 Surface(
@@ -5435,14 +5432,12 @@ private fun RecentTransactionDetailsDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text("USSD SESSION", color = C.t3, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
-                        SelectionContainer {
-                            Text(
-                                transcriptText,
-                                color = C.t2,
-                                fontSize = 12.sp,
-                                lineHeight = 18.sp
-                            )
-                        }
+                        Text(
+                            transcriptText,
+                            color = C.t2,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp
+                        )
                     }
                 }
             }

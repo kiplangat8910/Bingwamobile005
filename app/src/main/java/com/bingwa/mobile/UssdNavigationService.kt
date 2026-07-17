@@ -909,9 +909,17 @@ class UssdNavigationService : AccessibilityService() {
                         scheduleProcessStep(dialogChanged = false)
                         return
                     }
-                    if (step.all(Char::isDigit) && menuSignature != null && menuSignature.options.isNotEmpty()) {
-                        // If the current screen is a menu, ensure our selection exists on THIS menu.
-                        // This prevents "next step" inputs from being applied to the previous screen.
+                    val shouldPreferTextInput = inputField != null ||
+                        shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
+                        dialogSuggestsTextInput(lower) ||
+                        dialogAllowsPhoneInput
+                    if (!shouldPreferTextInput &&
+                        step.all(Char::isDigit) &&
+                        menuSignature != null &&
+                        menuSignature.options.isNotEmpty()
+                    ) {
+                        // Only enforce menu-option matching when this popup behaves like a menu.
+                        // Typed reply prompts can still contain numbered text from the previous step.
                         if (!menuSignature.options.containsKey(valueToEnter)) {
                             isProcessing = false
                             pendingProcessToken = SystemClock.elapsedRealtime()
@@ -919,10 +927,6 @@ class UssdNavigationService : AccessibilityService() {
                             return
                         }
                     }
-                    val shouldPreferTextInput = inputField != null ||
-                        shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
-                        dialogSuggestsTextInput(lower) ||
-                        dialogAllowsPhoneInput
                     if (inputField == null && shouldPreferTextInput && !dialogSuggestsTextInput(lower) && !dialogAllowsPhoneInput) {
                         if (!effectiveSnapshot.hasEditableField) {
                             isProcessing = false
