@@ -1143,6 +1143,11 @@ class UssdNavigationService : AccessibilityService() {
         val hasDismissButton: Boolean
     )
 
+    private data class DialogCaptureCandidate(
+        val node: AccessibilityNodeInfo,
+        val score: Int
+    )
+
     private data class MenuOptionMatch(
         val optionKey: String,
         val optionLabel: String,
@@ -1363,7 +1368,10 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun capturePopupTranscript(snapshot: UssdTreeSnapshot?, dialogText: String) {
         if (!shouldRecordPopupTranscript()) return
-        val recordedText = formatRecordedDialogText(snapshot?.textTokens.orEmpty(), dialogText)
+        if (signatureLearningMode && snapshot == null) return
+        val recordedText = snapshot?.let {
+            formatRecordedDialogText(it.textTokens, it.dialogText)
+        } ?: formatRecordedDialogText(emptyList(), dialogText)
         if (recordedText.isBlank()) return
         if (popupTranscript.lastOrNull() == recordedText) return
         popupTranscript += recordedText
@@ -3039,42 +3047,66 @@ class UssdNavigationService : AccessibilityService() {
     private fun findDialogCaptureRoot(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         val rootBounds = Rect()
         runCatching { root.getBoundsInScreen(rootBounds) }
-        return findDialogCaptureRootRecursive(root, rootBounds)
+        val candidates = mutableListOf<DialogCaptureCandidate>()
+        collectDialogCaptureCandidates(root, rootBounds, candidates, depth = 0)
+        return try {
+            candidates
+                .maxByOrNull { it.score }
+                ?.let { AccessibilityNodeInfo.obtain(it.node) }
+        } finally {
+            candidates.forEach { candidate ->
+                runCatching { candidate.node.recycle() }
+            }
+        }
     }
 
-    private fun findDialogCaptureRootRecursive(
+    private fun collectDialogCaptureCandidates(
         node: AccessibilityNodeInfo,
-        rootBounds: Rect
-    ): AccessibilityNodeInfo? {
+        rootBounds: Rect,
+        into: MutableList<DialogCaptureCandidate>,
+        depth: Int
+    ) {
+        val score = scoreDialogCaptureCandidate(node, rootBounds, depth)
+        if (score > 0) {
+            into += DialogCaptureCandidate(
+                node = AccessibilityNodeInfo.obtain(node),
+                score = score
+            )
+        }
         for (i in 0 until node.childCount) {
             val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-            val nested = findDialogCaptureRootRecursive(child, rootBounds)
-            child.recycle()
-            if (nested != null) return nested
+            try {
+                collectDialogCaptureCandidates(child, rootBounds, into, depth + 1)
+            } finally {
+                child.recycle()
+            }
         }
-        return if (isDialogCaptureCandidate(node, rootBounds)) AccessibilityNodeInfo.obtain(node) else null
     }
 
-    private fun isDialogCaptureCandidate(node: AccessibilityNodeInfo, rootBounds: Rect): Boolean {
+    private fun scoreDialogCaptureCandidate(
+        node: AccessibilityNodeInfo,
+        rootBounds: Rect,
+        depth: Int
+    ): Int {
         val childCount = try { node.childCount } catch (_: Exception) { 0 }
-        if (childCount == 0) return false
+        if (childCount == 0) return 0
 
         val bounds = Rect()
         runCatching { node.getBoundsInScreen(bounds) }
         val nodeArea = bounds.width().toLong() * bounds.height().toLong()
         val rootArea = rootBounds.width().toLong() * rootBounds.height().toLong()
         val areaRatio = if (nodeArea > 0L && rootArea > 0L) nodeArea.toFloat() / rootArea.toFloat() else 1f
-        if (nodeArea <= 0L || areaRatio < 0.05f || areaRatio > 0.96f) return false
+        if (nodeArea <= 0L || areaRatio < 0.03f) return 0
 
         val summary = scanNodeSummary(node)
         val textTokens = summary.textTokens
             .map(::normalizeCollapsedText)
             .filter { it.isNotBlank() }
             .distinct()
-        if (textTokens.isEmpty()) return false
+        if (textTokens.isEmpty()) return 0
 
         val combinedText = textTokens.joinToString(" ").lowercase()
-        if (NON_USSD_DIALOG_HINTS.any { combinedText.contains(it) }) return false
+        if (NON_USSD_DIALOG_HINTS.any { combinedText.contains(it) }) return 0
 
         val hasAction = summary.hasSendButton || summary.hasDismissButton || summary.hasEditableField
         val hasMenuOptions = buildMenuSignature(textTokens) != null
@@ -3083,11 +3115,39 @@ class UssdNavigationService : AccessibilityService() {
             className.contains("AlertDialog", ignoreCase = true) ||
             className.contains("BottomSheet", ignoreCase = true)
         val compactContainer = childCount in 1..8
+        val moderatelyCompactContainer = childCount in 1..14
         val hasUssdLanguage = USSD_HINTS.any { combinedText.contains(it) } || errorKeywords.any { combinedText.contains(it) }
+        if (!hasAction && !hasMenuOptions) return 0
+        if (!(hasUssdLanguage || hasMenuOptions || signatureLearningMode || advancedActive || isForegroundUiActive())) return 0
 
-        return (hasAction || hasMenuOptions) &&
-            (hasDialogClass || compactContainer || areaRatio <= 0.82f) &&
-            (hasUssdLanguage || hasMenuOptions || signatureLearningMode || advancedActive || isForegroundUiActive())
+        val horizontalInset = maxOf(0, bounds.left - rootBounds.left) + maxOf(0, rootBounds.right - bounds.right)
+        val verticalInset = maxOf(0, bounds.top - rootBounds.top) + maxOf(0, rootBounds.bottom - bounds.bottom)
+        val hasInset = horizontalInset > 0 || verticalInset > 0
+        val centerDx = kotlin.math.abs(bounds.centerX() - rootBounds.centerX())
+        val centerDy = kotlin.math.abs(bounds.centerY() - rootBounds.centerY())
+        val centered = centerDx <= (rootBounds.width() * 0.18f) && centerDy <= (rootBounds.height() * 0.18f)
+        val fullScreenDialogLike = areaRatio > 0.96f &&
+            (hasDialogClass || (centered && childCount <= 10 && (hasAction || hasMenuOptions)))
+        if (areaRatio > 0.995f && !fullScreenDialogLike) return 0
+
+        var score = 0
+        if (summary.hasEditableField) score += 380
+        if (summary.hasSendButton) score += 260
+        if (summary.hasDismissButton) score += 120
+        if (hasMenuOptions) score += 260
+        if (hasUssdLanguage) score += 220
+        if (hasDialogClass) score += 180
+        if (compactContainer) score += 140
+        else if (moderatelyCompactContainer) score += 70
+        else score -= minOf(childCount, 32) * 18
+        if (areaRatio in 0.08f..0.86f) score += 180
+        else if (fullScreenDialogLike) score += 110
+        else if (areaRatio > 0.96f) score -= 220
+        if (hasInset) score += 80
+        if (centered) score += 70
+        score += maxOf(0, 42 - (depth * 4))
+        score -= maxOf(0, textTokens.size - 12) * 10
+        return score.takeIf { it > 0 } ?: 0
     }
 
     private fun collectTreeSnapshot(node: AccessibilityNodeInfo, accumulator: TreeScanAccumulator) {
@@ -3646,6 +3706,12 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun writeValueUsingStrategies(node: AccessibilityNodeInfo, value: String): InputWriteResult {
+        if (setTextOnNode(node, value)) {
+            return InputWriteResult(
+                wroteValue = true,
+                likelyVerified = isLikelyDirectWriteVerified(node, value)
+            )
+        }
         focusInputTarget(node)
         if (setTextOnNode(node, value)) {
             return InputWriteResult(
@@ -3713,7 +3779,10 @@ class UssdNavigationService : AccessibilityService() {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
             })
         }.getOrDefault(false)
-        if (replacedDirectly) return true
+        if (replacedDirectly) {
+            collapseInputSelection(node, value)
+            return true
+        }
         runCatching {
             node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
@@ -3724,6 +3793,9 @@ class UssdNavigationService : AccessibilityService() {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
             })
         }.getOrDefault(false)
+        if (replaced) {
+            collapseInputSelection(node, value)
+        }
         return replaced
     }
 
@@ -3734,8 +3806,25 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun refocusInputTarget(node: AccessibilityNodeInfo): Boolean =
-        runCatching { node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) }.getOrDefault(false) ||
-            runCatching { node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) }.getOrDefault(false)
+        runCatching { node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) }.getOrDefault(false) ||
+            (Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
+                runCatching {
+                    node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
+                }.getOrDefault(false))
+
+    private fun collapseInputSelection(node: AccessibilityNodeInfo, value: String) {
+        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_SELECTION)) return
+        val cursorPosition = value.length.coerceAtLeast(0)
+        runCatching {
+            node.performAction(
+                AccessibilityNodeInfo.ACTION_SET_SELECTION,
+                Bundle().apply {
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, cursorPosition)
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, cursorPosition)
+                }
+            )
+        }
+    }
 
     private fun activateInputTarget(node: AccessibilityNodeInfo): Boolean {
         if (!isSafeInputActivationCandidate(node)) return false
