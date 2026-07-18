@@ -542,7 +542,7 @@ class UssdNavigationService : AccessibilityService() {
         val windowChanged = windowId != lastWindowId
         lastWindowId = windowId
 
-        val root = getUssdRoot() ?: return
+        val root = obtainRootFromEvent(event) ?: getUssdRoot() ?: return
         try {
             val windowPkg = root.packageName?.toString() ?: ""
             val allowBlockedWindow = windowPkg == "com.android.systemui" && shouldAllowSystemUiDialogRoot(root, windowPkg)
@@ -1053,6 +1053,42 @@ class UssdNavigationService : AccessibilityService() {
             }
         }
         return null
+    }
+
+    private fun obtainRootFromEvent(event: AccessibilityEvent): AccessibilityNodeInfo? {
+        val source = try { event.source } catch (_: Exception) { null } ?: return null
+        var current: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(source)
+        var result: AccessibilityNodeInfo? = null
+        var depth = 0
+        try {
+            while (current != null && depth < 24) {
+                val parent = try { current.parent } catch (_: Exception) { null }
+                if (parent == null) {
+                    result = AccessibilityNodeInfo.obtain(current)
+                    break
+                }
+                val next = try { AccessibilityNodeInfo.obtain(parent) } catch (_: Exception) { null }
+                current.recycle()
+                current = next
+                depth++
+            }
+        } finally {
+            current?.recycle()
+            source.recycle()
+        }
+
+        val candidate = result ?: return null
+        val pkg = candidate.packageName?.toString() ?: ""
+        val allowBlocked = pkg !in BLOCKED_PACKAGES || shouldAllowSystemUiDialogRoot(candidate, pkg)
+        val allowed = allowBlocked &&
+            (isPotentialUssdPackage(pkg) ||
+                shouldAllowAndroidDialogRoot(candidate, pkg) ||
+                shouldAllowSystemUiDialogRoot(candidate, pkg))
+        if (!allowed) {
+            candidate.recycle()
+            return null
+        }
+        return candidate
     }
 
     private fun shouldAllowSystemUiDialogRoot(root: AccessibilityNodeInfo, pkg: String): Boolean {
@@ -2767,26 +2803,36 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun findEditableField(node: AccessibilityNodeInfo): AccessibilityNodeInfo? =
-        mutableListOf<AccessibilityNodeInfo>().let { candidates ->
-            collectTextEntryCandidates(node, candidates)
-            val best = candidates.maxByOrNull { scoreTextEntryCandidate(it) }
-                ?.let { AccessibilityNodeInfo.obtain(it) }
-            candidates.forEach { it.recycle() }
-            best
-        }
+        findBestEditableField(node) { scoreTextEntryCandidate(it) }
 
     private fun findEditableFieldForStep(
         node: AccessibilityNodeInfo,
         step: String,
         dialogText: String
     ): AccessibilityNodeInfo? =
-        mutableListOf<AccessibilityNodeInfo>().let { candidates ->
-            collectTextEntryCandidates(node, candidates)
-            val best = candidates.maxByOrNull { scoreTextEntryCandidateForStep(it, step, dialogText) }
-                ?.let { AccessibilityNodeInfo.obtain(it) }
-            candidates.forEach { it.recycle() }
-            best
+        findBestEditableField(node) { scoreTextEntryCandidateForStep(it, step, dialogText) }
+
+    private fun findBestEditableField(
+        node: AccessibilityNodeInfo,
+        scorer: (AccessibilityNodeInfo) -> Int
+    ): AccessibilityNodeInfo? {
+        val directTargets = obtainInputTargets(node)
+        try {
+            directTargets.maxByOrNull(scorer)?.let { best ->
+                return AccessibilityNodeInfo.obtain(best)
+            }
+        } finally {
+            directTargets.forEach { it.recycle() }
         }
+
+        val candidates = mutableListOf<AccessibilityNodeInfo>()
+        try {
+            collectTextEntryCandidates(node, candidates)
+            return candidates.maxByOrNull(scorer)?.let { AccessibilityNodeInfo.obtain(it) }
+        } finally {
+            candidates.forEach { it.recycle() }
+        }
+    }
 
     private fun collectTextEntryCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>) {
         try {
