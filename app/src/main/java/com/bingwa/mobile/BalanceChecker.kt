@@ -17,7 +17,8 @@ class BalanceChecker : Service() {
 
     companion object {
         private const val TAG = "BalanceChecker"
-        private const val BALANCE_USSD = "*144#"
+        private const val DEFAULT_BALANCE_USSD = "*144#"
+        private const val AIRTEL_BALANCE_USSD = "*131#"
         private const val CHECK_INTERVAL = 5 * 60 * 1000L
         private const val BALANCE_TIMEOUT_MS = 30_000L
         private const val CHANNEL_ID = "balance_checker"
@@ -36,11 +37,20 @@ class BalanceChecker : Service() {
             val score: Int
         )
 
+        internal fun resolveBalanceUssdCode(context: Context, selectionOverride: Int? = null): String {
+            return if (isAirtelBalanceTarget(context, selectionOverride)) {
+                AIRTEL_BALANCE_USSD
+            } else {
+                DEFAULT_BALANCE_USSD
+            }
+        }
+
         fun requestBalanceCheck(context: Context) {
             if (checking) { Log.d(TAG, "check already in flight — skipping"); return }
             checking = true
             armTimeout()
-            Log.d(TAG, "Requesting balance via $BALANCE_USSD (SILENT)")
+            val balanceUssd = resolveBalanceUssdCode(context)
+            Log.d(TAG, "Requesting balance via $balanceUssd (SILENT)")
 
             UssdNavigationService.balanceCallback = { raw ->
                 Log.d(TAG, "balanceCallback raw='$raw'")
@@ -65,7 +75,7 @@ class BalanceChecker : Service() {
 
             // Try UssdHelper first (silent), fallback to AutomationService SIMPLE
             val helperSuccess = UssdHelper.dialUssd(
-                context, BALANCE_USSD, silentOnly = true,
+                context, balanceUssd, silentOnly = true,
                 onSuccess = { response ->
                     Log.d(TAG, "UssdHelper success: '$response'")
                     UssdNavigationService.balanceCallback?.invoke(response)
@@ -74,7 +84,7 @@ class BalanceChecker : Service() {
                     Log.e(TAG, "UssdHelper failed: $error, trying AutomationService")
                     ServiceLauncher.startAutomationService(context, Intent(context, AutomationService::class.java).apply {
                         putExtra("mode", "SIMPLE")
-                        putExtra("code", BALANCE_USSD)
+                        putExtra("code", balanceUssd)
                         putExtra("phoneNumber", "")
                     })
                 }
@@ -83,7 +93,7 @@ class BalanceChecker : Service() {
                 Log.w(TAG, "UssdHelper returned false, using AutomationService")
                 ServiceLauncher.startAutomationService(context, Intent(context, AutomationService::class.java).apply {
                     putExtra("mode", "SIMPLE")
-                    putExtra("code", BALANCE_USSD)
+                    putExtra("code", balanceUssd)
                     putExtra("phoneNumber", "")
                 })
             }
@@ -127,17 +137,24 @@ class BalanceChecker : Service() {
 
             addMatches(
                 Regex(
-                    """(?:airtime\s*bal(?:ance)?|balance|your\s+balance\s+is|salio|umbea|account\s+balance)[:\s-]*(?:is\s*)?(?:ksh[s]?|kes)?\s*([\d,]+(?:\.\d{1,2})?)""",
+                    """your\s+balance\s+is\s+ksh[s]?\.\s*([\d,]+(?:\.\d{1,2})?)""",
+                    RegexOption.IGNORE_CASE
+                ),
+                score = 650
+            )
+            addMatches(
+                Regex(
+                    """(?:airtime\s*bal(?:ance)?|balance|your\s+balance\s+is|salio|umbea|account\s+balance)[:\s-]*(?:is\s*)?(?:(?:ksh[s]?|kes)\.?\s*)?([\d,]+(?:\.\d{1,2})?)""",
                     RegexOption.IGNORE_CASE
                 ),
                 score = 500
             )
             addMatches(
-                Regex("""(?:ksh[s]?|kes)\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
+                Regex("""(?:ksh[s]?|kes)\.?\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
                 score = 420
             )
             addMatches(
-                Regex("""([\d,]+(?:\.\d{1,2})?)\s*(?:ksh[s]?|kes)""", RegexOption.IGNORE_CASE),
+                Regex("""([\d,]+(?:\.\d{1,2})?)\s*(?:ksh[s]?|kes)\.?""", RegexOption.IGNORE_CASE),
                 score = 420
             )
             addMatches(
@@ -170,6 +187,21 @@ class BalanceChecker : Service() {
                 .replace(Regex("""[^\S\r\n]+"""), " ")
                 .replace(Regex("""\s+"""), " ")
                 .trim()
+
+        private fun isAirtelBalanceTarget(context: Context, selectionOverride: Int? = null): Boolean {
+            val targetSubId = resolvePreferredUssdSubId(context, selectionOverride) ?: return false
+            val targetSim = getAvailableSims(context).firstOrNull { it.subscriptionId == targetSubId } ?: return false
+            val labels = buildList {
+                add(targetSim.displayName?.toString().orEmpty())
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    add(targetSim.carrierName?.toString().orEmpty())
+                }
+            }
+                .joinToString(" ")
+                .trim()
+
+            return labels.contains("airtel", ignoreCase = true)
+        }
 
         private fun formatAmount(amount: Double): String {
             return if (amount == kotlin.math.floor(amount)) {

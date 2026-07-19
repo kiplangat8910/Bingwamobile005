@@ -94,7 +94,6 @@ private const val MAX_RECENT_PINS = 5
 private const val FREE_RECHARGE_WINDOW_LIMIT = 10
 private const val FREE_RECHARGE_WINDOW_MS = 24 * 60 * 60 * 1000L
 private const val USED_PIN_RECORD_RETENTION_MS = 60 * 60 * 1000L
-private const val SCRATCH_BALANCE_USSD = "*144#"
 private const val SCRATCH_BALANCE_REFRESH_POLL_MS = 250L
 private const val SCRATCH_BATCH_GAP_MS = 650L
 private const val SCRATCH_DEFAULT_SCAN_MESSAGE =
@@ -2247,7 +2246,7 @@ private suspend fun startScratchBalanceCheck(
         suspendCancellableCoroutine { cont ->
             val executed = UssdHelper.dialUssd(
                 context = context,
-                ussdCode = SCRATCH_BALANCE_USSD,
+                ussdCode = BalanceChecker.resolveBalanceUssdCode(context, simSelection),
                 silentOnly = true,
                 subIdOverride = simSelection,
                 onSuccess = { response ->
