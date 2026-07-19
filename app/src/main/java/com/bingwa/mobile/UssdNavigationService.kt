@@ -306,6 +306,8 @@ class UssdNavigationService : AccessibilityService() {
     private var hasSeenForegroundPopup = false
     private var lastMenuSignatureKey = ""
     private var lastMenuSignature: ParsedMenuSignature? = null
+    private var loadedSignatureLookupSource: List<UssdSignatureStep> = emptyList()
+    private var loadedSignatureLookup: Map<Int, LearnedSignatureContext> = emptyMap()
     private var lastScreenSignatureKey = ""
     private var pendingExpectedValue: String? = null
     private var pendingPhase: PendingPhase = PendingPhase.NONE
@@ -1155,9 +1157,29 @@ class UssdNavigationService : AccessibilityService() {
         return hasUssdLanguage || menuLike || startupRelaxed
     }
 
+    private data class MenuOptionDescriptor(
+        val key: String,
+        val label: String,
+        val normalizedLabel: String,
+        val tokens: Set<String>
+    )
+
     private data class ParsedMenuSignature(
         val title: String,
-        val options: LinkedHashMap<String, String>
+        val options: LinkedHashMap<String, String>,
+        val normalizedTitle: String,
+        val titleTokens: Set<String>,
+        val optionDescriptors: List<MenuOptionDescriptor>,
+        val normalizedOptionLabels: Set<String>
+    )
+
+    private data class LearnedSignatureContext(
+        val step: UssdSignatureStep,
+        val normalizedSelectedLabel: String,
+        val selectedLabelTokens: Set<String>,
+        val normalizedMenuTitle: String,
+        val menuTitleTokens: Set<String>,
+        val normalizedOptionSnapshot: Set<String>
     )
 
     private data class UssdTreeSnapshot(
@@ -1181,8 +1203,7 @@ class UssdNavigationService : AccessibilityService() {
     )
 
     private data class ScoredMenuOptionMatch(
-        val optionKey: String,
-        val optionLabel: String,
+        val descriptor: MenuOptionDescriptor,
         val sharedTokenCount: Int,
         val strongSharedTokenCount: Int,
         val expectedTokenCount: Int,
@@ -1298,7 +1319,7 @@ class UssdNavigationService : AccessibilityService() {
             adjustedStepInputs[stepIndex] = rawStep
             return rawStep to menu?.options?.get(rawStep)
         }
-        val learned = loadedSignatureSteps.firstOrNull { it.stepIndex == stepIndex } ?: run {
+        val learned = getLoadedSignatureContext(stepIndex) ?: run {
             adjustedStepInputs[stepIndex] = rawStep
             return rawStep to menu?.options?.get(rawStep)
         }
@@ -1310,7 +1331,7 @@ class UssdNavigationService : AccessibilityService() {
         val match = findBestMenuOptionMatch(menu, learned)
         if (match == null) {
             val message = buildChangeMessage(
-                learned = learned,
+                learned = learned.step,
                 actualOption = null,
                 actualLabel = null
             )
@@ -1322,7 +1343,7 @@ class UssdNavigationService : AccessibilityService() {
         if (match.optionKey != rawStep) {
             signatureChangeDetected = true
             detectedChangeNotes += buildChangeMessage(
-                learned = learned,
+                learned = learned.step,
                 actualOption = match.optionKey,
                 actualLabel = match.optionLabel
             )
@@ -1457,6 +1478,34 @@ class UssdNavigationService : AccessibilityService() {
             .replace(MULTI_SPACE_REGEX, " ")
             .trim()
 
+    private fun buildLearnedSignatureContext(step: UssdSignatureStep): LearnedSignatureContext {
+        val normalizedSelectedLabel = normalizeMenuText(step.selectedOptionLabel)
+        val normalizedMenuTitle = normalizeMenuText(step.menuTitle)
+        return LearnedSignatureContext(
+            step = step,
+            normalizedSelectedLabel = normalizedSelectedLabel,
+            selectedLabelTokens = tokenizeMenuLabel(normalizedSelectedLabel),
+            normalizedMenuTitle = normalizedMenuTitle,
+            menuTitleTokens = tokenizeMenuLabel(normalizedMenuTitle),
+            normalizedOptionSnapshot = step.menuOptionsSnapshot
+                .asSequence()
+                .map(::normalizeMenuText)
+                .filter { it.isNotBlank() }
+                .toSet()
+        )
+    }
+
+    private fun getLoadedSignatureContext(stepIndex: Int): LearnedSignatureContext? {
+        if (loadedSignatureLookupSource !== loadedSignatureSteps) {
+            loadedSignatureLookupSource = loadedSignatureSteps
+            loadedSignatureLookup = loadedSignatureSteps
+                .asSequence()
+                .map(::buildLearnedSignatureContext)
+                .associateBy { it.step.stepIndex }
+        }
+        return loadedSignatureLookup[stepIndex]
+    }
+
     private fun markStepAction(dialogText: String) {
         lastStepActionKey = normalizeMenuText(dialogText)
         lastStepActionElapsed = SystemClock.elapsedRealtime()
@@ -1540,21 +1589,40 @@ class UssdNavigationService : AccessibilityService() {
         }
 
         if (options.isEmpty()) return null
+        val title = titleParts.distinct().take(2).joinToString(" / ")
+        val normalizedTitle = normalizeMenuText(title)
+        val optionDescriptors = options.entries.map { (key, label) ->
+            val normalizedLabel = normalizeMenuText(label)
+            MenuOptionDescriptor(
+                key = key,
+                label = label,
+                normalizedLabel = normalizedLabel,
+                tokens = tokenizeMenuLabel(normalizedLabel)
+            )
+        }
         return ParsedMenuSignature(
-            title = titleParts.distinct().take(2).joinToString(" / "),
-            options = LinkedHashMap(options)
+            title = title,
+            options = LinkedHashMap(options),
+            normalizedTitle = normalizedTitle,
+            titleTokens = tokenizeMenuLabel(normalizedTitle),
+            optionDescriptors = optionDescriptors,
+            normalizedOptionLabels = optionDescriptors
+                .asSequence()
+                .map { it.normalizedLabel }
+                .filter { it.isNotBlank() }
+                .toSet()
         )
     }
 
     private fun normalizeDialogLines(tokens: List<String>): List<String> {
-        val normalized = tokens
-            .flatMap { token -> token.lineSequence().map { it.trim() }.toList() }
-            .map { normalizeCollapsedText(it) }
-            .filter { it.isNotBlank() }
-        if (normalized.size < 2) return normalized
         val collapsed = mutableListOf<String>()
-        normalized.forEach { token ->
-            if (collapsed.lastOrNull() != token) collapsed += token
+        tokens.forEach { token ->
+            token.lineSequence().forEach { line ->
+                val normalizedLine = normalizeCollapsedText(line)
+                if (normalizedLine.isNotBlank() && collapsed.lastOrNull() != normalizedLine) {
+                    collapsed += normalizedLine
+                }
+            }
         }
         return collapsed
     }
@@ -1621,20 +1689,19 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun findBestMenuOptionMatch(
         menu: ParsedMenuSignature,
-        learned: UssdSignatureStep
+        learned: LearnedSignatureContext
     ): MenuOptionMatch? {
-        val expectedLabel = learned.selectedOptionLabel
-        val normalizedExpected = normalizeMenuText(expectedLabel)
+        val normalizedExpected = learned.normalizedSelectedLabel
         if (normalizedExpected.isBlank()) return null
         if (!isMenuContextCompatible(menu, learned)) return null
 
-        val exactMatches = menu.options.entries
+        val exactMatches = menu.optionDescriptors
             .asSequence()
-            .filter { entry -> normalizeMenuText(entry.value) == normalizedExpected }
-            .map { entry ->
+            .filter { descriptor -> descriptor.normalizedLabel == normalizedExpected }
+            .map { descriptor ->
                 MenuOptionMatch(
-                    optionKey = entry.key,
-                    optionLabel = entry.value,
+                    optionKey = descriptor.key,
+                    optionLabel = descriptor.label,
                     autoAdjustSafe = true
                 )
             }
@@ -1642,29 +1709,27 @@ class UssdNavigationService : AccessibilityService() {
         return when (exactMatches.size) {
             1 -> exactMatches.first()
             else -> {
-                exactMatches.firstOrNull { it.optionKey == learned.expectedInput }?.let { return it }
-                val scoredMatches = menu.options.entries
-                    .asSequence()
-                    .mapNotNull { entry ->
-                        scoreMenuOptionMatch(
-                            expectedLabel = normalizedExpected,
-                            candidateLabel = normalizeMenuText(entry.value)
-                        )?.let { scored ->
-                            scored.copy(
-                                optionKey = entry.key,
-                                optionLabel = entry.value
-                            )
-                        }
+                exactMatches.firstOrNull { it.optionKey == learned.step.expectedInput }?.let { return it }
+                var bestMatch: ScoredMenuOptionMatch? = null
+                var runnerUp: ScoredMenuOptionMatch? = null
+                menu.optionDescriptors.forEach { descriptor ->
+                    val scored = scoreMenuOptionMatch(
+                        expectedTokens = learned.selectedLabelTokens,
+                        descriptor = descriptor
+                    ) ?: return@forEach
+                    if (bestMatch == null || scored.score > bestMatch!!.score) {
+                        runnerUp = bestMatch
+                        bestMatch = scored
+                    } else if (runnerUp == null || scored.score > runnerUp!!.score) {
+                        runnerUp = scored
                     }
-                    .sortedByDescending { it.score }
-                    .toList()
-                val bestMatch = scoredMatches.firstOrNull() ?: return null
-                val runnerUp = scoredMatches.getOrNull(1)
+                }
+                val bestMatch = bestMatch ?: return null
                 val uniqueEnough = runnerUp == null || (bestMatch.score - runnerUp.score) >= 0.18
                 if (!uniqueEnough) return null
 
-                val expectedTokens = tokenizeMenuLabel(normalizedExpected)
-                val candidateTokens = tokenizeMenuLabel(normalizeMenuText(bestMatch.optionLabel))
+                val expectedTokens = learned.selectedLabelTokens
+                val candidateTokens = bestMatch.descriptor.tokens
                 val hasStrongAnchor = bestMatch.strongSharedTokenCount >= minOf(2, bestMatch.expectedTokenCount.coerceAtLeast(1))
                 val hasNumericAnchor = expectedTokens
                     .intersect(candidateTokens)
@@ -1678,8 +1743,8 @@ class UssdNavigationService : AccessibilityService() {
                 if (!strongEnoughToReport) return null
 
                 MenuOptionMatch(
-                    optionKey = bestMatch.optionKey,
-                    optionLabel = bestMatch.optionLabel,
+                    optionKey = bestMatch.descriptor.key,
+                    optionLabel = bestMatch.descriptor.label,
                     autoAdjustSafe = safeToAdjust
                 )
             }
@@ -1687,11 +1752,10 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun scoreMenuOptionMatch(
-        expectedLabel: String,
-        candidateLabel: String
+        expectedTokens: Set<String>,
+        descriptor: MenuOptionDescriptor
     ): ScoredMenuOptionMatch? {
-        val expectedTokens = tokenizeMenuLabel(expectedLabel)
-        val candidateTokens = tokenizeMenuLabel(candidateLabel)
+        val candidateTokens = descriptor.tokens
         if (expectedTokens.isEmpty() || candidateTokens.isEmpty()) return null
 
         val sharedTokens = expectedTokens.intersect(candidateTokens)
@@ -1705,8 +1769,7 @@ class UssdNavigationService : AccessibilityService() {
             token.any(Char::isDigit) || token.length >= 4
         }
         return ScoredMenuOptionMatch(
-            optionKey = "",
-            optionLabel = candidateLabel,
+            descriptor = descriptor,
             sharedTokenCount = sharedCount,
             strongSharedTokenCount = strongSharedCount,
             expectedTokenCount = expectedTokens.size,
@@ -1722,35 +1785,34 @@ class UssdNavigationService : AccessibilityService() {
             .filter { token -> token.length >= 2 || token.any(Char::isDigit) }
             .toSet()
 
-    private fun titlesLookCompatible(learnedTitle: String, currentTitle: String): Boolean {
+    private fun titlesLookCompatible(
+        learnedTitle: String,
+        learnedTokens: Set<String>,
+        currentTitle: String,
+        currentTokens: Set<String>
+    ): Boolean {
         if (learnedTitle.isBlank() || currentTitle.isBlank()) return true
         if (learnedTitle == currentTitle) return true
         if (learnedTitle.contains(currentTitle) || currentTitle.contains(learnedTitle)) return true
-        val learnedTokens = tokenizeMenuLabel(learnedTitle)
-        val currentTokens = tokenizeMenuLabel(currentTitle)
         if (learnedTokens.isEmpty() || currentTokens.isEmpty()) return true
         val sharedCount = learnedTokens.intersect(currentTokens).size
         val requiredShared = minOf(2, learnedTokens.size, currentTokens.size).coerceAtLeast(1)
         return sharedCount >= requiredShared
     }
 
-    private fun isMenuContextCompatible(menu: ParsedMenuSignature, learned: UssdSignatureStep): Boolean {
-        val learnedTitle = normalizeMenuText(learned.menuTitle)
-        val currentTitle = normalizeMenuText(menu.title)
-        if (!titlesLookCompatible(learnedTitle, currentTitle)) {
+    private fun isMenuContextCompatible(menu: ParsedMenuSignature, learned: LearnedSignatureContext): Boolean {
+        if (!titlesLookCompatible(
+                learnedTitle = learned.normalizedMenuTitle,
+                learnedTokens = learned.menuTitleTokens,
+                currentTitle = menu.normalizedTitle,
+                currentTokens = menu.titleTokens
+            )
+        ) {
             return false
         }
 
-        val learnedSnapshot = learned.menuOptionsSnapshot
-            .asSequence()
-            .map(::normalizeMenuText)
-            .filter { it.isNotBlank() }
-            .toSet()
-        val currentSnapshot = menu.options.values
-            .asSequence()
-            .map(::normalizeMenuText)
-            .filter { it.isNotBlank() }
-            .toSet()
+        val learnedSnapshot = learned.normalizedOptionSnapshot
+        val currentSnapshot = menu.normalizedOptionLabels
         if (learnedSnapshot.isEmpty() || currentSnapshot.isEmpty()) return true
 
         val overlapCount = learnedSnapshot.intersect(currentSnapshot).size
@@ -2304,6 +2366,8 @@ class UssdNavigationService : AccessibilityService() {
         hasSeenForegroundPopup = false
         lastMenuSignatureKey = ""
         lastMenuSignature = null
+        loadedSignatureLookupSource = emptyList()
+        loadedSignatureLookup = emptyMap()
         lastScreenSignatureKey = ""
         lastStepActionKey = ""
         lastStepActionElapsed = 0L
@@ -3061,17 +3125,22 @@ class UssdNavigationService : AccessibilityService() {
         return null
     }
 
-    private fun extractAllText(node: AccessibilityNodeInfo): String {
-        val sb = StringBuilder()
+    private fun extractAllText(node: AccessibilityNodeInfo): String =
+        StringBuilder().also { appendAllText(node, it) }.toString()
+
+    private fun appendAllText(node: AccessibilityNodeInfo, into: StringBuilder) {
         try {
-            node.text?.let { sb.append(it).append(' ') }
-            node.contentDescription?.let { sb.append(it).append(' ') }
+            node.text?.let { into.append(it).append(' ') }
+            node.contentDescription?.let { into.append(it).append(' ') }
             for (i in 0 until node.childCount) {
                 val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-                sb.append(extractAllText(child)); child.recycle()
+                try {
+                    appendAllText(child, into)
+                } finally {
+                    child.recycle()
+                }
             }
         } catch (_: Exception) {}
-        return sb.toString()
     }
 
     private class TreeScanAccumulator {
