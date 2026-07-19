@@ -2902,9 +2902,37 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
             .navigationBarsPadding()
             .padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 8.dp)
     ) {
+        val veryCompact = maxWidth < 360.dp
         val compact = maxWidth < 420.dp
-        val centerSlotWidth = if (compact) 92.dp else 106.dp
-        val navHeight = if (compact) 78.dp else 86.dp
+        val centerSlotWidth = when {
+            veryCompact -> 72.dp
+            compact -> 88.dp
+            else -> 106.dp
+        }
+        val navHeight = when {
+            veryCompact -> 72.dp
+            compact -> 78.dp
+            else -> 86.dp
+        }
+        val sideItemGap = when {
+            veryCompact -> 2.dp
+            compact -> 4.dp
+            else -> 6.dp
+        }
+        val rowHorizontalPadding = when {
+            veryCompact -> 4.dp
+            compact -> 8.dp
+            else -> 10.dp
+        }
+        val availableRowWidth = maxWidth - (rowHorizontalPadding * 2)
+        val sideSectionWidth = (availableRowWidth - centerSlotWidth) / 2f
+        val maxSideItemWidth = ((sideSectionWidth - sideItemGap) / 2f).coerceAtLeast(44.dp)
+        val preferredSideItemWidth = when {
+            veryCompact -> 50.dp
+            compact -> 56.dp
+            else -> 68.dp
+        }
+        val sideItemWidth = minOf(preferredSideItemWidth, maxSideItemWidth)
         Surface(
             shape = RoundedCornerShape(30.dp),
             color = C.surface.copy(alpha = 0.98f),
@@ -2929,37 +2957,65 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(navHeight)
-                        .padding(horizontal = if (compact) 8.dp else 10.dp, vertical = 8.dp),
+                        .padding(
+                            horizontal = rowHorizontalPadding,
+                            vertical = if (veryCompact) 6.dp else 8.dp
+                        ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
                         modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        horizontalArrangement = Arrangement.spacedBy(sideItemGap, Alignment.CenterHorizontally),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         NAV_ITEMS.take(2).forEach { item ->
-                            NavBarItemButton(item, current == item, compact = compact) { onSelect(item) }
+                            NavBarItemButton(
+                                item = item,
+                                selected = current == item,
+                                compact = compact,
+                                veryCompact = veryCompact,
+                                itemWidth = sideItemWidth,
+                                onClick = { onSelect(item) }
+                            )
                         }
                     }
                     Spacer(Modifier.width(centerSlotWidth))
                     Row(
                         modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        horizontalArrangement = Arrangement.spacedBy(sideItemGap, Alignment.CenterHorizontally),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         NAV_ITEMS.drop(2).forEach { item ->
-                            NavBarItemButton(item, current == item, compact = compact) { onSelect(item) }
+                            NavBarItemButton(
+                                item = item,
+                                selected = current == item,
+                                compact = compact,
+                                veryCompact = veryCompact,
+                                itemWidth = sideItemWidth,
+                                onClick = { onSelect(item) }
+                            )
                         }
                     }
                 }
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .offset(y = if (compact) (-6).dp else (-8).dp)
+                        .offset(
+                            y = when {
+                                veryCompact -> (-2).dp
+                                compact -> (-6).dp
+                                else -> (-8).dp
+                            }
+                        )
                         .width(centerSlotWidth),
                     contentAlignment = Alignment.Center
                 ) {
-                    StartNavButton(running = running, onClick = onToggleRunning, compact = compact)
+                    StartNavButton(
+                        running = running,
+                        onClick = onToggleRunning,
+                        compact = compact,
+                        veryCompact = veryCompact
+                    )
                 }
             }
         }
@@ -2967,16 +3023,23 @@ private fun VolcanicNavBar(current: Screen, running: Boolean, onSelect: (Screen)
 }
 
 @Composable
-private fun NavBarItemButton(item: Screen, selected: Boolean, compact: Boolean, onClick: () -> Unit) {
+private fun NavBarItemButton(
+    item: Screen,
+    selected: Boolean,
+    compact: Boolean,
+    veryCompact: Boolean,
+    itemWidth: Dp,
+    onClick: () -> Unit
+) {
     val selectedTint = C.amber
     Column(
         modifier = Modifier
-            .width(if (compact) 60.dp else 68.dp)
+            .width(itemWidth)
             .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = if (compact) 4.dp else 6.dp),
+            .padding(vertical = if (veryCompact) 2.dp else if (compact) 4.dp else 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 4.dp)
+        verticalArrangement = Arrangement.spacedBy(if (veryCompact) 2.dp else if (compact) 3.dp else 4.dp)
     ) {
         Surface(
             shape = RoundedCornerShape(18.dp),
@@ -2984,21 +3047,36 @@ private fun NavBarItemButton(item: Screen, selected: Boolean, compact: Boolean, 
             border = if (selected) BorderStroke(1.dp, C.amber.copy(alpha = 0.28f)) else BorderStroke(1.dp, Color.Transparent)
         ) {
             Box(
-                modifier = Modifier.size(width = if (compact) 42.dp else 46.dp, height = if (compact) 36.dp else 38.dp),
+                modifier = Modifier.size(
+                    width = when {
+                        veryCompact -> 36.dp
+                        compact -> 42.dp
+                        else -> 46.dp
+                    },
+                    height = when {
+                        veryCompact -> 30.dp
+                        compact -> 36.dp
+                        else -> 38.dp
+                    }
+                ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     if (selected) item.iconSel else item.icon,
                     null,
                     tint = if (selected) selectedTint else C.t3,
-                    modifier = Modifier.size(if (compact) 18.dp else 20.dp)
+                    modifier = Modifier.size(if (veryCompact) 16.dp else if (compact) 18.dp else 20.dp)
                 )
             }
         }
         Text(
             item.label,
             modifier = Modifier.fillMaxWidth(),
-            fontSize = if (compact) 9.sp else 10.sp,
+            fontSize = when {
+                veryCompact -> 8.sp
+                compact -> 9.sp
+                else -> 10.sp
+            },
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             color = if (selected) selectedTint else C.t3,
             maxLines = 1,
@@ -3009,7 +3087,13 @@ private fun NavBarItemButton(item: Screen, selected: Boolean, compact: Boolean, 
 }
 
 @Composable
-private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
+private fun StartNavButton(
+    running: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    veryCompact: Boolean = false
+) {
     val ctx = LocalContext.current
     val color = if (running) C.green else C.red
     val auraAnim = rememberInfiniteTransition(label = "start_nav_aura")
@@ -3036,12 +3120,24 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
     }
     Box(
         modifier = modifier
-            .size(if (compact) 82.dp else 92.dp),
+            .size(
+                when {
+                    veryCompact -> 68.dp
+                    compact -> 82.dp
+                    else -> 92.dp
+                }
+            ),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .size(if (compact) 68.dp else 78.dp)
+                .size(
+                    when {
+                        veryCompact -> 56.dp
+                        compact -> 68.dp
+                        else -> 78.dp
+                    }
+                )
                 .graphicsLayer {
                     scaleX = pulseScale
                     scaleY = pulseScale
@@ -3055,7 +3151,13 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
             border = BorderStroke(2.dp, color.copy(alpha = 0.88f)),
             shadowElevation = 18.dp,
             modifier = Modifier
-                .size(if (compact) 60.dp else 68.dp)
+                .size(
+                    when {
+                        veryCompact -> 48.dp
+                        compact -> 60.dp
+                        else -> 68.dp
+                    }
+                )
                 .combinedClickable(
                     onClick = {
                         Toast.makeText(
@@ -3087,7 +3189,13 @@ private fun StartNavButton(running: Boolean, onClick: () -> Unit, modifier: Modi
                     Icons.Outlined.PowerSettingsNew,
                     null,
                     tint = color,
-                    modifier = Modifier.size(if (compact) 22.dp else 26.dp)
+                    modifier = Modifier.size(
+                        when {
+                            veryCompact -> 18.dp
+                            compact -> 22.dp
+                            else -> 26.dp
+                        }
+                    )
                 )
             }
         }
