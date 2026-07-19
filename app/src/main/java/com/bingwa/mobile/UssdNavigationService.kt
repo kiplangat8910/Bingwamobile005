@@ -1418,7 +1418,12 @@ class UssdNavigationService : AccessibilityService() {
         if (!shouldRecordPopupTranscript()) return
         if (signatureLearningMode && snapshot == null) return
         val recordedText = snapshot?.let {
-            formatRecordedDialogText(it.textTokens, it.dialogText)
+            val menu = parseMenuSignature(it)
+            if (signatureLearningMode) {
+                formatLearningRecordedDialogText(snapshot = it, menu = menu)
+            } else {
+                formatRecordedDialogText(it.textTokens, it.dialogText)
+            }
         } ?: formatRecordedDialogText(emptyList(), dialogText)
         if (recordedText.isBlank()) return
         if (popupTranscript.lastOrNull() == recordedText) return
@@ -1426,7 +1431,8 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun captureLearningDialog(snapshot: UssdTreeSnapshot) {
-        val recordedText = formatRecordedDialogText(snapshot.textTokens, snapshot.dialogText)
+        val menu = parseMenuSignature(snapshot) ?: return
+        val recordedText = formatLearningRecordedDialogText(snapshot, menu)
         if (recordedText.isBlank()) return
 
         val captureIndex = when {
@@ -1435,7 +1441,6 @@ class UssdNavigationService : AccessibilityService() {
             else -> currentStep
         }
         val rawStep = advancedSteps.getOrNull(captureIndex).orEmpty()
-        val menu = parseMenuSignature(snapshot)
         val enteredInput = recordedInputForStep(captureIndex, rawStep)
         val selectedOptionLabel = selectedOptionLabelForInput(enteredInput, rawStep, menu)
         val capture = UssdLearningCapture(
@@ -1589,6 +1594,7 @@ class UssdNavigationService : AccessibilityService() {
         }
 
         if (options.isEmpty()) return null
+        if (!looksLikeStructuredUssdMenu(options)) return null
         val title = titleParts.distinct().take(2).joinToString(" / ")
         val normalizedTitle = normalizeMenuText(title)
         val optionDescriptors = options.entries.map { (key, label) ->
@@ -1678,6 +1684,28 @@ class UssdNavigationService : AccessibilityService() {
                 }
             }
             .joinToString("\n")
+    }
+
+    private fun formatLearningRecordedDialogText(
+        snapshot: UssdTreeSnapshot,
+        menu: ParsedMenuSignature?
+    ): String {
+        if (menu == null) return ""
+        val lines = buildList {
+            menu.title
+                .takeIf { it.isNotBlank() }
+                ?.let(::normalizeCollapsedText)
+                ?.takeIf { it.isNotBlank() }
+                ?.let(::add)
+            menu.options.forEach { (key, label) ->
+                val normalizedLabel = normalizeCollapsedText(label)
+                if (normalizedLabel.isBlank()) add(key) else add("$key. $normalizedLabel")
+            }
+        }
+        if (lines.isNotEmpty()) {
+            return lines.joinToString("\n")
+        }
+        return formatRecordedDialogText(snapshot.textTokens, snapshot.dialogText)
     }
 
     private fun looksLikeMenuLabel(token: String): Boolean {
@@ -3657,6 +3685,29 @@ class UssdNavigationService : AccessibilityService() {
                 (hasViewHint && (focusable || clickable)) ||
                 (hasLabelHint && (editable || hasSetTextAction))
             )
+    }
+
+    private fun looksLikeStructuredUssdMenu(options: LinkedHashMap<String, String>): Boolean {
+        if (options.size < 2) return false
+        val numericKeys = options.keys.mapNotNull { it.toIntOrNull() }
+        if (numericKeys.size != options.size) return false
+        val firstKey = numericKeys.firstOrNull() ?: return false
+        if (firstKey != 0 && firstKey != 1) return false
+
+        val sequentialPrefixCount = numericKeys
+            .zipWithNext()
+            .takeWhile { (left, right) -> right == left + 1 }
+            .size + 1
+        if (sequentialPrefixCount < 2) return false
+
+        val meaningfulLabels = options.values.count { label ->
+            val normalized = normalizeActionLabel(label)
+            normalized.isNotBlank() &&
+                normalized !in SEND_BUTTON_LABELS &&
+                normalized !in DISMISS_BUTTON_LABELS &&
+                normalized.any(Char::isLetterOrDigit)
+        }
+        return meaningfulLabels >= 2
     }
 
     private fun isLooseInputCandidate(node: AccessibilityNodeInfo): Boolean {
