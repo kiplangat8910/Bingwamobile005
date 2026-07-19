@@ -1403,6 +1403,7 @@ private fun ScratchConsoleCard(
                     fontFamily = FontFamily.Monospace,
                     lineHeight = 18.sp
                 )
+            }
         }
     }
 }

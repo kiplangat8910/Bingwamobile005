@@ -1752,27 +1752,27 @@ class UssdNavigationService : AccessibilityService() {
                         runnerUp = scored
                     }
                 }
-                val bestMatch = bestMatch ?: return null
-                val uniqueEnough = runnerUp == null || (bestMatch.score - runnerUp.score) >= 0.18
+                val resolvedBestMatch = bestMatch ?: return null
+                val uniqueEnough = runnerUp == null || (resolvedBestMatch.score - runnerUp.score) >= 0.18
                 if (!uniqueEnough) return null
 
                 val expectedTokens = learned.selectedLabelTokens
-                val candidateTokens = bestMatch.descriptor.tokens
-                val hasStrongAnchor = bestMatch.strongSharedTokenCount >= minOf(2, bestMatch.expectedTokenCount.coerceAtLeast(1))
+                val candidateTokens = resolvedBestMatch.descriptor.tokens
+                val hasStrongAnchor = resolvedBestMatch.strongSharedTokenCount >= minOf(2, resolvedBestMatch.expectedTokenCount.coerceAtLeast(1))
                 val hasNumericAnchor = expectedTokens
                     .intersect(candidateTokens)
                     .any { token -> token.any(Char::isDigit) }
-                val safeToAdjust = bestMatch.score >= 0.72 &&
-                    bestMatch.sharedTokenCount >= 1 &&
+                val safeToAdjust = resolvedBestMatch.score >= 0.72 &&
+                    resolvedBestMatch.sharedTokenCount >= 1 &&
                     (hasStrongAnchor || hasNumericAnchor)
-                val strongEnoughToReport = bestMatch.score >= 0.48 &&
-                    bestMatch.sharedTokenCount >= 1 &&
-                    bestMatch.candidateTokenCount > 0
+                val strongEnoughToReport = resolvedBestMatch.score >= 0.48 &&
+                    resolvedBestMatch.sharedTokenCount >= 1 &&
+                    resolvedBestMatch.candidateTokenCount > 0
                 if (!strongEnoughToReport) return null
 
                 MenuOptionMatch(
-                    optionKey = bestMatch.descriptor.key,
-                    optionLabel = bestMatch.descriptor.label,
+                    optionKey = resolvedBestMatch.descriptor.key,
+                    optionLabel = resolvedBestMatch.descriptor.label,
                     autoAdjustSafe = safeToAdjust
                 )
             }
