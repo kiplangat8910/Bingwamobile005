@@ -87,6 +87,8 @@ private const val MAX_RECENT_PINS = 5
 private const val FREE_RECHARGE_WINDOW_LIMIT = 10
 private const val FREE_RECHARGE_WINDOW_MS = 24 * 60 * 60 * 1000L
 private const val USED_PIN_RECORD_RETENTION_MS = 60 * 60 * 1000L
+private const val SCRATCH_BALANCE_REFRESH_POLL_MS = 250L
+private const val SCRATCH_BALANCE_REFRESH_TIMEOUT_MS = 30_000L
 private const val SCRATCH_DEFAULT_SCAN_MESSAGE =
     "Pick one image to scan for 16-digit scratch card PINs."
 
@@ -243,6 +245,46 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         }
     }
 
+    fun applyLiveBalance(display: String, checkedAt: Long = System.currentTimeMillis()) {
+        if (display.isBlank()) return
+        balanceDisplay = display
+        lastBalanceCheckedAt = checkedAt
+    }
+
+    fun syncBalanceFromRechargeResponse(rawResponse: String): Boolean {
+        val parsedBalance = BalanceChecker.parseBalanceDisplay(rawResponse)
+        if (parsedBalance.isBlank()) return false
+
+        applyLiveBalance(parsedBalance)
+        BalanceChecker.currentBalanceStr = parsedBalance
+        val parsedAmount = BalanceChecker.parseBalanceInt(rawResponse)
+        if (parsedAmount >= 0) {
+            BalanceChecker.currentBalance = parsedAmount
+        }
+        RelayManager.syncPrimaryAirtimeBalance(ctx, parsedBalance)
+        return true
+    }
+
+    fun requestBalanceRefresh() {
+        if (isRefreshingBalance) return
+
+        isRefreshingBalance = true
+        if (!BalanceChecker.checking) {
+            BalanceChecker.requestBalanceCheck(ctx)
+        }
+
+        scope.launch {
+            var waitedMs = 0L
+            while (BalanceChecker.checking && waitedMs < SCRATCH_BALANCE_REFRESH_TIMEOUT_MS) {
+                delay(SCRATCH_BALANCE_REFRESH_POLL_MS)
+                waitedMs += SCRATCH_BALANCE_REFRESH_POLL_MS
+            }
+
+            applyLiveBalance(BalanceChecker.currentBalanceStr)
+            isRefreshingBalance = false
+        }
+    }
+
     fun runRechargeBatch(targetPins: List<String>) {
         val sanitizedPins = targetPins.filter { it.length == 16 }.distinct()
         if (sanitizedPins.isEmpty()) {
@@ -291,6 +333,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                         completedQueuePins = completedQueuePins + targetPin
                         queueResponses = queueResponses + (targetPin to normalizedResponse)
                         finalResponse = normalizedResponse
+                        syncBalanceFromRechargeResponse(normalizedResponse)
                         responseMessage = if (sanitizedPins.size > 1) {
                             "Card ${index + 1} of ${sanitizedPins.size} completed on $rechargeSimLabelForRun."
                         } else {
@@ -328,6 +371,10 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
             }
             responseMessage = summary
             Toast.makeText(ctx, summary, Toast.LENGTH_SHORT).show()
+            if (successCount > 0) {
+                delay(400L)
+                requestBalanceRefresh()
+            }
         }
     }
 
@@ -339,21 +386,21 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         }
     }
 
-    fun requestBalanceRefresh() {
-        if (isRefreshingBalance || BalanceChecker.checking) return
-        isRefreshingBalance = true
-        BalanceChecker.requestBalanceCheck(ctx)
-        scope.launch {
-            repeat(60) {
-                if (!BalanceChecker.checking) return@repeat
-                delay(250)
+    LaunchedEffect(Unit) {
+        if (BalanceChecker.currentBalanceStr.isBlank()) {
+            requestBalanceRefresh()
+        } else {
+            applyLiveBalance(BalanceChecker.currentBalanceStr, lastBalanceCheckedAt)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            val latestBalance = BalanceChecker.currentBalanceStr
+            if (latestBalance.isNotBlank() && latestBalance != balanceDisplay) {
+                applyLiveBalance(latestBalance)
             }
-            val latest = BalanceChecker.currentBalanceStr
-            if (latest.isNotBlank()) {
-                balanceDisplay = latest
-                lastBalanceCheckedAt = System.currentTimeMillis()
-            }
-            isRefreshingBalance = false
+            delay(SCRATCH_BALANCE_REFRESH_POLL_MS)
         }
     }
 
