@@ -1542,7 +1542,7 @@ private fun ScratchQueueStub(
             }
             Spacer(Modifier.width(12.dp))
             Text(
-                text = pin?.let(::maskScratchPin) ?: "•••• •••• •••• ••••",
+                text = pin?.let(::formatPinForDisplay) ?: "•••• •••• •••• ••••",
                 color = if (pin == null) ScratchText2 else tint,
                 fontSize = 12.5.sp,
                 fontFamily = FontFamily.Monospace,
