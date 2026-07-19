@@ -1,5 +1,7 @@
 package com.bingwa.mobile
 
+import androidx.annotation.Keep
+
 const val OFFER_CATEGORY_DATA = "Data"
 const val OFFER_CATEGORY_CALLS = "Calls"
 const val OFFER_CATEGORY_SMS = "SMS"
@@ -62,6 +64,7 @@ fun offerSimSelectionLabel(selection: Int): String {
     }
 }
 
+@Keep
 data class OfferItem(
     val id: Int,
     val catalogKey: String = "",

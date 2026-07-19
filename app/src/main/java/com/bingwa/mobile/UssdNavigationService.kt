@@ -3,6 +3,7 @@ package com.bingwa.mobile
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -75,14 +76,14 @@ class UssdNavigationService : AccessibilityService() {
         private const val MAX_RETRY_WINDOW_MS    = 60_000L
         private const val SHOW_RUNNING_OVERLAY   = false
         private const val STEP_DELAY_MS          = 20L
-        private const val EVENT_HOT_POLL_MS      = 2L
-        private const val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 8L
-        private const val DUPLICATE_EVENT_WINDOW_MS = 12L
-        private const val FAST_VERIFY_POLL_MS    = 2L
-        private const val HOT_SEND_RETRY_DELAY_MS = 2L
-        private const val SEND_RETRY_DELAY_MS    = 4L
-        private const val POST_WRITE_VERIFY_POLL_MS = 1L
-        private const val POST_WRITE_SEND_RETRY_MS = 1L
+        private const val EVENT_HOT_POLL_MS      = 8L
+        private const val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 12L
+        private const val DUPLICATE_EVENT_WINDOW_MS = 24L
+        private const val FAST_VERIFY_POLL_MS    = 10L
+        private const val HOT_SEND_RETRY_DELAY_MS = 10L
+        private const val SEND_RETRY_DELAY_MS    = 16L
+        private const val POST_WRITE_VERIFY_POLL_MS = 8L
+        private const val POST_WRITE_SEND_RETRY_MS = 8L
         private const val STEP_TIMEOUT_MS           = 4_500L
         private const val STARTUP_STEP_TIMEOUT_MS   = 7_000L
         private const val FINAL_RESPONSE_TIMEOUT_MS = 6_500L
@@ -91,10 +92,10 @@ class UssdNavigationService : AccessibilityService() {
         private const val ROOT_REACQUIRE_TIMEOUT_MS  = 5_000L
         private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 4_000L
         private const val PENDING_STEP_ADVANCE_KICK_MS = 12L
-        private const val VERIFY_POLL_MS         = 4L
-        private const val RAPID_POST_POPUP_POLL_MS = 2L
-        private const val RAPID_POST_POPUP_VERIFY_MS = 1L
-        private const val RAPID_POST_POPUP_SEND_RETRY_MS = 2L
+        private const val VERIFY_POLL_MS         = 20L
+        private const val RAPID_POST_POPUP_POLL_MS = 8L
+        private const val RAPID_POST_POPUP_VERIFY_MS = 8L
+        private const val RAPID_POST_POPUP_SEND_RETRY_MS = 10L
         private const val MAX_VERIFY_ATTEMPTS    = 24
         private const val MAX_SEND_ATTEMPTS      = 10
         private const val NO_FIELD_PATIENCE      = 4
@@ -108,8 +109,8 @@ class UssdNavigationService : AccessibilityService() {
         private const val POPUP_STABILITY_DELAY_MS = 2L
         private const val TAP_GESTURE_DURATION_MS = 10L
         private const val REDIAL_COOLDOWN_MS     = 350L
-        private const val PENDING_ADVANCE_KICK_MS = 4L
-        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 12L
+        private const val PENDING_ADVANCE_KICK_MS = 12L
+        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 24L
         private const val DIALOG_DISMISS_SETTLE_MS = 40L
         private const val UI_KEEP_VISIBLE_INTERVAL_MS = 800L
         private const val STARTUP_UI_KEEP_VISIBLE_MS = 8_000L
@@ -336,6 +337,11 @@ class UssdNavigationService : AccessibilityService() {
     private var runningOverlayView: View? = null
     private var runningOverlayStatusText: TextView? = null
     private var runningOverlayDetailText: TextView? = null
+    private val useRelaxedAccessibilityTimings: Boolean by lazy(LazyThreadSafetyMode.NONE) {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        val isLowRamDevice = activityManager?.isLowRamDevice == true
+        isLowRamDevice || Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
+    }
     private enum class PendingPhase { NONE, WAIT_VERIFY, WAIT_SEND }
 
     private data class InputWriteResult(
@@ -351,6 +357,60 @@ class UssdNavigationService : AccessibilityService() {
         val dialogText: String,
         val strictDialog: Boolean
     )
+
+    private fun timingForDevice(modernMs: Long, relaxedMs: Long): Long =
+        if (useRelaxedAccessibilityTimings) relaxedMs else modernMs
+
+    private val accessibilityNotificationTimeoutMs: Long
+        get() = timingForDevice(ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS, 24L)
+
+    private val duplicateEventWindowMs: Long
+        get() = timingForDevice(DUPLICATE_EVENT_WINDOW_MS, 48L)
+
+    private val eventHotPollMs: Long
+        get() = timingForDevice(EVENT_HOT_POLL_MS, 16L)
+
+    private val fastVerifyPollMs: Long
+        get() = timingForDevice(FAST_VERIFY_POLL_MS, 20L)
+
+    private val verifyPollMs: Long
+        get() = timingForDevice(VERIFY_POLL_MS, 36L)
+
+    private val postWriteVerifyPollMs: Long
+        get() = timingForDevice(POST_WRITE_VERIFY_POLL_MS, 18L)
+
+    private val hotSendRetryDelayMs: Long
+        get() = timingForDevice(HOT_SEND_RETRY_DELAY_MS, 20L)
+
+    private val sendRetryDelayMs: Long
+        get() = timingForDevice(SEND_RETRY_DELAY_MS, 28L)
+
+    private val postWriteSendRetryMs: Long
+        get() = timingForDevice(POST_WRITE_SEND_RETRY_MS, 18L)
+
+    private val rapidPostPopupPollMs: Long
+        get() = timingForDevice(RAPID_POST_POPUP_POLL_MS, 16L)
+
+    private val rapidPostPopupVerifyMs: Long
+        get() = timingForDevice(RAPID_POST_POPUP_VERIFY_MS, 16L)
+
+    private val rapidPostPopupSendRetryMs: Long
+        get() = timingForDevice(RAPID_POST_POPUP_SEND_RETRY_MS, 20L)
+
+    private val pendingAdvanceKickMs: Long
+        get() = timingForDevice(PENDING_ADVANCE_KICK_MS, 24L)
+
+    private val rootReacquireRetryDelayMs: Long
+        get() = timingForDevice(ROOT_REACQUIRE_RETRY_DELAY_MS, 48L)
+
+    private val sendRetryIncrementMs: Long
+        get() = timingForDevice(6L, 12L)
+
+    private val fastSendRetryIncrementMs: Long
+        get() = timingForDevice(4L, 8L)
+
+    private val maxSendRetryDelayMs: Long
+        get() = timingForDevice(48L, 84L)
 
     private val errorKeywords = listOf(
         "connection problem", "invalid mmi", "mmi code", "network error", "invalid", "failed",
@@ -427,7 +487,7 @@ class UssdNavigationService : AccessibilityService() {
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                 AccessibilityServiceInfo.DEFAULT
             // Small coalescing window trims duplicate bursts without adding perceptible latency.
-            notificationTimeout = ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS
+            notificationTimeout = accessibilityNotificationTimeoutMs
         }
         if (pendingAdvancedArm) {
             pendingAdvancedArm = false
@@ -721,7 +781,7 @@ class UssdNavigationService : AccessibilityService() {
         val fingerprint = buildEventFingerprint(event)
         val isDuplicate = fingerprint.isNotBlank() &&
             fingerprint == lastEventFingerprint &&
-            now - lastEventElapsed <= DUPLICATE_EVENT_WINDOW_MS
+            now - lastEventElapsed <= duplicateEventWindowMs
         lastEventFingerprint = fingerprint
         lastEventElapsed = now
         return isDuplicate
@@ -905,7 +965,7 @@ class UssdNavigationService : AccessibilityService() {
                     if (shouldWaitForFinalResponse(effectiveSnapshot, dialogText)) {
                         isProcessing = false
                         pendingProcessToken = SystemClock.elapsedRealtime()
-                        scheduleProcessStep(dialogChanged = false, overrideDelayMs = RAPID_POST_POPUP_POLL_MS)
+                        scheduleProcessStep(dialogChanged = false, overrideDelayMs = rapidPostPopupPollMs)
                         return
                     }
                     val finalText = lastFinalResponse
@@ -990,9 +1050,9 @@ class UssdNavigationService : AccessibilityService() {
                         if (isFinalSignatureLearningStep(currentStep)) {
                             // Keep legacy behavior for learning flows (we don't want to risk changing capture timing).
                             val delay = when {
-                                wroteValue && hasSeenAdvancedPopup -> RAPID_POST_POPUP_VERIFY_MS
-                                wroteValue -> FAST_VERIFY_POLL_MS
-                                else -> VERIFY_POLL_MS
+                                wroteValue && hasSeenAdvancedPopup -> rapidPostPopupVerifyMs
+                                wroteValue -> fastVerifyPollMs
+                                else -> verifyPollMs
                             }
                             if (delay <= 0L) handler.post { verifyLearningFinalInputThenDismiss(valueToEnter, 0, 0) }
                             else handler.postDelayed({ verifyLearningFinalInputThenDismiss(valueToEnter, 0, 0) }, delay)
@@ -1221,12 +1281,12 @@ class UssdNavigationService : AccessibilityService() {
         val token = pendingProcessToken
         val delayMs = overrideDelayMs ?: when {
             dialogChanged && hasFreshRecentUssdContext() -> 0L
-            hasSeenAdvancedPopup && dialogChanged -> RAPID_POST_POPUP_POLL_MS
-            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> RAPID_POST_POPUP_VERIFY_MS
-            dialogChanged && hasRecentUssdUiEvent() -> EVENT_HOT_POLL_MS
+            hasSeenAdvancedPopup && dialogChanged -> rapidPostPopupPollMs
+            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> rapidPostPopupVerifyMs
+            dialogChanged && hasRecentUssdUiEvent() -> eventHotPollMs
             dialogChanged -> POPUP_STABILITY_DELAY_MS
-            hasRecentUssdUiEvent() -> FAST_VERIFY_POLL_MS
-            else -> VERIFY_POLL_MS
+            hasRecentUssdUiEvent() -> fastVerifyPollMs
+            else -> verifyPollMs
         }
         val task = Runnable {
             processStepRunnable = null
@@ -1241,14 +1301,14 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun verificationPollDelay(expected: String, noFieldCount: Int = 0): Long =
         when {
-            hasRecentExpectedInput(expected) && hasRecentUssdUiEvent() -> POST_WRITE_VERIFY_POLL_MS
-            hasRecentExpectedInput(expected) -> POST_WRITE_VERIFY_POLL_MS
-            hasSeenAdvancedPopup && noFieldCount > 0 -> RAPID_POST_POPUP_VERIFY_MS
-            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> RAPID_POST_POPUP_VERIFY_MS
-            hasRecentUssdUiEvent() && noFieldCount > 0 -> EVENT_HOT_POLL_MS
-            noFieldCount > 0 -> FAST_VERIFY_POLL_MS
-            hasRecentUssdUiEvent() -> FAST_VERIFY_POLL_MS
-            else -> VERIFY_POLL_MS
+            hasRecentExpectedInput(expected) && hasRecentUssdUiEvent() -> postWriteVerifyPollMs
+            hasRecentExpectedInput(expected) -> postWriteVerifyPollMs
+            hasSeenAdvancedPopup && noFieldCount > 0 -> rapidPostPopupVerifyMs
+            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> rapidPostPopupVerifyMs
+            hasRecentUssdUiEvent() && noFieldCount > 0 -> eventHotPollMs
+            noFieldCount > 0 -> fastVerifyPollMs
+            hasRecentUssdUiEvent() -> fastVerifyPollMs
+            else -> verifyPollMs
         }
 
     private fun hasRecentUssdUiEvent(): Boolean =
@@ -1258,18 +1318,18 @@ class UssdNavigationService : AccessibilityService() {
         val hasRecentWrite = expectedValue?.let { hasRecentExpectedInput(it) } == true
         val hasRecentVerification = expectedValue?.let { hasRecentVerifiedInput(it) } == true
         val base = when {
-            hasRecentVerification || hasRecentWrite -> POST_WRITE_SEND_RETRY_MS
-            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> RAPID_POST_POPUP_SEND_RETRY_MS
-            hasSeenAdvancedPopup -> HOT_SEND_RETRY_DELAY_MS
-            hasRecentUssdUiEvent() -> HOT_SEND_RETRY_DELAY_MS
-            else -> SEND_RETRY_DELAY_MS
+            hasRecentVerification || hasRecentWrite -> postWriteSendRetryMs
+            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> rapidPostPopupSendRetryMs
+            hasSeenAdvancedPopup -> hotSendRetryDelayMs
+            hasRecentUssdUiEvent() -> hotSendRetryDelayMs
+            else -> sendRetryDelayMs
         }
         val increment = when {
-            hasRecentVerification || hasRecentWrite -> 2L
-            hasSeenAdvancedPopup -> 2L
-            else -> 4L
+            hasRecentVerification || hasRecentWrite -> fastSendRetryIncrementMs
+            hasSeenAdvancedPopup -> fastSendRetryIncrementMs
+            else -> sendRetryIncrementMs
         }
-        return minOf(base + (attempt.toLong() * increment), 20L)
+        return minOf(base + (attempt.toLong() * increment), maxSendRetryDelayMs)
     }
 
     private fun captureSignatureStepIfNeeded(
@@ -2246,7 +2306,7 @@ class UssdNavigationService : AccessibilityService() {
                 }
                 handler.postDelayed(
                     { clickSendButton(expectedValue, attempt + 1, skipFieldVerification) },
-                    sendRetryDelay(attempt, expectedValue) + HOT_SEND_RETRY_DELAY_MS
+                    sendRetryDelay(attempt, expectedValue) + hotSendRetryDelayMs
                 )
             }
         } finally {
@@ -2519,15 +2579,15 @@ class UssdNavigationService : AccessibilityService() {
         when {
             phase == PendingPhase.WAIT_SEND && hasRecentVerifiedInput(expectedValue) -> 0L
             hasSeenAdvancedPopup && hasRecentVerifiedInput(expectedValue) -> 0L
-            hasRecentExpectedInput(expectedValue) && hasRecentUssdUiEvent() -> POST_WRITE_VERIFY_POLL_MS
-            hasRecentExpectedInput(expectedValue) -> POST_WRITE_VERIFY_POLL_MS
-            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> RAPID_POST_POPUP_VERIFY_MS
-            hasRecentVerifiedInput(expectedValue) -> HOT_SEND_RETRY_DELAY_MS
-            hasRecentUssdUiEvent() -> FAST_VERIFY_POLL_MS
-            else -> PENDING_ADVANCE_KICK_MS
+            hasRecentExpectedInput(expectedValue) && hasRecentUssdUiEvent() -> postWriteVerifyPollMs
+            hasRecentExpectedInput(expectedValue) -> postWriteVerifyPollMs
+            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> rapidPostPopupVerifyMs
+            hasRecentVerifiedInput(expectedValue) -> hotSendRetryDelayMs
+            hasRecentUssdUiEvent() -> fastVerifyPollMs
+            else -> pendingAdvanceKickMs
         }
 
-    private fun schedulePendingAdvanceKick(delayMs: Long = ROOT_REACQUIRE_RETRY_DELAY_MS) {
+    private fun schedulePendingAdvanceKick(delayMs: Long = rootReacquireRetryDelayMs) {
         if (!advancedActive || pendingPhase == PendingPhase.NONE) return
         clearPendingAdvanceKick()
         val task = Runnable {
@@ -2568,7 +2628,7 @@ class UssdNavigationService : AccessibilityService() {
                 dismissErrorAndRestart()
             } else {
                 val expected = pendingExpectedValue
-                val delayMs = expected?.let { pendingAdvanceKickDelay(it, pendingPhase) } ?: ROOT_REACQUIRE_RETRY_DELAY_MS
+                val delayMs = expected?.let { pendingAdvanceKickDelay(it, pendingPhase) } ?: rootReacquireRetryDelayMs
                 schedulePendingAdvanceKick(delayMs = delayMs)
             }
             return
@@ -2839,7 +2899,7 @@ class UssdNavigationService : AccessibilityService() {
             return
         }
         pendingProcessToken = now
-        scheduleProcessStep(dialogChanged = false, overrideDelayMs = ROOT_REACQUIRE_RETRY_DELAY_MS)
+        scheduleProcessStep(dialogChanged = false, overrideDelayMs = rootReacquireRetryDelayMs)
     }
 
     private fun clearRootRecoveryState() {

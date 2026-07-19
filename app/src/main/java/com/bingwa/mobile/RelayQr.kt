@@ -2,6 +2,7 @@ package com.bingwa.mobile
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import androidx.annotation.Keep
 import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
 import com.google.zxing.BarcodeFormat
@@ -11,6 +12,7 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
+@Keep
 data class RelayQrPayload(
     val type: String = TYPE,
     val version: Int = 1,

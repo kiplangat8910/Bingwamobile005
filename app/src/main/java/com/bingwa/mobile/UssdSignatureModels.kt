@@ -1,5 +1,8 @@
 package com.bingwa.mobile
 
+import androidx.annotation.Keep
+
+@Keep
 data class UssdSignatureStep(
     val stepIndex: Int = 0,
     val expectedInput: String = "",
@@ -9,6 +12,7 @@ data class UssdSignatureStep(
     val menuOptionsSnapshot: List<String> = emptyList()
 )
 
+@Keep
 data class UssdLearningCapture(
     val stepIndex: Int = -1,
     val enteredInput: String = "",
