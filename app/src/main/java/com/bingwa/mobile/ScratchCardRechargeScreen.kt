@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -67,11 +68,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -114,6 +117,7 @@ private val ScratchText0 = Color(0xFFEEF1F5)
 private val ScratchText1 = Color(0xFF9AA4B2)
 private val ScratchText2 = Color(0xFF5F6773)
 private val ScratchDanger = Color(0xFFFF6B6B)
+private val ScratchSectionGap = 24.dp
 
 private sealed interface ScratchCardRechargeResult {
     data class Completed(val response: String) : ScratchCardRechargeResult
@@ -501,23 +505,23 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
+            ScratchLedStrip(simLabel = selectedSimLabel)
+
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
             ) {
-                ScratchLedStrip(simLabel = selectedSimLabel)
-
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(20.dp))
 
                 ScratchScreenHeader(onBack = onBack)
 
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(16.dp))
 
                 ScratchTicker(text = tickerText)
 
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(ScratchSectionGap))
 
                 ScratchBalanceCard(
                     currency = balanceCurrency,
@@ -528,7 +532,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                     onRefresh = ::requestBalanceRefresh
                 )
 
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(ScratchSectionGap))
 
                 ScratchBatchReadoutCard(
                     subtitle = batchSubtitle,
@@ -538,15 +542,15 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                     progressPercent = progressPercent
                 )
 
-                Spacer(Modifier.height(22.dp))
+                Spacer(Modifier.height(ScratchSectionGap))
 
                 ScratchSectionLabel(text = "Batch Recharge")
 
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
 
                 ScratchProcessRail()
 
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(ScratchSectionGap))
 
                 ScratchActionsCard(
                     primaryLabel = when {
@@ -556,10 +560,6 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                         else -> "Pick Image"
                     },
                     selectedSimLabel = selectedSimLabel,
-                    queueStatusLabel = queueStatusLabel,
-                    queueStatusTint = queueStatusTint,
-                    queueTargetPins = queueTargetPins,
-                    freeLeftCount = freeLeftCount,
                     isBusy = isProcessing || isScanningImage,
                     onPrimaryAction = {
                         if (queuePinsForAction.isNotEmpty()) {
@@ -607,7 +607,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 )
 
                 if (isScanningImage || detectedPins.isNotEmpty() || processedCount > 0) {
-                    Spacer(Modifier.height(22.dp))
+                    Spacer(Modifier.height(ScratchSectionGap))
                     ScratchQueueSection(
                         isScanningImage = isScanningImage,
                         detectedPins = detectedPins,
@@ -648,9 +648,15 @@ private fun ScratchLedStrip(simLabel: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, ScratchLineSoft, RoundedCornerShape(0.dp))
-            .padding(horizontal = 2.dp)
-            .padding(top = 12.dp, bottom = 10.dp),
+            .drawBehind {
+                drawLine(
+                    color = ScratchLineSoft,
+                    start = Offset(0f, size.height),
+                    end = Offset(size.width, size.height),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+            .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -842,7 +848,7 @@ private fun ScratchBalanceCard(
                                 Icons.Rounded.Autorenew,
                                 contentDescription = "Refresh balance",
                                 tint = Color(0xFF5C8F83),
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(13.dp)
                             )
                         }
                     }
@@ -1089,29 +1095,45 @@ private fun ScratchSonarIcon() {
 }
 
 @Composable
-private fun ScratchSectionLabel(text: String) {
+private fun ScratchSectionLabel(
+    text: String,
+    trailingContent: (@Composable RowScope.() -> Unit)? = null
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text.uppercase(Locale.getDefault()),
-            color = ScratchAmber,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.8.sp
-        )
-        Spacer(Modifier.width(10.dp))
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(1.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(ScratchLine, Color.Transparent)
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text.uppercase(Locale.getDefault()),
+                color = ScratchAmber,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.8.sp
+            )
+            Spacer(Modifier.width(10.dp))
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(1.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(ScratchLine, Color.Transparent)
+                        )
                     )
-                )
-        )
+            )
+        }
+        if (trailingContent != null) {
+            Spacer(Modifier.width(10.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                content = trailingContent
+            )
+        }
     }
 }
 
@@ -1236,10 +1258,6 @@ private fun ScratchRailStep(
 private fun ScratchActionsCard(
     primaryLabel: String,
     selectedSimLabel: String,
-    queueStatusLabel: String,
-    queueStatusTint: Color,
-    queueTargetPins: Int,
-    freeLeftCount: Int,
     isBusy: Boolean,
     onPrimaryAction: () -> Unit,
     onChooseSim: () -> Unit,
@@ -1362,13 +1380,9 @@ private fun ScratchQueueSection(
     onShowRecentRecharges: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ScratchSectionLabel(text = "Card Queue")
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        ScratchSectionLabel(
+            text = "Card Queue",
+            trailingContent = {
                 Text(
                     if (isScanningImage) "Scanning" else "${detectedPins.size}",
                     color = ScratchAmber,
@@ -1383,7 +1397,7 @@ private fun ScratchQueueSection(
                     fontFamily = FontFamily.Monospace
                 )
             }
-        }
+        )
 
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             ScratchLegendItem(label = "Free", tint = scratchCoolAccent())
@@ -1416,6 +1430,7 @@ private fun ScratchQueueSection(
                         state = state,
                         selected = queuePin != null && queuePin == selectedPin,
                         response = queuePin?.let { responsesByPin[it].orEmpty() }.orEmpty(),
+                        showDivider = index != totalRows - 1,
                         onClick = { queuePin?.let(onPinClick) }
                     )
                 }
@@ -1456,6 +1471,7 @@ private fun ScratchQueueStub(
     state: ScratchQueueVisualState,
     selected: Boolean,
     response: String,
+    showDivider: Boolean,
     onClick: () -> Unit
 ) {
     val tint = when (state) {
@@ -1477,12 +1493,22 @@ private fun ScratchQueueStub(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = pin != null, onClick = onClick)
-            .padding(vertical = 1.dp)
+            .drawBehind {
+                if (showDivider) {
+                    drawLine(
+                        color = ScratchLine,
+                        start = Offset(0f, size.height),
+                        end = Offset(size.width, size.height),
+                        strokeWidth = 1.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 8.dp.toPx()))
+                    )
+                }
+            }
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 12.dp),
+                .padding(horizontal = 2.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -1490,7 +1516,7 @@ private fun ScratchQueueStub(
                 color = ScratchText2,
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
-                modifier = Modifier.width(20.dp)
+                modifier = Modifier.width(18.dp)
             )
             Box(
                 modifier = Modifier
@@ -1520,28 +1546,35 @@ private fun ScratchQueueStub(
             Text(
                 text = pin?.let(::maskScratchPin) ?: "•••• •••• •••• ••••",
                 color = if (pin == null) ScratchText2 else tint,
-                fontSize = 12.sp,
+                fontSize = 12.5.sp,
                 fontFamily = FontFamily.Monospace,
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.width(8.dp))
-            ScratchPill(text = label, tint = tint)
+            ScratchQueueStatusPill(text = label, tint = tint)
         }
-        if (index < 10) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 28.dp)
-                    .height(1.dp)
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(ScratchLine, Color.Transparent)
-                        )
-                    )
-            )
-        }
+    }
+}
+
+@Composable
+private fun ScratchQueueStatusPill(text: String, tint: Color) {
+    Surface(
+        color = ScratchBg0,
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, tint.copy(alpha = if (tint == ScratchText2) 0.18f else 0.34f))
+    ) {
+        Text(
+            text = text,
+            color = tint,
+            fontSize = 8.5.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.8.sp,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            maxLines = 1
+        )
     }
 }
 
