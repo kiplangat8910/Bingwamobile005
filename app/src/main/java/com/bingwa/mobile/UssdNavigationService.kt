@@ -102,6 +102,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val RECENT_INPUT_GRACE_MS  = 4_000L
         private const val RECENT_VERIFIED_INPUT_GRACE_MS = 6_500L
         private const val RECENT_UI_EVENT_GRACE_MS = 1_200L
+        private const val RECENT_USSD_CONTEXT_WINDOW_MS = 220L
         private const val GESTURE_SETTLE_MS      = 6L
         private const val POST_GESTURE_WAIT_MS   = 4L
         private const val POPUP_STABILITY_DELAY_MS = 4L
@@ -322,6 +323,13 @@ class UssdNavigationService : AccessibilityService() {
     private var waitingForRootSinceElapsed: Long = 0L
     private var lastEventFingerprint = ""
     private var lastEventElapsed = 0L
+    private var recentUssdRoot: AccessibilityNodeInfo? = null
+    private var recentUssdSnapshot: UssdTreeSnapshot? = null
+    private var recentUssdWindowId = -1
+    private var recentUssdWindowPkg = ""
+    private var recentUssdDialogText = ""
+    private var recentUssdStrictDialog = false
+    private var recentUssdCapturedElapsed = 0L
     private var windowManager: WindowManager? = null
     private var runningOverlayView: View? = null
     private var runningOverlayStatusText: TextView? = null
@@ -331,6 +339,15 @@ class UssdNavigationService : AccessibilityService() {
     private data class InputWriteResult(
         val wroteValue: Boolean,
         val likelyVerified: Boolean
+    )
+
+    private data class RecentUssdContext(
+        val root: AccessibilityNodeInfo,
+        val snapshot: UssdTreeSnapshot?,
+        val windowId: Int,
+        val windowPkg: String,
+        val dialogText: String,
+        val strictDialog: Boolean
     )
 
     private val errorKeywords = listOf(
@@ -583,6 +600,14 @@ class UssdNavigationService : AccessibilityService() {
             }
             if (!looksLikeDialog) return
             lastRelevantEventElapsed = SystemClock.elapsedRealtime()
+            rememberRecentUssdContext(
+                root = root,
+                snapshot = snapshot,
+                windowId = windowId,
+                windowPkg = windowPkg,
+                dialogText = dialogText,
+                strictDialog = requireStrictPopupScope
+            )
 
             if (advancedActive && advancedSteps.isNotEmpty()) {
                 if (!hasSeenAdvancedPopup) {
@@ -818,7 +843,9 @@ class UssdNavigationService : AccessibilityService() {
     private fun processStep() {
         if (!advancedActive) { isProcessing = false; return }
         if (pendingStepAdvanceFromKey.isNotBlank()) { isProcessing = false; return }
-        val root = getUssdRoot() ?: run {
+        val requireStrictPopupScope = shouldRequireStrictPopupScope()
+        val recentContext = obtainRecentUssdContext(requireStrictDialog = requireStrictPopupScope)
+        val root = recentContext?.root ?: getUssdRoot() ?: run {
             if (shouldWaitForRootRecovery()) {
                 isProcessing = false
                 waitForRootRecovery()
@@ -831,9 +858,8 @@ class UssdNavigationService : AccessibilityService() {
         }
         try {
             clearRootRecoveryState()
-            val windowPkg = root.packageName?.toString() ?: ""
-            val requireStrictPopupScope = shouldRequireStrictPopupScope()
-            val effectiveSnapshot = capturePreferredPopupSnapshot(
+            val windowPkg = recentContext?.windowPkg ?: (root.packageName?.toString() ?: "")
+            val effectiveSnapshot = recentContext?.snapshot ?: capturePreferredPopupSnapshot(
                 root = root,
                 requireStrictDialog = requireStrictPopupScope
             )
@@ -1168,6 +1194,7 @@ class UssdNavigationService : AccessibilityService() {
         processStepRunnable?.let { handler.removeCallbacks(it) }
         val token = pendingProcessToken
         val delayMs = overrideDelayMs ?: when {
+            dialogChanged && hasFreshRecentUssdContext() -> 0L
             hasSeenAdvancedPopup && dialogChanged -> RAPID_POST_POPUP_POLL_MS
             hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> RAPID_POST_POPUP_VERIFY_MS
             dialogChanged && hasRecentUssdUiEvent() -> EVENT_HOT_POLL_MS
@@ -2143,6 +2170,7 @@ class UssdNavigationService : AccessibilityService() {
         clearPendingStepAdvance()
         pendingProcessToken = 0L
         clearInputWriteMarker()
+        clearRecentUssdContext()
         requestAppUiBehindPopup(force = true)
         updateRunningOverlay()
         redialAdvancedIfNeeded()
@@ -2284,6 +2312,7 @@ class UssdNavigationService : AccessibilityService() {
         clearPendingAdvance()
         clearPendingStepAdvance()
         clearInputWriteMarker()
+        clearRecentUssdContext()
         onDispatchComplete  = null
         tokenPurchaseCallback = null
         resetSignatureTracking()
@@ -2624,6 +2653,59 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun clearRootRecoveryState() {
         waitingForRootSinceElapsed = 0L
+    }
+
+    private fun rememberRecentUssdContext(
+        root: AccessibilityNodeInfo,
+        snapshot: UssdTreeSnapshot?,
+        windowId: Int,
+        windowPkg: String,
+        dialogText: String,
+        strictDialog: Boolean
+    ) {
+        recentUssdRoot?.let { existing ->
+            if (existing !== root) {
+                runCatching { existing.recycle() }
+            }
+        }
+        recentUssdRoot = AccessibilityNodeInfo.obtain(root)
+        recentUssdSnapshot = snapshot
+        recentUssdWindowId = windowId
+        recentUssdWindowPkg = windowPkg
+        recentUssdDialogText = dialogText
+        recentUssdStrictDialog = strictDialog
+        recentUssdCapturedElapsed = SystemClock.elapsedRealtime()
+    }
+
+    private fun hasFreshRecentUssdContext(requireStrictDialog: Boolean = false): Boolean {
+        if (recentUssdCapturedElapsed <= 0L) return false
+        if (SystemClock.elapsedRealtime() - recentUssdCapturedElapsed > RECENT_USSD_CONTEXT_WINDOW_MS) return false
+        if (requireStrictDialog && !recentUssdStrictDialog) return false
+        return recentUssdRoot != null
+    }
+
+    private fun obtainRecentUssdContext(requireStrictDialog: Boolean = false): RecentUssdContext? {
+        if (!hasFreshRecentUssdContext(requireStrictDialog = requireStrictDialog)) return null
+        val root = recentUssdRoot ?: return null
+        return RecentUssdContext(
+            root = AccessibilityNodeInfo.obtain(root),
+            snapshot = recentUssdSnapshot,
+            windowId = recentUssdWindowId,
+            windowPkg = recentUssdWindowPkg,
+            dialogText = recentUssdDialogText,
+            strictDialog = recentUssdStrictDialog
+        )
+    }
+
+    private fun clearRecentUssdContext() {
+        recentUssdRoot?.let { runCatching { it.recycle() } }
+        recentUssdRoot = null
+        recentUssdSnapshot = null
+        recentUssdWindowId = -1
+        recentUssdWindowPkg = ""
+        recentUssdDialogText = ""
+        recentUssdStrictDialog = false
+        recentUssdCapturedElapsed = 0L
     }
 
     private fun startPendingStepAdvance(root: AccessibilityNodeInfo, dialogText: String) {
