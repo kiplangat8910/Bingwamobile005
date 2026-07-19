@@ -1196,6 +1196,11 @@ class UssdNavigationService : AccessibilityService() {
         val score: Int
     )
 
+    private data class StructuredMenuBlock(
+        val titleLines: List<String>,
+        val options: LinkedHashMap<String, String>
+    )
+
     private data class MenuOptionMatch(
         val optionKey: String,
         val optionLabel: String,
@@ -1561,41 +1566,12 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun buildMenuSignature(tokens: List<String>): ParsedMenuSignature? {
         val normalizedTokens = normalizeDialogLines(tokens)
-
-        val options = linkedMapOf<String, String>()
-        val titleParts = mutableListOf<String>()
-        var pendingOptionKey: String? = null
-
-        for (token in normalizedTokens) {
-            val lower = token.lowercase()
-            if (lower in setOf("send", "ok", "call", "cancel", "close", "confirm", "enda", "tuma")) continue
-            val match = MENU_OPTION_REGEX.find(token)
-            if (match != null) {
-                pendingOptionKey = null
-                val key = match.groupValues[1]
-                val label = match.groupValues[2].trim()
-                if (label.isNotBlank()) options[key] = label
-                continue
-            }
-
-            val numberOnly = MENU_OPTION_NUMBER_ONLY_REGEX.find(token)
-            if (numberOnly != null) {
-                pendingOptionKey = numberOnly.groupValues[1]
-                continue
-            }
-
-            val deferredKey = pendingOptionKey
-            if (deferredKey != null && looksLikeMenuLabel(token)) {
-                options[deferredKey] = token
-                pendingOptionKey = null
-            } else if (options.isEmpty()) {
-                titleParts += token
-            }
-        }
-
-        if (options.isEmpty()) return null
-        if (!looksLikeStructuredUssdMenu(options)) return null
-        val title = titleParts.distinct().take(2).joinToString(" / ")
+        val menuBlock = extractStructuredMenuBlock(normalizedTokens) ?: return null
+        val options = menuBlock.options
+        val title = menuBlock.titleLines
+            .distinct()
+            .takeLast(2)
+            .joinToString(" / ")
         val normalizedTitle = normalizeMenuText(title)
         val optionDescriptors = options.entries.map { (key, label) ->
             val normalizedLabel = normalizeMenuText(label)
@@ -1633,8 +1609,125 @@ class UssdNavigationService : AccessibilityService() {
         return collapsed
     }
 
+    private fun extractStructuredMenuBlock(lines: List<String>): StructuredMenuBlock? {
+        if (lines.isEmpty()) return null
+        var bestBlock: StructuredMenuBlock? = null
+        for (startIndex in lines.indices) {
+            val token = lines[startIndex]
+            val key = parseStructuredMenuKey(token) ?: continue
+            if (key != "0" && key != "1") continue
+            val candidate = collectStructuredMenuBlock(lines, startIndex) ?: continue
+            val currentBest = bestBlock
+            if (
+                currentBest == null ||
+                candidate.options.size > currentBest.options.size ||
+                (
+                    candidate.options.size == currentBest.options.size &&
+                        candidate.titleLines.size > currentBest.titleLines.size
+                    )
+            ) {
+                bestBlock = candidate
+            }
+        }
+        return bestBlock
+    }
+
+    private fun collectStructuredMenuBlock(
+        lines: List<String>,
+        startIndex: Int
+    ): StructuredMenuBlock? {
+        val options = linkedMapOf<String, String>()
+        var pendingOptionKey: String? = null
+
+        for (index in startIndex until lines.size) {
+            val token = lines[index]
+            val normalizedAction = normalizeActionLabel(token)
+            if (normalizedAction in SEND_BUTTON_LABELS || normalizedAction in DISMISS_BUTTON_LABELS) {
+                if (options.isNotEmpty()) break
+                continue
+            }
+
+            val numberedOption = MENU_OPTION_REGEX.matchEntire(token)
+            if (numberedOption != null) {
+                val key = numberedOption.groupValues[1]
+                if (!isNextStructuredMenuKey(options, key)) {
+                    if (options.isNotEmpty()) break
+                    return null
+                }
+                val label = normalizeCollapsedText(numberedOption.groupValues[2])
+                if (label.isBlank()) break
+                options[key] = label
+                pendingOptionKey = null
+                continue
+            }
+
+            val numberOnly = MENU_OPTION_NUMBER_ONLY_REGEX.matchEntire(token)
+            if (numberOnly != null) {
+                val key = numberOnly.groupValues[1]
+                if (!isNextStructuredMenuKey(options, key)) {
+                    if (options.isNotEmpty()) break
+                    return null
+                }
+                pendingOptionKey = key
+                continue
+            }
+
+            val deferredKey = pendingOptionKey
+            if (deferredKey != null) {
+                if (!looksLikeMenuLabel(token)) break
+                options[deferredKey] = token
+                pendingOptionKey = null
+                continue
+            }
+
+            if (options.isNotEmpty()) break
+        }
+
+        if (pendingOptionKey != null) return null
+        if (!looksLikeStructuredUssdMenu(LinkedHashMap(options))) return null
+
+        val titleLines = lines
+            .take(startIndex)
+            .takeLast(2)
+            .map(::normalizeCollapsedText)
+            .filter { line ->
+                line.isNotBlank() &&
+                    normalizeActionLabel(line) !in SEND_BUTTON_LABELS &&
+                    normalizeActionLabel(line) !in DISMISS_BUTTON_LABELS
+            }
+
+        return StructuredMenuBlock(
+            titleLines = titleLines,
+            options = LinkedHashMap(options)
+        )
+    }
+
+    private fun parseStructuredMenuKey(token: String): String? =
+        MENU_OPTION_REGEX.matchEntire(token)?.groupValues?.get(1)
+            ?: MENU_OPTION_NUMBER_ONLY_REGEX.matchEntire(token)?.groupValues?.get(1)
+
+    private fun isNextStructuredMenuKey(
+        options: LinkedHashMap<String, String>,
+        key: String
+    ): Boolean {
+        val numericKey = key.toIntOrNull() ?: return false
+        if (options.isEmpty()) return numericKey == 0 || numericKey == 1
+        val lastKey = options.keys.lastOrNull()?.toIntOrNull() ?: return false
+        return numericKey == lastKey + 1
+    }
+
     private fun formatRecordedDialogText(tokens: List<String>, fallbackText: String = ""): String {
         val normalizedLines = normalizeDialogLines(tokens)
+        extractStructuredMenuBlock(normalizedLines)?.let { menuBlock ->
+            return buildList {
+                menuBlock.titleLines.forEach(::add)
+                menuBlock.options.forEach { (key, label) -> add("$key. ${normalizeCollapsedText(label)}") }
+            }
+                .map(::normalizeCollapsedText)
+                .filter { it.isNotBlank() }
+                .distinct()
+                .joinToString("\n")
+        }
         if (normalizedLines.isEmpty()) return normalizeCollapsedText(fallbackText)
 
         val recordedLines = mutableListOf<String>()
@@ -1691,6 +1784,12 @@ class UssdNavigationService : AccessibilityService() {
         menu: ParsedMenuSignature?
     ): String {
         if (menu == null) return ""
+        extractStructuredMenuBlock(normalizeDialogLines(snapshot.textTokens))?.let { menuBlock ->
+            return buildList {
+                menuBlock.titleLines.forEach(::add)
+                menuBlock.options.forEach { (key, label) -> add("$key. ${normalizeCollapsedText(label)}") }
+            }.joinToString("\n")
+        }
         val lines = buildList {
             menu.title
                 .takeIf { it.isNotBlank() }
@@ -3288,7 +3387,9 @@ class UssdNavigationService : AccessibilityService() {
         if (NON_USSD_DIALOG_HINTS.any { combinedText.contains(it) }) return 0
 
         val hasAction = summary.hasSendButton || summary.hasDismissButton || summary.hasEditableField
-        val hasMenuOptions = buildMenuSignature(textTokens) != null
+        val structuredMenu = extractStructuredMenuBlock(textTokens)
+        val hasMenuOptions = structuredMenu != null
+        val structuredMenuOptionCount = structuredMenu?.options?.size ?: 0
         val className = node.className?.toString().orEmpty()
         val hasDialogClass = className.contains("Dialog", ignoreCase = true) ||
             className.contains("AlertDialog", ignoreCase = true) ||
@@ -3313,7 +3414,7 @@ class UssdNavigationService : AccessibilityService() {
         if (summary.hasEditableField) score += 380
         if (summary.hasSendButton) score += 260
         if (summary.hasDismissButton) score += 120
-        if (hasMenuOptions) score += 260
+        if (hasMenuOptions) score += 260 + (structuredMenuOptionCount * 45)
         if (hasUssdLanguage) score += 220
         if (hasDialogClass) score += 180
         if (compactContainer) score += 140
@@ -3326,6 +3427,10 @@ class UssdNavigationService : AccessibilityService() {
         if (centered) score += 70
         score += maxOf(0, 42 - (depth * 4))
         score -= maxOf(0, textTokens.size - 12) * 10
+        if (hasMenuOptions) {
+            val blockLineCount = structuredMenuOptionCount + (structuredMenu?.titleLines?.size ?: 0)
+            score -= maxOf(0, textTokens.size - blockLineCount - 4) * 18
+        }
         return score.takeIf { it > 0 } ?: 0
     }
 
