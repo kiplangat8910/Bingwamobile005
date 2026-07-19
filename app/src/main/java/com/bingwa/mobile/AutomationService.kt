@@ -49,6 +49,12 @@ class AutomationService : Service() {
                 pi.cancel()
             }
         }
+
+        fun stopAutomationNow(context: Context) {
+            UssdNavigationService.cancelActiveSession()
+            runCatching { context.stopService(Intent(context, AutomationService::class.java)) }
+            runCatching { context.stopService(Intent(context, BalanceChecker::class.java)) }
+        }
     }
 
     private data class AutomationRequest(
@@ -113,6 +119,11 @@ class AutomationService : Service() {
                 sendBroadcastUpdate(request.txId, TransactionStatus.PROCESSING.value, msg)
             }
         }
+        if (!isAutomationEnabled()) {
+            handleAutomationPaused(request)
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         // Global safety check: block dispatches to blacklisted numbers (even if scheduled earlier).
         if (request.phoneNumber.isNotBlank() && BlacklistedContactStore.isBlacklisted(this, request.phoneNumber)) {
@@ -152,6 +163,25 @@ class AutomationService : Service() {
             signatureLearning = safeIntent.getBooleanExtra("signatureLearning", false),
             returnToAppAggressively = safeIntent.getBooleanExtra("returnToAppAggressively", true)
         )
+    }
+
+    private fun isAutomationEnabled(): Boolean =
+        getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+            .safeGetBoolean("automation_enabled", true)
+
+    private fun handleAutomationPaused(request: AutomationRequest) {
+        UssdNavigationService.cancelActiveSession()
+        val message = "Automation is stopped. Start automation before running this request."
+        if (request.txId >= 0) {
+            saveTransactionResponse(request.txId, TransactionStatus.CANCELLED.value, message)
+            sendBroadcastUpdate(request.txId, TransactionStatus.CANCELLED.value, message)
+        } else if (request.signatureLearning || request.offerId >= 0) {
+            OfferNotifications.notify(
+                this,
+                "Automation Stopped",
+                message
+            )
+        }
     }
 
     private fun handleSimple(request: AutomationRequest) {

@@ -3657,7 +3657,7 @@ private fun AutomationSettings(onBack: () -> Unit) {
                 ToggleRow(Icons.Rounded.Autorenew, "Enable Automation", "Auto-run bundles on payment", autoEnabled) {
                     autoEnabled = it
                     prefs.edit().putBoolean("automation_enabled", it).apply()
-                    if (!it) ctx.stopService(android.content.Intent(ctx, BalanceChecker::class.java))
+                    if (!it) AutomationService.stopAutomationNow(ctx)
                     else ServiceLauncher.startBalanceChecker(ctx)
                 }
                 GroupDivider()

@@ -2778,7 +2778,7 @@ fun BingwaApp() {
     val toggleRunning = {
         running = !running
         appPrefs.edit().putBoolean("automation_enabled", running).apply()
-        if (!running) ctx.stopService(Intent(ctx, BalanceChecker::class.java))
+        if (!running) AutomationService.stopAutomationNow(ctx)
         else if (canUsePhoneAutomation(ctx)) ServiceLauncher.startBalanceChecker(ctx)
         vib(ctx, if (running) 140L else 120L)
     }
@@ -8595,7 +8595,11 @@ fun SettingsScreen() {
             )
 
             SettingsGroup("Automation") {
-                ToggleRow(Icons.Outlined.Bolt, "Enable Automation", "Auto-run bundles on payment", autoEnabled) { autoEnabled = it; prefs.edit().putBoolean("automation_enabled", it).apply() }
+                ToggleRow(Icons.Outlined.Bolt, "Enable Automation", "Auto-run bundles on payment", autoEnabled) {
+                    autoEnabled = it
+                    prefs.edit().putBoolean("automation_enabled", it).apply()
+                    if (!it) AutomationService.stopAutomationNow(ctx)
+                }
                 GroupDivider()
                 ToggleRow(Icons.Rounded.Autorenew, "Auto-Retry on Failure", "Retry failed USSD up to 3 times", autoRetry) { autoRetry = it; prefs.edit().putBoolean("auto_retry", it).apply() }
                 GroupDivider()

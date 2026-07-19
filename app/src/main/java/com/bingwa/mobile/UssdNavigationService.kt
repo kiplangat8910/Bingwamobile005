@@ -237,6 +237,40 @@ class UssdNavigationService : AccessibilityService() {
             }
         }
 
+        fun cancelActiveSession() {
+            pendingAdvancedArm = false
+            activeInstance?.let { instance ->
+                instance.handler.post {
+                    runCatching { instance.closeCurrentUssdUi() }
+                    instance.cleanupAdvanced()
+                    instance.clearCallbacks()
+                    instance.updateRunningOverlay()
+                }
+            } ?: run {
+                advancedSteps = emptyList()
+                advancedPhoneNumber = ""
+                advancedDialCode = ""
+                advancedOfferId = -1
+                advancedOfferName = ""
+                advancedActive = false
+                advancedInProgress = false
+                currentStep = 0
+                retryCount = 0
+                retryWindowStartedAt = 0L
+                lastRedialElapsed = 0L
+                signatureGuardEnabled = false
+                signatureAction = "STOP"
+                signatureLearningMode = false
+                loadedSignatureSteps = emptyList()
+                tokenPurchaseCallback = null
+                balanceCallback = null
+                onDispatchComplete = null
+                foregroundUiActive = false
+                foregroundUiUntilElapsed = 0L
+                uiReturnSuppressed = false
+            }
+        }
+
         fun beginAdvancedSessionMonitoring() {
             activeInstance?.let { instance ->
                 pendingAdvancedArm = false
