@@ -130,6 +130,8 @@ private fun scratchPanelColor(): Color = lerp(C.surface, C.card, 0.55f)
 
 private fun scratchPanelHighColor(): Color = lerp(C.cardHi, C.orange, 0.08f)
 
+private fun scratchTickerColor(): Color = Color(0xFF100C08).copy(alpha = 0.96f)
+
 @Composable
 fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
@@ -616,15 +618,14 @@ private fun ScratchLedStrip(simLabel: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 4.dp, bottom = 4.dp)
-            .border(1.dp, C.border.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
-            .background(C.surface.copy(alpha = 0.22f), RoundedCornerShape(14.dp))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .border(0.8.dp, C.border.copy(alpha = 0.16f), RoundedCornerShape(0.dp))
+            .padding(horizontal = 2.dp)
+            .padding(top = 12.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(8.dp)
+                .size(7.dp)
                 .clip(CircleShape)
                 .background(scratchCoolAccent())
         )
@@ -656,12 +657,12 @@ private fun ScratchScreenHeader(onBack: () -> Unit) {
     ) {
         Surface(
             modifier = Modifier.clickable(onClick = onBack),
-            color = C.cardHi.copy(alpha = 0.92f),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, C.border.copy(alpha = 0.68f))
+            color = lerp(C.surface, C.card, 0.35f),
+            shape = RoundedCornerShape(10.dp),
+            border = BorderStroke(1.dp, C.border.copy(alpha = 0.56f))
         ) {
             Box(
-                modifier = Modifier.size(42.dp),
+                modifier = Modifier.size(38.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -677,7 +678,7 @@ private fun ScratchScreenHeader(onBack: () -> Unit) {
             Text(
                 "Scratch Card Recharge",
                 color = C.t1,
-                fontSize = 22.sp,
+                fontSize = 21.sp,
                 fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(4.dp))
@@ -695,8 +696,8 @@ private fun ScratchScreenHeader(onBack: () -> Unit) {
 private fun ScratchTicker(text: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color(0xFF100C08).copy(alpha = 0.94f),
-        shape = RoundedCornerShape(10.dp),
+        color = scratchTickerColor(),
+        shape = RoundedCornerShape(8.dp),
         border = BorderStroke(1.dp, C.orange.copy(alpha = 0.18f))
     ) {
         Box(
@@ -711,12 +712,12 @@ private fun ScratchTicker(text: String) {
                         )
                     )
                 )
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .padding(horizontal = 14.dp, vertical = 8.dp)
         ) {
             Text(
                 text = text,
                 color = C.orange,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.6.sp,
@@ -737,11 +738,11 @@ private fun ScratchBalanceCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = scratchPanelColor(),
+        color = lerp(C.bg, scratchCoolAccent(), 0.04f),
         shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, scratchCoolAccent().copy(alpha = 0.18f))
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .background(
                     Brush.verticalGradient(
@@ -754,91 +755,109 @@ private fun ScratchBalanceCard(
                 )
                 .padding(horizontal = 20.dp, vertical = 18.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(scratchCoolAccent())
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .align(Alignment.TopCenter)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                scratchCoolAccent().copy(alpha = 0.5f),
+                                Color.Transparent
+                            )
+                        ),
+                        RoundedCornerShape(999.dp)
+                    )
+            )
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(scratchCoolAccent())
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "AIRTIME BALANCE",
+                            color = scratchCoolAccent().copy(alpha = 0.72f),
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.6.sp
+                        )
+                    }
+                    Surface(
+                        modifier = Modifier.clickable(enabled = !isRefreshing, onClick = onRefresh),
+                        color = scratchCoolDim(0.10f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, scratchCoolAccent().copy(alpha = 0.18f))
+                    ) {
+                        Box(
+                            modifier = Modifier.size(28.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Rounded.Autorenew,
+                                contentDescription = "Refresh balance",
+                                tint = scratchCoolAccent().copy(alpha = 0.72f),
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        currency,
+                        color = scratchCoolAccent().copy(alpha = 0.72f),
+                        fontSize = 16.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(bottom = 6.dp)
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "AIRTIME BALANCE",
+                        amount,
+                        color = scratchCoolAccent(),
+                        fontSize = 42.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        simLabel,
                         color = scratchCoolAccent().copy(alpha = 0.72f),
                         fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.6.sp
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        checkedLabel,
+                        color = C.t3,
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace
                     )
                 }
-                Surface(
-                    modifier = Modifier.clickable(enabled = !isRefreshing, onClick = onRefresh),
-                    color = scratchCoolDim(0.10f),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, scratchCoolAccent().copy(alpha = 0.18f))
-                ) {
-                    Box(
-                        modifier = Modifier.size(28.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Rounded.Autorenew,
-                            contentDescription = "Refresh balance",
-                            tint = scratchCoolAccent().copy(alpha = 0.72f),
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    currency,
-                    color = scratchCoolAccent().copy(alpha = 0.72f),
-                    fontSize = 16.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(bottom = 6.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    amount,
-                    color = scratchCoolAccent(),
-                    fontSize = 38.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.ExtraBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    simLabel,
-                    color = scratchCoolAccent().copy(alpha = 0.72f),
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    checkedLabel,
-                    color = C.t3,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace
-                )
             }
         }
     }
@@ -892,23 +911,7 @@ private fun ScratchBatchReadoutCard(
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Surface(
-                    color = C.surface.copy(alpha = 0.92f),
-                    shape = CircleShape,
-                    border = BorderStroke(1.dp, scratchCoolAccent().copy(alpha = 0.28f))
-                ) {
-                    Box(
-                        modifier = Modifier.size(46.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Rounded.Search,
-                            contentDescription = null,
-                            tint = scratchCoolAccent(),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
+                ScratchSonarIcon()
             }
 
             Spacer(Modifier.height(18.dp))
@@ -999,22 +1002,55 @@ private fun ScratchReadoutStat(
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 label.uppercase(Locale.getDefault()),
                 color = C.t3,
-                fontSize = 10.sp,
+                fontSize = 9.5.sp,
                 letterSpacing = 1.sp
             )
             Text(
                 value,
                 color = tint,
-                fontSize = 22.sp,
+                fontSize = 20.sp,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.ExtraBold
             )
         }
+    }
+}
+
+@Composable
+private fun ScratchSonarIcon() {
+    Box(
+        modifier = Modifier.size(46.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier.size(46.dp),
+            color = C.surface.copy(alpha = 0.92f),
+            shape = CircleShape,
+            border = BorderStroke(1.dp, C.border.copy(alpha = 0.52f))
+        ) {}
+        Surface(
+            modifier = Modifier.size(38.dp),
+            color = Color.Transparent,
+            shape = CircleShape,
+            border = BorderStroke(1.dp, scratchCoolAccent().copy(alpha = 0.20f))
+        ) {}
+        Surface(
+            modifier = Modifier.size(30.dp),
+            color = Color.Transparent,
+            shape = CircleShape,
+            border = BorderStroke(1.dp, scratchCoolAccent().copy(alpha = 0.12f))
+        ) {}
+        Icon(
+            Icons.Rounded.Search,
+            contentDescription = null,
+            tint = scratchCoolAccent(),
+            modifier = Modifier.size(18.dp)
+        )
     }
 }
 
@@ -1181,8 +1217,8 @@ private fun ScratchActionsCard(
             enabled = !isBusy,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp),
-            shape = RoundedCornerShape(16.dp),
+                .height(52.dp),
+            shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = C.orange,
                 contentColor = C.bg,
@@ -1205,7 +1241,7 @@ private fun ScratchActionsCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(14.dp),
             border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
             colors = ButtonDefaults.outlinedButtonColors(
                 containerColor = scratchPanelColor().copy(alpha = 0.82f),
@@ -1223,25 +1259,10 @@ private fun ScratchActionsCard(
             )
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ScratchPill(text = queueStatusLabel, tint = queueStatusTint)
-            ScratchPill(
-                text = if (queueTargetPins > 0) {
-                    "${queueTargetPins} queued · ${String.format(Locale.getDefault(), "%02d", freeLeftCount)} free left"
-                } else {
-                    "Ready to scan"
-                },
-                tint = if (queueTargetPins > 0) scratchCoolAccent() else C.t3
-            )
-        }
-
         TextButton(
             onClick = onClear,
-            enabled = !isBusy
+            enabled = !isBusy,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
         ) {
             Icon(Icons.Rounded.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
@@ -1266,7 +1287,7 @@ private fun ScratchConsoleCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = scratchPanelColor().copy(alpha = 0.92f),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.36f))
     ) {
         Row(
@@ -1282,7 +1303,7 @@ private fun ScratchConsoleCard(
             )
             Spacer(Modifier.width(10.dp))
             Text(
-                "${statusLabel.uppercase(Locale.getDefault())} · $message",
+                message,
                 color = C.t2,
                 fontSize = 11.5.sp,
                 fontFamily = FontFamily.Monospace,
@@ -1312,45 +1333,19 @@ private fun ScratchQueueSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                ScratchSectionLabel(text = "Card Queue")
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    if (isScanningImage) {
-                        "Scanning image · building queue"
-                    } else {
-                        "${detectedPins.size} of 10 detected"
-                    },
-                    color = C.t3,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            OutlinedButton(
-                onClick = onShowRecentRecharges,
-                enabled = hasRecentRecharges,
-                modifier = Modifier.height(40.dp),
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.60f)),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = C.surface.copy(alpha = 0.42f),
-                    contentColor = C.t1,
-                    disabledContainerColor = C.surface.copy(alpha = 0.22f),
-                    disabledContentColor = C.t3
-                )
-            ) {
-                Icon(Icons.Rounded.History, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Recent", fontWeight = FontWeight.SemiBold)
-            }
+            ScratchSectionLabel(text = "Card Queue")
+            Text(
+                if (isScanningImage) "Scanning" else "${detectedPins.size} of 10 detected",
+                color = C.t3,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace
+            )
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             ScratchLegendItem(label = "Free", tint = scratchCoolAccent())
             ScratchLegendItem(label = "Paid overflow", tint = C.orange)
-            ScratchLegendItem(label = "Complete", tint = C.green)
-            ScratchLegendItem(label = "Failed", tint = C.red)
+            ScratchLegendItem(label = "Empty", tint = C.t3.copy(alpha = 0.6f))
         }
 
         Surface(
@@ -1359,7 +1354,7 @@ private fun ScratchQueueSection(
             shape = RoundedCornerShape(20.dp),
             border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f))
         ) {
-            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
                 val totalRows = maxOf(10, detectedPins.size)
                 for (index in 0 until totalRows) {
                     val queuePin = detectedPins.getOrNull(index)
@@ -1381,6 +1376,17 @@ private fun ScratchQueueSection(
                         onClick = { queuePin?.let(onPinClick) }
                     )
                 }
+            }
+        }
+
+        if (hasRecentRecharges) {
+            TextButton(
+                onClick = onShowRecentRecharges,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Icon(Icons.Rounded.History, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Recent recharges", color = C.t3, fontSize = 11.sp)
             }
         }
     }
@@ -1428,28 +1434,11 @@ private fun ScratchQueueStub(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = pin != null, onClick = onClick)
-            .padding(vertical = 2.dp)
+            .padding(vertical = 1.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    when {
-                        selected && pin != null -> tint.copy(alpha = 0.10f)
-                        pin != null -> C.surface.copy(alpha = 0.18f)
-                        else -> Color.Transparent
-                    }
-                )
-                .border(
-                    1.dp,
-                    when {
-                        selected && pin != null -> tint.copy(alpha = 0.26f)
-                        pin != null -> C.border.copy(alpha = 0.14f)
-                        else -> Color.Transparent
-                    },
-                    RoundedCornerShape(16.dp)
-                )
                 .padding(horizontal = 10.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1464,8 +1453,8 @@ private fun ScratchQueueStub(
                 modifier = Modifier
                     .size(16.dp)
                     .clip(CircleShape)
-                    .background(tint.copy(alpha = if (pin == null) 0.12f else 0.16f))
-                    .border(1.dp, tint.copy(alpha = if (pin == null) 0.24f else 0.52f), CircleShape),
+                    .background(if (pin == null) C.surface.copy(alpha = 0.65f) else tint.copy(alpha = 0.10f))
+                    .border(1.dp, tint.copy(alpha = if (pin == null) 0.20f else 0.44f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 if (state == ScratchQueueVisualState.DONE) {
@@ -1497,16 +1486,18 @@ private fun ScratchQueueStub(
             Spacer(Modifier.width(8.dp))
             ScratchPill(text = label, tint = tint)
         }
-
-        if (pin != null) {
-            Spacer(Modifier.height(8.dp))
-            Box(modifier = Modifier.padding(start = 32.dp)) {
-                ScratchResponsePreview(
-                    response = response,
-                    tint = tint,
-                    emptyLabel = "No final USSD response captured yet."
-                )
-            }
+        if (index < 10) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 28.dp)
+                    .height(1.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(C.border.copy(alpha = 0.45f), C.border.copy(alpha = 0.0f))
+                        )
+                    )
+            )
         }
     }
 }
