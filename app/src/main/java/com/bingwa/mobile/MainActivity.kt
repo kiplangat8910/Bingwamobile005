@@ -82,6 +82,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -767,14 +768,31 @@ private fun shouldAutoStartPhoneAutomation(context: Context): Boolean {
     return prefs.safeGetBoolean("automation_enabled", true) && canUsePhoneAutomation(context)
 }
 
-private fun requestBalanceCheckSafely(context: Context): Boolean =
+private fun requestBalanceCheckSafely(
+    context: Context,
+    selectionOverride: Int? = null,
+    persistResult: Boolean = selectionOverride == null
+): Boolean =
     runCatching {
-        BalanceChecker.requestBalanceCheck(context)
+        BalanceChecker.requestBalanceCheck(
+            context = context,
+            selectionOverride = selectionOverride,
+            persistResult = persistResult
+        )
         true
     }.getOrElse { error ->
         Log.e("MainActivity", "Unable to start balance refresh", error)
         false
     }
+
+private fun hasTwoActiveSimSlots(context: Context): Boolean {
+    val activeSlots = getAvailableSims(context)
+        .map { info ->
+            info.simSlotIndex.takeIf { it >= 0 } ?: info.subscriptionId
+        }
+        .distinct()
+    return activeSlots.size >= 2
+}
 
 fun canonicalNameTokens(value: String): List<String> =
     value.trim()
@@ -2769,12 +2787,16 @@ fun BingwaApp() {
     }
     var tokenBal by remember { mutableIntStateOf(tm.getBalance()) }
     var airBal by remember { mutableStateOf(BalanceChecker.currentBalanceStr) }
+    var slot2PreviewBalance by remember { mutableStateOf<String?>(null) }
+    var slot2PreviewNonce by remember { mutableIntStateOf(0) }
     var isRefreshing by remember { mutableStateOf(false) }
     var running by remember { mutableStateOf(appPrefs.safeGetBoolean("automation_enabled", true)) }
     var remainingMs by remember { mutableLongStateOf(unlimitedManager.remainingMs()) }
     val txns = remember { mutableStateListOf<Transaction>() }
     val relayCfg by RelayManager.configState.collectAsState()
     val mirroredPrimaryAirtime by RelayManager.mirroredPrimaryAirtime.collectAsState()
+    val hasDualActiveSlots = hasTwoActiveSimSlots(ctx)
+    val canPreviewSlot2 = hasDualActiveSlots && !(relayCfg.enabled && relayCfg.role == "RELAY")
     val toggleRunning = {
         running = !running
         appPrefs.edit().putBoolean("automation_enabled", running).apply()
@@ -2797,8 +2819,33 @@ fun BingwaApp() {
         }
     }
 
+    LaunchedEffect(slot2PreviewBalance, slot2PreviewNonce) {
+        if (slot2PreviewBalance == null) return@LaunchedEffect
+        delay(4_000L)
+        slot2PreviewBalance = null
+    }
+
     DisposableEffect(Unit) {
-        BalanceChecker.balanceCallback = { display -> airBal = display; isRefreshing = false }
+        BalanceChecker.balanceResultListener = { result ->
+            isRefreshing = false
+            when {
+                result.persistResult -> {
+                    airBal = result.display
+                    if (result.display.isBlank()) {
+                        slot2PreviewBalance = null
+                    }
+                }
+                result.selectionOverride == USSD_SIM_SELECTION_SLOT_2 -> {
+                    if (result.display.isBlank()) {
+                        slot2PreviewBalance = null
+                        Toast.makeText(ctx, "Unable to read SIM / Slot 2 balance right now.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        slot2PreviewBalance = result.display
+                        slot2PreviewNonce++
+                    }
+                }
+            }
+        }
         TokenManager.tokenBalanceListener = { newTok ->
             tokenBal = newTok
             remainingMs = unlimitedManager.remainingMs()
@@ -2829,6 +2876,9 @@ fun BingwaApp() {
             addAction(ACTION_TX_CREATED)
         })
         onDispose {
+            if (BalanceChecker.balanceResultListener != null) {
+                BalanceChecker.balanceResultListener = null
+            }
             if (receiverRegistered) {
                 try { ctx.unregisterReceiver(receiver) } catch (_: Exception) {}
             }
@@ -2861,24 +2911,43 @@ fun BingwaApp() {
         Box(Modifier.fillMaxSize().background(C.bg).padding(pad)) {
             AnimatedContent(targetState = screen, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) }, label = "screen") { s ->
                 val unlimitedLabel = unlimitedManager.getActivePlan()?.label?.takeIf { remainingMs > 0L }
-                val displayedAirBal =
+                val defaultAirBal =
                     if (relayCfg.enabled && relayCfg.role == "RELAY") mirroredPrimaryAirtime.ifBlank { airBal }
                     else airBal
+                val displayedAirBal = slot2PreviewBalance ?: defaultAirBal
+                val showSlot2Hint = canPreviewSlot2 && defaultAirBal.isNotBlank()
                 when (s) {
                     Screen.Home     -> HomeScreenVolcanic(
                         tokenBal = tokenBal,
                         airBal = displayedAirBal,
                         isRefreshing = isRefreshing,
+                        canCheckSlot2 = showSlot2Hint,
+                        isShowingSlot2Preview = slot2PreviewBalance != null,
                         txns = txns,
                         running = running,
                         unlimitedLabel = unlimitedLabel,
                         unlimitedRemaining = unlimitedLabel?.let { formatRemainingTimeHome(remainingMs) },
                         onRefresh = {
+                            slot2PreviewBalance = null
                             if (relayCfg.enabled && relayCfg.role == "RELAY") {
                                 airBal = mirroredPrimaryAirtime.ifBlank { airBal }
                             } else if (!isRefreshing) {
                                 isRefreshing = true
                                 if (!requestBalanceCheckSafely(ctx)) isRefreshing = false
+                            }
+                        },
+                        onCheckSlot2 = {
+                            if (showSlot2Hint && !isRefreshing) {
+                                slot2PreviewBalance = null
+                                isRefreshing = true
+                                if (!requestBalanceCheckSafely(
+                                        context = ctx,
+                                        selectionOverride = USSD_SIM_SELECTION_SLOT_2,
+                                        persistResult = false
+                                    )
+                                ) {
+                                    isRefreshing = false
+                                }
                             }
                         },
                         onToggleRunning = toggleRunning
@@ -3293,11 +3362,14 @@ fun HomeScreenVolcanic(
     tokenBal: Int,
     airBal: String,
     isRefreshing: Boolean,
+    canCheckSlot2: Boolean,
+    isShowingSlot2Preview: Boolean,
     txns: MutableList<Transaction>,
     running: Boolean,
     unlimitedLabel: String?,
     unlimitedRemaining: String?,
     onRefresh: () -> Unit,
+    onCheckSlot2: () -> Unit,
     onToggleRunning: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -3406,8 +3478,11 @@ fun HomeScreenVolcanic(
                             scheduledCount = scheduledCount,
                             rate = completionRate,
                             isRefreshing = isRefreshing,
+                            canCheckSlot2 = canCheckSlot2,
+                            isShowingSlot2Preview = isShowingSlot2Preview,
                             spin = spin,
-                            onRefresh = onRefresh
+                            onRefresh = onRefresh,
+                            onCheckSlot2 = onCheckSlot2
                         )
                         HomeActivityHeading(automatedCount = automatedTxns.size)
                         HomeActivityPanel(
@@ -3865,8 +3940,11 @@ private fun HomeSplitBalanceCard(
     scheduledCount: Int,
     rate: Int,
     isRefreshing: Boolean,
+    canCheckSlot2: Boolean,
+    isShowingSlot2Preview: Boolean,
     spin: Float,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onCheckSlot2: () -> Unit
 ) {
     val amber = Color(0xFFFFB454)
     val cyan = Color(0xFF74E6D8)
@@ -3879,6 +3957,49 @@ private fun HomeSplitBalanceCard(
     val cardBg = Color(0xFF1C2123)
     val line = Color(0xFF333B3E)
     val lineSoft = Color(0xFF262D2F)
+    val scope = rememberCoroutineScope()
+    var tapCount by remember { mutableIntStateOf(0) }
+    var tapWindowJob by remember { mutableStateOf<Job?>(null) }
+    val balanceHelperText = when {
+        isRefreshing -> "checking balance"
+        isShowingSlot2Preview -> "showing balance for SIM / Slot 2"
+        canCheckSlot2 -> "tap three times to check balance for SIM / Slot 2"
+        else -> "tap card to refresh"
+    }
+    val handleCardTap: () -> Unit = {
+        if (!isRefreshing) {
+            tapCount += 1
+            if (canCheckSlot2 && tapCount >= 3) {
+                tapWindowJob?.cancel()
+                tapWindowJob = null
+                tapCount = 0
+                onCheckSlot2()
+            } else {
+                tapWindowJob?.cancel()
+                tapWindowJob = scope.launch {
+                    delay(320L)
+                    val finalTapCount = tapCount
+                    tapCount = 0
+                    tapWindowJob = null
+                    if (canCheckSlot2 && finalTapCount >= 3) {
+                        onCheckSlot2()
+                    } else {
+                        onRefresh()
+                    }
+                }
+            }
+        }
+    }
+    DisposableEffect(isRefreshing, canCheckSlot2) {
+        if (isRefreshing || !canCheckSlot2) {
+            tapWindowJob?.cancel()
+            tapWindowJob = null
+            tapCount = 0
+        }
+        onDispose {
+            tapWindowJob?.cancel()
+        }
+    }
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
@@ -3893,7 +4014,7 @@ private fun HomeSplitBalanceCard(
                 )
             )
             .border(1.dp, lineSoft, RoundedCornerShape(18.dp))
-            .clickable(onClick = onRefresh)
+            .clickable(onClick = handleCardTap)
             .padding(horizontal = 13.dp, vertical = 10.dp)
     ) {
         val compact = maxWidth < 380.dp
@@ -3976,7 +4097,7 @@ private fun HomeSplitBalanceCard(
                         fontFamily = FontFamily.Monospace
                     )
                     Text(
-                        if (isRefreshing) "checking balance" else "tap card to refresh",
+                        balanceHelperText,
                         color = textDimmer,
                         fontSize = 9.sp,
                         maxLines = 1

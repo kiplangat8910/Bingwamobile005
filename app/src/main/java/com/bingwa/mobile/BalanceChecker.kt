@@ -25,12 +25,25 @@ class BalanceChecker : Service() {
         private const val NOTIFICATION_ID = 2013
 
         @Volatile var balanceCallback: ((String) -> Unit)? = null
+        @Volatile var balanceResultListener: ((BalanceCheckResult) -> Unit)? = null
         @Volatile var currentBalanceStr: String = ""
         @Volatile var currentBalance: Int = -1
         @Volatile var checking = false
 
         private val timeoutHandler = Handler(Looper.getMainLooper())
         private var timeoutRunnable: Runnable? = null
+        @Volatile private var activeRequestContext: BalanceRequestContext? = null
+
+        data class BalanceCheckResult(
+            val display: String,
+            val selectionOverride: Int?,
+            val persistResult: Boolean
+        )
+
+        private data class BalanceRequestContext(
+            val selectionOverride: Int? = null,
+            val persistResult: Boolean = true
+        )
 
         private data class BalanceCandidate(
             val amount: Double,
@@ -45,11 +58,20 @@ class BalanceChecker : Service() {
             }
         }
 
-        fun requestBalanceCheck(context: Context) {
+        fun requestBalanceCheck(
+            context: Context,
+            selectionOverride: Int? = null,
+            persistResult: Boolean = selectionOverride == null
+        ) {
             if (checking) { Log.d(TAG, "check already in flight — skipping"); return }
             checking = true
+            val requestContext = BalanceRequestContext(
+                selectionOverride = selectionOverride,
+                persistResult = persistResult
+            )
+            activeRequestContext = requestContext
             armTimeout()
-            val balanceUssd = resolveBalanceUssdCode(context)
+            val balanceUssd = resolveBalanceUssdCode(context, selectionOverride)
             Log.d(TAG, "Requesting balance via $balanceUssd (SILENT)")
 
             UssdNavigationService.balanceCallback = { raw ->
@@ -57,25 +79,41 @@ class BalanceChecker : Service() {
                 cancelTimeout()
                 checking = false
                 UssdNavigationService.balanceCallback = null
+                val completedRequest = activeRequestContext ?: requestContext
+                activeRequestContext = null
 
                 val display = parseBalanceDisplay(raw)
                 val intVal = if (display.isNotEmpty()) parseBalanceInt(raw) else -1
-                currentBalance = intVal
-                currentBalanceStr = display
-                if (display.isNotEmpty()) {
+                if (completedRequest.persistResult) {
+                    currentBalance = intVal
+                    currentBalanceStr = display
+                }
+                if (completedRequest.persistResult && display.isNotEmpty()) {
                     RelayManager.syncPrimaryAirtimeBalance(context, display)
                 }
 
                 Handler(Looper.getMainLooper()).post {
                     balanceCallback?.invoke(display)
-                    // Trigger admin alerts after balance update
-                    MpesaReceiver.checkAndSendAlerts(context)
+                    balanceResultListener?.invoke(
+                        BalanceCheckResult(
+                            display = display,
+                            selectionOverride = completedRequest.selectionOverride,
+                            persistResult = completedRequest.persistResult
+                        )
+                    )
+                    if (completedRequest.persistResult) {
+                        // Trigger admin alerts after balance update
+                        MpesaReceiver.checkAndSendAlerts(context)
+                    }
                 }
             }
 
             // Try UssdHelper first (silent), fallback to AutomationService SIMPLE
             val helperSuccess = UssdHelper.dialUssd(
-                context, balanceUssd, silentOnly = true,
+                context,
+                balanceUssd,
+                silentOnly = true,
+                subIdOverride = selectionOverride,
                 onSuccess = { response ->
                     Log.d(TAG, "UssdHelper success: '$response'")
                     UssdNavigationService.balanceCallback?.invoke(response)
@@ -86,6 +124,7 @@ class BalanceChecker : Service() {
                         putExtra("mode", "SIMPLE")
                         putExtra("code", balanceUssd)
                         putExtra("phoneNumber", "")
+                        putExtra("simSelection", selectionOverride ?: OFFER_SIM_USE_GENERAL)
                     })
                 }
             )
@@ -95,6 +134,7 @@ class BalanceChecker : Service() {
                     putExtra("mode", "SIMPLE")
                     putExtra("code", balanceUssd)
                     putExtra("phoneNumber", "")
+                    putExtra("simSelection", selectionOverride ?: OFFER_SIM_USE_GENERAL)
                 })
             }
         }
@@ -104,7 +144,18 @@ class BalanceChecker : Service() {
             cancelTimeout()
             checking = false
             UssdNavigationService.balanceCallback = null
-            Handler(Looper.getMainLooper()).post { balanceCallback?.invoke("") }
+            val failedRequest = activeRequestContext ?: BalanceRequestContext()
+            activeRequestContext = null
+            Handler(Looper.getMainLooper()).post {
+                balanceCallback?.invoke("")
+                balanceResultListener?.invoke(
+                    BalanceCheckResult(
+                        display = "",
+                        selectionOverride = failedRequest.selectionOverride,
+                        persistResult = failedRequest.persistResult
+                    )
+                )
+            }
         }
 
         fun parseBalanceDisplay(raw: String): String {
