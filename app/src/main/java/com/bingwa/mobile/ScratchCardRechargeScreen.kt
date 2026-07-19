@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -38,14 +37,10 @@ import androidx.compose.material.icons.rounded.Autorenew
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DeleteSweep
-import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.SimCard
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -99,8 +94,8 @@ private const val MAX_RECENT_PINS = 5
 private const val FREE_RECHARGE_WINDOW_LIMIT = 10
 private const val FREE_RECHARGE_WINDOW_MS = 24 * 60 * 60 * 1000L
 private const val USED_PIN_RECORD_RETENTION_MS = 60 * 60 * 1000L
+private const val SCRATCH_BALANCE_USSD = "*144#"
 private const val SCRATCH_BALANCE_REFRESH_POLL_MS = 250L
-private const val SCRATCH_BALANCE_REFRESH_TIMEOUT_MS = 30_000L
 private const val SCRATCH_BATCH_GAP_MS = 650L
 private const val SCRATCH_DEFAULT_SCAN_MESSAGE =
     "Pick one image to scan for 16-digit scratch card PINs."
@@ -305,20 +300,28 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
 
     fun requestBalanceRefresh() {
         if (isRefreshingBalance) return
-
-        isRefreshingBalance = true
-        if (!BalanceChecker.checking) {
-            BalanceChecker.requestBalanceCheck(ctx)
+        if (sims.isEmpty()) {
+            Toast.makeText(ctx, "No SIM available for airtime balance check.", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        scope.launch {
-            var waitedMs = 0L
-            while (BalanceChecker.checking && waitedMs < SCRATCH_BALANCE_REFRESH_TIMEOUT_MS) {
-                delay(SCRATCH_BALANCE_REFRESH_POLL_MS)
-                waitedMs += SCRATCH_BALANCE_REFRESH_POLL_MS
-            }
+        isRefreshingBalance = true
+        val balanceSimSelection = selectedRechargeSim
+        val balanceSimLabel = selectedSimLabel
 
-            applyLiveBalance(BalanceChecker.currentBalanceStr)
+        scope.launch {
+            when (val result = startScratchBalanceCheck(ctx, balanceSimSelection)) {
+                is ScratchCardRechargeResult.Completed -> {
+                    applyLiveBalance(result.response)
+                    responseMessage = "Airtime balance updated for $balanceSimLabel."
+                    responseIsError = false
+                }
+                is ScratchCardRechargeResult.Failed -> {
+                    responseMessage = result.message
+                    responseIsError = true
+                    Toast.makeText(ctx, result.message, Toast.LENGTH_SHORT).show()
+                }
+            }
             isRefreshingBalance = false
         }
     }
@@ -626,12 +629,6 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
 
                 Spacer(Modifier.height(28.dp))
             }
-
-            ScratchBottomNav(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-            )
         }
     }
 
@@ -1579,71 +1576,6 @@ private fun ScratchQueueStatusPill(text: String, tint: Color) {
     }
 }
 
-@Composable
-private fun ScratchBottomNav(modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-        color = Color.Transparent
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(ScratchBg1, RoundedCornerShape(22.dp))
-                .border(1.dp, ScratchLine, RoundedCornerShape(22.dp))
-                .padding(horizontal = 6.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceAround
-        ) {
-            ScratchNavItem(icon = Icons.Rounded.Home, label = "Home", active = true, modifier = Modifier.weight(1f))
-            ScratchNavItem(icon = Icons.Rounded.SimCard, label = "Manual", modifier = Modifier.weight(1f))
-            Surface(
-                modifier = Modifier.size(52.dp),
-                color = ScratchBg0,
-                shape = CircleShape,
-                border = BorderStroke(1.5.dp, ScratchCyan)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Rounded.PowerSettingsNew,
-                        contentDescription = null,
-                        tint = ScratchCyan,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-            ScratchNavItem(icon = Icons.Rounded.Tune, label = "Tokens", modifier = Modifier.weight(1f))
-            ScratchNavItem(icon = Icons.Rounded.Settings, label = "Settings", modifier = Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-private fun ScratchNavItem(
-    icon: ImageVector,
-    label: String,
-    modifier: Modifier = Modifier,
-    active: Boolean = false
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = if (active) ScratchAmber else ScratchText2,
-            modifier = Modifier.size(19.dp)
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = label,
-            color = if (active) ScratchAmber else ScratchText2,
-            fontSize = 9.5.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-    }
-}
-
 private fun maskScratchPin(pin: String): String {
     if (pin.length != 16) return pin.ifBlank { "•••• •••• •••• ••••" }
     return "•••• •••• •••• ${pin.takeLast(4)}"
@@ -2309,5 +2241,67 @@ private suspend fun startScratchCardRecharge(
         }
     } catch (_: Exception) {
         ScratchCardRechargeResult.Failed("Unable to start recharge on this phone.")
+    }
+}
+
+private suspend fun startScratchBalanceCheck(
+    context: Context,
+    simSelection: Int
+): ScratchCardRechargeResult {
+    return try {
+        suspendCancellableCoroutine { cont ->
+            val executed = UssdHelper.dialUssd(
+                context = context,
+                ussdCode = SCRATCH_BALANCE_USSD,
+                silentOnly = true,
+                subIdOverride = simSelection,
+                onSuccess = { response ->
+                    val display = BalanceChecker.parseBalanceDisplay(response)
+                    if (display.isBlank()) {
+                        if (cont.isActive) {
+                            cont.resumeWith(
+                                Result.success(
+                                    ScratchCardRechargeResult.Failed("Balance check completed, but no airtime balance was found in the USSD response.")
+                                )
+                            )
+                        }
+                        return@dialUssd
+                    }
+
+                    BalanceChecker.currentBalanceStr = display
+                    val parsedAmount = BalanceChecker.parseBalanceInt(response)
+                    if (parsedAmount >= 0) {
+                        BalanceChecker.currentBalance = parsedAmount
+                    }
+                    BalanceChecker.balanceCallback?.invoke(display)
+                    RelayManager.syncPrimaryAirtimeBalance(context, display)
+
+                    if (cont.isActive) {
+                        cont.resumeWith(Result.success(ScratchCardRechargeResult.Completed(display)))
+                    }
+                },
+                onFailure = { error ->
+                    if (cont.isActive) {
+                        cont.resumeWith(
+                            Result.success(
+                                ScratchCardRechargeResult.Failed(
+                                    error.ifBlank { "Unable to complete airtime balance check on this phone." }
+                                )
+                            )
+                        )
+                    }
+                }
+            )
+
+            if (!executed && cont.isActive) {
+                cont.resumeWith(
+                    Result.success(
+                        ScratchCardRechargeResult.Failed("Unable to start airtime balance check on this phone.")
+                    )
+                )
+            }
+        }
+    } catch (_: Exception) {
+        ScratchCardRechargeResult.Failed("Unable to start airtime balance check on this phone.")
     }
 }
