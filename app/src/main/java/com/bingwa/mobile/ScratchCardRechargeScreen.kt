@@ -33,8 +33,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Autorenew
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DeleteSweep
-import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SimCard
 import androidx.compose.material3.AlertDialog
@@ -43,7 +44,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -173,6 +173,18 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     val balanceAmount = splitScratchBalance(balanceDisplay).second
     val processedCount = completedQueuePins.size + failedQueuePins.size
     val progressPercent = if (queueTargetPins == 0) 0 else ((processedCount * 100f) / queueTargetPins).toInt().coerceIn(0, 100)
+    val queueStatusLabel = when {
+        isScanningImage -> "Scanning"
+        isProcessing -> "Running"
+        queueTargetPins > 0 -> "Ready"
+        else -> "Idle"
+    }
+    val queueStatusTint = when {
+        isScanningImage -> C.cyan
+        isProcessing -> C.orange
+        queueTargetPins > 0 -> C.green
+        else -> C.t3
+    }
     val batchSubtitle = when {
         isScanningImage -> "Scanning single image for 16-digit Airtel recharge PINs."
         isProcessing && activeQueuePin != null -> "Running ${processedCount + 1} of $queueTargetPins with a 2-second gap."
@@ -223,7 +235,6 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         queueResponses = emptyMap()
         queueFreeSnapshot = freeLeftCount
         scanMessage = SCRATCH_DEFAULT_SCAN_MESSAGE
-        if (clearPin) pin = ""
         if (clearPin) pin = ""
         if (!isProcessing) {
             finalResponse = ""
@@ -425,6 +436,32 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
 
             Spacer(Modifier.height(16.dp))
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ScratchHeroStat(
+                    label = "Queue",
+                    value = if (queueTargetPins == 0) "Idle" else "$queueTargetPins card${if (queueTargetPins == 1) "" else "s"}",
+                    accent = queueStatusTint,
+                    modifier = Modifier.weight(1f)
+                )
+                ScratchHeroStat(
+                    label = "Free left",
+                    value = "$freeLeftCount of $FREE_RECHARGE_WINDOW_LIMIT",
+                    accent = C.cyan,
+                    modifier = Modifier.weight(1f)
+                )
+                ScratchHeroStat(
+                    label = "Selected SIM",
+                    value = selectedSimLabel,
+                    accent = C.orange,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+
             ScratchBalanceCard(
                 currency = balanceCurrency,
                 amount = balanceAmount,
@@ -462,6 +499,10 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                     else -> "Pick Image"
                 },
                 selectedSimLabel = selectedSimLabel,
+                queueStatusLabel = queueStatusLabel,
+                queueStatusTint = queueStatusTint,
+                queueTargetPins = queueTargetPins,
+                freeLeftCount = freeLeftCount,
                 isBusy = isProcessing || isScanningImage,
                 onPrimaryAction = {
                     if (queuePinsForAction.isNotEmpty()) {
@@ -503,7 +544,9 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
 
             ScratchConsoleCard(
                 message = consoleMessage,
-                isError = responseIsError && !isProcessing
+                isError = responseIsError && !isProcessing,
+                statusLabel = queueStatusLabel,
+                statusTint = queueStatusTint
             )
 
             if (detectedPins.isNotEmpty() || processedCount > 0) {
@@ -517,6 +560,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                     failedQueuePins = failedQueuePins,
                     responsesByPin = savedResponsesByPin + queueResponses,
                     onPinClick = { pin = it },
+                    hasRecentRecharges = usedPinRecords.isNotEmpty(),
                     onShowRecentRecharges = { showRecentRecharges = true }
                 )
             }
@@ -586,16 +630,16 @@ private fun ScratchLedStrip(simLabel: String) {
 private fun ScratchScreenHeader(onBack: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
         Surface(
             modifier = Modifier.clickable(onClick = onBack),
-            color = C.cardHi.copy(alpha = 0.95f),
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, C.border.copy(alpha = 0.7f))
+            color = C.cardHi.copy(alpha = 0.92f),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, C.border.copy(alpha = 0.68f))
         ) {
             Box(
-                modifier = Modifier.size(38.dp),
+                modifier = Modifier.size(42.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -608,10 +652,12 @@ private fun ScratchScreenHeader(onBack: () -> Unit) {
         }
         Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
+            ScratchPill(text = "Silent USSD", tint = C.orange)
+            Spacer(Modifier.height(10.dp))
             Text(
                 "Scratch Card Recharge",
                 color = C.t1,
-                fontSize = 22.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.ExtraBold
             )
             Spacer(Modifier.height(4.dp))
@@ -629,20 +675,40 @@ private fun ScratchScreenHeader(onBack: () -> Unit) {
 private fun ScratchTicker(text: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = C.surface.copy(alpha = 0.52f),
-        shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.32f))
+        color = C.surface.copy(alpha = 0.72f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.44f))
     ) {
-        Text(
-            text = text,
-            color = C.blue,
-            fontSize = 10.sp,
-            fontFamily = FontFamily.Monospace,
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            maxLines = 1
-        )
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            C.orange.copy(alpha = 0.08f),
+                            C.surface.copy(alpha = 0.0f),
+                            C.green.copy(alpha = 0.06f)
+                        )
+                    )
+                )
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            Text(
+                "LIVE COMMAND",
+                color = C.t3,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.2.sp
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = text,
+                color = C.blue,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -1074,112 +1140,222 @@ private fun ScratchRailStep(
 private fun ScratchActionsCard(
     primaryLabel: String,
     selectedSimLabel: String,
+    queueStatusLabel: String,
+    queueStatusTint: Color,
+    queueTargetPins: Int,
+    freeLeftCount: Int,
     isBusy: Boolean,
     onPrimaryAction: () -> Unit,
     onChooseSim: () -> Unit,
     onClear: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(
-            onClick = onPrimaryAction,
-            enabled = !isBusy,
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = C.card.copy(alpha = 0.98f),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.70f))
+    ) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = C.orange,
-                contentColor = C.bg,
-                disabledContainerColor = C.orange.copy(alpha = 0.35f),
-                disabledContentColor = C.bg.copy(alpha = 0.6f)
-            )
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            C.cardHi.copy(alpha = 0.94f),
+                            C.card.copy(alpha = 0.98f),
+                            C.surface.copy(alpha = 0.96f)
+                        )
+                    )
+                )
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Icon(
-                if (primaryLabel.contains("Run", ignoreCase = true)) Icons.Rounded.Bolt else Icons.Rounded.Search,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(primaryLabel, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-        }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Recharge controls",
+                        color = C.t1,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (queueTargetPins > 0) {
+                            "Queue is ready on $selectedSimLabel. The next run will process $queueTargetPins card${if (queueTargetPins == 1) "" else "s"}."
+                        } else {
+                            "Pick a scratch-card image first, then run the detected PINs one after another."
+                        },
+                        color = C.t2,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                ScratchPill(text = queueStatusLabel, tint = queueStatusTint)
+            }
 
-        OutlinedButton(
-            onClick = onChooseSim,
-            enabled = !isBusy,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(14.dp),
-            border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
-            colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = C.card.copy(alpha = 0.96f),
-                contentColor = C.t1,
-                disabledContainerColor = C.card.copy(alpha = 0.72f),
-                disabledContentColor = C.t3
-            )
-        ) {
-            Icon(Icons.Rounded.SimCard, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "Choose SIM - $selectedSimLabel",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ScratchReadoutStat(
+                    label = "Selected SIM",
+                    value = if (selectedSimLabel.length > 12) selectedSimLabel.take(12) + "..." else selectedSimLabel,
+                    tint = C.orange,
+                    modifier = Modifier.weight(1f)
+                )
+                ScratchReadoutStat(
+                    label = "Free left",
+                    value = String.format(Locale.getDefault(), "%02d", freeLeftCount),
+                    tint = C.cyan,
+                    modifier = Modifier.weight(1f)
+                )
+            }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = !isBusy, onClick = onClear)
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Rounded.DeleteSweep,
-                contentDescription = null,
-                tint = C.t3,
-                modifier = Modifier.size(14.dp)
-            )
-            Spacer(Modifier.width(6.dp))
+            Button(
+                onClick = onPrimaryAction,
+                enabled = !isBusy,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = C.orange,
+                    contentColor = C.bg,
+                    disabledContainerColor = C.orange.copy(alpha = 0.35f),
+                    disabledContentColor = C.bg.copy(alpha = 0.6f)
+                )
+            ) {
+                Icon(
+                    if (primaryLabel.contains("Run", ignoreCase = true)) Icons.Rounded.Bolt else Icons.Rounded.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(primaryLabel, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onChooseSim,
+                    enabled = !isBusy,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = C.surface.copy(alpha = 0.46f),
+                        contentColor = C.t1,
+                        disabledContainerColor = C.card.copy(alpha = 0.72f),
+                        disabledContentColor = C.t3
+                    )
+                ) {
+                    Icon(Icons.Rounded.SimCard, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Choose SIM", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                OutlinedButton(
+                    onClick = onClear,
+                    enabled = !isBusy,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = C.surface.copy(alpha = 0.46f),
+                        contentColor = C.t2,
+                        disabledContainerColor = C.card.copy(alpha = 0.72f),
+                        disabledContentColor = C.t3
+                    )
+                ) {
+                    Icon(Icons.Rounded.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Clear scan", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+
             Text(
-                "Clear scan",
+                "Runs each card with a 2-second gap and keeps the latest USSD response visible below.",
                 color = C.t3,
                 fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-                letterSpacing = 0.6.sp
+                lineHeight = 16.sp
             )
         }
     }
 }
 
 @Composable
-private fun ScratchConsoleCard(message: String, isError: Boolean) {
+private fun ScratchConsoleCard(
+    message: String,
+    isError: Boolean,
+    statusLabel: String,
+    statusTint: Color
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = C.card.copy(alpha = 0.96f),
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.4f))
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.46f))
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Live console",
+                    color = C.t1,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                ScratchPill(
+                    text = if (isError) "Issue" else statusLabel,
+                    tint = if (isError) C.red else statusTint
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Row(
                 modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(if (isError) C.red else C.t3)
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                message,
-                color = C.t2,
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-                lineHeight = 16.sp
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        if (isError) C.redDim.copy(alpha = 0.22f) else C.surface.copy(alpha = 0.52f)
+                    )
+                    .border(
+                        1.dp,
+                        if (isError) C.red.copy(alpha = 0.24f) else C.border.copy(alpha = 0.24f),
+                        RoundedCornerShape(16.dp)
+                    )
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(if (isError) C.red else statusTint)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    message,
+                    color = C.t2,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    lineHeight = 18.sp
+                )
             )
         }
     }
@@ -1195,46 +1371,63 @@ private fun ScratchQueueSection(
     failedQueuePins: Set<String>,
     responsesByPin: Map<String, String>,
     onPinClick: (String) -> Unit,
+    hasRecentRecharges: Boolean,
     onShowRecentRecharges: () -> Unit
 ) {
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                "CARD QUEUE",
-                color = C.orange,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.8.sp
-            )
-            Text(
-                "${detectedPins.size} detected",
-                color = C.t3,
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace
-            )
+            Column {
+                Text(
+                    "CARD QUEUE",
+                    color = C.orange,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.8.sp
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "${detectedPins.size} detected · tap any row to inspect the saved response",
+                    color = C.t3,
+                    fontSize = 11.sp
+                )
+            }
+            OutlinedButton(
+                onClick = onShowRecentRecharges,
+                enabled = hasRecentRecharges,
+                modifier = Modifier.height(40.dp),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.60f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = C.surface.copy(alpha = 0.42f),
+                    contentColor = C.t1,
+                    disabledContainerColor = C.surface.copy(alpha = 0.22f),
+                    disabledContentColor = C.t3
+                )
+            ) {
+                Icon(Icons.Rounded.History, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Recent", fontWeight = FontWeight.SemiBold)
+            }
         }
-
-        Spacer(Modifier.height(8.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             ScratchLegendItem(label = "Free", tint = Color(0xFF74E6D8))
             ScratchLegendItem(label = "Paid overflow", tint = C.orange)
-            ScratchLegendItem(label = "Empty", tint = C.t3)
+            ScratchLegendItem(label = "Complete", tint = C.green)
+            ScratchLegendItem(label = "Failed", tint = C.red)
         }
-
-        Spacer(Modifier.height(12.dp))
 
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = C.card.copy(alpha = 0.96f),
-            shape = RoundedCornerShape(16.dp),
+            color = C.card.copy(alpha = 0.98f),
+            shape = RoundedCornerShape(20.dp),
             border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f))
         ) {
-            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                 val totalRows = maxOf(10, detectedPins.size)
                 for (index in 0 until totalRows) {
                     val queuePin = detectedPins.getOrNull(index)
@@ -1252,8 +1445,7 @@ private fun ScratchQueueSection(
                         state = state,
                         selected = queuePin != null && queuePin == selectedPin,
                         response = queuePin?.let { responsesByPin[it].orEmpty() }.orEmpty(),
-                        onClick = { queuePin?.let(onPinClick) },
-                        onShowRecentRecharges = onShowRecentRecharges
+                        onClick = { queuePin?.let(onPinClick) }
                     )
                 }
             }
@@ -1282,8 +1474,7 @@ private fun ScratchQueueStub(
     state: ScratchQueueVisualState,
     selected: Boolean,
     response: String,
-    onClick: () -> Unit,
-    onShowRecentRecharges: () -> Unit
+    onClick: () -> Unit
 ) {
     val tint = when (state) {
         ScratchQueueVisualState.EMPTY -> C.t3
@@ -1303,13 +1494,26 @@ private fun ScratchQueueStub(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(18.dp))
             .clickable(enabled = pin != null, onClick = onClick)
             .background(
-                if (selected && pin != null) tint.copy(alpha = 0.08f) else Color.Transparent,
-                RoundedCornerShape(14.dp)
+                when {
+                    selected && pin != null -> tint.copy(alpha = 0.10f)
+                    pin != null -> C.surface.copy(alpha = 0.22f)
+                    else -> Color.Transparent
+                },
+                RoundedCornerShape(18.dp)
             )
-            .padding(horizontal = 2.dp, vertical = 8.dp)
+            .border(
+                1.dp,
+                when {
+                    selected && pin != null -> tint.copy(alpha = 0.28f)
+                    pin != null -> C.border.copy(alpha = 0.18f)
+                    else -> Color.Transparent
+                },
+                RoundedCornerShape(18.dp)
+            )
+            .padding(horizontal = 10.dp, vertical = 10.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically
@@ -1321,15 +1525,22 @@ private fun ScratchQueueStub(
                 fontFamily = FontFamily.Monospace,
                 modifier = Modifier.width(20.dp)
             )
-            Surface(
-                color = C.surface.copy(alpha = 0.92f),
-                shape = CircleShape,
-                border = BorderStroke(1.dp, tint.copy(alpha = if (pin == null) 0.3f else 0.6f))
+            Box(
+                modifier = Modifier
+                    .size(16.dp)
+                    .clip(CircleShape)
+                    .background(tint.copy(alpha = if (pin == null) 0.18f else 0.16f))
+                    .border(1.dp, tint.copy(alpha = if (pin == null) 0.24f else 0.52f), CircleShape),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier.size(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                if (state == ScratchQueueVisualState.DONE) {
+                    Icon(
+                        Icons.Rounded.CheckCircle,
+                        contentDescription = null,
+                        tint = tint,
+                        modifier = Modifier.size(12.dp)
+                    )
+                } else {
                     Box(
                         modifier = Modifier
                             .size(5.dp)
@@ -1349,32 +1560,11 @@ private fun ScratchQueueStub(
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.width(8.dp))
-            Text(
-                label,
-                color = tint,
-                fontSize = 9.sp,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.7.sp
-            )
-            if (pin != null) {
-                Spacer(Modifier.width(6.dp))
-                IconButton(
-                    onClick = onShowRecentRecharges,
-                    modifier = Modifier.size(34.dp)
-                ) {
-                    Icon(
-                        Icons.Rounded.MoreVert,
-                        contentDescription = "More",
-                        tint = C.t3,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
+            ScratchPill(text = label, tint = tint)
         }
 
         if (pin != null) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             Box(modifier = Modifier.padding(start = 32.dp)) {
                 ScratchResponsePreview(
                     response = response,
