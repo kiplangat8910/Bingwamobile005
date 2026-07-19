@@ -101,6 +101,7 @@ private const val FREE_RECHARGE_WINDOW_MS = 24 * 60 * 60 * 1000L
 private const val USED_PIN_RECORD_RETENTION_MS = 60 * 60 * 1000L
 private const val SCRATCH_BALANCE_REFRESH_POLL_MS = 250L
 private const val SCRATCH_BALANCE_REFRESH_TIMEOUT_MS = 30_000L
+private const val SCRATCH_BATCH_GAP_MS = 650L
 private const val SCRATCH_DEFAULT_SCAN_MESSAGE =
     "Pick one image to scan for 16-digit scratch card PINs."
 
@@ -393,7 +394,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
                 }
 
                 if (index < sanitizedPins.lastIndex) {
-                    delay(2_000L)
+                    delay(SCRATCH_BATCH_GAP_MS)
                 }
             }
             activeQueuePin = null

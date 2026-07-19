@@ -110,7 +110,7 @@ object UssdHelper {
         val slotLabel = target?.slotIndex?.let { "slot ${it + 1}" } ?: "default telephony"
         Log.d("UssdHelper", "Trying USSD on $slotLabel")
 
-        val silentOk = SilentUssd.execute(
+        val silentOk = SilentUssdOptimized.execute(
             tm,
             code,
             onSuccess = { onSuccess?.invoke(it) },
@@ -130,6 +130,27 @@ object UssdHelper {
             }
         )
         if (silentOk) return true
+
+        val legacySilentOk = SilentUssd.execute(
+            tm,
+            code,
+            onSuccess = { onSuccess?.invoke(it) },
+            onFailure = { error ->
+                val nextTarget = targets.getOrNull(attemptIndex + 1)
+                if (nextTarget != null) {
+                    Log.w(
+                        "UssdHelper",
+                        "Legacy silent USSD failed on $slotLabel, retrying slot ${nextTarget.slotIndex + 1}: $error"
+                    )
+                    dialUssdAttempt(context, code, silentOnly, targets, attemptIndex + 1, onSuccess, onFailure)
+                } else if (!silentOnly) {
+                    fallbackToVisible(context, code, onSuccess, onFailure, target?.subId)
+                } else {
+                    onFailure?.invoke(error)
+                }
+            }
+        )
+        if (legacySilentOk) return true
 
         return if (attemptIndex + 1 < targets.size) {
             val nextTarget = targets[attemptIndex + 1]
