@@ -228,7 +228,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     }
     val consoleMessage = when {
         isScanningImage -> "Reading image for 16-digit scratch card PINs..."
-        isProcessing && activeQueuePin != null -> "Running *141*PIN# silently for ${maskScratchPin(activeQueuePin.orEmpty())} on $selectedSimLabel."
+        isProcessing && activeQueuePin != null -> "Running *141*PIN# silently for ${formatPinForDisplay(activeQueuePin.orEmpty())} on $selectedSimLabel."
         finalResponse.isNotBlank() -> responseMessage
         else -> scanMessage
     }
@@ -236,8 +236,8 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         append("*141*")
         append(
             when {
-                activeQueuePin != null -> maskScratchPin(activeQueuePin.orEmpty())
-                pin.length == 16 -> maskScratchPin(pin)
+                activeQueuePin != null -> formatPinForDisplay(activeQueuePin.orEmpty())
+                pin.length == 16 -> formatPinForDisplay(pin)
                 else -> "0000 0000 0000 0000"
             }
         )
@@ -1510,11 +1510,11 @@ private fun ScratchQueueStub(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                String.format(Locale.getDefault(), "%02d", index),
+                String.format(Locale.getDefault(), "#%02d", index),
                 color = ScratchText2,
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
-                modifier = Modifier.width(18.dp)
+                modifier = Modifier.width(24.dp)
             )
             Box(
                 modifier = Modifier
@@ -1542,7 +1542,7 @@ private fun ScratchQueueStub(
             }
             Spacer(Modifier.width(12.dp))
             Text(
-                text = pin?.let(::maskScratchPin) ?: "•••• •••• •••• ••••",
+                text = pin?.let(::formatPinForDisplay) ?: "•••• •••• •••• ••••",
                 color = if (pin == null) ScratchText2 else tint,
                 fontSize = 12.5.sp,
                 fontFamily = FontFamily.Monospace,
@@ -1574,11 +1574,6 @@ private fun ScratchQueueStatusPill(text: String, tint: Color) {
             maxLines = 1
         )
     }
-}
-
-private fun maskScratchPin(pin: String): String {
-    if (pin.length != 16) return pin.ifBlank { "•••• •••• •••• ••••" }
-    return "•••• •••• •••• ${pin.takeLast(4)}"
 }
 
 @Composable
