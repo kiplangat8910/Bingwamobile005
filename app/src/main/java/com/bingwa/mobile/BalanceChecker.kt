@@ -19,9 +19,9 @@ class BalanceChecker : Service() {
         private const val TAG = "BalanceChecker"
         private const val DEFAULT_BALANCE_USSD = "*144#"
         private const val AIRTEL_BALANCE_USSD = "*131#"
-        private const val CHECK_INTERVAL = 2 * 60 * 1000L
+        private const val CHECK_INTERVAL = 60_000L
         private const val BALANCE_TIMEOUT_MS = 30_000L
-        private const val FOREGROUND_REFRESH_COOLDOWN_MS = 15_000L
+        private const val FOREGROUND_REFRESH_COOLDOWN_MS = 3_000L
         private const val CHANNEL_ID = "balance_checker"
         private const val NOTIFICATION_ID = 2013
 
@@ -63,11 +63,12 @@ class BalanceChecker : Service() {
         fun requestBalanceCheck(
             context: Context,
             selectionOverride: Int? = null,
-            persistResult: Boolean = selectionOverride == null
+            persistResult: Boolean = selectionOverride == null,
+            ignoreCooldown: Boolean = false
         ) {
             val now = System.currentTimeMillis()
             if (checking) { Log.d(TAG, "check already in flight — skipping"); return }
-            if (selectionOverride == null && now - lastCheckStartedAt < FOREGROUND_REFRESH_COOLDOWN_MS) {
+            if (!ignoreCooldown && selectionOverride == null && now - lastCheckStartedAt < FOREGROUND_REFRESH_COOLDOWN_MS) {
                 Log.d(TAG, "balance check cooldown active — skipping duplicate request")
                 return
             }
