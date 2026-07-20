@@ -92,6 +92,59 @@ internal object TransactionStore {
         }
     }
 
+    fun restartExisting(
+        context: Context,
+        txId: Int,
+        description: String,
+        amount: String,
+        phone: String,
+        ussd: String,
+        clientName: String = "",
+        status: String = TransactionStatus.PROCESSING.value,
+        source: String = TX_SOURCE_SYSTEM,
+        showInRecent: Boolean = false,
+        offerId: Int = -1,
+        response: String = ""
+    ): Boolean {
+        val updatedTransaction = synchronized(lock) {
+            if (txId < 0) return@synchronized null
+            val current = load(context)
+            val index = current.indexOfFirst { it.id == txId }
+            if (index < 0) return@synchronized null
+
+            val restartedAt = System.currentTimeMillis()
+            val existing = current[index]
+            val normalizedStatus = TransactionStatus.fromString(status)
+            val restartedDate = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
+                .format(java.util.Date(restartedAt))
+
+            current[index] = existing.copy(
+                description = description,
+                amount = amount,
+                amountValue = extractAmountValue(amount),
+                date = restartedDate,
+                status = status,
+                statusEnum = normalizedStatus,
+                ussdCode = ussd,
+                phoneNumber = phone,
+                clientName = formatClientName(clientName),
+                ussdResponse = response,
+                ussdTranscript = "",
+                timestamp = restartedAt,
+                source = source,
+                showInRecent = showInRecent,
+                offerId = offerId,
+                completedAt = 0L,
+                executionDurationMs = 0L
+            )
+            save(context, current)
+            current[index]
+        }
+        if (updatedTransaction == null) return false
+        notifyDispatchStarted(context, updatedTransaction)
+        return true
+    }
+
     fun createPendingTransaction(
         context: Context,
         description: String,

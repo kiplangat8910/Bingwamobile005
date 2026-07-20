@@ -5229,8 +5229,10 @@ private fun retryRecentTransaction(context: Context, tx: Transaction): Transacti
         return TransactionRetryResult(false, "USSD code is missing, so this transaction cannot be retried.")
     }
 
-    val newTxId = createPendingTransaction(
-        context,
+    val retryTxId = tx.id
+    val restarted = TransactionStore.restartExisting(
+        context = context,
+        txId = retryTxId,
         description = matchedOffer?.name ?: tx.description,
         amount = tx.amount,
         phone = phone,
@@ -5239,23 +5241,25 @@ private fun retryRecentTransaction(context: Context, tx: Transaction): Transacti
         status = TransactionStatus.PROCESSING.value,
         source = tx.source,
         showInRecent = true,
-        offerId = matchedOffer?.id ?: tx.offerId
+        offerId = matchedOffer?.id ?: tx.offerId,
+        response = "Retry started. Preparing a fresh execution attempt."
     )
-    if (newTxId < 0) {
+    if (!restarted) {
         return TransactionRetryResult(false, "Retry could not be queued. Please try again.")
     }
+    broadcastTransactionUpdated(context, retryTxId)
 
     context.startOfferAutomation(
         offer = matchedOffer,
         phoneNumber = phone,
-        txId = newTxId,
+        txId = retryTxId,
         finalCode = finalCode,
         mode = matchedOffer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE
     )
     return TransactionRetryResult(
         success = true,
         message = "Retry started for ${matchedOffer?.name ?: tx.description.ifBlank { "this transaction" }}.",
-        newTxId = newTxId
+        newTxId = retryTxId
     )
 }
 
@@ -5393,35 +5397,29 @@ private fun GithubActivityCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(
-                    modifier = Modifier.width(86.dp),
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
                     Text(
                         tx.amount.ifBlank { "-" },
                         color = C.t1,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        textAlign = TextAlign.End,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = statusColor.copy(alpha = 0.10f),
-                        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.28f))
-                    ) {
-                        Text(
-                            executionCopy.statusLabel,
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                            color = statusColor,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = statusColor.copy(alpha = 0.10f),
+                    border = BorderStroke(1.dp, statusColor.copy(alpha = 0.28f))
+                ) {
+                    Text(
+                        executionCopy.statusLabel,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        color = statusColor,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.End
+                    )
                 }
             }
             Row(
