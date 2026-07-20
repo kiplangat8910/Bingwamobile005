@@ -342,6 +342,8 @@ class UssdNavigationService : AccessibilityService() {
         val isLowRamDevice = activityManager?.isLowRamDevice == true
         isLowRamDevice || Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
     }
+    private val useAggressiveVerifiedPopupFastPath: Boolean
+        get() = !useRelaxedAccessibilityTimings && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
     private enum class PendingPhase { NONE, WAIT_VERIFY, WAIT_SEND }
 
     private data class InputWriteResult(
@@ -1317,6 +1319,12 @@ class UssdNavigationService : AccessibilityService() {
     private fun sendRetryDelay(attempt: Int, expectedValue: String? = null): Long {
         val hasRecentWrite = expectedValue?.let { hasRecentExpectedInput(it) } == true
         val hasRecentVerification = expectedValue?.let { hasRecentVerifiedInput(it) } == true
+        if (useAggressiveVerifiedPopupFastPath &&
+            attempt <= 1 &&
+            (hasRecentVerification || (hasRecentWrite && hasRecentUssdUiEvent()))
+        ) {
+            return 0L
+        }
         val base = when {
             hasRecentVerification || hasRecentWrite -> postWriteSendRetryMs
             hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> rapidPostPopupSendRetryMs
@@ -2577,6 +2585,14 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun pendingAdvanceKickDelay(expectedValue: String, phase: PendingPhase): Long =
         when {
+            useAggressiveVerifiedPopupFastPath &&
+                phase == PendingPhase.WAIT_SEND &&
+                (hasRecentVerifiedInput(expectedValue) ||
+                    (hasRecentExpectedInput(expectedValue) && hasRecentUssdUiEvent())) -> 0L
+            useAggressiveVerifiedPopupFastPath &&
+                phase == PendingPhase.WAIT_VERIFY &&
+                hasRecentExpectedInput(expectedValue) &&
+                hasRecentUssdUiEvent() -> 0L
             phase == PendingPhase.WAIT_SEND && hasRecentVerifiedInput(expectedValue) -> 0L
             hasSeenAdvancedPopup && hasRecentVerifiedInput(expectedValue) -> 0L
             hasRecentExpectedInput(expectedValue) && hasRecentUssdUiEvent() -> postWriteVerifyPollMs
