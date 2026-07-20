@@ -1160,6 +1160,8 @@ private data class LearnedStepDetail(
     val menuOptionsSnapshot: List<String>
 )
 
+private val OfferEditorTeal = Color(0xFF74E6D8)
+
 private fun buildLearnedStepDetails(
     learnedSteps: List<UssdSignatureStep>,
     learningCaptures: List<UssdLearningCapture>
@@ -1186,6 +1188,27 @@ private fun buildLearnedStepDetails(
         )
     }
 }
+
+private fun buildLearningRecordExport(details: List<LearnedStepDetail>): String =
+    details.joinToString(separator = "\n\n") { detail ->
+        buildString {
+            appendLine(if (detail.stepIndex >= 0) "Step ${detail.stepIndex + 1}" else "Final Popup")
+            if (detail.menuTitle.isNotBlank()) appendLine("Menu: ${detail.menuTitle}")
+            appendLine("Selected option: ${detail.selectedOptionLabel.ifBlank { "Not captured" }}")
+            appendLine("Sent input: ${detail.enteredInput.ifBlank { "Not captured" }}")
+            if (detail.menuOptionsSnapshot.isNotEmpty()) {
+                appendLine("Visible options: ${detail.menuOptionsSnapshot.joinToString(" | ")}")
+            }
+            if (detail.recordedTexts.isNotEmpty()) {
+                appendLine()
+                detail.recordedTexts.forEachIndexed { index, text ->
+                    appendLine(if (index == 0) "Recorded text:" else "Recorded text ${index + 1}:")
+                    appendLine(text)
+                    if (index != detail.recordedTexts.lastIndex) appendLine()
+                }
+            }
+        }.trim()
+    }
 
 fun loadContacts(prefs: SharedPreferences): List<SavedContact> = SavedContactStore.load(prefs)
 
@@ -2604,14 +2627,30 @@ private fun UssdCodeDialogField(
     onValueChange: (TextFieldValue) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("USSD", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "USSD CODE",
+            color = C.t3,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        )
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
+            shape = RoundedCornerShape(14.dp),
             placeholder = { Text("e.g. *180*5*2*pn*6*1#", color = C.t3) },
-            colors = dialogFieldColors(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = C.amber,
+                unfocusedBorderColor = C.borderHi.copy(alpha = 0.78f),
+                focusedTextColor = C.amber,
+                unfocusedTextColor = C.amber,
+                cursorColor = C.amber,
+                focusedContainerColor = C.bg.copy(alpha = 0.55f),
+                unfocusedContainerColor = C.bg.copy(alpha = 0.45f),
+                focusedPlaceholderColor = C.t3,
+                unfocusedPlaceholderColor = C.t3
+            ),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Ascii,
                 capitalization = KeyboardCapitalization.None,
@@ -2619,8 +2658,8 @@ private fun UssdCodeDialogField(
             ),
             singleLine = true,
             textStyle = LocalTextStyle.current.copy(
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
                 fontFamily = FontFamily.Monospace
             )
         )
@@ -2632,15 +2671,15 @@ private fun UssdCodeDialogField(
                 onClick = { onValueChange(insertIntoTextFieldValue(value, "pn")) },
                 label = { Text("Insert pn") },
                 colors = AssistChipDefaults.assistChipColors(
-                    containerColor = C.cyan.copy(alpha = 0.12f),
-                    labelColor = C.cyan
+                    containerColor = C.amber.copy(alpha = 0.14f),
+                    labelColor = C.amber
                 )
             )
             AssistChip(
                 onClick = { onValueChange(insertIntoTextFieldValue(value, "*")) },
                 label = { Text("Insert *") },
                 colors = AssistChipDefaults.assistChipColors(
-                    containerColor = C.cardHi,
+                    containerColor = C.surface.copy(alpha = 0.92f),
                     labelColor = C.t1
                 )
             )
@@ -2648,7 +2687,7 @@ private fun UssdCodeDialogField(
                 onClick = { onValueChange(insertIntoTextFieldValue(value, "#")) },
                 label = { Text("Insert #") },
                 colors = AssistChipDefaults.assistChipColors(
-                    containerColor = C.cardHi,
+                    containerColor = C.surface.copy(alpha = 0.92f),
                     labelColor = C.t1
                 )
             )
@@ -2674,6 +2713,13 @@ fun DialogDropdown(
     onSelect: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            label.uppercase(),
+            color = C.t3,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        )
         ExposedDropdownMenuBox(
             expanded = expanded,
             onExpandedChange = onExpandedChange
@@ -2684,15 +2730,24 @@ fun DialogDropdown(
                 modifier = Modifier
                     .fillMaxWidth()
                     .menuAnchor(),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(14.dp),
                 readOnly = true,
-                label = { Text(label, color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
                 trailingIcon = {
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
                 },
-                colors = dialogFieldColors(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = C.borderHi,
+                    unfocusedBorderColor = C.borderHi.copy(alpha = 0.82f),
+                    focusedTextColor = C.t1,
+                    unfocusedTextColor = C.t1,
+                    cursorColor = C.t1,
+                    focusedContainerColor = C.bg.copy(alpha = 0.45f),
+                    unfocusedContainerColor = C.bg.copy(alpha = 0.45f),
+                    focusedTrailingIconColor = C.t2,
+                    unfocusedTrailingIconColor = C.t2
+                ),
                 singleLine = true,
-                textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                textStyle = LocalTextStyle.current.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold)
             )
             ExposedDropdownMenu(
                 expanded = expanded,
@@ -9759,6 +9814,9 @@ private fun SignatureLearningDetailsDialog(
     val details = remember(learnedSteps, learningCaptures) {
         buildLearnedStepDetails(learnedSteps, learningCaptures)
     }
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    val exportText = remember(details) { buildLearningRecordExport(details) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -9776,22 +9834,34 @@ private fun SignatureLearningDetailsDialog(
                 containerColor = C.bg,
                 topBar = {
                     Surface(
-                        color = C.surface.copy(alpha = 0.96f),
+                        color = C.surface.copy(alpha = 0.98f),
                         border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .statusBarsPadding()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 18.dp, vertical = 14.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.Top
                         ) {
                             Column(
                                 modifier = Modifier.weight(1f),
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Text("USSD Learning Record", color = C.t1, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text(
+                                    "LEARNING RECORD",
+                                    color = C.amber,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.1.sp
+                                )
+                                Text(
+                                    "Popup Text Record",
+                                    color = C.t1,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.sp
+                                )
                                 Text(
                                     "Saved on ${formatSignatureLearnedAt(learnedAt)}",
                                     color = C.t2,
@@ -9799,9 +9869,9 @@ private fun SignatureLearningDetailsDialog(
                                 )
                             }
                             Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = C.w04,
-                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+                                shape = RoundedCornerShape(10.dp),
+                                color = C.cardHi,
+                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
                             ) {
                                 IconButton(onClick = onDismiss) {
                                     Icon(Icons.Outlined.Close, null, tint = C.t2)
@@ -9824,7 +9894,8 @@ private fun SignatureLearningDetailsDialog(
                     item {
                         OfferDialogSection(
                             title = "Learning Summary",
-                            subtitle = "Review the captured steps, the selected option for each step, and the recorded popup text."
+                                subtitle = "Review the captured steps, selected options, popup text history, and copy the full record in one tap.",
+                                accent = C.amber
                         ) {
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -9832,8 +9903,47 @@ private fun SignatureLearningDetailsDialog(
                             ) {
                                 MiniTag("STEPS ${learnedSteps.size}", C.green)
                                 MiniTag("POPUPS ${learningCaptures.size}", C.amber)
-                                MiniTag(if (details.isEmpty()) "NO RECORD" else "RECORD READY", if (details.isEmpty()) C.red else C.cyan)
+                                    MiniTag(if (details.isEmpty()) "NO RECORD" else "RECORD READY", if (details.isEmpty()) C.red else OfferEditorTeal)
                             }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            clipboard.setText(AnnotatedString(exportText.ifBlank { "No popup record saved yet." }))
+                                            Toast.makeText(context, "Full record copied", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = BorderStroke(1.dp, OfferEditorTeal.copy(alpha = 0.5f))
+                                    ) {
+                                        Icon(Icons.Outlined.ContentCopy, null, tint = OfferEditorTeal, modifier = Modifier.size(15.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Copy Full Record", color = OfferEditorTeal, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    }
+                                }
+                                if (exportText.isNotBlank()) {
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = C.bg.copy(alpha = 0.42f),
+                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f))
+                                    ) {
+                                        SelectionContainer {
+                                            Text(
+                                                exportText,
+                                                modifier = Modifier.padding(12.dp),
+                                                color = C.t2,
+                                                fontSize = 11.sp,
+                                                lineHeight = 17.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                maxLines = 10,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
                         }
                     }
                     if (details.isEmpty()) {
@@ -9868,15 +9978,17 @@ private fun SignatureLearningRecordCard(
     detail: LearnedStepDetail,
     modifier: Modifier = Modifier
 ) {
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(16.dp),
         color = C.cardHi,
-        border = BorderStroke(1.dp, C.border)
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -9889,8 +10001,8 @@ private fun SignatureLearningRecordCard(
                 ) {
                     Text(
                         if (detail.stepIndex >= 0) "Step ${detail.stepIndex + 1}" else "Final Popup",
-                        color = C.cyan,
-                        fontWeight = FontWeight.SemiBold,
+                        color = OfferEditorTeal,
+                        fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
                     if (detail.menuTitle.isNotBlank()) {
@@ -9910,8 +10022,8 @@ private fun SignatureLearningRecordCard(
 
             Surface(
                 shape = RoundedCornerShape(14.dp),
-                color = C.surface.copy(alpha = 0.45f),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.75f))
+                color = C.bg.copy(alpha = 0.38f),
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.72f))
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -9941,12 +10053,31 @@ private fun SignatureLearningRecordCard(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Record",
-                    color = C.t1,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Recorded Popup Text",
+                        color = C.t1,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp
+                    )
+                    if (detail.recordedTexts.isNotEmpty()) {
+                        TextButton(
+                            onClick = {
+                                clipboard.setText(AnnotatedString(detail.recordedTexts.joinToString("\n\n")))
+                                Toast.makeText(context, "Step record copied", Toast.LENGTH_SHORT).show()
+                            },
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Icon(Icons.Outlined.ContentCopy, null, tint = C.t2, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text("Copy", color = C.t2, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
                 if (detail.recordedTexts.isEmpty()) {
                     Text(
                         "No recorded text was saved for this step.",
@@ -9958,7 +10089,7 @@ private fun SignatureLearningRecordCard(
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(14.dp),
-                            color = C.w04,
+                            color = C.bg.copy(alpha = 0.44f),
                             border = BorderStroke(1.dp, C.border.copy(alpha = 0.7f))
                         ) {
                             Column(
@@ -9976,7 +10107,8 @@ private fun SignatureLearningRecordCard(
                                     popupText,
                                     color = C.t1,
                                     fontSize = 11.sp,
-                                    lineHeight = 17.sp
+                                    lineHeight = 17.sp,
+                                    fontFamily = FontFamily.Monospace
                                 )
                             }
                         }
@@ -9999,7 +10131,7 @@ private fun SignatureLearningRecordSection(
     accent: Color,
     actions: @Composable (() -> Unit)? = null
 ) {
-    OfferDialogSection(title = title, subtitle = subtitle) {
+    OfferDialogSection(title = title, subtitle = subtitle, accent = accent) {
         Text(
             "Saved on ${formatSignatureLearnedAt(learnedAt)}",
             color = C.t3,
@@ -10011,7 +10143,7 @@ private fun SignatureLearningRecordSection(
         ) {
             MiniTag("STEPS $learnedStepsCount", accent)
             MiniTag("POPUPS $popupCount", C.amber)
-            MiniTag(if (details.isEmpty()) "NO RECORD" else "RECORD READY", if (details.isEmpty()) C.red else C.cyan)
+            MiniTag(if (details.isEmpty()) "NO RECORD" else "RECORD READY", if (details.isEmpty()) C.red else OfferEditorTeal)
         }
         if (details.isEmpty()) {
             Text(
@@ -10143,10 +10275,15 @@ private fun CompactDialogToggleCard(
 }
 
 @Composable
-private fun OfferDialogSection(title: String, subtitle: String? = null, content: @Composable ColumnScope.() -> Unit) {
+private fun OfferDialogSection(
+    title: String,
+    subtitle: String? = null,
+    accent: Color = C.amber,
+    content: @Composable ColumnScope.() -> Unit
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(16.dp),
         color = C.cardHi.copy(alpha = 0.92f),
         border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
     ) {
@@ -10154,29 +10291,28 @@ private fun OfferDialogSection(title: String, subtitle: String? = null, content:
             Modifier
                 .background(
                     Brush.verticalGradient(
-                        listOf(C.cardHi.copy(alpha = 0.98f), C.card.copy(alpha = 0.90f))
+                        listOf(C.surface.copy(alpha = 0.98f), C.card.copy(alpha = 0.92f))
                     )
                 )
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
                 Box(
                     Modifier
-                        .padding(top = 3.dp)
-                        .width(4.dp)
-                        .height(28.dp)
+                        .padding(top = 2.dp)
+                        .width(3.dp)
+                        .height(30.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(C.cyan)
+                        .background(accent)
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(title, color = C.t1, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     if (!subtitle.isNullOrBlank()) {
                         Text(subtitle, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
                     }
                 }
             }
-            Divider(color = C.w08)
             content()
         }
     }
@@ -10215,7 +10351,8 @@ private fun OfferEditorOverviewCard(
 ) {
     OfferDialogSection(
         title = if (existing != null) "Offer Snapshot" else "New Offer Snapshot",
-        subtitle = "Use this card to confirm the main setup before changing the detailed fields below."
+        subtitle = "Use this card to confirm the main setup before changing the detailed fields below.",
+        accent = OfferEditorTeal
     ) {
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -10250,9 +10387,9 @@ private fun OfferDialogToggleRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = C.cardHi.copy(alpha = 0.92f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+        shape = RoundedCornerShape(14.dp),
+        color = C.bg.copy(alpha = 0.38f),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.8f))
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -10266,7 +10403,7 @@ private fun OfferDialogToggleRow(
             CompactDialogSwitch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
-                checkedTrackColor = C.cyan
+                checkedTrackColor = OfferEditorTeal
             )
         }
     }
@@ -10281,7 +10418,6 @@ fun OfferDialog(
     onApprovePending: (OfferItem) -> Unit,
     onRelearnSignature: (OfferItem) -> Unit
 ) {
-    val configuration = LocalConfiguration.current
     var name by remember(existing?.id, existing?.name) { mutableStateOf(existing?.name ?: "") }
     var codeField by rememberSaveable(existing?.id, existing?.ussdCode, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(existing?.ussdCode ?: ""))
@@ -10324,7 +10460,6 @@ fun OfferDialog(
     val canSave = remember(name, price, code) {
         name.isNotBlank() && code.isNotBlank() && (price.toIntOrNull() ?: 0) > 0
     }
-    val compactActions = configuration.screenWidthDp < 420
 
     fun buildOffer(): OfferItem? {
         val p = price.toIntOrNull() ?: 0
@@ -10380,18 +10515,23 @@ fun OfferDialog(
         ) {
             val showSaveAndLearn = signatureEnabled
             val showProtectionRecords = signatureEnabled || hasLearnedSignature || hasPendingSignature
+            val dialogSubtitle = when {
+                existing?.name?.isNotBlank() == true -> existing.name
+                name.isNotBlank() -> name
+                else -> "${cat.replaceFirstChar { it.uppercase() }} setup"
+            }
             Scaffold(
                 containerColor = C.bg,
                 topBar = {
                     Surface(
-                        color = C.surface.copy(alpha = 0.96f),
+                        color = C.surface.copy(alpha = 0.98f),
                         border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .statusBarsPadding()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 18.dp, vertical = 14.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.Top
                         ) {
@@ -10400,33 +10540,57 @@ fun OfferDialog(
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
-                                    if (existing != null) "BUNDLE SETTINGS" else "CREATE OFFER",
-                                    color = C.cyan,
-                                    fontSize = 11.sp,
+                                    if (existing != null) "BUNDLE SETTINGS" else "BUNDLE CREATION",
+                                    color = C.amber,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 1.1.sp
                                 )
-                                Text(
-                                    if (existing != null) "Edit Bundle" else "New Bundle",
-                                    color = C.t1,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 24.sp,
-                                    lineHeight = 28.sp
-                                )
-                                Text(
-                                    "Full screen editor with offer details, learning steps, selected options, and the saved USSD record.",
-                                    color = C.t2,
-                                    fontSize = 12.sp,
-                                    lineHeight = 18.sp
-                                )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.Bottom
+                                ) {
+                                    Text(
+                                        if (existing != null) "Edit Bundle" else "New Bundle",
+                                        color = C.t1,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 20.sp,
+                                        lineHeight = 24.sp
+                                    )
+                                    Text(
+                                        "· $dialogSubtitle",
+                                        color = C.t2,
+                                        fontSize = 11.sp,
+                                        maxLines = 1
+                                    )
+                                }
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .size(4.dp)
+                                            .clip(CircleShape)
+                                            .background(OfferEditorTeal)
+                                    )
+                                    Text(
+                                        "Offer details, USSD record and execution routing",
+                                        color = C.t3,
+                                        fontSize = 10.sp
+                                    )
+                                }
                             }
                             Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = C.w04,
-                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+                                shape = RoundedCornerShape(10.dp),
+                                color = C.cardHi,
+                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
                             ) {
-                                IconButton(onClick = onDismiss) {
-                                    Icon(Icons.Outlined.Close, null, tint = C.t2)
+                                IconButton(
+                                    onClick = onDismiss,
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Outlined.Close, null, tint = C.t2, modifier = Modifier.size(16.dp))
                                 }
                             }
                         }
@@ -10434,93 +10598,49 @@ fun OfferDialog(
                 },
                 bottomBar = {
                     Surface(
-                        color = C.surface.copy(alpha = 0.97f),
+                        color = C.surface.copy(alpha = 0.98f),
                         border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
                     ) {
-                        if (compactActions && showSaveAndLearn) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .navigationBarsPadding()
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                horizontalAlignment = Alignment.End,
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(horizontal = 18.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = onDismiss,
+                                shape = RoundedCornerShape(11.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                             ) {
-                                TextButton(
-                                    onClick = onDismiss,
-                                    shape = RoundedCornerShape(16.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
+                            }
+                            if (showSaveAndLearn) {
+                                OutlinedButton(
+                                    onClick = { buildOffer()?.let(onSaveAndLearn) },
+                                    enabled = canSave,
+                                    modifier = Modifier.weight(1f).height(40.dp),
+                                    shape = RoundedCornerShape(11.dp),
+                                    border = BorderStroke(1.dp, OfferEditorTeal.copy(alpha = 0.7f)),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                                 ) {
-                                    Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    OutlinedButton(
-                                        onClick = { buildOffer()?.let(onSaveAndLearn) },
-                                        enabled = canSave,
-                                        shape = RoundedCornerShape(16.dp),
-                                        border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
-                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
-                                    ) {
-                                        Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
-                                        Spacer(Modifier.width(7.dp))
-                                        Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    }
-                                    Button(
-                                        onClick = { buildOffer()?.let(onSave) },
-                                        enabled = canSave,
-                                        shape = RoundedCornerShape(18.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
-                                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
-                                    ) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(17.dp))
-                                            Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        }
-                                    }
+                                    Icon(Icons.Outlined.AutoFixHigh, null, tint = OfferEditorTeal, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Save & Learn", color = OfferEditorTeal, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 }
                             }
-                        } else {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .navigationBarsPadding()
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Button(
+                                onClick = { buildOffer()?.let(onSave) },
+                                enabled = canSave,
+                                modifier = Modifier.weight(1f).height(40.dp),
+                                shape = RoundedCornerShape(11.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = C.amber),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
                             ) {
-                                TextButton(
-                                    onClick = onDismiss,
-                                    shape = RoundedCornerShape(16.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                                ) {
-                                    Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    if (showSaveAndLearn) {
-                                        OutlinedButton(
-                                            onClick = { buildOffer()?.let(onSaveAndLearn) },
-                                            enabled = canSave,
-                                            shape = RoundedCornerShape(16.dp),
-                                            border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
-                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
-                                        ) {
-                                            Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
-                                            Spacer(Modifier.width(7.dp))
-                                            Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        }
-                                    }
-                                    Button(
-                                        onClick = { buildOffer()?.let(onSave) },
-                                        enabled = canSave,
-                                        shape = RoundedCornerShape(18.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
-                                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
-                                    ) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(17.dp))
-                                            Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        }
-                                    }
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(14.dp))
+                                    Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 }
                             }
                         }
@@ -10535,31 +10655,24 @@ fun OfferDialog(
                         end = 16.dp,
                         bottom = pad.calculateBottomPadding() + 20.dp
                     ),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    item {
-                        OfferStatusCard(
-                            enabled = enabled,
-                            onCheckedChange = { enabled = it }
-                        )
-                    }
-                    item {
-                        OfferEditorOverviewCard(
-                            existing = existing,
-                            category = cat,
-                            mode = mode,
-                            device = device,
-                            simSelection = simSelection,
-                            signatureEnabled = signatureEnabled,
-                            hasLearnedSignature = hasLearnedSignature,
-                            hasPendingSignature = hasPendingSignature
-                        )
-                    }
                     item {
                         OfferDialogSection(
                             title = "Bundle Identity",
-                            subtitle = "Set the category, plan name, and selling price customers should see."
+                            subtitle = "Set the category, plan name, status, and selling price customers should see.",
+                            accent = C.amber
                         ) {
+                            OfferDialogToggleRow(
+                                title = "Bundle status",
+                                description = if (enabled) {
+                                    "Live offers are available for matching and dispatch."
+                                } else {
+                                    "Paused offers stay saved but are hidden from matching."
+                                },
+                                checked = enabled,
+                                onCheckedChange = { enabled = it }
+                            )
                             DialogDropdown("Category", cat, offerCategoryOptions(), catExp, { catExp = it }) {
                                 updateCategory(it)
                                 catExp = false
@@ -10568,7 +10681,7 @@ fun OfferDialog(
                                 value = name,
                                 onValueChange = { name = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(18.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 label = { Text("Plan name", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
                                 placeholder = { Text("e.g. 250mbs, 24 hours", color = C.t3) },
                                 colors = dialogFieldColors(),
@@ -10580,7 +10693,7 @@ fun OfferDialog(
                                 value = price,
                                 onValueChange = { price = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(18.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 label = { Text("Selling Price (KES)", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
                                 placeholder = { Text("e.g. 20", color = C.t3) },
                                 colors = dialogFieldColors(),
@@ -10594,7 +10707,8 @@ fun OfferDialog(
                     item {
                         OfferDialogSection(
                             title = "USSD Setup",
-                            subtitle = "Store the exact USSD code and choose how the network flow should be executed."
+                            subtitle = "Set the dial code and choose how the network flow should be executed.",
+                            accent = C.amber
                         ) {
                             UssdCodeDialogField(
                                 value = codeField,
@@ -10620,7 +10734,8 @@ fun OfferDialog(
                     item {
                         OfferDialogSection(
                             title = "Execution Path",
-                            subtitle = "Choose which SIM and device should dial this offer."
+                            subtitle = "Choose which SIM and device should dial this offer.",
+                            accent = OfferEditorTeal
                         ) {
                             DialogDropdown(
                                 "SIM To Use",
@@ -10640,19 +10755,13 @@ fun OfferDialog(
                                 device = it
                                 devExp = false
                             }
-                        }
-                    }
-                    item {
-                        OfferDialogSection(
-                            title = "Protection",
-                            subtitle = "Learn the live USSD flow and stop or adjust if the network menu changes."
-                        ) {
+                            HorizontalDivider(color = C.w08)
                             OfferDialogToggleRow(
                                 title = "Protection",
                                 description = if (signatureEnabled) {
-                                    "Protection is on. The app will use guided verification before executing so signature checks can run on most phones."
+                                    "Verify the learned signature before dispatching so the app can stop or adjust when menus change."
                                 } else {
-                                    "Turn this on to learn live menu labels and stop or adjust if menus change."
+                                    "Turn this on to learn live menu labels and protect the offer from wrong selections."
                                 },
                                 checked = signatureEnabled,
                                 onCheckedChange = { signatureEnabled = it }
