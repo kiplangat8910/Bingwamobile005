@@ -2598,20 +2598,69 @@ private fun insertIntoTextFieldValue(value: TextFieldValue, insertion: String): 
     )
 }
 
+private val EditBundleBg = Color(0xFF12151C)
+private val EditBundlePanel = Color(0xFF1B1F28)
+private val EditBundlePanel2 = Color(0xFF20242E)
+private val EditBundleStroke = Color(0x14FFFFFF)
+private val EditBundleStrokeStrong = Color(0x24FFFFFF)
+private val EditBundleAmber = Color(0xFFFFB454)
+private val EditBundleAmberDim = Color(0x24FFB454)
+private val EditBundleCyan = Color(0xFF74E6D8)
+private val EditBundleCyanDim = Color(0x2474E6D8)
+private val EditBundleText = Color(0xFFF3F0E9)
+private val EditBundleTextDim = Color(0xFF9AA1AF)
+private val EditBundleTextFaint = Color(0xFF666D7C)
+private val EditBundleFieldBg = Color(0xFF15181F)
+
 @Composable
 private fun UssdCodeDialogField(
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("USSD", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    fun chip(
+        text: String,
+        active: Boolean,
+        onClick: () -> Unit
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(38.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (active) EditBundleAmberDim else EditBundlePanel2)
+                .border(1.dp, if (active) EditBundleAmber else EditBundleStrokeStrong, RoundedCornerShape(10.dp))
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text,
+                color = if (active) EditBundleAmber else EditBundleText,
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            placeholder = { Text("e.g. *180*5*2*pn*6*1#", color = C.t3) },
-            colors = dialogFieldColors(),
+            shape = RoundedCornerShape(12.dp),
+            placeholder = { Text("*180*5*2*pn*6*1#", color = EditBundleTextFaint) },
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = EditBundleFieldBg,
+                unfocusedContainerColor = EditBundleFieldBg,
+                disabledContainerColor = EditBundleFieldBg,
+                focusedIndicatorColor = EditBundleStrokeStrong,
+                unfocusedIndicatorColor = EditBundleStrokeStrong,
+                disabledIndicatorColor = EditBundleStroke,
+                focusedTextColor = EditBundleAmber,
+                unfocusedTextColor = EditBundleAmber,
+                disabledTextColor = EditBundleAmber.copy(alpha = 0.6f),
+                cursorColor = EditBundleAmber
+            ),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Ascii,
                 capitalization = KeyboardCapitalization.None,
@@ -2619,46 +2668,22 @@ private fun UssdCodeDialogField(
             ),
             singleLine = true,
             textStyle = LocalTextStyle.current.copy(
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                fontFamily = FontFamily.Monospace
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 0.2.sp
             )
         )
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            AssistChip(
-                onClick = { onValueChange(insertIntoTextFieldValue(value, "pn")) },
-                label = { Text("Insert pn") },
-                colors = AssistChipDefaults.assistChipColors(
-                    containerColor = C.cyan.copy(alpha = 0.12f),
-                    labelColor = C.cyan
-                )
-            )
-            AssistChip(
-                onClick = { onValueChange(insertIntoTextFieldValue(value, "*")) },
-                label = { Text("Insert *") },
-                colors = AssistChipDefaults.assistChipColors(
-                    containerColor = C.cardHi,
-                    labelColor = C.t1
-                )
-            )
-            AssistChip(
-                onClick = { onValueChange(insertIntoTextFieldValue(value, "#")) },
-                label = { Text("Insert #") },
-                colors = AssistChipDefaults.assistChipColors(
-                    containerColor = C.cardHi,
-                    labelColor = C.t1
-                )
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            chip("Insert pn", active = true) { onValueChange(insertIntoTextFieldValue(value, "pn")) }
+            chip("Insert *", active = false) { onValueChange(insertIntoTextFieldValue(value, "*")) }
+            chip("Insert #", active = false) { onValueChange(insertIntoTextFieldValue(value, "#")) }
         }
         Text(
             "Use \"pn\" as a placeholder for customer number, then tap a chip to insert at cursor position.",
-            color = C.t3,
-            fontSize = 11.sp,
-            lineHeight = 15.sp,
-            modifier = Modifier.padding(start = 4.dp)
+            color = EditBundleTextFaint,
+            fontSize = 10.5.sp,
+            lineHeight = 14.sp
         )
     }
 }
@@ -2673,37 +2698,56 @@ fun DialogDropdown(
     onExpandedChange: (Boolean) -> Unit,
     onSelect: (String) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = onExpandedChange
-        ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = {},
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Text(
+            label,
+            color = EditBundleTextFaint,
+            fontSize = 9.5.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.1.sp,
+            fontFamily = FontFamily.Monospace
+        )
+        Box(Modifier.fillMaxWidth()) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(),
-                shape = RoundedCornerShape(18.dp),
-                readOnly = true,
-                label = { Text(label, color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
-                trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                },
-                colors = dialogFieldColors(),
-                singleLine = true,
-                textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
-            )
-            ExposedDropdownMenu(
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(EditBundleFieldBg)
+                    .border(1.dp, EditBundleStrokeStrong, RoundedCornerShape(12.dp))
+                    .clickable { onExpandedChange(true) }
+                    .padding(horizontal = 14.dp, vertical = 13.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    value,
+                    color = EditBundleText,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Icon(
+                    Icons.Outlined.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = EditBundleTextDim,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { onExpandedChange(false) },
                 modifier = Modifier
-                    .background(C.cardHi, RoundedCornerShape(12.dp))
-                    .border(1.dp, C.border, RoundedCornerShape(12.dp))
+                    .background(EditBundlePanel, RoundedCornerShape(12.dp))
+                    .border(1.dp, EditBundleStroke, RoundedCornerShape(12.dp))
             ) {
                 opts.forEach { o ->
                     DropdownMenuItem(
-                        text = { Text(o, color = C.t1) },
+                        text = {
+                            Text(
+                                o,
+                                color = EditBundleText,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        },
                         onClick = { onSelect(o) }
                     )
                 }
@@ -9220,7 +9264,7 @@ fun SettingsScreen() {
                     }
                     Spacer(Modifier.height(12.dp))
                     Text("Bingwa Mobile", color = C.t1, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text("Version 3.0.41 · by Victor Ngetich", color = C.t2, fontSize = 11.sp)
+                    Text("Version ${BuildConfig.VERSION_NAME} · by Victor Ngetich", color = C.t2, fontSize = 11.sp)
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -9756,8 +9800,36 @@ private fun SignatureLearningDetailsDialog(
     learnedAt: Long,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    var query by remember { mutableStateOf("") }
     val details = remember(learnedSteps, learningCaptures) {
         buildLearnedStepDetails(learnedSteps, learningCaptures)
+    }
+    val transcript = remember(learningCaptures) {
+        learningCaptures.mapNotNull { it.popupText.takeIf(String::isNotBlank) }
+            .joinToString("\n\n")
+            .trim()
+    }
+    val filteredDetails = remember(details, query) {
+        val q = query.trim()
+        if (q.isBlank()) {
+            details
+        } else {
+            details.filter { detail ->
+                val haystack = buildString {
+                    append(detail.menuTitle)
+                    append('\n')
+                    append(detail.selectedOptionLabel)
+                    append('\n')
+                    append(detail.enteredInput)
+                    append('\n')
+                    detail.menuOptionsSnapshot.forEach { append(it).append('\n') }
+                    detail.recordedTexts.forEach { append(it).append('\n') }
+                }
+                haystack.contains(q, ignoreCase = true)
+            }
+        }
     }
 
     Dialog(
@@ -9770,69 +9842,174 @@ private fun SignatureLearningDetailsDialog(
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = C.bg
+            color = EditBundleBg
         ) {
             Scaffold(
-                containerColor = C.bg,
+                containerColor = EditBundleBg,
                 topBar = {
-                    Surface(
-                        color = C.surface.copy(alpha = 0.96f),
-                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(listOf(EditBundlePanel, EditBundleBg)))
+                            .statusBarsPadding()
+                            .padding(horizontal = 18.dp, vertical = 14.dp)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .statusBarsPadding()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(
                                 modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
-                                Text("USSD Learning Record", color = C.t1, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text(
+                                    "USSD Record",
+                                    color = EditBundleAmber,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.4.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Text("USSD Learning Record", color = EditBundleText, fontWeight = FontWeight.Bold, fontSize = 19.sp)
                                 Text(
                                     "Saved on ${formatSignatureLearnedAt(learnedAt)}",
-                                    color = C.t2,
-                                    fontSize = 12.sp
+                                    color = EditBundleTextDim,
+                                    fontSize = 11.sp
                                 )
                             }
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = C.w04,
-                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(EditBundlePanel2)
+                                    .border(1.dp, EditBundleStrokeStrong, RoundedCornerShape(10.dp))
+                                    .clickable(onClick = onDismiss),
+                                contentAlignment = Alignment.Center
                             ) {
-                                IconButton(onClick = onDismiss) {
-                                    Icon(Icons.Outlined.Close, null, tint = C.t2)
-                                }
+                                Icon(Icons.Outlined.Close, null, tint = EditBundleTextDim, modifier = Modifier.size(16.dp))
                             }
                         }
+                        Spacer(Modifier.height(9.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(4.dp)
+                                    .clip(CircleShape)
+                                    .background(EditBundleCyan)
+                            )
+                            Text(
+                                "Captured steps, selected options & popup transcript",
+                                color = EditBundleTextFaint,
+                                fontSize = 10.5.sp
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(EditBundleStroke)
+                        )
                     }
                 }
             ) { pad ->
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 16.dp,
+                        start = 18.dp,
                         top = pad.calculateTopPadding() + 16.dp,
-                        end = 16.dp,
-                        bottom = 28.dp + pad.calculateBottomPadding()
+                        end = 18.dp,
+                        bottom = 18.dp + pad.calculateBottomPadding()
                     ),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     item {
                         OfferDialogSection(
                             title = "Learning Summary",
-                            subtitle = "Review the captured steps, the selected option for each step, and the recorded popup text."
+                            subtitle = "Review the captured steps, the selected option for each step, and the recorded popup text.",
+                            accent = EditBundleCyan
                         ) {
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                MiniTag("STEPS ${learnedSteps.size}", C.green)
-                                MiniTag("POPUPS ${learningCaptures.size}", C.amber)
-                                MiniTag(if (details.isEmpty()) "NO RECORD" else "RECORD READY", if (details.isEmpty()) C.red else C.cyan)
+                                MiniTag("STEPS ${learnedSteps.size}", EditBundleCyan)
+                                MiniTag("POPUPS ${learningCaptures.size}", EditBundleAmber)
+                                MiniTag(if (details.isEmpty()) "NO RECORD" else "RECORD READY", if (details.isEmpty()) C.red else EditBundleCyan)
+                            }
+                        }
+                    }
+                    item {
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            placeholder = { Text("Search captured text…", color = EditBundleTextFaint) },
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = EditBundleFieldBg,
+                                unfocusedContainerColor = EditBundleFieldBg,
+                                focusedIndicatorColor = EditBundleStrokeStrong,
+                                unfocusedIndicatorColor = EditBundleStrokeStrong,
+                                focusedTextColor = EditBundleText,
+                                unfocusedTextColor = EditBundleText,
+                                cursorColor = EditBundleCyan
+                            ),
+                            singleLine = true,
+                            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        )
+                    }
+                    item {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = {
+                                    clipboard.setText(AnnotatedString(transcript.ifBlank { "No popup transcript captured." }))
+                                    Toast.makeText(context, "Transcript copied", Toast.LENGTH_SHORT).show()
+                                },
+                                enabled = transcript.isNotBlank(),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(11.dp),
+                                border = BorderStroke(1.dp, EditBundleStrokeStrong),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = EditBundleText)
+                            ) {
+                                Icon(Icons.Outlined.ContentCopy, null, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Copy Transcript", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    val payload = filteredDetails.joinToString("\n\n") { detail ->
+                                        buildString {
+                                            append(if (detail.stepIndex >= 0) "Step ${detail.stepIndex + 1}" else "Final Popup")
+                                            if (detail.menuTitle.isNotBlank()) append(" · ").append(detail.menuTitle)
+                                            append("\nSelected option: ").append(detail.selectedOptionLabel.ifBlank { "Not captured" })
+                                            append("\nSent input: ").append(detail.enteredInput.ifBlank { "Not captured" })
+                                            if (detail.recordedTexts.isNotEmpty()) {
+                                                append("\n\n")
+                                                detail.recordedTexts.forEachIndexed { index, text ->
+                                                    append(if (index == 0) "Recorded text:\n" else "\nRecorded text ${index + 1}:\n")
+                                                    append(text.trim()).append('\n')
+                                                }
+                                            }
+                                        }.trim()
+                                    }
+                                    clipboard.setText(AnnotatedString(payload.ifBlank { "No record available." }))
+                                    Toast.makeText(context, "Record copied", Toast.LENGTH_SHORT).show()
+                                },
+                                enabled = filteredDetails.isNotEmpty(),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(11.dp),
+                                border = BorderStroke(1.dp, EditBundleStrokeStrong),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = EditBundleText)
+                            ) {
+                                Icon(Icons.Outlined.Article, null, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Copy Record", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                             }
                         }
                     }
@@ -9840,20 +10017,20 @@ private fun SignatureLearningDetailsDialog(
                         item {
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(18.dp),
-                                color = C.cardHi,
-                                border = BorderStroke(1.dp, C.border)
+                                shape = RoundedCornerShape(16.dp),
+                                color = EditBundlePanel,
+                                border = BorderStroke(1.dp, EditBundleStroke)
                             ) {
                                 Text(
                                     "No learned steps are available yet.",
                                     modifier = Modifier.padding(16.dp),
-                                    color = C.t2,
+                                    color = EditBundleTextDim,
                                     fontSize = 13.sp
                                 )
                             }
                         }
                     } else {
-                        items(details, key = { it.stepIndex }) { detail ->
+                        items(filteredDetails, key = { it.stepIndex }) { detail ->
                             SignatureLearningRecordCard(detail = detail)
                         }
                     }
@@ -9868,15 +10045,21 @@ private fun SignatureLearningRecordCard(
     detail: LearnedStepDetail,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    var expanded by rememberSaveable(detail.stepIndex) { mutableStateOf(true) }
+    val recordPayload = remember(detail) {
+        detail.recordedTexts.joinToString("\n\n") { it.trim() }.trim()
+    }
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = C.cardHi,
-        border = BorderStroke(1.dp, C.border)
+        shape = RoundedCornerShape(16.dp),
+        color = EditBundlePanel,
+        border = BorderStroke(1.dp, EditBundleStroke)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -9889,98 +10072,162 @@ private fun SignatureLearningRecordCard(
                 ) {
                     Text(
                         if (detail.stepIndex >= 0) "Step ${detail.stepIndex + 1}" else "Final Popup",
-                        color = C.cyan,
-                        fontWeight = FontWeight.SemiBold,
+                        color = EditBundleCyan,
+                        fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
                     if (detail.menuTitle.isNotBlank()) {
                         Text(
                             detail.menuTitle,
-                            color = C.t2,
-                            fontSize = 12.sp,
-                            lineHeight = 17.sp
-                        )
-                    }
-                }
-                MiniTag(
-                    if (detail.selectedOptionLabel.isBlank()) "NO OPTION" else "OPTION SAVED",
-                    if (detail.selectedOptionLabel.isBlank()) C.red else C.green
-                )
-            }
-
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = C.surface.copy(alpha = 0.45f),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.75f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        "Selected option: ${detail.selectedOptionLabel.ifBlank { "Not captured" }}",
-                        color = C.t1,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp
-                    )
-                    Text(
-                        "Sent input: ${detail.enteredInput.ifBlank { "Not captured" }}",
-                        color = C.t2,
-                        fontSize = 12.sp,
-                        lineHeight = 17.sp
-                    )
-                    if (detail.menuOptionsSnapshot.isNotEmpty()) {
-                        Text(
-                            "Visible options: ${detail.menuOptionsSnapshot.joinToString(" | ")}",
-                            color = C.t3,
-                            fontSize = 11.sp,
+                            color = EditBundleTextDim,
+                            fontSize = 11.5.sp,
                             lineHeight = 16.sp
                         )
                     }
                 }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    MiniTag(
+                        if (detail.selectedOptionLabel.isBlank()) "NO OPTION" else "OPTION SAVED",
+                        if (detail.selectedOptionLabel.isBlank()) C.red else EditBundleCyan
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(EditBundlePanel2)
+                            .border(1.dp, EditBundleStrokeStrong, RoundedCornerShape(10.dp))
+                            .clickable {
+                                val payload = buildString {
+                                    append(if (detail.stepIndex >= 0) "Step ${detail.stepIndex + 1}" else "Final Popup")
+                                    if (detail.menuTitle.isNotBlank()) append(" · ").append(detail.menuTitle)
+                                    append("\nSelected option: ").append(detail.selectedOptionLabel.ifBlank { "Not captured" })
+                                    append("\nSent input: ").append(detail.enteredInput.ifBlank { "Not captured" })
+                                    if (recordPayload.isNotBlank()) append("\n\n").append(recordPayload)
+                                }.trim()
+                                clipboard.setText(AnnotatedString(payload))
+                                Toast.makeText(context, "Step copied", Toast.LENGTH_SHORT).show()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Outlined.ContentCopy, null, tint = EditBundleTextDim, modifier = Modifier.size(15.dp))
+                    }
+                }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Record",
-                    color = C.t1,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp
-                )
-                if (detail.recordedTexts.isEmpty()) {
-                    Text(
-                        "No recorded text was saved for this step.",
-                        color = C.t3,
-                        fontSize = 11.sp
-                    )
-                } else {
-                    detail.recordedTexts.forEachIndexed { index, popupText ->
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                            color = C.w04,
-                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.7f))
+            if (expanded) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = EditBundleFieldBg,
+                    border = BorderStroke(1.dp, EditBundleStrokeStrong)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            "Selected option: ${detail.selectedOptionLabel.ifBlank { "Not captured" }}",
+                            color = EditBundleText,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+                        Text(
+                            "Sent input: ${detail.enteredInput.ifBlank { "Not captured" }}",
+                            color = EditBundleTextDim,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp
+                        )
+                        if (detail.menuOptionsSnapshot.isNotEmpty()) {
+                            Text(
+                                "Visible options: ${detail.menuOptionsSnapshot.joinToString(" | ")}",
+                                color = EditBundleTextFaint,
+                                fontSize = 10.5.sp,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Record",
+                            color = EditBundleText,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        TextButton(
+                            onClick = { expanded = false },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            Text("Hide", color = EditBundleTextDim, fontSize = 12.sp)
+                        }
+                    }
+                    if (detail.recordedTexts.isEmpty()) {
+                        Text(
+                            "No recorded text was saved for this step.",
+                            color = EditBundleTextFaint,
+                            fontSize = 10.5.sp
+                        )
+                    } else {
+                        detail.recordedTexts.forEachIndexed { index, popupText ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = EditBundlePanel2,
+                                border = BorderStroke(1.dp, EditBundleStrokeStrong)
                             ) {
-                                Text(
-                                    if (index == 0) "Recorded text" else "Recorded text ${index + 1}",
-                                    color = C.amber,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.8.sp
-                                )
-                                Text(
-                                    popupText,
-                                    color = C.t1,
-                                    fontSize = 11.sp,
-                                    lineHeight = 17.sp
-                                )
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            if (index == 0) "Recorded text" else "Recorded text ${index + 1}",
+                                            color = EditBundleAmber,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 0.8.sp
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .clip(RoundedCornerShape(9.dp))
+                                                .background(EditBundleFieldBg)
+                                                .border(1.dp, EditBundleStroke, RoundedCornerShape(9.dp))
+                                                .clickable {
+                                                    clipboard.setText(AnnotatedString(popupText))
+                                                    Toast.makeText(context, "Text copied", Toast.LENGTH_SHORT).show()
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Outlined.ContentCopy, null, tint = EditBundleTextDim, modifier = Modifier.size(14.dp))
+                                        }
+                                    }
+                                    Text(
+                                        popupText,
+                                        color = EditBundleText,
+                                        fontSize = 11.sp,
+                                        lineHeight = 17.sp
+                                    )
+                                }
                             }
                         }
                     }
+                }
+            } else {
+                TextButton(
+                    onClick = { expanded = true },
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text("Show record", color = EditBundleTextDim, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -9999,24 +10246,24 @@ private fun SignatureLearningRecordSection(
     accent: Color,
     actions: @Composable (() -> Unit)? = null
 ) {
-    OfferDialogSection(title = title, subtitle = subtitle) {
+    OfferDialogSection(title = title, subtitle = subtitle, accent = accent) {
         Text(
             "Saved on ${formatSignatureLearnedAt(learnedAt)}",
-            color = C.t3,
-            fontSize = 11.sp
+            color = EditBundleTextFaint,
+            fontSize = 10.5.sp
         )
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             MiniTag("STEPS $learnedStepsCount", accent)
-            MiniTag("POPUPS $popupCount", C.amber)
-            MiniTag(if (details.isEmpty()) "NO RECORD" else "RECORD READY", if (details.isEmpty()) C.red else C.cyan)
+            MiniTag("POPUPS $popupCount", EditBundleAmber)
+            MiniTag(if (details.isEmpty()) "NO RECORD" else "RECORD READY", if (details.isEmpty()) C.red else EditBundleCyan)
         }
         if (details.isEmpty()) {
             Text(
                 emptyMessage,
-                color = C.t2,
+                color = EditBundleTextDim,
                 fontSize = 12.sp,
                 lineHeight = 18.sp
             )
@@ -10143,40 +10390,51 @@ private fun CompactDialogToggleCard(
 }
 
 @Composable
-private fun OfferDialogSection(title: String, subtitle: String? = null, content: @Composable ColumnScope.() -> Unit) {
+private fun OfferDialogSection(
+    title: String,
+    subtitle: String? = null,
+    accent: Color = EditBundleAmber,
+    content: @Composable ColumnScope.() -> Unit
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = C.cardHi.copy(alpha = 0.92f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+        shape = RoundedCornerShape(16.dp),
+        color = EditBundlePanel,
+        border = BorderStroke(1.dp, EditBundleStroke)
     ) {
         Column(
-            Modifier
-                .background(
-                    Brush.verticalGradient(
-                        listOf(C.cardHi.copy(alpha = 0.98f), C.card.copy(alpha = 0.90f))
-                    )
-                )
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Top
+            ) {
                 Box(
-                    Modifier
-                        .padding(top = 3.dp)
-                        .width(4.dp)
-                        .height(28.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(C.cyan)
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .width(3.dp)
+                        .height(30.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(accent)
                 )
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        title,
+                        color = EditBundleText,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.5.sp
+                    )
                     if (!subtitle.isNullOrBlank()) {
-                        Text(subtitle, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
+                        Text(
+                            subtitle,
+                            color = EditBundleTextDim,
+                            fontSize = 11.5.sp,
+                            lineHeight = 16.sp
+                        )
                     }
                 }
             }
-            Divider(color = C.w08)
             content()
         }
     }
@@ -10248,27 +10506,26 @@ private fun OfferDialogToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = C.cardHi.copy(alpha = 0.92f),
-        border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(EditBundlePanel2)
+            .border(1.dp, EditBundleStrokeStrong, RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                Text(description, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
-            }
-            CompactDialogSwitch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                checkedTrackColor = C.cyan
-            )
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, color = EditBundleText, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            Text(description, color = EditBundleTextFaint, fontSize = 10.5.sp, lineHeight = 14.sp)
         }
+        CompactDialogSwitch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            checkedTrackColor = EditBundleCyan,
+            uncheckedThumbColor = EditBundleTextFaint
+        )
     }
 }
 
@@ -10281,7 +10538,6 @@ fun OfferDialog(
     onApprovePending: (OfferItem) -> Unit,
     onRelearnSignature: (OfferItem) -> Unit
 ) {
-    val configuration = LocalConfiguration.current
     var name by remember(existing?.id, existing?.name) { mutableStateOf(existing?.name ?: "") }
     var codeField by rememberSaveable(existing?.id, existing?.ussdCode, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(existing?.ussdCode ?: ""))
@@ -10324,7 +10580,6 @@ fun OfferDialog(
     val canSave = remember(name, price, code) {
         name.isNotBlank() && code.isNotBlank() && (price.toIntOrNull() ?: 0) > 0
     }
-    val compactActions = configuration.screenWidthDp < 420
 
     fun buildOffer(): OfferItem? {
         val p = price.toIntOrNull() ?: 0
@@ -10376,152 +10631,156 @@ fun OfferDialog(
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = C.bg
+            color = EditBundleBg
         ) {
-            val showSaveAndLearn = signatureEnabled
+            val canLearn = signatureEnabled && canSave
             val showProtectionRecords = signatureEnabled || hasLearnedSignature || hasPendingSignature
             Scaffold(
-                containerColor = C.bg,
+                containerColor = EditBundleBg,
                 topBar = {
-                    Surface(
-                        color = C.surface.copy(alpha = 0.96f),
-                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
+                    val headerSub = name.trim().ifBlank { existing?.name.orEmpty() }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(listOf(EditBundlePanel, EditBundleBg)))
+                            .statusBarsPadding()
+                            .padding(horizontal = 18.dp, vertical = 14.dp)
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .statusBarsPadding()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.Top
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(
                                 modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
                                 Text(
-                                    if (existing != null) "BUNDLE SETTINGS" else "CREATE OFFER",
-                                    color = C.cyan,
-                                    fontSize = 11.sp,
+                                    "Bundle Settings",
+                                    color = EditBundleAmber,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.1.sp
+                                    letterSpacing = 1.4.sp,
+                                    fontFamily = FontFamily.Monospace
                                 )
-                                Text(
-                                    if (existing != null) "Edit Bundle" else "New Bundle",
-                                    color = C.t1,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 24.sp,
-                                    lineHeight = 28.sp
-                                )
-                                Text(
-                                    "Full screen editor with offer details, learning steps, selected options, and the saved USSD record.",
-                                    color = C.t2,
-                                    fontSize = 12.sp,
-                                    lineHeight = 18.sp
-                                )
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = C.w04,
-                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
-                            ) {
-                                IconButton(onClick = onDismiss) {
-                                    Icon(Icons.Outlined.Close, null, tint = C.t2)
+                                Row(
+                                    verticalAlignment = Alignment.Bottom,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        if (existing != null) "Edit Bundle" else "New Bundle",
+                                        color = EditBundleText,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 19.sp
+                                    )
+                                    if (headerSub.isNotBlank()) {
+                                        Text(
+                                            "· $headerSub",
+                                            color = EditBundleTextDim,
+                                            fontSize = 11.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                    }
                                 }
                             }
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(EditBundlePanel2)
+                                    .border(1.dp, EditBundleStrokeStrong, RoundedCornerShape(10.dp))
+                                    .clickable(onClick = onDismiss),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Outlined.Close, null, tint = EditBundleTextDim, modifier = Modifier.size(16.dp))
+                            }
                         }
+                        Spacer(Modifier.height(9.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(4.dp)
+                                    .clip(CircleShape)
+                                    .background(EditBundleCyan)
+                            )
+                            Text(
+                                "Offer details, USSD record & execution routing",
+                                color = EditBundleTextFaint,
+                                fontSize = 10.5.sp
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(EditBundleStroke)
+                        )
                     }
                 },
                 bottomBar = {
-                    Surface(
-                        color = C.surface.copy(alpha = 0.97f),
-                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(EditBundlePanel)
                     ) {
-                        if (compactActions && showSaveAndLearn) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .navigationBarsPadding()
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                horizontalAlignment = Alignment.End,
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(EditBundleStroke)
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(horizontal = 18.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = onDismiss,
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                             ) {
-                                TextButton(
-                                    onClick = onDismiss,
-                                    shape = RoundedCornerShape(16.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                                ) {
-                                    Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    OutlinedButton(
-                                        onClick = { buildOffer()?.let(onSaveAndLearn) },
-                                        enabled = canSave,
-                                        shape = RoundedCornerShape(16.dp),
-                                        border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
-                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
-                                    ) {
-                                        Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
-                                        Spacer(Modifier.width(7.dp))
-                                        Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    }
-                                    Button(
-                                        onClick = { buildOffer()?.let(onSave) },
-                                        enabled = canSave,
-                                        shape = RoundedCornerShape(18.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
-                                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
-                                    ) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(17.dp))
-                                            Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        }
-                                    }
-                                }
+                                Text("Cancel", color = EditBundleTextDim, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                             }
-                        } else {
-                            Row(
+                            OutlinedButton(
+                                onClick = { buildOffer()?.let(onSaveAndLearn) },
+                                enabled = canLearn,
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .navigationBarsPadding()
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .weight(1f)
+                                    .height(40.dp),
+                                shape = RoundedCornerShape(11.dp),
+                                border = BorderStroke(1.dp, EditBundleCyan),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = EditBundleCyan)
                             ) {
-                                TextButton(
-                                    onClick = onDismiss,
-                                    shape = RoundedCornerShape(16.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                                ) {
-                                    Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    if (showSaveAndLearn) {
-                                        OutlinedButton(
-                                            onClick = { buildOffer()?.let(onSaveAndLearn) },
-                                            enabled = canSave,
-                                            shape = RoundedCornerShape(16.dp),
-                                            border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
-                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
-                                        ) {
-                                            Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
-                                            Spacer(Modifier.width(7.dp))
-                                            Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        }
-                                    }
-                                    Button(
-                                        onClick = { buildOffer()?.let(onSave) },
-                                        enabled = canSave,
-                                        shape = RoundedCornerShape(18.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = C.cyan),
-                                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
-                                    ) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Rounded.Check, contentDescription = null, tint = C.bg, modifier = Modifier.size(17.dp))
-                                            Text("Save", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        }
-                                    }
-                                }
+                                Icon(Icons.Outlined.AutoFixHigh, null, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(7.dp))
+                                Text("Save & Learn", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = { buildOffer()?.let(onSave) },
+                                enabled = canSave,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(40.dp),
+                                shape = RoundedCornerShape(11.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = EditBundleAmber,
+                                    contentColor = Color(0xFF1A1305),
+                                    disabledContainerColor = EditBundleAmber.copy(alpha = 0.5f),
+                                    disabledContentColor = Color(0xFF1A1305).copy(alpha = 0.6f)
+                                )
+                            ) {
+                                Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(13.dp))
+                                Spacer(Modifier.width(7.dp))
+                                Text("Save", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -10530,12 +10789,12 @@ fun OfferDialog(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 16.dp,
+                        start = 18.dp,
                         top = pad.calculateTopPadding() + 16.dp,
-                        end = 16.dp,
-                        bottom = pad.calculateBottomPadding() + 20.dp
+                        end = 18.dp,
+                        bottom = pad.calculateBottomPadding() + 12.dp
                     ),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     item {
                         OfferStatusCard(
@@ -10558,43 +10817,89 @@ fun OfferDialog(
                     item {
                         OfferDialogSection(
                             title = "Bundle Identity",
-                            subtitle = "Set the category, plan name, and selling price customers should see."
+                            subtitle = "Set the category, plan name, and selling price customers should see.",
+                            accent = EditBundleAmber
                         ) {
                             DialogDropdown("Category", cat, offerCategoryOptions(), catExp, { catExp = it }) {
                                 updateCategory(it)
                                 catExp = false
                             }
+                            Text(
+                                "Plan name",
+                                color = EditBundleTextFaint,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.1.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
                             OutlinedTextField(
                                 value = name,
                                 onValueChange = { name = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(18.dp),
-                                label = { Text("Plan name", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
-                                placeholder = { Text("e.g. 250mbs, 24 hours", color = C.t3) },
-                                colors = dialogFieldColors(),
+                                shape = RoundedCornerShape(12.dp),
+                                placeholder = { Text("e.g. 250mbs, 24 hours", color = EditBundleTextFaint) },
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = EditBundleFieldBg,
+                                    unfocusedContainerColor = EditBundleFieldBg,
+                                    disabledContainerColor = EditBundleFieldBg,
+                                    focusedIndicatorColor = EditBundleStrokeStrong,
+                                    unfocusedIndicatorColor = EditBundleStrokeStrong,
+                                    disabledIndicatorColor = EditBundleStroke,
+                                    focusedTextColor = EditBundleText,
+                                    unfocusedTextColor = EditBundleText,
+                                    cursorColor = EditBundleCyan
+                                ),
                                 singleLine = true,
-                                textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                                textStyle = LocalTextStyle.current.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                             )
-                            Text("Example: 1GB 1hr, 250MB till midnight", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
+                            Text(
+                                "Example: 1GB 1hr, 250MB till midnight",
+                                color = EditBundleTextFaint,
+                                fontSize = 10.5.sp,
+                                lineHeight = 14.sp
+                            )
+                            Text(
+                                "Selling Price (KES)",
+                                color = EditBundleTextFaint,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.1.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
                             OutlinedTextField(
                                 value = price,
                                 onValueChange = { price = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(18.dp),
-                                label = { Text("Selling Price (KES)", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
-                                placeholder = { Text("e.g. 20", color = C.t3) },
-                                colors = dialogFieldColors(),
+                                shape = RoundedCornerShape(12.dp),
+                                placeholder = { Text("e.g. 20", color = EditBundleTextFaint) },
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = EditBundleFieldBg,
+                                    unfocusedContainerColor = EditBundleFieldBg,
+                                    disabledContainerColor = EditBundleFieldBg,
+                                    focusedIndicatorColor = EditBundleStrokeStrong,
+                                    unfocusedIndicatorColor = EditBundleStrokeStrong,
+                                    disabledIndicatorColor = EditBundleStroke,
+                                    focusedTextColor = EditBundleText,
+                                    unfocusedTextColor = EditBundleText,
+                                    cursorColor = EditBundleCyan
+                                ),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
-                                textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                                textStyle = LocalTextStyle.current.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                             )
-                            Text("Your price to customer", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
+                            Text(
+                                "Your price to customer",
+                                color = EditBundleTextFaint,
+                                fontSize = 10.5.sp,
+                                lineHeight = 14.sp
+                            )
                         }
                     }
                     item {
                         OfferDialogSection(
                             title = "USSD Setup",
-                            subtitle = "Store the exact USSD code and choose how the network flow should be executed."
+                            subtitle = "Set the dial code and choose how the network flow should be executed.",
+                            accent = EditBundleAmber
                         ) {
                             UssdCodeDialogField(
                                 value = codeField,
@@ -10610,17 +10915,17 @@ fun OfferDialog(
                                     "Protection-enabled offers automatically use the guided USSD flow so signature verification can run on more phones."
                                 else
                                     "Default mode follows category: Data uses SIMPLE, while Calls and SMS use ADVANCED.",
-                                color = C.t3,
-                                fontSize = 11.sp,
-                                lineHeight = 15.sp,
-                                modifier = Modifier.padding(start = 4.dp)
+                                color = EditBundleTextFaint,
+                                fontSize = 10.5.sp,
+                                lineHeight = 14.sp
                             )
                         }
                     }
                     item {
                         OfferDialogSection(
                             title = "Execution Path",
-                            subtitle = "Choose which SIM and device should dial this offer."
+                            subtitle = "Choose which SIM and device should dial this offer.",
+                            accent = EditBundleCyan
                         ) {
                             DialogDropdown(
                                 "SIM To Use",
@@ -10645,7 +10950,8 @@ fun OfferDialog(
                     item {
                         OfferDialogSection(
                             title = "Protection",
-                            subtitle = "Learn the live USSD flow and stop or adjust if the network menu changes."
+                            subtitle = "Verify signature before dispatch and stop or adjust if the network menu changes.",
+                            accent = EditBundleCyan
                         ) {
                             OfferDialogToggleRow(
                                 title = "Protection",
@@ -10673,24 +10979,22 @@ fun OfferDialog(
                                         "ADJUST only auto-fixes exact same-label moves. If the network changes wording, the app stops instead of guessing."
                                     else
                                         "STOP is the recommended production setting. It prevents the app from choosing the wrong bundle when the menu looks different.",
-                                    color = C.t2,
-                                    fontSize = 11.sp,
-                                    lineHeight = 16.sp,
-                                    modifier = Modifier.padding(start = 4.dp)
+                                    color = EditBundleTextDim,
+                                    fontSize = 10.5.sp,
+                                    lineHeight = 14.sp
                                 )
                                 if (mode != OFFER_EXECUTION_MODE_ADVANCED) {
                                     Text(
                                         "This offer is saved as $mode, but Bingwa will switch to the guided USSD path automatically whenever protection or learning is enabled.",
-                                        color = C.t3,
-                                        fontSize = 11.sp,
-                                        lineHeight = 16.sp,
-                                        modifier = Modifier.padding(start = 4.dp)
+                                        color = EditBundleTextFaint,
+                                        fontSize = 10.5.sp,
+                                        lineHeight = 14.sp
                                     )
                                 }
                             } else if (!hasLearnedSignature && !hasPendingSignature) {
                                 Text(
                                     "No signature learned yet. Turn protection on, save the offer, then use Save & Learn to scan the live USSD menus.",
-                                    color = C.t2,
+                                    color = EditBundleTextDim,
                                     fontSize = 12.sp,
                                     lineHeight = 18.sp
                                 )
@@ -10708,22 +11012,25 @@ fun OfferDialog(
                                     learnedStepsCount = pendingLearnedSteps.size,
                                     popupCount = pendingLearningCaptures.size,
                                     emptyMessage = "This pending learning run has no saved record yet.",
-                                    accent = C.orange,
+                                    accent = EditBundleAmber,
                                     actions = {
                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             OutlinedButton(
                                                 onClick = { existing?.let(onRelearnSignature) },
-                                                shape = RoundedCornerShape(14.dp),
-                                                border = BorderStroke(1.dp, C.amber.copy(alpha = 0.5f))
+                                                shape = RoundedCornerShape(11.dp),
+                                                border = BorderStroke(1.dp, EditBundleAmber)
                                             ) {
-                                                Text("Relearn", color = C.amber, fontWeight = FontWeight.Bold)
+                                                Text("Relearn", color = EditBundleAmber, fontWeight = FontWeight.Bold)
                                             }
                                             Button(
                                                 onClick = { existing?.let(onApprovePending) },
-                                                shape = RoundedCornerShape(14.dp),
-                                                colors = ButtonDefaults.buttonColors(containerColor = C.green)
+                                                shape = RoundedCornerShape(11.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = EditBundleCyan,
+                                                    contentColor = Color(0xFF0B1413)
+                                                )
                                             ) {
-                                                Text("Approve", color = C.bg, fontWeight = FontWeight.Bold)
+                                                Text("Approve", fontWeight = FontWeight.Bold)
                                             }
                                         }
                                     }
@@ -10739,7 +11046,7 @@ fun OfferDialog(
                                 learnedStepsCount = learnedSteps.size,
                                 popupCount = learningCaptures.size,
                                 emptyMessage = "No signature learned yet. Save this offer, then use Save & Learn to scan the live USSD menus with test number 0700000000.",
-                                accent = C.green
+                                accent = EditBundleCyan
                             )
                         }
                     }
