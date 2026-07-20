@@ -159,6 +159,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         UssdNavigationService.onAppUiForegrounded()
+        if (shouldAutoStartPhoneAutomation(this)) {
+            ServiceLauncher.startBalanceChecker(this)
+        }
     }
 
     private fun warmUpLaunchState() {
@@ -2810,6 +2813,9 @@ fun BingwaApp() {
         remainingMs = unlimitedManager.remainingMs()
         runCatching { RelayManager.load(ctx) }
             .onFailure { Log.e("MainActivity", "Relay warm-up failed", it) }
+        if (shouldAutoStartPhoneAutomation(ctx)) {
+            ServiceLauncher.startBalanceChecker(ctx)
+        }
     }
 
     LaunchedEffect(Unit) {

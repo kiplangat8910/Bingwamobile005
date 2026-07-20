@@ -19,8 +19,9 @@ class BalanceChecker : Service() {
         private const val TAG = "BalanceChecker"
         private const val DEFAULT_BALANCE_USSD = "*144#"
         private const val AIRTEL_BALANCE_USSD = "*131#"
-        private const val CHECK_INTERVAL = 5 * 60 * 1000L
+        private const val CHECK_INTERVAL = 2 * 60 * 1000L
         private const val BALANCE_TIMEOUT_MS = 30_000L
+        private const val FOREGROUND_REFRESH_COOLDOWN_MS = 15_000L
         private const val CHANNEL_ID = "balance_checker"
         private const val NOTIFICATION_ID = 2013
 
@@ -29,6 +30,7 @@ class BalanceChecker : Service() {
         @Volatile var currentBalanceStr: String = ""
         @Volatile var currentBalance: Int = -1
         @Volatile var checking = false
+        @Volatile private var lastCheckStartedAt: Long = 0L
 
         private val timeoutHandler = Handler(Looper.getMainLooper())
         private var timeoutRunnable: Runnable? = null
@@ -63,8 +65,14 @@ class BalanceChecker : Service() {
             selectionOverride: Int? = null,
             persistResult: Boolean = selectionOverride == null
         ) {
+            val now = System.currentTimeMillis()
             if (checking) { Log.d(TAG, "check already in flight — skipping"); return }
+            if (selectionOverride == null && now - lastCheckStartedAt < FOREGROUND_REFRESH_COOLDOWN_MS) {
+                Log.d(TAG, "balance check cooldown active — skipping duplicate request")
+                return
+            }
             checking = true
+            lastCheckStartedAt = now
             val requestContext = BalanceRequestContext(
                 selectionOverride = selectionOverride,
                 persistResult = persistResult
@@ -301,7 +309,7 @@ class BalanceChecker : Service() {
             return START_NOT_STICKY
         }
         handler.removeCallbacks(periodicCheck)
-        handler.postDelayed(periodicCheck, 2_000)
+        handler.post(periodicCheck)
         return START_STICKY
     }
 
