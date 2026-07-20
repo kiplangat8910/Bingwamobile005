@@ -20,8 +20,9 @@ class BalanceChecker : Service() {
         private const val TAG = "BalanceChecker"
         private const val DEFAULT_BALANCE_USSD = "*144#"
         private const val AIRTEL_BALANCE_USSD = "*131#"
-        private const val CHECK_INTERVAL = 60_000L
+        private const val CHECK_INTERVAL = 5 * 60_000L
         private const val BALANCE_TIMEOUT_MS = 30_000L
+        private const val EVENT_REFRESH_DELAY_MS = 2_000L
         private const val FOREGROUND_REFRESH_COOLDOWN_MS = 3_000L
         private const val CHANNEL_ID = "balance_checker"
         private const val NOTIFICATION_ID = 2013
@@ -35,6 +36,7 @@ class BalanceChecker : Service() {
 
         private val timeoutHandler = Handler(Looper.getMainLooper())
         private var timeoutRunnable: Runnable? = null
+        private var pendingRefreshRunnable: Runnable? = null
         @Volatile private var activeRequestContext: BalanceRequestContext? = null
 
         data class BalanceCheckResult(
@@ -152,6 +154,41 @@ class BalanceChecker : Service() {
                     return false
                 }
             }
+            return true
+        }
+
+        fun scheduleAirtimeRefresh(
+            context: Context,
+            reason: String,
+            delayMs: Long = EVENT_REFRESH_DELAY_MS
+        ): Boolean {
+            val appContext = context.applicationContext
+            val automationEnabled = appContext
+                .getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                .getBoolean("automation_enabled", true)
+            if (!automationEnabled) {
+                Log.d(TAG, "Skipping scheduled airtime refresh for $reason because automation is disabled")
+                return false
+            }
+
+            ServiceLauncher.startBalanceChecker(appContext)
+
+            var scheduledRefresh: Runnable? = null
+            scheduledRefresh = Runnable {
+                if (pendingRefreshRunnable === scheduledRefresh) {
+                    pendingRefreshRunnable = null
+                }
+                val started = requestBalanceCheck(
+                    context = appContext,
+                    ignoreCooldown = true
+                )
+                Log.d(TAG, "Scheduled airtime refresh reason=$reason started=$started")
+            }
+            val refreshRunnable = scheduledRefresh ?: return false
+
+            pendingRefreshRunnable?.let(timeoutHandler::removeCallbacks)
+            pendingRefreshRunnable = refreshRunnable
+            timeoutHandler.postDelayed(refreshRunnable, delayMs.coerceAtLeast(0L))
             return true
         }
 

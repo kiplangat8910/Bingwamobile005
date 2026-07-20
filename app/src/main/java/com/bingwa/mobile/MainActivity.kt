@@ -16,7 +16,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
@@ -120,7 +119,6 @@ private fun formatStartupFallbackErrorLabel(raw: String): String {
 // ─── MainActivity ─────────────────────────────────────────────────────────
 class MainActivity : ComponentActivity() {
     private var pendingStartupPermissions: Array<String> = emptyArray()
-    private var lastAppOpenBalanceRefreshElapsed: Long = 0L
 
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { perms ->
         val denied = perms.filterValues { !it }.keys
@@ -163,18 +161,7 @@ class MainActivity : ComponentActivity() {
         UssdNavigationService.onAppUiForegrounded()
         if (shouldAutoStartPhoneAutomation(this)) {
             ServiceLauncher.startBalanceChecker(this)
-            triggerAppOpenBalanceRefresh()
         }
-    }
-
-    private fun triggerAppOpenBalanceRefresh() {
-        val now = SystemClock.elapsedRealtime()
-        if (now - lastAppOpenBalanceRefreshElapsed < 1_500L) return
-        lastAppOpenBalanceRefreshElapsed = now
-        requestBalanceCheckSafely(
-            context = this,
-            ignoreCooldown = true
-        )
     }
 
     private fun warmUpLaunchState() {

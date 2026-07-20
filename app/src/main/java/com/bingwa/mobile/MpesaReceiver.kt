@@ -4,8 +4,6 @@ import android.Manifest
 import android.content.*
 import android.content.pm.PackageManager
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.provider.Telephony
 import android.telephony.SmsMessage
 import android.util.Log
@@ -239,12 +237,12 @@ class MpesaReceiver : BroadcastReceiver() {
             if (handleCustomerReplySms(context, sender, body)) return@forEach
             if (!isMpesaSms(sender, body)) return@forEach
             Log.d(TAG, "M-PESA SMS sender='$sender' body='$body'")
-
-            if (isAirtimeTopup(sender, body)) {
-                Handler(Looper.getMainLooper()).postDelayed({
-                    BalanceChecker.requestBalanceCheck(context)
-                }, 2_000L)
+            val refreshReason = if (isAirtimeTopup(sender, body)) {
+                "airtime top-up SMS"
+            } else {
+                "M-PESA SMS"
             }
+            BalanceChecker.scheduleAirtimeRefresh(context, refreshReason)
 
             if (appPrefs.getBoolean("auto_save_contacts", true)) {
                 val rawPhone = extractPhoneOrMasked(body)

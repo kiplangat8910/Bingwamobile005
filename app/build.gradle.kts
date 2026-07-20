@@ -19,8 +19,8 @@ android {
         applicationId = "com.bingwa.mobile"
         minSdk = 21
         targetSdk = 34
-        versionCode = 333
-        versionName = "3.3.4"
+        versionCode = 334
+        versionName = "3.3.5"
     }
 
     signingConfigs {

@@ -385,6 +385,7 @@ class AutomationService : Service() {
                 "USSD Signature Learning",
                 "USSD signature learning finished, but the offer could not be identified for saving."
             )
+            schedulePostExecutionAirtimeRefresh()
             stopSelf()
             return
         }
@@ -394,6 +395,7 @@ class AutomationService : Service() {
                 "USSD Signature Learning",
                 "The system could not learn a signature for $offerLabel. Open the offer and run Save & Learn again while the USSD menu is available."
             )
+            schedulePostExecutionAirtimeRefresh()
             stopSelf()
             return
         }
@@ -432,6 +434,7 @@ class AutomationService : Service() {
                 .setPackage(packageName)
                 .putExtra("offerId", request.offerId)
         )
+        schedulePostExecutionAirtimeRefresh()
         stopSelf()
     }
 
@@ -462,6 +465,13 @@ class AutomationService : Service() {
         }
     }
 
+    private fun schedulePostExecutionAirtimeRefresh() {
+        BalanceChecker.scheduleAirtimeRefresh(
+            context = this,
+            reason = "USSD execution"
+        )
+    }
+
     private fun processResponse(
         request: AutomationRequest,
         response: String,
@@ -478,6 +488,7 @@ class AutomationService : Service() {
             Log.d(TAG, "Token purchase callback: success=$success")
             cb(success)
             UssdNavigationService.tokenPurchaseCallback = null
+            schedulePostExecutionAirtimeRefresh()
             stopSelf()
             return
         }
@@ -492,6 +503,7 @@ class AutomationService : Service() {
 
         // Save transaction with response
         if (request.txId < 0) {
+            schedulePostExecutionAirtimeRefresh()
             stopSelf()
             return
         }
@@ -501,6 +513,7 @@ class AutomationService : Service() {
 
         if (shouldRetryRetriableFinalResponse(status, response)) {
             handleRetriableFinalResponse(request, response, status, transcript)
+            schedulePostExecutionAirtimeRefresh()
             stopSelf()
             return
         }
@@ -517,6 +530,7 @@ class AutomationService : Service() {
             "Failed" -> handleFailedWithFallback(request, response)
             else -> Unit
         }
+        schedulePostExecutionAirtimeRefresh()
         stopSelf()
     }
 
