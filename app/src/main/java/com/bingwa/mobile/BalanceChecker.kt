@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -65,12 +66,20 @@ class BalanceChecker : Service() {
             selectionOverride: Int? = null,
             persistResult: Boolean = selectionOverride == null,
             ignoreCooldown: Boolean = false
-        ) {
+        ): Boolean {
+            val appContext = context.applicationContext
             val now = System.currentTimeMillis()
-            if (checking) { Log.d(TAG, "check already in flight — skipping"); return }
+            if (checking) {
+                Log.d(TAG, "check already in flight — skipping")
+                return false
+            }
+            if (selectionOverride == null && isUssdWorkBusy(appContext)) {
+                Log.d(TAG, "another USSD task is active — skipping balance check")
+                return false
+            }
             if (!ignoreCooldown && selectionOverride == null && now - lastCheckStartedAt < FOREGROUND_REFRESH_COOLDOWN_MS) {
                 Log.d(TAG, "balance check cooldown active — skipping duplicate request")
-                return
+                return false
             }
             checking = true
             lastCheckStartedAt = now
@@ -119,7 +128,7 @@ class BalanceChecker : Service() {
 
             // Try UssdHelper first (silent), fallback to AutomationService SIMPLE
             val helperSuccess = UssdHelper.dialUssd(
-                context,
+                appContext,
                 balanceUssd,
                 silentOnly = true,
                 subIdOverride = selectionOverride,
@@ -129,23 +138,21 @@ class BalanceChecker : Service() {
                 },
                 onFailure = { error ->
                     Log.e(TAG, "UssdHelper failed: $error, trying AutomationService")
-                    ServiceLauncher.startAutomationService(context, Intent(context, AutomationService::class.java).apply {
-                        putExtra("mode", "SIMPLE")
-                        putExtra("code", balanceUssd)
-                        putExtra("phoneNumber", "")
-                        putExtra("simSelection", selectionOverride ?: OFFER_SIM_USE_GENERAL)
-                    })
+                    if (!startBalanceFallback(appContext, balanceUssd, selectionOverride)) {
+                        Log.w(TAG, "automation fallback skipped while another USSD task is active")
+                        onBalanceCheckFailed()
+                    }
                 }
             )
             if (!helperSuccess) {
                 Log.w(TAG, "UssdHelper returned false, using AutomationService")
-                ServiceLauncher.startAutomationService(context, Intent(context, AutomationService::class.java).apply {
-                    putExtra("mode", "SIMPLE")
-                    putExtra("code", balanceUssd)
-                    putExtra("phoneNumber", "")
-                    putExtra("simSelection", selectionOverride ?: OFFER_SIM_USE_GENERAL)
-                })
+                if (!startBalanceFallback(appContext, balanceUssd, selectionOverride)) {
+                    Log.w(TAG, "balance fallback could not start")
+                    onBalanceCheckFailed()
+                    return false
+                }
             }
+            return true
         }
 
         fun onBalanceCheckFailed() {
@@ -281,6 +288,37 @@ class BalanceChecker : Service() {
         private fun cancelTimeout() {
             timeoutRunnable?.let { timeoutHandler.removeCallbacks(it) }
             timeoutRunnable = null
+        }
+
+        private fun startBalanceFallback(
+            context: Context,
+            balanceUssd: String,
+            selectionOverride: Int?
+        ): Boolean {
+            if (isUssdWorkBusy(context)) return false
+            return ServiceLauncher.startAutomationService(
+                context,
+                Intent(context, AutomationService::class.java).apply {
+                    putExtra("mode", "SIMPLE")
+                    putExtra("code", balanceUssd)
+                    putExtra("phoneNumber", "")
+                    putExtra("simSelection", selectionOverride ?: OFFER_SIM_USE_GENERAL)
+                }
+            )
+        }
+
+        private fun isUssdWorkBusy(context: Context): Boolean {
+            if (UssdNavigationService.isBusyForBalanceCheck()) return true
+            return isServiceRunning(context, AutomationService::class.java)
+        }
+
+        private fun isServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
+            val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
+            return runCatching {
+                @Suppress("DEPRECATION")
+                manager.getRunningServices(Int.MAX_VALUE)
+                    .any { it.service.className == serviceClass.name }
+            }.getOrDefault(false)
         }
     }
 

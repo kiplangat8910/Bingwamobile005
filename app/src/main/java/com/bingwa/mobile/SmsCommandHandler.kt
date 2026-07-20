@@ -320,7 +320,10 @@ object SmsCommandHandler {
     // ── BALANCE ─────────────────────────────────────────────────────
     private fun checkBalance(context: Context, replyTo: String, replySubId: Int?) {
         sendSms(context, replyTo, "Checking your airtime balance. Please wait…", replySubId)
-        BalanceChecker.requestBalanceCheck(context)
+        if (!BalanceChecker.requestBalanceCheck(context)) {
+            sendSms(context, replyTo, "Another USSD task is running right now. Please try again shortly.", replySubId)
+            return
+        }
         val origCb = BalanceChecker.balanceCallback
         BalanceChecker.balanceCallback = { display ->
             val tokens = TokenManager(context).getBalance()

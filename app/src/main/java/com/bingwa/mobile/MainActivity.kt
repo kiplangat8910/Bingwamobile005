@@ -797,7 +797,6 @@ private fun requestBalanceCheckSafely(
             persistResult = persistResult,
             ignoreCooldown = ignoreCooldown
         )
-        true
     }.getOrElse { error ->
         Log.e("MainActivity", "Unable to start balance refresh", error)
         false

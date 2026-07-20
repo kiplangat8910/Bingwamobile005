@@ -278,6 +278,13 @@ class UssdNavigationService : AccessibilityService() {
             }
         }
 
+        fun isBusyForBalanceCheck(): Boolean =
+            advancedActive ||
+                advancedInProgress ||
+                signatureLearningMode ||
+                tokenPurchaseCallback != null ||
+                isForegroundUiActive()
+
         private fun refreshForegroundUi(timeoutMs: Long = 35_000L) {
             if (!foregroundUiActive) return
             foregroundUiUntilElapsed = SystemClock.elapsedRealtime() + timeoutMs
