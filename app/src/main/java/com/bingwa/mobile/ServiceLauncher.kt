@@ -1,5 +1,6 @@
 package com.bingwa.mobile
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -7,6 +8,7 @@ import androidx.core.content.ContextCompat
 
 object ServiceLauncher {
     private const val TAG = "ServiceLauncher"
+    private const val FALLBACK_START_DELAY_MS = 5_000L
 
     fun startBalanceChecker(context: Context): Boolean {
         return startForegroundServiceSafely(
@@ -30,6 +32,7 @@ object ServiceLauncher {
             true
         }.getOrElse { error ->
             Log.e(TAG, "Unable to start $label", error)
+            scheduleStartFallback(context, intent, label)
             OfferNotifications.notify(
                 context,
                 "Phone blocked background start",
@@ -37,5 +40,34 @@ object ServiceLauncher {
             )
             false
         }
+    }
+
+    private fun scheduleStartFallback(context: Context, intent: Intent, label: String) {
+        runCatching {
+            val safeContext = context.applicationContext
+            val component = intent.component ?: return@runCatching
+            val requestCode = resolveFallbackRequestCode(intent, label)
+            val pi = PendingIntent.getService(
+                safeContext,
+                requestCode,
+                Intent(intent).setComponent(component),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            AlarmCompat.scheduleRtcWakeup(
+                context = safeContext,
+                triggerAtMillis = System.currentTimeMillis() + FALLBACK_START_DELAY_MS,
+                pendingIntent = pi,
+                preferExact = false,
+                allowWhileIdle = true
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "Unable to schedule fallback start for $label", error)
+        }
+    }
+
+    private fun resolveFallbackRequestCode(intent: Intent, label: String): Int {
+        val txId = intent.getIntExtra("txId", -1)
+        if (txId >= 0) return txId
+        return (label.hashCode() and Int.MAX_VALUE).coerceAtLeast(1)
     }
 }
