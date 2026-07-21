@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.BufferedWriter
@@ -20,8 +21,11 @@ import java.util.concurrent.RejectedExecutionException
 
 class HotspotRelayService : Service() {
     @Volatile private var running = false
+    @Volatile private var lastRelayContactElapsed = 0L
+    @Volatile private var clearedForDisconnect = false
     private var server: ServerSocket? = null
     private var serverThread: Thread? = null
+    private var watchdogThread: Thread? = null
     private val clientExecutor = Executors.newFixedThreadPool(4)
 
     override fun onCreate() {
@@ -42,7 +46,10 @@ class HotspotRelayService : Service() {
         }
         if (running) return START_STICKY
         running = true
+        lastRelayContactElapsed = SystemClock.elapsedRealtime()
+        clearedForDisconnect = false
         serverThread = Thread({ runServerLoop() }, "BingwaRelayServer").apply { start() }
+        watchdogThread = Thread({ runDisconnectWatchdog() }, "BingwaRelayWatchdog").apply { start() }
         return START_STICKY
     }
 
@@ -90,6 +97,7 @@ class HotspotRelayService : Service() {
                 return
             }
             val cmd = (obj.optString("cmd", "") ?: "").trim()
+            markRelayContact()
             if (cmd.uppercase() == "PING") {
                 writer.write("OK PONG\n")
                 writer.flush()
@@ -145,9 +153,41 @@ class HotspotRelayService : Service() {
         server = null
         runCatching { serverThread?.interrupt() }
         serverThread = null
+        runCatching { watchdogThread?.interrupt() }
+        watchdogThread = null
         clientExecutor.shutdownNow()
+        val cfg = RelayManager.load(this)
+        if (!cfg.enabled || cfg.role != "RELAY") {
+            RelayManager.clearTemporaryRelayMirrors(applicationContext)
+        }
         stopForegroundCompat()
         super.onDestroy()
+    }
+
+    private fun markRelayContact() {
+        lastRelayContactElapsed = SystemClock.elapsedRealtime()
+        clearedForDisconnect = false
+    }
+
+    private fun runDisconnectWatchdog() {
+        while (running) {
+            try {
+                Thread.sleep(DISCONNECT_WATCHDOG_INTERVAL_MS)
+                val lastSeen = lastRelayContactElapsed
+                if (
+                    !clearedForDisconnect &&
+                    lastSeen > 0L &&
+                    SystemClock.elapsedRealtime() - lastSeen >= RELAY_SESSION_TIMEOUT_MS
+                ) {
+                    RelayManager.clearTemporaryRelayMirrors(applicationContext)
+                    clearedForDisconnect = true
+                }
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return
+            } catch (_: Exception) {
+            }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -181,6 +221,8 @@ class HotspotRelayService : Service() {
         private const val CHANNEL_ID = "relay_hotspot"
         private const val HOTSPOT_PORT = 8765
         private const val NOTIFICATION_ID = 2012
+        private const val DISCONNECT_WATCHDOG_INTERVAL_MS = 2_500L
+        private const val RELAY_SESSION_TIMEOUT_MS = 15_000L
     }
 
     @Suppress("DEPRECATION")

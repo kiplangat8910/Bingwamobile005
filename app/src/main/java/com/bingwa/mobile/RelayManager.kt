@@ -84,9 +84,11 @@ object RelayManager {
     val mirroredPrimaryAirtime: StateFlow<String> = _mirroredPrimaryAirtime.asStateFlow()
 
     fun load(context: Context): Config {
-        runCatching { observeConfig(context.applicationContext) }
+        val appCtx = context.applicationContext
+        runCatching { observeConfig(appCtx) }
             .onFailure { Log.e(TAG, "Unable to observe relay config", it) }
-        _mirroredPrimaryAirtime.value = getStoredMirroredPrimaryAirtime(context.applicationContext)
+        _mirroredPrimaryAirtime.value = getStoredMirroredPrimaryAirtime(appCtx)
+        clearTemporaryRelayMirrorsIfInactive(appCtx, _configState.value)
         return _configState.value
     }
 
@@ -109,15 +111,19 @@ object RelayManager {
                     key == "sms_prefix" ||
                     key == "sms_pin"
                 ) {
-                    _configState.value = readConfig(sharedPrefs)
+                    val cfg = readConfig(sharedPrefs)
+                    _configState.value = cfg
+                    clearTemporaryRelayMirrorsIfInactive(context, cfg)
                 }
                 if (key == null || key == KEY_RELAY_PRIMARY_AIRTIME) {
                     _mirroredPrimaryAirtime.value =
                         sharedPrefs.safeGetString(KEY_RELAY_PRIMARY_AIRTIME, "")?.trim().orEmpty()
                 }
             }
-            _configState.value = readConfig(prefs)
+            val cfg = readConfig(prefs)
+            _configState.value = cfg
             _mirroredPrimaryAirtime.value = prefs.safeGetString(KEY_RELAY_PRIMARY_AIRTIME, "")?.trim().orEmpty()
+            clearTemporaryRelayMirrorsIfInactive(context, cfg)
             prefs.registerOnSharedPreferenceChangeListener(listener)
             observedPrefs = prefs
             prefsListener = listener
@@ -155,6 +161,12 @@ object RelayManager {
             .putString(KEY_RELAY_PRIMARY_AIRTIME, clean)
             .apply()
         _mirroredPrimaryAirtime.value = clean
+    }
+
+    fun clearTemporaryRelayMirrors(context: Context) {
+        val appCtx = context.applicationContext
+        TokenManager(appCtx).clearTemporaryRelayBalance()
+        setMirroredPrimaryAirtime(appCtx, "")
     }
 
     fun encodeRelayText(value: String): String =
@@ -408,6 +420,11 @@ object RelayManager {
     private fun getStoredMirroredPrimaryAirtime(context: Context): String =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(KEY_RELAY_PRIMARY_AIRTIME, "")?.trim().orEmpty()
+
+    private fun clearTemporaryRelayMirrorsIfInactive(context: Context, cfg: Config) {
+        if (cfg.enabled && cfg.role == "RELAY") return
+        clearTemporaryRelayMirrors(context)
+    }
 
     private fun rememberGoodRelayIp(context: Context, ip: String) {
         if (ip.isBlank()) return
