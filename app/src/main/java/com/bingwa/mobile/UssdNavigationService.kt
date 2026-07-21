@@ -705,7 +705,13 @@ class UssdNavigationService : AccessibilityService() {
                 }
 
                 // Prevent "next-step" injections on the same dialog right after we click Send/OK.
-                if (shouldWaitForStepTransition(dialogText, windowChanged)) return
+                if (shouldWaitForStepTransition(
+                        dialogText = dialogText,
+                        windowChanged = windowChanged,
+                        root = root,
+                        snapshot = snapshot
+                    )
+                ) return
 
                 if (errorKeywords.any { lower.contains(it) }) {
                     if (signatureLearningMode && currentStep >= advancedSteps.size) {
@@ -917,7 +923,7 @@ class UssdNavigationService : AccessibilityService() {
         val cls = root.className?.toString().orEmpty()
         val normalized = normalizeCollapsedText(dialogText)
         val flags = if (snapshot != null) {
-            "${snapshot.hasEditableField}|${snapshot.hasSendButton}|${snapshot.hasDismissButton}"
+            "${snapshot.hasEditableField}|${snapshot.hasSendButton}|${snapshot.hasDismissButton}|${snapshot.inputStateSignature}"
         } else {
             ""
         }
@@ -934,7 +940,7 @@ class UssdNavigationService : AccessibilityService() {
         val cls = root.className?.toString().orEmpty()
         val normalized = normalizeCollapsedText(dialogText)
         val flags = if (snapshot != null) {
-            "${snapshot.hasEditableField}|${snapshot.hasSendButton}|${snapshot.hasDismissButton}"
+            "${snapshot.hasEditableField}|${snapshot.hasSendButton}|${snapshot.hasDismissButton}|${snapshot.inputStateSignature}"
         } else {
             ""
         }
@@ -983,7 +989,13 @@ class UssdNavigationService : AccessibilityService() {
                 val freshDialogText = effectiveSnapshot.dialogText
                 val dialogText = freshDialogText.ifBlank { lastFinalResponse }
                 val lower = dialogText.lowercase()
-                if (shouldWaitForStepTransition(dialogText, windowChanged = false)) {
+                if (shouldWaitForStepTransition(
+                        dialogText = dialogText,
+                        windowChanged = false,
+                        root = interactionRoot,
+                        snapshot = effectiveSnapshot
+                    )
+                ) {
                     isProcessing = false
                     pendingProcessToken = SystemClock.elapsedRealtime()
                     scheduleProcessStep(dialogChanged = false)
@@ -1080,7 +1092,7 @@ class UssdNavigationService : AccessibilityService() {
                             recentVerifiedWrite &&
                             tryImmediateVerifiedSend(interactionRoot, inputField, valueToEnter)
                         ) {
-                            markStepAction(dialogText)
+                            markStepAction(dialogText, root = interactionRoot)
                             startPendingStepAdvance(interactionRoot, dialogText)
                             return
                         }
@@ -1109,7 +1121,7 @@ class UssdNavigationService : AccessibilityService() {
                 if (menuBtn != null) {
                     val clicked = try { performClick(menuBtn) } finally { menuBtn.recycle() }
                     if (clicked) {
-                        markStepAction(dialogText)
+                        markStepAction(dialogText, root = interactionRoot, snapshot = effectiveSnapshot)
                         startPendingStepAdvance(interactionRoot, dialogText)
                         return
                     }
@@ -1287,7 +1299,8 @@ class UssdNavigationService : AccessibilityService() {
         val textTokens: List<String>,
         val hasEditableField: Boolean,
         val hasSendButton: Boolean,
-        val hasDismissButton: Boolean
+        val hasDismissButton: Boolean,
+        val inputStateSignature: String
     )
 
     private data class DialogCaptureCandidate(
@@ -1620,13 +1633,28 @@ class UssdNavigationService : AccessibilityService() {
         return loadedSignatureLookup[stepIndex]
     }
 
-    private fun markStepAction(dialogText: String) {
-        lastStepActionKey = normalizeMenuText(dialogText)
+    private fun markStepAction(
+        dialogText: String,
+        root: AccessibilityNodeInfo? = null,
+        snapshot: UssdTreeSnapshot? = null
+    ) {
+        lastStepActionKey = buildDialogStateKey(
+            dialogText = dialogText,
+            inputStateSignature = snapshot?.inputStateSignature ?: root?.let(::captureInputStateSignature).orEmpty()
+        )
         lastStepActionElapsed = SystemClock.elapsedRealtime()
     }
 
-    private fun shouldWaitForStepTransition(dialogText: String, windowChanged: Boolean): Boolean {
-        val key = normalizeMenuText(dialogText)
+    private fun shouldWaitForStepTransition(
+        dialogText: String,
+        windowChanged: Boolean,
+        root: AccessibilityNodeInfo? = null,
+        snapshot: UssdTreeSnapshot? = null
+    ): Boolean {
+        val key = buildDialogStateKey(
+            dialogText = dialogText,
+            inputStateSignature = snapshot?.inputStateSignature ?: root?.let(::captureInputStateSignature).orEmpty()
+        )
         if (lastStepActionKey.isBlank() || key.isBlank()) return false
         if (key != lastStepActionKey) {
             // Screen changed; clear the guard and proceed normally.
@@ -2073,9 +2101,10 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun shouldWaitForFinalResponse(snapshot: UssdTreeSnapshot, dialogText: String): Boolean {
         val normalized = normalizeMenuText(dialogText)
+        val stateKey = buildDialogStateKey(dialogText, snapshot.inputStateSignature)
         if (!hasMeaningfulResponseText(snapshot, dialogText)) return true
         if (isTransientResponseText(normalized)) return true
-        return lastStepActionKey.isNotBlank() && normalized == lastStepActionKey
+        return lastStepActionKey.isNotBlank() && stateKey == lastStepActionKey
     }
 
     private fun extractTextTokens(node: AccessibilityNodeInfo, into: MutableList<String> = mutableListOf()): List<String> {
@@ -3387,6 +3416,8 @@ class UssdNavigationService : AccessibilityService() {
         var hasEditableField = false
         var hasSendButton = false
         var hasDismissButton = false
+        var bestInputSignature = ""
+        var bestInputScore = Int.MIN_VALUE
     }
 
     private fun scanNodeSummary(node: AccessibilityNodeInfo): TreeScanAccumulator =
@@ -3403,7 +3434,8 @@ class UssdNavigationService : AccessibilityService() {
                 textTokens = accumulator.textTokens.toList(),
                 hasEditableField = accumulator.hasEditableField,
                 hasSendButton = accumulator.hasSendButton,
-                hasDismissButton = accumulator.hasDismissButton
+                hasDismissButton = accumulator.hasDismissButton,
+                inputStateSignature = accumulator.bestInputSignature
             )
         } finally {
             captureRoot.recycle()
@@ -3427,7 +3459,8 @@ class UssdNavigationService : AccessibilityService() {
                 textTokens = accumulator.textTokens.toList(),
                 hasEditableField = accumulator.hasEditableField,
                 hasSendButton = accumulator.hasSendButton,
-                hasDismissButton = accumulator.hasDismissButton
+                hasDismissButton = accumulator.hasDismissButton,
+                inputStateSignature = accumulator.bestInputSignature
             )
         } finally {
             captureRoot.recycle()
@@ -3550,15 +3583,70 @@ class UssdNavigationService : AccessibilityService() {
         try {
             node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { accumulator.textTokens += it }
             node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { accumulator.textTokens += it }
-            if (!accumulator.hasEditableField && isTextEntryNode(node)) accumulator.hasEditableField = true
+            val isEditableField = isTextEntryNode(node)
+            if (!accumulator.hasEditableField && isEditableField) accumulator.hasEditableField = true
             if (!accumulator.hasSendButton && isSendActionNode(node)) accumulator.hasSendButton = true
             if (!accumulator.hasDismissButton && isDismissActionNode(node)) accumulator.hasDismissButton = true
+            if (isEditableField || isLooseInputCandidate(node)) {
+                val candidateScore = scoreTextEntryCandidate(node)
+                if (candidateScore >= accumulator.bestInputScore) {
+                    accumulator.bestInputScore = candidateScore
+                    accumulator.bestInputSignature = buildInputNodeSignature(node)
+                }
+            }
             for (i in 0 until node.childCount) {
                 val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
                 collectTreeSnapshot(child, accumulator)
                 child.recycle()
             }
         } catch (_: Exception) {}
+    }
+
+    private fun buildDialogStateKey(dialogText: String, inputStateSignature: String): String {
+        val normalizedDialog = normalizeMenuText(dialogText)
+        if (normalizedDialog.isBlank()) return ""
+        val normalizedInput = normalizeCollapsedText(inputStateSignature)
+        return if (normalizedInput.isBlank()) normalizedDialog else "$normalizedDialog|$normalizedInput"
+    }
+
+    private fun captureInputStateSignature(root: AccessibilityNodeInfo): String {
+        val field = findEditableField(root) ?: return ""
+        return try {
+            buildInputNodeSignature(field)
+        } finally {
+            field.recycle()
+        }
+    }
+
+    private fun buildInputNodeSignature(node: AccessibilityNodeInfo): String {
+        val className = node.className?.toString().orEmpty().substringAfterLast('.')
+        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
+        } else {
+            ""
+        }
+        val fieldText = normalizeCollapsedText(readFieldText(node))
+        val valueSignature = when {
+            fieldText.isBlank() -> "_"
+            isLikelyPromptText(fieldText) -> "prompt:${normalizeActionLabel(fieldText).take(24)}"
+            else -> "value:${normalizeInputValue(fieldText).takeLast(20)}"
+        }
+        val bounds = Rect()
+        runCatching { node.getBoundsInScreen(bounds) }
+        val role = when {
+            try { node.isEditable } catch (_: Exception) { false } -> "editable"
+            supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) -> "settext"
+            else -> "candidate"
+        }
+        return listOf(
+            className,
+            viewId.takeLast(24),
+            hint.take(24),
+            valueSignature,
+            "${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}",
+            role
+        ).joinToString("|")
     }
 
     private fun findActionButton(root: AccessibilityNodeInfo, labels: List<String>): AccessibilityNodeInfo? {
