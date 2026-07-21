@@ -103,25 +103,31 @@ class BalanceChecker : Service() {
                 activeRequestContext = null
 
                 val display = parseBalanceDisplay(raw)
+                val fallbackDisplay = if (completedRequest.persistResult) currentBalanceStr else ""
+                val safeDisplay = display.ifBlank { fallbackDisplay }
                 val intVal = if (display.isNotEmpty()) parseBalanceInt(raw) else -1
                 if (completedRequest.persistResult) {
-                    currentBalance = intVal
-                    currentBalanceStr = display
+                    if (intVal >= 0) {
+                        currentBalance = intVal
+                    }
+                    if (display.isNotEmpty()) {
+                        currentBalanceStr = display
+                    }
                 }
                 if (completedRequest.persistResult && display.isNotEmpty()) {
                     RelayManager.syncPrimaryAirtimeBalance(context, display)
                 }
 
                 Handler(Looper.getMainLooper()).post {
-                    balanceCallback?.invoke(display)
+                    balanceCallback?.invoke(safeDisplay)
                     balanceResultListener?.invoke(
                         BalanceCheckResult(
-                            display = display,
+                            display = safeDisplay,
                             selectionOverride = completedRequest.selectionOverride,
                             persistResult = completedRequest.persistResult
                         )
                     )
-                    if (completedRequest.persistResult) {
+                    if (completedRequest.persistResult && safeDisplay.isNotBlank()) {
                         // Trigger admin alerts after balance update
                         MpesaReceiver.checkAndSendAlerts(context)
                     }

@@ -8,6 +8,8 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -771,14 +773,64 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun extractDialogTextFromEvent(event: AccessibilityEvent): String {
-        val parts = mutableListOf<String>()
+        val parts = linkedSetOf<String>()
         runCatching {
             event.text?.forEach { cs ->
                 val s = cs?.toString()?.trim().orEmpty()
                 if (s.isNotBlank()) parts += s
             }
         }
+        event.contentDescription?.toString()?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let(parts::add)
+        val source = try { event.source } catch (_: Exception) { null }
+        if (source != null) {
+            try {
+                collectEventNodeText(source, parts, maxDepth = 2)
+                var current = try { source.parent } catch (_: Exception) { null }
+                var depth = 0
+                while (current != null && depth < 3 && parts.size < 24) {
+                    try {
+                        collectEventNodeText(current, parts, maxDepth = 1)
+                        val next = try { current.parent } catch (_: Exception) { null }
+                        current.recycle()
+                        current = next
+                        depth++
+                    } catch (_: Exception) {
+                        runCatching { current.recycle() }
+                        current = null
+                    }
+                }
+                current?.recycle()
+            } finally {
+                source.recycle()
+            }
+        }
         return normalizeCollapsedText(parts.distinct().joinToString(" "))
+    }
+
+    private fun collectEventNodeText(
+        node: AccessibilityNodeInfo,
+        into: MutableSet<String>,
+        maxDepth: Int,
+        depth: Int = 0
+    ) {
+        if (depth > maxDepth || into.size >= 24) return
+        try {
+            node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let(into::add)
+            node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let(into::add)
+            if (depth >= maxDepth) return
+            for (i in 0 until node.childCount) {
+                if (into.size >= 24) break
+                val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+                try {
+                    collectEventNodeText(child, into, maxDepth, depth + 1)
+                } finally {
+                    child.recycle()
+                }
+            }
+        } catch (_: Exception) {
+        }
     }
 
     private fun shouldSkipDuplicateEvent(event: AccessibilityEvent): Boolean {
@@ -2505,9 +2557,15 @@ class UssdNavigationService : AccessibilityService() {
                 airtimeBalance = dialogText
                 val display = BalanceChecker.parseBalanceDisplay(dialogText)
                 val intVal  = BalanceChecker.parseBalanceInt(dialogText)
-                BalanceChecker.currentBalance    = intVal
-                BalanceChecker.currentBalanceStr = display
-                BalanceChecker.balanceCallback?.invoke(display)
+                if (intVal >= 0) {
+                    BalanceChecker.currentBalance = intVal
+                }
+                if (display.isNotBlank()) {
+                    BalanceChecker.currentBalanceStr = display
+                }
+                BalanceChecker.balanceCallback?.invoke(
+                    display.ifBlank { BalanceChecker.currentBalanceStr }
+                )
                 closeCurrentUssdUi()
                 clearCallbacks()
             }
@@ -4138,7 +4196,22 @@ class UssdNavigationService : AccessibilityService() {
                 likelyVerified = isLikelyDirectWriteVerified(node, value)
             )
         }
+        if (pasteValueOnNode(node, value)) {
+            return InputWriteResult(
+                wroteValue = true,
+                likelyVerified = isLikelyDirectWriteVerified(node, value)
+            )
+        }
         if (supportsSilentSetText(node) && activateInputTarget(node) && setTextOnNode(node, value)) {
+            return InputWriteResult(
+                wroteValue = true,
+                likelyVerified = isLikelyDirectWriteVerified(node, value)
+            )
+        }
+        if (supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE) &&
+            activateInputTarget(node) &&
+            pasteValueOnNode(node, value)
+        ) {
             return InputWriteResult(
                 wroteValue = true,
                 likelyVerified = isLikelyDirectWriteVerified(node, value)
@@ -4252,7 +4325,35 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun supportsSilentSetText(node: AccessibilityNodeInfo): Boolean =
-        supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)
+        supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
+            supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
+
+    private fun pasteValueOnNode(node: AccessibilityNodeInfo, value: String): Boolean {
+        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)) return false
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return false
+        val previousClip = runCatching { clipboard.primaryClip }.getOrNull()
+        val hadPrimaryClip = runCatching { clipboard.hasPrimaryClip() }.getOrDefault(false)
+        return try {
+            clipboard.setPrimaryClip(ClipData.newPlainText("bingwa_ussd_input", value))
+            focusInputTarget(node)
+            val pasted = runCatching {
+                node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+            }.getOrDefault(false)
+            if (pasted) {
+                collapseInputSelection(node, value)
+            }
+            pasted
+        } finally {
+            runCatching {
+                when {
+                    previousClip != null -> clipboard.setPrimaryClip(previousClip)
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.P -> clipboard.clearPrimaryClip()
+                    hadPrimaryClip -> clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+                    else -> clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+                }
+            }
+        }
+    }
 
     private fun isSafeInputActivationCandidate(node: AccessibilityNodeInfo): Boolean {
         val className = node.className?.toString().orEmpty()

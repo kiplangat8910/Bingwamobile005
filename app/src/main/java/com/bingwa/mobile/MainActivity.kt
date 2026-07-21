@@ -2837,7 +2837,9 @@ fun BingwaApp() {
             isRefreshing = false
             when {
                 result.persistResult -> {
-                    airBal = result.display
+                    if (result.display.isNotBlank()) {
+                        airBal = result.display
+                    }
                     if (result.display.isBlank()) {
                         slot2PreviewBalance = null
                     }
@@ -2921,7 +2923,9 @@ fun BingwaApp() {
                 val defaultAirBal =
                     if (relayCfg.enabled && relayCfg.role == "RELAY") mirroredPrimaryAirtime.ifBlank { airBal }
                     else airBal
-                val displayedAirBal = slot2PreviewBalance ?: defaultAirBal
+                val displayedAirBal = slot2PreviewBalance ?: defaultAirBal.ifBlank {
+                    BalanceChecker.currentBalanceStr.ifBlank { "KSh 0.00" }
+                }
                 val showSlot2Hint = canPreviewSlot2 && defaultAirBal.isNotBlank()
                 when (s) {
                     Screen.Home     -> HomeScreenVolcanic(
@@ -5765,7 +5769,7 @@ fun VolcanicBalanceCard(
         val pendingAccent = Color(0xFFF5AF19)
         val failedAccent = Color(0xFFFF496A)
         val completedAccent = Color(0xFFB79BFF)
-        val airtimeValue = airBal.ifBlank { "—" }
+        val airtimeValue = airBal.ifBlank { BalanceChecker.currentBalanceStr.ifBlank { "KSh 0.00" } }
         val topTokenValue = unlimitedLabel ?: tokenBal.toString()
         val topTokenCaption = unlimitedRemaining ?: if (unlimitedLabel != null) "Unlimited plan active" else "Available Units"
         val airtimeFontSize = balanceValueFontSize(
