@@ -10,6 +10,7 @@ fun Context.startOfferAutomation(
     finalCode: String,
     mode: String = offer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE,
     signatureLearning: Boolean = false,
+    executionPriority: String = USSD_EXECUTION_PRIORITY_NORMAL,
     returnToAppAggressively: Boolean = true
 ) {
     val requestedMode = mode.ifBlank { offer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE }
@@ -26,6 +27,7 @@ fun Context.startOfferAutomation(
         putExtra("phoneNumber", phoneNumber)
         putExtra("txId", txId)
         putExtra("signatureLearning", signatureLearning)
+        putExtra("executionPriority", executionPriority)
         putExtra("returnToAppAggressively", returnToAppAggressively)
         if (offer != null) {
             putExtra("offerId", offer.id)

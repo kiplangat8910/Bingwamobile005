@@ -62,6 +62,7 @@ class AutomationService : Service() {
         val signatureEnabled: Boolean,
         val signatureMode: String,
         val signatureLearning: Boolean,
+        val executionPriority: String,
         val returnToAppAggressively: Boolean
     )
 
@@ -125,12 +126,16 @@ class AutomationService : Service() {
         }
         UssdQueue.enqueue(
             Runnable {
-                Log.d(TAG, "Dequeued USSD request txId=${request.txId} mode=${request.mode}")
+                Log.d(
+                    TAG,
+                    "Dequeued USSD request txId=${request.txId} mode=${request.mode} priority=${request.executionPriority}"
+                )
                 when {
                     usesAdvancedFlow(request) -> startAdvanced(request)
                     else -> handleSimple(request)
                 }
-            }
+            },
+            priority = request.executionPriority
         )
         return START_REDELIVER_INTENT
     }
@@ -154,6 +159,7 @@ class AutomationService : Service() {
             signatureEnabled = safeIntent.getBooleanExtra("signatureEnabled", false),
             signatureMode = (safeIntent.getStringExtra("signatureMode") ?: "STOP").uppercase(),
             signatureLearning = safeIntent.getBooleanExtra("signatureLearning", false),
+            executionPriority = safeIntent.getStringExtra("executionPriority") ?: USSD_EXECUTION_PRIORITY_NORMAL,
             returnToAppAggressively = safeIntent.getBooleanExtra("returnToAppAggressively", true)
         )
     }
@@ -741,6 +747,7 @@ class AutomationService : Service() {
             putExtra("signatureEnabled", request.signatureEnabled)
             putExtra("signatureMode", request.signatureMode)
             putExtra("signatureLearning", request.signatureLearning)
+            putExtra("executionPriority", request.executionPriority)
             putExtra("returnToAppAggressively", request.returnToAppAggressively)
         }
 
