@@ -102,6 +102,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val MAX_SEND_ATTEMPTS      = 5
         private const val NO_FIELD_PATIENCE      = 4
         private const val INPUT_TARGET_DEPTH     = 8
+        private const val INPUT_DESCENT_DEPTH    = 4
         private const val RECENT_INPUT_GRACE_MS  = 4_000L
         private const val RECENT_VERIFIED_INPUT_GRACE_MS = 6_500L
         private const val RECENT_UI_EVENT_GRACE_MS = 1_200L
@@ -1109,7 +1110,8 @@ class UssdNavigationService : AccessibilityService() {
                             wroteValue = wroteValue,
                             expectedValue = valueToEnter,
                             existingField = inputField,
-                            snapshot = effectiveSnapshot
+                            snapshot = effectiveSnapshot,
+                            dialogTextLower = lower
                         )
                         val recentVerifiedWrite = inlineVerified ||
                             hasRecentVerifiedInput(valueToEnter) ||
@@ -2176,7 +2178,9 @@ class UssdNavigationService : AccessibilityService() {
         val fields = mutableListOf<AccessibilityNodeInfo>()
         try {
             collectTextEntryCandidates(root, fields)
-            if (fields.isEmpty()) return false
+            if (fields.isEmpty()) {
+                return tryWriteValueToField(root, value)
+            }
             fields.sortByDescending { scoreTextEntryCandidate(it) }
             return fields.any { field -> tryWriteValueToField(field, value) }
         } finally {
@@ -3290,7 +3294,9 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun collectTextEntryCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>) {
         try {
-            if (isTextEntryNode(node) || isLooseInputCandidate(node)) into += AccessibilityNodeInfo.obtain(node)
+            if (isTextEntryNode(node) || isLooseInputCandidate(node) || isHiddenInputProxyCandidate(node)) {
+                into += AccessibilityNodeInfo.obtain(node)
+            }
             for (i in 0 until node.childCount) {
                 val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
                 collectTextEntryCandidates(child, into)
@@ -3321,6 +3327,7 @@ class UssdNavigationService : AccessibilityService() {
         if (INPUT_VIEW_ID_HINTS.any { viewId.contains(it) }) score += 180
         if (INPUT_FIELD_HINTS.any { label.contains(it) || desc.contains(it) || hint.contains(it) }) score += 120
         if (isLooseInputCandidate(node)) score += 110
+        if (isHiddenInputProxyCandidate(node)) score += 150
         if (try { node.isFocused } catch (_: Exception) { false }) score += 90
         if (try { node.isFocusable } catch (_: Exception) { false }) score += 70
         if (try { node.isClickable } catch (_: Exception) { false }) score += 40
@@ -4116,6 +4123,50 @@ class UssdNavigationService : AccessibilityService() {
                 (hasViewHint && (focusable || clickable)))
     }
 
+    private fun isHiddenInputProxyCandidate(node: AccessibilityNodeInfo): Boolean {
+        val className = node.className?.toString().orEmpty()
+        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
+        } else {
+            ""
+        }
+        val enabled = try { node.isEnabled } catch (_: Exception) { true }
+        val editable = try { node.isEditable } catch (_: Exception) { false }
+        val focusable = try { node.isFocusable || node.isFocused } catch (_: Exception) { false }
+        val clickable = try { node.isClickable || node.isLongClickable } catch (_: Exception) { false }
+        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            try { node.isVisibleToUser } catch (_: Exception) { true }
+        } else {
+            true
+        }
+        val hasSetTextAction = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)
+        val hasPasteAction = supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
+        val hasWritableAction = hasSetTextAction || hasPasteAction
+        val looksLikeButton = className.contains("Button", ignoreCase = true) ||
+            className.contains("ImageButton", ignoreCase = true)
+        val looksLikeInputClass = EDITABLE_CLASS_HINTS.any { className.contains(it, ignoreCase = true) } ||
+            className.contains("TextInput", ignoreCase = true) ||
+            className.contains("Edit", ignoreCase = true) ||
+            className.contains("AutoComplete", ignoreCase = true) ||
+            className.contains("Search", ignoreCase = true)
+        val hasViewHint = hasInputViewHint(viewId, hint)
+        val hasLabelHint = hasInputLabelHint(label, desc)
+        val hasShortOrBlankText = label.isBlank() || label.length <= 18
+        val isActionLabel = label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS ||
+            label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS
+        if (!enabled || editable || looksLikeButton || isActionLabel) return false
+        if (!visible && !hasWritableAction) return false
+        if (hasWritableAction && (looksLikeInputClass || hasViewHint || hasLabelHint || focusable || clickable)) {
+            return true
+        }
+        return hasShortOrBlankText &&
+            (focusable || clickable) &&
+            (looksLikeInputClass || hasViewHint || hasLabelHint)
+    }
+
     private fun supportsAction(node: AccessibilityNodeInfo, actionId: Int): Boolean =
         try {
             node.actionList?.any { it.id == actionId } == true
@@ -4201,11 +4252,16 @@ class UssdNavigationService : AccessibilityService() {
         wroteValue: Boolean,
         expectedValue: String,
         existingField: AccessibilityNodeInfo?,
-        snapshot: UssdTreeSnapshot
+        snapshot: UssdTreeSnapshot,
+        dialogTextLower: String
     ): Boolean {
         if (!wroteValue || !hasRecentExpectedInput(expectedValue)) return false
         if (existingField != null) return true
-        return snapshot.hasEditableField && snapshot.hasSendButton
+        return snapshot.hasSendButton && (
+            snapshot.hasEditableField ||
+                snapshot.inputStateSignature.isNotBlank() ||
+                dialogSuggestsTypedReplyPrompt(dialogTextLower)
+            )
     }
 
     private fun shouldTrustRecentWrite(fieldText: String?, expectedValue: String): Boolean {
@@ -4342,7 +4398,7 @@ class UssdNavigationService : AccessibilityService() {
         into: MutableList<AccessibilityNodeInfo>,
         depth: Int
     ) {
-        if (depth > 2) return
+        if (depth > INPUT_DESCENT_DEPTH) return
         try {
             if (supportsDirectInput(node)) into += AccessibilityNodeInfo.obtain(node)
             for (i in 0 until node.childCount) {
@@ -4355,7 +4411,8 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun supportsDirectInput(node: AccessibilityNodeInfo): Boolean =
         isTextEntryNode(node) ||
-            supportsSilentSetText(node)
+            supportsSilentSetText(node) ||
+            isHiddenInputProxyCandidate(node)
 
     private fun focusInputTarget(node: AccessibilityNodeInfo) {
         val alreadyFocused = try { node.isFocused } catch (_: Exception) { false }
