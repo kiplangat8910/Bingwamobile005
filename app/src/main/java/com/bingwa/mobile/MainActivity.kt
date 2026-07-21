@@ -2795,6 +2795,7 @@ fun BingwaApp() {
     var airBal by remember { mutableStateOf(BalanceChecker.getLastKnownBalanceDisplay(ctx)) }
     var slot2PreviewBalance by remember { mutableStateOf<String?>(null) }
     var slot2PreviewNonce by remember { mutableIntStateOf(0) }
+    var showSlot2HintPrompt by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     var running by remember { mutableStateOf(appPrefs.safeGetBoolean("automation_enabled", true)) }
     var remainingMs by remember { mutableLongStateOf(unlimitedManager.remainingMs()) }
@@ -2836,6 +2837,18 @@ fun BingwaApp() {
         if (slot2PreviewBalance == null) return@LaunchedEffect
         delay(4_000L)
         slot2PreviewBalance = null
+    }
+
+    LaunchedEffect(canPreviewSlot2, defaultAirBal, slot2PreviewBalance) {
+        if (!canPreviewSlot2 || defaultAirBal.isBlank() || slot2PreviewBalance != null) {
+            showSlot2HintPrompt = false
+            return@LaunchedEffect
+        }
+        showSlot2HintPrompt = true
+        delay(5_000L)
+        if (slot2PreviewBalance == null) {
+            showSlot2HintPrompt = false
+        }
     }
 
     DisposableEffect(Unit) {
@@ -2941,7 +2954,7 @@ fun BingwaApp() {
         Box(Modifier.fillMaxSize().background(C.bg).padding(pad)) {
             AnimatedContent(targetState = screen, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) }, label = "screen") { s ->
                 val unlimitedLabel = unlimitedManager.getActivePlan()?.label?.takeIf { remainingMs > 0L }
-                val showSlot2Hint = canPreviewSlot2 && defaultAirBal.isNotBlank()
+                val showSlot2Hint = canPreviewSlot2 && defaultAirBal.isNotBlank() && showSlot2HintPrompt
                 when (s) {
                     Screen.Home     -> HomeScreenVolcanic(
                         tokenBal = tokenBal,
