@@ -16,6 +16,12 @@ import androidx.core.app.NotificationCompat
 
 class BalanceChecker : Service() {
 
+    data class BalanceCheckResult(
+        val display: String,
+        val selectionOverride: Int?,
+        val persistResult: Boolean
+    )
+
     companion object {
         private const val TAG = "BalanceChecker"
         private const val DEFAULT_BALANCE_USSD = "*144#"
@@ -39,12 +45,6 @@ class BalanceChecker : Service() {
         private var timeoutRunnable: Runnable? = null
         private var pendingRefreshRunnable: Runnable? = null
         @Volatile private var activeRequestContext: BalanceRequestContext? = null
-
-        data class BalanceCheckResult(
-            val display: String,
-            val selectionOverride: Int?,
-            val persistResult: Boolean
-        )
 
         private data class BalanceRequestContext(
             val selectionOverride: Int? = null,
