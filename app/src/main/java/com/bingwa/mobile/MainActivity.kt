@@ -2801,6 +2801,10 @@ fun BingwaApp() {
     val mirroredPrimaryAirtime by RelayManager.mirroredPrimaryAirtime.collectAsState()
     val hasDualActiveSlots = hasTwoActiveSimSlots(ctx)
     val canPreviewSlot2 = hasDualActiveSlots && !(relayCfg.enabled && relayCfg.role == "RELAY")
+    val defaultAirBal =
+        if (relayCfg.enabled && relayCfg.role == "RELAY") mirroredPrimaryAirtime.ifBlank { airBal }
+        else airBal
+    val displayedAirBal = slot2PreviewBalance ?: defaultAirBal
     val toggleRunning = {
         running = !running
         appPrefs.edit().putBoolean("automation_enabled", running).apply()
@@ -2902,6 +2906,23 @@ fun BingwaApp() {
         onDispose { runCatching { RelayManager.stopHotspotMonitor() } }
     }
 
+    LaunchedEffect(screen, displayedAirBal.isBlank(), relayCfg.enabled, relayCfg.role, running) {
+        val shouldAutoRefreshBlankBalance =
+            screen == Screen.Home &&
+                displayedAirBal.isBlank() &&
+                !isRefreshing &&
+                running &&
+                !(relayCfg.enabled && relayCfg.role == "RELAY") &&
+                shouldAutoStartPhoneAutomation(ctx)
+        if (!shouldAutoRefreshBlankBalance) return@LaunchedEffect
+
+        slot2PreviewBalance = null
+        isRefreshing = true
+        if (!requestBalanceCheckSafely(ctx, ignoreCooldown = true)) {
+            isRefreshing = false
+        }
+    }
+
     BackHandler(enabled = screen != Screen.Home) { screenRoute = Screen.Home.route }
 
     Scaffold(
@@ -2918,10 +2939,6 @@ fun BingwaApp() {
         Box(Modifier.fillMaxSize().background(C.bg).padding(pad)) {
             AnimatedContent(targetState = screen, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) }, label = "screen") { s ->
                 val unlimitedLabel = unlimitedManager.getActivePlan()?.label?.takeIf { remainingMs > 0L }
-                val defaultAirBal =
-                    if (relayCfg.enabled && relayCfg.role == "RELAY") mirroredPrimaryAirtime.ifBlank { airBal }
-                    else airBal
-                val displayedAirBal = slot2PreviewBalance ?: defaultAirBal
                 val showSlot2Hint = canPreviewSlot2 && defaultAirBal.isNotBlank()
                 when (s) {
                     Screen.Home     -> HomeScreenVolcanic(
