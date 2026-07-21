@@ -354,7 +354,10 @@ class BalanceChecker : Service() {
             )
         }
 
-        private fun isUssdSessionBusy(): Boolean = UssdNavigationService.isBusyForBalanceCheck()
+        private fun isUssdSessionBusy(): Boolean =
+            UssdNavigationService.isBusyForBalanceCheck() ||
+                SilentUssd.isExecutionInProgress() ||
+                SilentUssdOptimized.isExecutionInProgress()
 
         fun getLastKnownBalanceDisplay(context: Context): String {
             val cached = currentBalanceStr.trim()

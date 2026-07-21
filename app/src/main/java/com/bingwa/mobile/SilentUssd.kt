@@ -14,6 +14,7 @@ import java.lang.reflect.Proxy
 object SilentUssd {
     private const val TAG             = "SilentUssd"
     private const val TIMEOUT_MS      = 3_000L
+    @Volatile private var inProgress  = false
 
     private var successCb : ((String) -> Unit)? = null
     private var failureCb : ((String) -> Unit)? = null
@@ -48,6 +49,7 @@ object SilentUssd {
             clearLocked()
             successCb = onSuccess
             failureCb = onFailure
+            inProgress = true
         }
         armTimeout(code)
 
@@ -63,6 +65,8 @@ object SilentUssd {
         cancelTimeout()
         return false
     }
+
+    fun isExecutionInProgress(): Boolean = synchronized(this) { inProgress }
 
     fun isSilentUssdSupported(context: Context): Boolean {
         val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
@@ -264,6 +268,7 @@ object SilentUssd {
     private fun clearLocked() {
         successCb = null
         failureCb = null
+        inProgress = false
     }
 
     private fun normaliseCode(raw: String): String {

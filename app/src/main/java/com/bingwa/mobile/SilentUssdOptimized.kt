@@ -73,6 +73,8 @@ object SilentUssdOptimized {
         return hasReflectionMethod(tm)
     }
 
+    fun isExecutionInProgress(): Boolean = isProcessing.get()
+
     @SuppressLint("MissingPermission")
     private fun tryPublicApi(tm: TelephonyManager, code: String): Boolean {
         return try {
