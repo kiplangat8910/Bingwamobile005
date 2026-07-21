@@ -2263,8 +2263,7 @@ class UssdNavigationService : AccessibilityService() {
             rememberVerifiedInput(expected)
             handler.post { clickSendButton(expected, 0, skipFieldVerification = true) }
         } else {
-            // Avoid expensive re-writes if we very recently injected the same value.
-            if (!hasRecentExpectedInput(expected)) {
+            if (shouldRetryUnverifiedInputWrite(expected, attempt)) {
                 writeValueToField(expected)
             }
             handler.postDelayed(
@@ -2326,7 +2325,7 @@ class UssdNavigationService : AccessibilityService() {
                 handler.post { finishLearningWithoutFinalSubmission() }
             }
             else -> {
-                if (!hasRecentExpectedInput(expected)) {
+                if (shouldRetryUnverifiedInputWrite(expected, attempt)) {
                     writeValueToField(expected)
                 }
                 handler.postDelayed(
@@ -2444,8 +2443,7 @@ class UssdNavigationService : AccessibilityService() {
                     startPendingStepAdvance(root, text)
                     return
                 }
-                // Avoid re-scanning/re-writing on every retry when we already know we injected this value recently.
-                if (!hasRecentExpectedInput(expectedValue) && attempt < 2) {
+                if (shouldRetryUnverifiedInputWrite(expectedValue, attempt) && attempt < 2) {
                     writeValueToField(expectedValue)
                 }
                 handler.postDelayed(
@@ -2832,8 +2830,9 @@ class UssdNavigationService : AccessibilityService() {
                         return
                     }
 
-                    // One corrective write, then wait for the next event.
-                    if (pendingAttempts == 0 && !hasRecentExpectedInput(expected)) {
+                    // Some Android builds report ACTION_SET_TEXT success before the field actually updates.
+                    // Allow one corrective rewrite even after a recent unverified write.
+                    if (pendingAttempts == 0 && !hasRecentVerifiedInput(expected)) {
                         pendingAttempts++
                         val wroteValue = writeValueToField(interactionRoot, expected)
                         if (wroteValue && hasRecentVerifiedInput(expected)) {
@@ -4420,6 +4419,12 @@ class UssdNavigationService : AccessibilityService() {
         return SystemClock.elapsedRealtime() - lastVerifiedInputElapsed <= RECENT_VERIFIED_INPUT_GRACE_MS
     }
 
+    private fun shouldRetryUnverifiedInputWrite(expectedValue: String, attempt: Int): Boolean {
+        if (hasRecentVerifiedInput(expectedValue)) return false
+        if (!hasRecentExpectedInput(expectedValue)) return true
+        return attempt <= 0
+    }
+
     private fun shouldTrustFreshInputWrite(
         wroteValue: Boolean,
         expectedValue: String,
@@ -4564,7 +4569,14 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun writeValueUsingStrategies(node: AccessibilityNodeInfo, value: String): InputWriteResult {
+        runCatching { node.refresh() }
         if (setTextOnNode(node, value)) {
+            return InputWriteResult(
+                wroteValue = true,
+                likelyVerified = isLikelyDirectWriteVerified(node, value)
+            )
+        }
+        if (activateInputTarget(node) && setTextOnNode(node, value)) {
             return InputWriteResult(
                 wroteValue = true,
                 likelyVerified = isLikelyDirectWriteVerified(node, value)
