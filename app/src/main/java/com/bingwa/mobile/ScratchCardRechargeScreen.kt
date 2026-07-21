@@ -52,6 +52,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -94,7 +95,6 @@ private const val MAX_RECENT_PINS = 5
 private const val FREE_RECHARGE_WINDOW_LIMIT = 10
 private const val FREE_RECHARGE_WINDOW_MS = 24 * 60 * 60 * 1000L
 private const val USED_PIN_RECORD_RETENTION_MS = 60 * 60 * 1000L
-private const val SCRATCH_BALANCE_REFRESH_POLL_MS = 250L
 private const val SCRATCH_BATCH_GAP_MS = 650L
 private const val SCRATCH_DEFAULT_SCAN_MESSAGE =
     "Pick one image to scan for 16-digit scratch card PINs."
@@ -172,10 +172,12 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     var responseMessage by remember { mutableStateOf("No final USSD response captured yet.") }
     var responseIsError by remember { mutableStateOf(false) }
     var balanceDisplay by remember {
-        mutableStateOf(BalanceChecker.currentBalanceStr.ifBlank { "KSh --" })
+        mutableStateOf(BalanceChecker.getBalanceDisplay(defaultRechargeSim).ifBlank { "KSh --" })
     }
     var lastBalanceCheckedAt by remember {
-        mutableLongStateOf(if (BalanceChecker.currentBalanceStr.isBlank()) 0L else System.currentTimeMillis())
+        mutableLongStateOf(
+            if (BalanceChecker.getBalanceDisplay(defaultRechargeSim).isBlank()) 0L else System.currentTimeMillis()
+        )
     }
     var scanMessage by remember {
         mutableStateOf(SCRATCH_DEFAULT_SCAN_MESSAGE)
@@ -285,7 +287,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
 
     fun publishSharedBalance(display: String, simSelection: Int = selectedRechargeSim) {
         if (display.isBlank()) return
-        BalanceChecker.balanceResultListener?.invoke(
+        BalanceChecker.notifyBalanceResult(
             BalanceChecker.BalanceCheckResult(
                 display = display,
                 selectionOverride = simSelection,
@@ -299,7 +301,6 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         if (parsedBalance.isBlank()) return false
 
         applyLiveBalance(parsedBalance)
-        BalanceChecker.currentBalanceStr = parsedBalance
         val parsedAmount = BalanceChecker.parseBalanceInt(rawResponse)
         if (parsedAmount >= 0) {
             BalanceChecker.currentBalance = parsedAmount
@@ -438,22 +439,32 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (BalanceChecker.currentBalanceStr.isBlank()) {
+    LaunchedEffect(selectedRechargeSim) {
+        val cachedBalance = BalanceChecker.getBalanceDisplay(selectedRechargeSim)
+        if (cachedBalance.isBlank()) {
+            balanceDisplay = "KSh --"
+            lastBalanceCheckedAt = 0L
             requestBalanceRefresh()
         } else {
-            applyLiveBalance(BalanceChecker.currentBalanceStr, lastBalanceCheckedAt)
+            applyLiveBalance(cachedBalance)
         }
     }
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            val latestBalance = BalanceChecker.currentBalanceStr
-            if (latestBalance.isNotBlank() && latestBalance != balanceDisplay) {
-                applyLiveBalance(latestBalance)
+    DisposableEffect(ctx, selectedRechargeSim) {
+        val listener: (BalanceChecker.BalanceCheckResult) -> Unit = listener@ { result ->
+            val matchesSelectedSim = when (result.selectionOverride) {
+                selectedRechargeSim -> true
+                null -> selectedRechargeSim == currentUssdSimSelection(ctx)
+                else -> false
             }
-            delay(SCRATCH_BALANCE_REFRESH_POLL_MS)
+            if (!matchesSelectedSim) return@listener
+            isRefreshingBalance = false
+            if (result.display.isNotBlank()) {
+                applyLiveBalance(result.display)
+            }
         }
+        BalanceChecker.addBalanceResultListener(listener)
+        onDispose { BalanceChecker.removeBalanceResultListener(listener) }
     }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -2274,13 +2285,12 @@ private suspend fun startScratchBalanceCheck(
                         return@dialUssd
                     }
 
-                    BalanceChecker.currentBalanceStr = display
                     val parsedAmount = BalanceChecker.parseBalanceInt(response)
                     if (parsedAmount >= 0) {
                         BalanceChecker.currentBalance = parsedAmount
                     }
                     RelayManager.syncPrimaryAirtimeBalance(context, display)
-                    BalanceChecker.balanceResultListener?.invoke(
+                    BalanceChecker.notifyBalanceResult(
                         BalanceChecker.BalanceCheckResult(
                             display = display,
                             selectionOverride = simSelection,

@@ -630,7 +630,16 @@ class UssdNavigationService : AccessibilityService() {
         val windowChanged = windowId != lastWindowId
         lastWindowId = windowId
 
-        val root = obtainRootFromEvent(event) ?: getUssdRoot() ?: return
+        val eventDialogText = normalizeCollapsedText(extractDialogTextFromEvent(event))
+        val root = obtainRootFromEvent(event) ?: getUssdRoot()
+        if (root == null) {
+            handleRootlessUssdEvent(
+                dialogText = eventDialogText,
+                windowPackageName = pkg.ifBlank { lastWindowPkg },
+                windowChanged = windowChanged
+            )
+            return
+        }
         try {
             val windowPkg = root.packageName?.toString() ?: ""
             val allowBlockedWindow = windowPkg == "com.android.systemui" && shouldAllowSystemUiDialogRoot(root, windowPkg)
@@ -638,7 +647,6 @@ class UssdNavigationService : AccessibilityService() {
             lastWindowPkg = windowPkg
 
             val requireStrictPopupScope = shouldRequireStrictPopupScope()
-            val eventDialogText = extractDialogTextFromEvent(event)
             val snapshot = if (
                 eventDialogText.isBlank() ||
                 advancedActive ||
@@ -1522,7 +1530,7 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun shouldRecordPopupTranscript(): Boolean =
-        signatureLearningMode || signatureGuardEnabled
+        advancedActive || signatureLearningMode || signatureGuardEnabled
 
     private fun capturePopupTranscript(snapshot: UssdTreeSnapshot?, dialogText: String) {
         if (!shouldRecordPopupTranscript()) return
@@ -1540,7 +1548,7 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun captureLearningDialog(snapshot: UssdTreeSnapshot) {
-        val menu = parseMenuSignature(snapshot) ?: return
+        val menu = parseMenuSignature(snapshot)
         val recordedText = formatLearningRecordedDialogText(snapshot, menu)
         if (recordedText.isBlank()) return
 
@@ -1623,6 +1631,52 @@ class UssdNavigationService : AccessibilityService() {
     private fun markStepAction(dialogText: String) {
         lastStepActionKey = normalizeMenuText(dialogText)
         lastStepActionElapsed = SystemClock.elapsedRealtime()
+    }
+
+    private fun handleRootlessUssdEvent(
+        dialogText: String,
+        windowPackageName: String,
+        windowChanged: Boolean
+    ) {
+        if (!advancedActive || advancedSteps.isEmpty()) return
+        if (dialogText.isBlank()) return
+        val lower = dialogText.lowercase()
+        if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return
+        if (!looksLikeUssdDialogFast(allTextLower = lower, windowPackageName = windowPackageName)) return
+
+        lastRelevantEventElapsed = SystemClock.elapsedRealtime()
+        lastFinalResponse = dialogText
+        capturePopupTranscript(snapshot = null, dialogText = dialogText)
+
+        if (!hasSeenAdvancedPopup) {
+            hasSeenAdvancedPopup = true
+            updateRunningOverlay()
+            requestAppUiBehindPopup(force = true)
+            startKeepingAppUiVisible()
+        } else if (windowChanged) {
+            requestAppUiBehindPopup()
+            startKeepingAppUiVisible()
+        }
+
+        cancelStepTimeout()
+        if (shouldWaitForStepTransition(dialogText, windowChanged)) return
+        if (currentStep >= advancedSteps.size) {
+            if (!isTransientResponseText(lower)) {
+                finishAdvancedDispatch(dialogText)
+            }
+            return
+        }
+        if (pendingPhase != PendingPhase.NONE) {
+            schedulePendingAdvanceKick(delayMs = 0L)
+            return
+        }
+        val dialogChanged = windowChanged || dialogText != lastDialogText
+        lastDialogText = dialogText
+        if (!isProcessing && dialogChanged) {
+            lastScreenSignatureKey = ""
+            pendingProcessToken = SystemClock.elapsedRealtime()
+            scheduleProcessStep(dialogChanged = true)
+        }
     }
 
     private fun shouldWaitForStepTransition(dialogText: String, windowChanged: Boolean): Boolean {
@@ -1887,7 +1941,7 @@ class UssdNavigationService : AccessibilityService() {
         snapshot: UssdTreeSnapshot,
         menu: ParsedMenuSignature?
     ): String {
-        if (menu == null) return ""
+        if (menu == null) return formatRecordedDialogText(snapshot.textTokens, snapshot.dialogText)
         extractStructuredMenuBlock(normalizeDialogLines(snapshot.textTokens))?.let { menuBlock ->
             return buildList {
                 menuBlock.titleLines.forEach(::add)
@@ -2720,7 +2774,7 @@ class UssdNavigationService : AccessibilityService() {
                                 existingField = field
                             )
                         } else {
-                            hasRecentVerifiedInput(expected) || hasRecentExpectedInput(expected)
+                            hasRecentVerifiedInput(expected)
                         }
                     } finally {
                         runCatching { field?.recycle() }

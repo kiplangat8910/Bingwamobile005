@@ -13,6 +13,8 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArraySet
 
 class BalanceChecker : Service() {
 
@@ -28,7 +30,14 @@ class BalanceChecker : Service() {
         private const val NOTIFICATION_ID = 2013
 
         @Volatile var balanceCallback: ((String) -> Unit)? = null
+        private val balanceResultListeners = CopyOnWriteArraySet<(BalanceCheckResult) -> Unit>()
+        private val balanceDisplayBySelection = ConcurrentHashMap<Int, String>()
         @Volatile var balanceResultListener: ((BalanceCheckResult) -> Unit)? = null
+            set(value) {
+                field?.let(::removeBalanceResultListener)
+                field = value
+                value?.let(::addBalanceResultListener)
+            }
         @Volatile var currentBalanceStr: String = ""
         @Volatile var currentBalance: Int = -1
         @Volatile var checking = false
@@ -44,6 +53,45 @@ class BalanceChecker : Service() {
             val selectionOverride: Int?,
             val persistResult: Boolean
         )
+
+        fun addBalanceResultListener(listener: (BalanceCheckResult) -> Unit) {
+            balanceResultListeners += listener
+        }
+
+        fun removeBalanceResultListener(listener: (BalanceCheckResult) -> Unit) {
+            balanceResultListeners -= listener
+        }
+
+        fun notifyBalanceResult(result: BalanceCheckResult) {
+            rememberBalanceResult(result)
+            balanceResultListeners.forEach { listener ->
+                runCatching { listener(result) }
+                    .onFailure { Log.w(TAG, "Balance listener failed", it) }
+            }
+        }
+
+        fun rememberBalanceResult(result: BalanceCheckResult) {
+            val display = result.display
+            val selection = result.selectionOverride
+            if (selection != null) {
+                if (display.isBlank()) {
+                    balanceDisplayBySelection.remove(selection)
+                } else {
+                    balanceDisplayBySelection[selection] = display
+                }
+            }
+            if (result.persistResult) {
+                currentBalanceStr = display
+            }
+        }
+
+        fun getBalanceDisplay(selectionOverride: Int? = null): String {
+            return if (selectionOverride != null) {
+                balanceDisplayBySelection[selectionOverride].orEmpty()
+            } else {
+                currentBalanceStr
+            }
+        }
 
         private data class BalanceRequestContext(
             val selectionOverride: Int? = null,
@@ -104,17 +152,21 @@ class BalanceChecker : Service() {
 
                 val display = parseBalanceDisplay(raw)
                 val intVal = if (display.isNotEmpty()) parseBalanceInt(raw) else -1
-                if (completedRequest.persistResult) {
-                    currentBalance = intVal
-                    currentBalanceStr = display
-                }
+                if (intVal >= 0) currentBalance = intVal
+                rememberBalanceResult(
+                    BalanceCheckResult(
+                        display = display,
+                        selectionOverride = completedRequest.selectionOverride,
+                        persistResult = completedRequest.persistResult
+                    )
+                )
                 if (completedRequest.persistResult && display.isNotEmpty()) {
                     RelayManager.syncPrimaryAirtimeBalance(context, display)
                 }
 
                 Handler(Looper.getMainLooper()).post {
                     balanceCallback?.invoke(display)
-                    balanceResultListener?.invoke(
+                    notifyBalanceResult(
                         BalanceCheckResult(
                             display = display,
                             selectionOverride = completedRequest.selectionOverride,
@@ -201,7 +253,7 @@ class BalanceChecker : Service() {
             activeRequestContext = null
             Handler(Looper.getMainLooper()).post {
                 balanceCallback?.invoke("")
-                balanceResultListener?.invoke(
+                notifyBalanceResult(
                     BalanceCheckResult(
                         display = "",
                         selectionOverride = failedRequest.selectionOverride,
