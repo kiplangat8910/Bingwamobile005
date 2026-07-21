@@ -8,6 +8,8 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -90,7 +92,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val PENDING_STEP_TIMEOUT_MS   = 6_000L
         private const val PENDING_ADVANCE_TIMEOUT_MS = 3_000L
         private const val ROOT_REACQUIRE_TIMEOUT_MS  = 5_000L
-        private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 2_000L
+        private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 3_500L
         private const val PENDING_STEP_ADVANCE_KICK_MS = 4L
         private const val VERIFY_POLL_MS         = 4L
         private const val RAPID_POST_POPUP_POLL_MS = 2L
@@ -1048,8 +1050,20 @@ class UssdNavigationService : AccessibilityService() {
                         scheduleProcessStep(dialogChanged = false)
                         return
                     }
+                    val likelyTypedMenuReply = shouldTreatNumericReplyAsTextInput(
+                        step = step,
+                        valueToEnter = valueToEnter,
+                        snapshot = effectiveSnapshot,
+                        dialogTextLower = lower,
+                        menuSignature = menuSignature
+                    )
                     val shouldPreferTextInput = inputField != null ||
-                        shouldTreatStepAsTextInput(step, valueToEnter, selectedMenuLabel) ||
+                        shouldTreatStepAsTextInput(
+                            step = step,
+                            valueToEnter = valueToEnter,
+                            selectedMenuLabel = selectedMenuLabel
+                        ) ||
+                        likelyTypedMenuReply ||
                         dialogSuggestsTextInput(lower) ||
                         dialogAllowsPhoneInput
                     if (!shouldPreferTextInput &&
@@ -1066,7 +1080,12 @@ class UssdNavigationService : AccessibilityService() {
                             return
                         }
                     }
-                    if (inputField == null && shouldPreferTextInput && !dialogSuggestsTextInput(lower) && !dialogAllowsPhoneInput) {
+                    if (inputField == null &&
+                        shouldPreferTextInput &&
+                        !dialogSuggestsTextInput(lower) &&
+                        !dialogAllowsPhoneInput &&
+                        !likelyTypedMenuReply
+                    ) {
                         if (!effectiveSnapshot.hasEditableField) {
                             isProcessing = false
                             pendingProcessToken = SystemClock.elapsedRealtime()
@@ -1086,11 +1105,24 @@ class UssdNavigationService : AccessibilityService() {
                             expectedValue = valueToEnter,
                             existingField = inputField
                         )
-                        val recentVerifiedWrite = inlineVerified || hasRecentVerifiedInput(valueToEnter)
+                        val trustedFreshWrite = shouldTrustFreshInputWrite(
+                            wroteValue = wroteValue,
+                            expectedValue = valueToEnter,
+                            existingField = inputField,
+                            snapshot = effectiveSnapshot
+                        )
+                        val recentVerifiedWrite = inlineVerified ||
+                            hasRecentVerifiedInput(valueToEnter) ||
+                            trustedFreshWrite
                         if (!isFinalSignatureLearningStep(currentStep) &&
                             wroteValue &&
                             recentVerifiedWrite &&
-                            tryImmediateVerifiedSend(interactionRoot, inputField, valueToEnter)
+                            tryImmediateVerifiedSend(
+                                root = interactionRoot,
+                                field = inputField,
+                                expectedValue = valueToEnter,
+                                allowRecentExpectedWrite = trustedFreshWrite
+                            )
                         ) {
                             markStepAction(dialogText, root = interactionRoot)
                             startPendingStepAdvance(interactionRoot, dialogText)
@@ -3842,13 +3874,17 @@ class UssdNavigationService : AccessibilityService() {
     private fun tryImmediateVerifiedSend(
         root: AccessibilityNodeInfo,
         field: AccessibilityNodeInfo?,
-        expectedValue: String
+        expectedValue: String,
+        allowRecentExpectedWrite: Boolean = false
     ): Boolean {
         val verified = verifyExpectedInputFromRoot(
             root = root,
             expectedValue = expectedValue,
             existingField = field
-        ) || hasRecentVerifiedInput(expectedValue) || (field == null && hasRecentExpectedInput(expectedValue))
+        ) ||
+            hasRecentVerifiedInput(expectedValue) ||
+            (allowRecentExpectedWrite && hasRecentExpectedInput(expectedValue)) ||
+            (field == null && hasRecentExpectedInput(expectedValue))
         if (!verified) return false
         val fieldText = field?.let(::readFieldText)
         val sendBtn = findBestSendActionButton(root)
@@ -3929,6 +3965,21 @@ class UssdNavigationService : AccessibilityService() {
         return selectedMenuLabel == null && valueToEnter.length > 1
     }
 
+    private fun shouldTreatNumericReplyAsTextInput(
+        step: String,
+        valueToEnter: String,
+        snapshot: UssdTreeSnapshot,
+        dialogTextLower: String,
+        menuSignature: ParsedMenuSignature?
+    ): Boolean {
+        if (step == "INPUT_PHONE") return true
+        if (!valueToEnter.all(Char::isDigit) || valueToEnter.isBlank()) return false
+        if (!snapshot.hasSendButton) return false
+        if (snapshot.hasEditableField) return true
+        if (menuSignature?.options?.isNotEmpty() == true) return true
+        return dialogSuggestsTypedReplyPrompt(dialogTextLower)
+    }
+
     private fun dialogSuggestsTextInput(allTextLower: String): Boolean =
         allTextLower.contains("enter") ||
             allTextLower.contains("input") ||
@@ -3938,6 +3989,16 @@ class UssdNavigationService : AccessibilityService() {
             allTextLower.contains("phone") ||
             allTextLower.contains("number") ||
             allTextLower.contains("code")
+
+    private fun dialogSuggestsTypedReplyPrompt(allTextLower: String): Boolean =
+        dialogSuggestsTextInput(allTextLower) ||
+            allTextLower.contains("select") ||
+            allTextLower.contains("choose") ||
+            allTextLower.contains("option") ||
+            allTextLower.contains("press") ||
+            allTextLower.contains("respond") ||
+            allTextLower.contains("response") ||
+            allTextLower.contains("continue")
 
     private fun dialogSuggestsPhoneInput(allTextLower: String): Boolean =
         PHONE_INPUT_HINTS.any { allTextLower.contains(it) } ||
@@ -4136,6 +4197,17 @@ class UssdNavigationService : AccessibilityService() {
         return SystemClock.elapsedRealtime() - lastVerifiedInputElapsed <= RECENT_VERIFIED_INPUT_GRACE_MS
     }
 
+    private fun shouldTrustFreshInputWrite(
+        wroteValue: Boolean,
+        expectedValue: String,
+        existingField: AccessibilityNodeInfo?,
+        snapshot: UssdTreeSnapshot
+    ): Boolean {
+        if (!wroteValue || !hasRecentExpectedInput(expectedValue)) return false
+        if (existingField != null) return true
+        return snapshot.hasEditableField && snapshot.hasSendButton
+    }
+
     private fun shouldTrustRecentWrite(fieldText: String?, expectedValue: String): Boolean {
         val actual = fieldText?.trim().orEmpty()
         if (actual.isBlank()) return hasRecentExpectedInput(expectedValue)
@@ -4232,6 +4304,19 @@ class UssdNavigationService : AccessibilityService() {
                 likelyVerified = isLikelyDirectWriteVerified(node, value)
             )
         }
+        focusInputTarget(node)
+        if (pasteValueOnNode(node, value)) {
+            return InputWriteResult(
+                wroteValue = true,
+                likelyVerified = isLikelyDirectWriteVerified(node, value)
+            )
+        }
+        if (activateInputTarget(node) && pasteValueOnNode(node, value)) {
+            return InputWriteResult(
+                wroteValue = true,
+                likelyVerified = isLikelyDirectWriteVerified(node, value)
+            )
+        }
         return InputWriteResult(wroteValue = false, likelyVerified = false)
     }
 
@@ -4304,6 +4389,31 @@ class UssdNavigationService : AccessibilityService() {
             collapseInputSelection(node, value)
         }
         return replaced
+    }
+
+    private fun pasteValueOnNode(node: AccessibilityNodeInfo, value: String): Boolean {
+        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)) return false
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return false
+        val previousClip = runCatching { clipboard.primaryClip }.getOrNull()
+        val hadClip = runCatching { clipboard.hasPrimaryClip() }.getOrDefault(false)
+        return try {
+            clipboard.setPrimaryClip(ClipData.newPlainText("ussd_reply", value))
+            val pasted = runCatching {
+                node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+            }.getOrDefault(false)
+            if (pasted) {
+                collapseInputSelection(node, value)
+            }
+            pasted
+        } finally {
+            runCatching {
+                if (hadClip && previousClip != null) {
+                    clipboard.setPrimaryClip(previousClip)
+                } else {
+                    clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+                }
+            }
+        }
     }
 
     private fun isLikelyDirectWriteVerified(node: AccessibilityNodeInfo, expectedValue: String): Boolean {
