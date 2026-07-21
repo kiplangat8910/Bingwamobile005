@@ -3988,10 +3988,9 @@ private fun HomeSplitBalanceCard(
     var tapCount by remember { mutableIntStateOf(0) }
     var tapWindowJob by remember { mutableStateOf<Job?>(null) }
     val balanceHelperText = when {
-        isRefreshing -> "checking balance"
-        isShowingSlot2Preview -> "showing balance for SIM / Slot 2"
-        canCheckSlot2 -> "tap three times to check balance for SIM / Slot 2"
-        else -> "tap card to refresh"
+        isRefreshing -> "Checking balance..."
+        canCheckSlot2 -> "Tap three times to check the balance for SIM 2."
+        else -> "Tap to refresh."
     }
     val handleCardTap: () -> Unit = {
         if (!isRefreshing) {
@@ -5932,7 +5931,7 @@ fun VolcanicBalanceCard(
                             )
                         }
                         Text(
-                            if (isRefreshing) "checking balance..." else "tap card to refresh",
+                            if (isRefreshing) "Checking balance..." else "Tap to refresh.",
                             color = C.t3,
                             fontSize = if (compactTop) 10.sp else 11.sp,
                             lineHeight = if (compactTop) 13.sp else 15.sp,
