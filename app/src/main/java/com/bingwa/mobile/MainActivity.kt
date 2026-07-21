@@ -2790,7 +2790,7 @@ fun BingwaApp() {
         }
     }
     var tokenBal by remember { mutableIntStateOf(tm.getBalance()) }
-    var airBal by remember { mutableStateOf(BalanceChecker.currentBalanceStr) }
+    var airBal by remember { mutableStateOf(BalanceChecker.getLastKnownBalanceDisplay(ctx)) }
     var slot2PreviewBalance by remember { mutableStateOf<String?>(null) }
     var slot2PreviewNonce by remember { mutableIntStateOf(0) }
     var isRefreshing by remember { mutableStateOf(false) }
@@ -3476,7 +3476,7 @@ fun HomeScreenVolcanic(
                             latestStatusTx = latestStatusTx
                         )
                         HomeSplitBalanceCard(
-                            airBal = airBal.ifBlank { "0.00" },
+                            airBal = airBal.ifBlank { "KSh --" },
                             tokenValue = if (unlimitedLabel != null) "Unlimited" else tokenBal.toString(),
                             tokenHint = unlimitedRemaining ?: "Never expire",
                             completedCount = completedCount,
@@ -4983,7 +4983,7 @@ private fun GithubOverviewCard(
             ) {
                 GithubMetricTile(
                     title = "Airtime balance",
-                    value = airBal.ifBlank { "Ksh 0.00" },
+                    value = airBal.ifBlank { "KSh --" },
                     caption = "Current balance",
                     accent = C.blue,
                     modifier = Modifier.weight(1f)

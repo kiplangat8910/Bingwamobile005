@@ -26,6 +26,7 @@ class BalanceChecker : Service() {
         private const val FOREGROUND_REFRESH_COOLDOWN_MS = 3_000L
         private const val CHANNEL_ID = "balance_checker"
         private const val NOTIFICATION_ID = 2013
+        private const val KEY_LAST_AIRTIME_DISPLAY = "last_airtime_display"
 
         @Volatile var balanceCallback: ((String) -> Unit)? = null
         @Volatile var balanceResultListener: ((BalanceCheckResult) -> Unit)? = null
@@ -107,6 +108,9 @@ class BalanceChecker : Service() {
                 if (completedRequest.persistResult) {
                     currentBalance = intVal
                     currentBalanceStr = display
+                    if (display.isNotEmpty()) {
+                        persistLastKnownBalance(context, display)
+                    }
                 }
                 if (completedRequest.persistResult && display.isNotEmpty()) {
                     RelayManager.syncPrimaryAirtimeBalance(context, display)
@@ -357,6 +361,32 @@ class BalanceChecker : Service() {
                     .any { it.service.className == serviceClass.name }
             }.getOrDefault(false)
         }
+
+        fun getLastKnownBalanceDisplay(context: Context): String {
+            val cached = currentBalanceStr.trim()
+            if (cached.isNotEmpty()) return cached
+            return context.applicationContext
+                .getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                .getString(KEY_LAST_AIRTIME_DISPLAY, "")
+                ?.trim()
+                .orEmpty()
+                .also { stored ->
+                    if (stored.isNotEmpty()) {
+                        currentBalanceStr = stored
+                    }
+                }
+        }
+
+        fun persistLastKnownBalance(context: Context, display: String) {
+            val clean = display.trim()
+            if (clean.isEmpty()) return
+            currentBalanceStr = clean
+            context.applicationContext
+                .getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_LAST_AIRTIME_DISPLAY, clean)
+                .apply()
+        }
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -391,6 +421,7 @@ class BalanceChecker : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        getLastKnownBalanceDisplay(applicationContext)
         createNotificationChannel()
         startForegroundCompat(
             notificationId = NOTIFICATION_ID,

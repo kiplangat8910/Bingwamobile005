@@ -2506,7 +2506,7 @@ class UssdNavigationService : AccessibilityService() {
                 val display = BalanceChecker.parseBalanceDisplay(dialogText)
                 val intVal  = BalanceChecker.parseBalanceInt(dialogText)
                 BalanceChecker.currentBalance    = intVal
-                BalanceChecker.currentBalanceStr = display
+                BalanceChecker.persistLastKnownBalance(applicationContext, display)
                 BalanceChecker.balanceCallback?.invoke(display)
                 closeCurrentUssdUi()
                 clearCallbacks()

@@ -890,7 +890,7 @@ private fun BalanceAccentWave() {
 }
 
 private fun splitAirtimeBalance(value: String): Pair<String, String> {
-    val normalized = value.trim().ifBlank { "KSh 0.00" }
+    val normalized = value.trim().ifBlank { "KSh --" }
     val parts = normalized.split(Regex("\\s+"), limit = 2)
     return if (parts.size == 2 && parts[0].any { it.isLetter() }) {
         parts[0].replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } to parts[1]

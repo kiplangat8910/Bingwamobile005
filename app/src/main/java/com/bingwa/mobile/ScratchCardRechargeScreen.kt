@@ -299,7 +299,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         if (parsedBalance.isBlank()) return false
 
         applyLiveBalance(parsedBalance)
-        BalanceChecker.currentBalanceStr = parsedBalance
+        BalanceChecker.persistLastKnownBalance(ctx, parsedBalance)
         val parsedAmount = BalanceChecker.parseBalanceInt(rawResponse)
         if (parsedAmount >= 0) {
             BalanceChecker.currentBalance = parsedAmount
@@ -2274,7 +2274,7 @@ private suspend fun startScratchBalanceCheck(
                         return@dialUssd
                     }
 
-                    BalanceChecker.currentBalanceStr = display
+                    BalanceChecker.persistLastKnownBalance(context, display)
                     val parsedAmount = BalanceChecker.parseBalanceInt(response)
                     if (parsedAmount >= 0) {
                         BalanceChecker.currentBalance = parsedAmount
