@@ -775,14 +775,16 @@ private fun requestBalanceCheckSafely(
     context: Context,
     selectionOverride: Int? = null,
     persistResult: Boolean = selectionOverride == null,
-    ignoreCooldown: Boolean = false
+    ignoreCooldown: Boolean = false,
+    specialHandling: Boolean = false
 ): Boolean =
     runCatching {
         BalanceChecker.requestBalanceCheck(
             context = context,
             selectionOverride = selectionOverride,
             persistResult = persistResult,
-            ignoreCooldown = ignoreCooldown
+            ignoreCooldown = ignoreCooldown,
+            specialHandling = specialHandling
         )
     }.getOrElse { error ->
         Log.e("MainActivity", "Unable to start balance refresh", error)
@@ -2957,7 +2959,7 @@ fun BingwaApp() {
                                 airBal = mirroredPrimaryAirtime.ifBlank { airBal }
                             } else if (!isRefreshing) {
                                 isRefreshing = true
-                                if (!requestBalanceCheckSafely(ctx)) isRefreshing = false
+                                if (!requestBalanceCheckSafely(ctx, specialHandling = true)) isRefreshing = false
                             }
                         },
                         onCheckSlot2 = {
@@ -2967,7 +2969,8 @@ fun BingwaApp() {
                                 if (!requestBalanceCheckSafely(
                                         context = ctx,
                                         selectionOverride = USSD_SIM_SELECTION_SLOT_2,
-                                        persistResult = false
+                                        persistResult = false,
+                                        specialHandling = true
                                     )
                                 ) {
                                     isRefreshing = false
@@ -5279,7 +5282,7 @@ private fun retryRecentTransaction(context: Context, tx: Transaction): Transacti
         txId = retryTxId,
         finalCode = finalCode,
         mode = matchedOffer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE,
-        executionPriority = USSD_EXECUTION_PRIORITY_HIGH
+        executionPriority = USSD_EXECUTION_PRIORITY_SPECIAL
     )
     return TransactionRetryResult(
         success = true,
@@ -6906,7 +6909,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                     txId = txId,
                     finalCode = finalCode,
                     mode = mode,
-                    executionPriority = USSD_EXECUTION_PRIORITY_HIGH,
+                    executionPriority = USSD_EXECUTION_PRIORITY_SPECIAL,
                     returnToAppAggressively = true
                 )
             }
@@ -9212,7 +9215,7 @@ fun OffersScreen(onBack: () -> Unit) {
             finalCode = learnCode,
             mode = cleanOffer.executionMode,
             signatureLearning = true,
-            executionPriority = USSD_EXECUTION_PRIORITY_HIGH
+            executionPriority = USSD_EXECUTION_PRIORITY_SPECIAL
         )
     }
 

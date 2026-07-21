@@ -6,6 +6,7 @@ import android.os.Looper
 
 object UssdQueue {
     private const val NEXT_EXECUTION_DELAY_MS = 2_000L
+    private val specialPriorityPending = ArrayDeque<Runnable>()
     private val highPriorityPending = ArrayDeque<Runnable>()
     private val normalPriorityPending = ArrayDeque<Runnable>()
     private var processing = false
@@ -14,10 +15,16 @@ object UssdQueue {
 
     fun enqueue(task: Runnable, priority: String = USSD_EXECUTION_PRIORITY_NORMAL) {
         synchronized(this) {
-            if (priority.equals(USSD_EXECUTION_PRIORITY_HIGH, ignoreCase = true)) {
-                highPriorityPending.addLast(task)
-            } else {
-                normalPriorityPending.addLast(task)
+            when {
+                priority.equals(USSD_EXECUTION_PRIORITY_SPECIAL, ignoreCase = true) -> {
+                    specialPriorityPending.addLast(task)
+                }
+                priority.equals(USSD_EXECUTION_PRIORITY_HIGH, ignoreCase = true) -> {
+                    highPriorityPending.addLast(task)
+                }
+                else -> {
+                    normalPriorityPending.addLast(task)
+                }
             }
             scheduleNextIfPossible(useDelay = false)
         }
@@ -27,12 +34,16 @@ object UssdQueue {
         synchronized(this) {
             processing = false
             scheduled = false
-            scheduleNextIfPossible(useDelay = true)
+            scheduleNextIfPossible(useDelay = !hasSpecialPendingLocked())
         }
     }
 
     fun hasWork(): Boolean = synchronized(this) {
-        processing || scheduled || highPriorityPending.isNotEmpty() || normalPriorityPending.isNotEmpty()
+        processing ||
+            scheduled ||
+            specialPriorityPending.isNotEmpty() ||
+            highPriorityPending.isNotEmpty() ||
+            normalPriorityPending.isNotEmpty()
     }
 
     private fun scheduleNextIfPossible(useDelay: Boolean) {
@@ -46,6 +57,7 @@ object UssdQueue {
                 } else {
                     processing = true
                     when {
+                        specialPriorityPending.isNotEmpty() -> specialPriorityPending.removeFirst()
                         highPriorityPending.isNotEmpty() -> highPriorityPending.removeFirst()
                         else -> normalPriorityPending.removeFirst()
                     }
@@ -57,9 +69,21 @@ object UssdQueue {
     }
 
     fun enqueueBalanceCheck(context: Context) {
-        enqueue(Runnable { BalanceChecker.requestBalanceCheck(context) })
+        enqueue(
+            task = Runnable {
+                BalanceChecker.requestBalanceCheck(
+                    context = context,
+                    specialHandling = true
+                )
+            },
+            priority = USSD_EXECUTION_PRIORITY_SPECIAL
+        )
     }
 
     private fun isEmptyLocked(): Boolean =
-        highPriorityPending.isEmpty() && normalPriorityPending.isEmpty()
+        specialPriorityPending.isEmpty() &&
+            highPriorityPending.isEmpty() &&
+            normalPriorityPending.isEmpty()
+
+    private fun hasSpecialPendingLocked(): Boolean = specialPriorityPending.isNotEmpty()
 }

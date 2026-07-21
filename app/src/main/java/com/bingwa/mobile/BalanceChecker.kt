@@ -4,7 +4,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -68,7 +67,8 @@ class BalanceChecker : Service() {
             context: Context,
             selectionOverride: Int? = null,
             persistResult: Boolean = selectionOverride == null,
-            ignoreCooldown: Boolean = false
+            ignoreCooldown: Boolean = false,
+            specialHandling: Boolean = false
         ): Boolean {
             val appContext = context.applicationContext
             val now = System.currentTimeMillis()
@@ -76,11 +76,16 @@ class BalanceChecker : Service() {
                 Log.d(TAG, "check already in flight — skipping")
                 return false
             }
-            if (selectionOverride == null && isUssdWorkBusy(appContext)) {
+            if (selectionOverride == null && isUssdSessionBusy()) {
                 Log.d(TAG, "another USSD task is active — skipping balance check")
                 return false
             }
-            if (!ignoreCooldown && selectionOverride == null && now - lastCheckStartedAt < FOREGROUND_REFRESH_COOLDOWN_MS) {
+            if (
+                !specialHandling &&
+                !ignoreCooldown &&
+                selectionOverride == null &&
+                now - lastCheckStartedAt < FOREGROUND_REFRESH_COOLDOWN_MS
+            ) {
                 Log.d(TAG, "balance check cooldown active — skipping duplicate request")
                 return false
             }
@@ -336,7 +341,7 @@ class BalanceChecker : Service() {
             balanceUssd: String,
             selectionOverride: Int?
         ): Boolean {
-            if (isUssdWorkBusy(context)) return false
+            if (isUssdSessionBusy()) return false
             return ServiceLauncher.startAutomationService(
                 context,
                 Intent(context, AutomationService::class.java).apply {
@@ -344,23 +349,12 @@ class BalanceChecker : Service() {
                     putExtra("code", balanceUssd)
                     putExtra("phoneNumber", "")
                     putExtra("simSelection", selectionOverride ?: OFFER_SIM_USE_GENERAL)
+                    putExtra("executionPriority", USSD_EXECUTION_PRIORITY_SPECIAL)
                 }
             )
         }
 
-        private fun isUssdWorkBusy(context: Context): Boolean {
-            if (UssdNavigationService.isBusyForBalanceCheck()) return true
-            return isServiceRunning(context, AutomationService::class.java)
-        }
-
-        private fun isServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
-            val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
-            return runCatching {
-                @Suppress("DEPRECATION")
-                manager.getRunningServices(Int.MAX_VALUE)
-                    .any { it.service.className == serviceClass.name }
-            }.getOrDefault(false)
-        }
+        private fun isUssdSessionBusy(): Boolean = UssdNavigationService.isBusyForBalanceCheck()
 
         fun getLastKnownBalanceDisplay(context: Context): String {
             val cached = currentBalanceStr.trim()
