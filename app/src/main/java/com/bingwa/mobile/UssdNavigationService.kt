@@ -103,6 +103,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val NO_FIELD_PATIENCE      = 4
         private const val INPUT_TARGET_DEPTH     = 8
         private const val INPUT_DESCENT_DEPTH    = 4
+        private const val INPUT_NEARBY_SCOPE_DEPTH = 2
         private const val RECENT_INPUT_GRACE_MS  = 4_000L
         private const val RECENT_VERIFIED_INPUT_GRACE_MS = 6_500L
         private const val RECENT_UI_EVENT_GRACE_MS = 1_200L
@@ -1088,10 +1089,13 @@ class UssdNavigationService : AccessibilityService() {
                         !likelyTypedMenuReply
                     ) {
                         if (!effectiveSnapshot.hasEditableField) {
-                            isProcessing = false
-                            pendingProcessToken = SystemClock.elapsedRealtime()
-                            scheduleProcessStep(dialogChanged = false)
-                            return
+                            val opportunisticWrite = writeValueToField(interactionRoot, valueToEnter)
+                            if (!opportunisticWrite) {
+                                isProcessing = false
+                                pendingProcessToken = SystemClock.elapsedRealtime()
+                                scheduleProcessStep(dialogChanged = false)
+                                return
+                            }
                         }
                     }
                     if (inputField != null || shouldPreferTextInput) {
@@ -4571,30 +4575,38 @@ class UssdNavigationService : AccessibilityService() {
             )
         }
         focusInputTarget(node)
+        refreshInputTarget(node)
         if (setTextOnNode(node, value)) {
             return InputWriteResult(
                 wroteValue = true,
                 likelyVerified = isLikelyDirectWriteVerified(node, value)
             )
         }
-        if (supportsSilentSetText(node) && activateInputTarget(node) && setTextOnNode(node, value)) {
-            return InputWriteResult(
-                wroteValue = true,
-                likelyVerified = isLikelyDirectWriteVerified(node, value)
-            )
+        if (supportsSilentSetText(node) && activateInputTarget(node)) {
+            refreshInputTarget(node)
+            if (setTextOnNode(node, value)) {
+                return InputWriteResult(
+                    wroteValue = true,
+                    likelyVerified = isLikelyDirectWriteVerified(node, value)
+                )
+            }
         }
         focusInputTarget(node)
+        refreshInputTarget(node)
         if (pasteValueOnNode(node, value)) {
             return InputWriteResult(
                 wroteValue = true,
                 likelyVerified = isLikelyDirectWriteVerified(node, value)
             )
         }
-        if (activateInputTarget(node) && pasteValueOnNode(node, value)) {
-            return InputWriteResult(
-                wroteValue = true,
-                likelyVerified = isLikelyDirectWriteVerified(node, value)
-            )
+        if (activateInputTarget(node)) {
+            refreshInputTarget(node)
+            if (pasteValueOnNode(node, value)) {
+                return InputWriteResult(
+                    wroteValue = true,
+                    likelyVerified = isLikelyDirectWriteVerified(node, value)
+                )
+            }
         }
         return InputWriteResult(wroteValue = false, likelyVerified = false)
     }
@@ -4602,6 +4614,7 @@ class UssdNavigationService : AccessibilityService() {
     private fun obtainInputTargets(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
         val targets = mutableListOf<AccessibilityNodeInfo>()
         collectPreferredInputTargets(node, targets, 0)
+        collectNearbyInputTargets(node, targets, 0)
         var current: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
         var depth = 0
         while (current != null && depth < INPUT_TARGET_DEPTH) {
@@ -4614,6 +4627,25 @@ class UssdNavigationService : AccessibilityService() {
             depth++
         }
         return targets
+    }
+
+    private fun collectNearbyInputTargets(
+        node: AccessibilityNodeInfo,
+        into: MutableList<AccessibilityNodeInfo>,
+        ancestorDepth: Int
+    ) {
+        if (ancestorDepth >= INPUT_NEARBY_SCOPE_DEPTH) return
+        val parent = try { node.parent } catch (_: Exception) { null } ?: return
+        try {
+            for (i in 0 until parent.childCount) {
+                val sibling = try { parent.getChild(i) } catch (_: Exception) { null } ?: continue
+                collectPreferredInputTargets(sibling, into, 0)
+                sibling.recycle()
+            }
+            collectNearbyInputTargets(parent, into, ancestorDepth + 1)
+        } finally {
+            parent.recycle()
+        }
     }
 
     private fun collectPreferredInputTargets(
@@ -4642,6 +4674,10 @@ class UssdNavigationService : AccessibilityService() {
         if (alreadyFocused) return
         if (refocusInputTarget(node)) return
         activateInputTarget(node)
+    }
+
+    private fun refreshInputTarget(node: AccessibilityNodeInfo) {
+        runCatching { node.refresh() }
     }
 
     private fun setTextOnNode(node: AccessibilityNodeInfo, value: String): Boolean {
