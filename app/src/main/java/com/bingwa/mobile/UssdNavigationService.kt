@@ -1130,6 +1130,25 @@ class UssdNavigationService : AccessibilityService() {
                             startPendingStepAdvance(interactionRoot, dialogText)
                             return
                         }
+                        if (!isFinalSignatureLearningStep(currentStep) &&
+                            wroteValue &&
+                            shouldAttemptAggressiveImmediateSubmit(
+                                snapshot = effectiveSnapshot,
+                                dialogTextLower = lower,
+                                step = step,
+                                expectedValue = valueToEnter,
+                                field = inputField
+                            ) &&
+                            tryAggressiveImmediateSubmitAfterWrite(
+                                root = interactionRoot,
+                                field = inputField,
+                                expectedValue = valueToEnter
+                            )
+                        ) {
+                            markStepAction(dialogText, root = interactionRoot)
+                            startPendingStepAdvance(interactionRoot, dialogText)
+                            return
+                        }
                         // Fast path: stop polling loops. Set a pending phase and let the next accessibility
                         // event drive verification/send immediately (with a short safety kick).
                         if (isFinalSignatureLearningStep(currentStep)) {
@@ -2178,13 +2197,29 @@ class UssdNavigationService : AccessibilityService() {
         val fields = mutableListOf<AccessibilityNodeInfo>()
         try {
             collectTextEntryCandidates(root, fields)
-            if (fields.isEmpty()) {
-                return tryWriteValueToField(root, value)
+            if (fields.isNotEmpty()) {
+                fields.sortByDescending { scoreTextEntryCandidate(it) }
+                if (fields.any { field -> tryWriteValueToField(field, value) }) {
+                    return true
+                }
             }
-            fields.sortByDescending { scoreTextEntryCandidate(it) }
-            return fields.any { field -> tryWriteValueToField(field, value) }
         } finally {
             fields.forEach { it.recycle() }
+        }
+
+        if (tryWriteValueToField(root, value)) {
+            return true
+        }
+
+        val aggressiveFields = mutableListOf<AccessibilityNodeInfo>()
+        try {
+            collectAggressiveTextEntryCandidates(root, aggressiveFields)
+            aggressiveFields.sortByDescending {
+                scoreTextEntryCandidate(it) + scoreAggressiveTextEntryCandidate(it)
+            }
+            return aggressiveFields.any { field -> tryWriteValueToField(field, value) }
+        } finally {
+            aggressiveFields.forEach { it.recycle() }
         }
     }
 
@@ -3286,9 +3321,21 @@ class UssdNavigationService : AccessibilityService() {
         val candidates = mutableListOf<AccessibilityNodeInfo>()
         try {
             collectTextEntryCandidates(node, candidates)
-            return candidates.maxByOrNull(scorer)?.let { AccessibilityNodeInfo.obtain(it) }
+            candidates.maxByOrNull(scorer)?.let { best ->
+                return AccessibilityNodeInfo.obtain(best)
+            }
         } finally {
             candidates.forEach { it.recycle() }
+        }
+
+        val aggressiveCandidates = mutableListOf<AccessibilityNodeInfo>()
+        try {
+            collectAggressiveTextEntryCandidates(node, aggressiveCandidates)
+            return aggressiveCandidates.maxByOrNull {
+                scorer(it) + scoreAggressiveTextEntryCandidate(it)
+            }?.let { AccessibilityNodeInfo.obtain(it) }
+        } finally {
+            aggressiveCandidates.forEach { it.recycle() }
         }
     }
 
@@ -3300,6 +3347,19 @@ class UssdNavigationService : AccessibilityService() {
             for (i in 0 until node.childCount) {
                 val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
                 collectTextEntryCandidates(child, into)
+                child.recycle()
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun collectAggressiveTextEntryCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>) {
+        try {
+            if (isAggressiveTextEntryCandidate(node)) {
+                into += AccessibilityNodeInfo.obtain(node)
+            }
+            for (i in 0 until node.childCount) {
+                val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+                collectAggressiveTextEntryCandidates(child, into)
                 child.recycle()
             }
         } catch (_: Exception) {}
@@ -3369,6 +3429,37 @@ class UssdNavigationService : AccessibilityService() {
         if (combined.contains("phone") || combined.contains("mobile") || combined.contains("msisdn")) score += 180
         if (combined.contains("recipient") || combined.contains("customer") || combined.contains("subscriber")) score += 140
         if (dialogSuggestsPhoneInput(lowerDialog) && INPUT_VIEW_ID_HINTS.any { viewId.contains(it) }) score += 90
+        return score
+    }
+
+    private fun scoreAggressiveTextEntryCandidate(node: AccessibilityNodeInfo): Int {
+        val className = node.className?.toString().orEmpty()
+        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
+        } else {
+            ""
+        }
+        val writable = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
+            supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
+        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            try { node.isVisibleToUser } catch (_: Exception) { true }
+        } else {
+            true
+        }
+        var score = 0
+        if (writable) score += 260
+        if (!visible) score += 180
+        if (className.contains("Edit", ignoreCase = true) || className.contains("TextInput", ignoreCase = true)) score += 200
+        if (className.contains("AutoComplete", ignoreCase = true) || className.contains("Search", ignoreCase = true)) score += 140
+        if (INPUT_VIEW_ID_HINTS.any { viewId.contains(it) }) score += 200
+        if (INPUT_FIELD_HINTS.any { label.contains(it) || desc.contains(it) || hint.contains(it) }) score += 160
+        if (try { node.isFocused } catch (_: Exception) { false }) score += 70
+        if (try { node.isFocusable || node.isClickable || node.isLongClickable } catch (_: Exception) { false }) score += 60
+        if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS) score -= 360
+        if (label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS) score -= 360
         return score
     }
 
@@ -3722,11 +3813,13 @@ class UssdNavigationService : AccessibilityService() {
     private fun findBestSendActionButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         val candidates = mutableListOf<AccessibilityNodeInfo>()
         collectActionCandidates(root, candidates)
-        return candidates
+        val best = candidates
             .maxByOrNull { scoreSendActionCandidate(it) }
             ?.takeIf { scoreSendActionCandidate(it) > 0 }
             ?.let { AccessibilityNodeInfo.obtain(it) }
-            .also { candidates.forEach { it.recycle() } }
+        candidates.forEach { it.recycle() }
+        if (best != null) return best
+        return findAggressiveSendActionButton(root)
     }
 
     private fun findActionButtonByViewIdHints(
@@ -3770,6 +3863,17 @@ class UssdNavigationService : AccessibilityService() {
             for (i in 0 until node.childCount) {
                 val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
                 collectActionCandidates(child, into)
+                child.recycle()
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun collectAggressiveActionCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>) {
+        try {
+            if (isAggressiveActionCandidate(node)) into += AccessibilityNodeInfo.obtain(node)
+            for (i in 0 until node.childCount) {
+                val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+                collectAggressiveActionCandidates(child, into)
                 child.recycle()
             }
         } catch (_: Exception) {}
@@ -3837,6 +3941,34 @@ class UssdNavigationService : AccessibilityService() {
         if (SEND_VIEW_ID_HINTS.any { viewId.contains(it) }) score += 260
         if (label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS) score -= 420
         if (DISMISS_VIEW_ID_HINTS.any { viewId.contains(it) }) score -= 280
+        return score
+    }
+
+    private fun findAggressiveSendActionButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val candidates = mutableListOf<AccessibilityNodeInfo>()
+        collectAggressiveActionCandidates(root, candidates)
+        return candidates
+            .maxByOrNull { scoreSendActionCandidate(it) + scoreAggressiveActionCandidate(it) }
+            ?.takeIf { scoreSendActionCandidate(it) + scoreAggressiveActionCandidate(it) > 0 }
+            ?.let { AccessibilityNodeInfo.obtain(it) }
+            .also { candidates.forEach { it.recycle() } }
+    }
+
+    private fun scoreAggressiveActionCandidate(node: AccessibilityNodeInfo): Int {
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
+        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            try { node.isVisibleToUser } catch (_: Exception) { true }
+        } else {
+            true
+        }
+        var score = 0
+        if (!visible) score += 120
+        if (SEND_BUTTON_LABELS.any { label.contains(it) || desc.contains(it) }) score += 240
+        if (SEND_VIEW_ID_HINTS.any { viewId.contains(it) }) score += 220
+        if (label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS) score -= 320
+        if (DISMISS_VIEW_ID_HINTS.any { viewId.contains(it) }) score -= 260
         return score
     }
 
@@ -4167,6 +4299,46 @@ class UssdNavigationService : AccessibilityService() {
             (looksLikeInputClass || hasViewHint || hasLabelHint)
     }
 
+    private fun isAggressiveTextEntryCandidate(node: AccessibilityNodeInfo): Boolean {
+        val className = node.className?.toString().orEmpty()
+        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
+        } else {
+            ""
+        }
+        val enabled = try { node.isEnabled } catch (_: Exception) { true }
+        val editable = try { node.isEditable } catch (_: Exception) { false }
+        val writable = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
+            supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
+        val focusable = try {
+            node.isFocusable || node.isFocused || node.isClickable || node.isLongClickable
+        } catch (_: Exception) {
+            false
+        }
+        val looksLikeButton = className.contains("Button", ignoreCase = true) ||
+            className.contains("ImageButton", ignoreCase = true)
+        val looksLikeInputClass = EDITABLE_CLASS_HINTS.any { className.contains(it, ignoreCase = true) } ||
+            className.contains("TextInput", ignoreCase = true) ||
+            className.contains("Edit", ignoreCase = true) ||
+            className.contains("AutoComplete", ignoreCase = true) ||
+            className.contains("Search", ignoreCase = true)
+        val hasHints = hasInputViewHint(viewId, hint) || hasInputLabelHint(label, desc)
+        val isActionLabel = label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS ||
+            label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS
+        return enabled &&
+            !looksLikeButton &&
+            !isActionLabel && (
+                editable ||
+                    isHiddenInputProxyCandidate(node) ||
+                    isLooseInputCandidate(node) ||
+                    (writable && (looksLikeInputClass || hasHints || focusable)) ||
+                    (focusable && hasHints)
+                )
+    }
+
     private fun supportsAction(node: AccessibilityNodeInfo, actionId: Int): Boolean =
         try {
             node.actionList?.any { it.id == actionId } == true
@@ -4264,6 +4436,40 @@ class UssdNavigationService : AccessibilityService() {
             )
     }
 
+    private fun shouldAttemptAggressiveImmediateSubmit(
+        snapshot: UssdTreeSnapshot,
+        dialogTextLower: String,
+        step: String,
+        expectedValue: String,
+        field: AccessibilityNodeInfo?
+    ): Boolean {
+        if (!hasRecentExpectedInput(expectedValue)) return false
+        if (field == null && !snapshot.hasEditableField && snapshot.inputStateSignature.isBlank()) return false
+        return snapshot.hasSendButton ||
+            step == "INPUT_PHONE" ||
+            field == null ||
+            dialogSuggestsTypedReplyPrompt(dialogTextLower)
+    }
+
+    private fun tryAggressiveImmediateSubmitAfterWrite(
+        root: AccessibilityNodeInfo,
+        field: AccessibilityNodeInfo?,
+        expectedValue: String
+    ): Boolean {
+        if (!hasRecentExpectedInput(expectedValue) && !hasRecentVerifiedInput(expectedValue)) return false
+        val sendBtn = findBestSendActionButton(root)
+            ?: findPositiveDialogButton(root)
+            ?: findBottomRightActionButton(root)
+        try {
+            if (sendBtn != null && performClick(sendBtn)) {
+                return true
+            }
+        } finally {
+            sendBtn?.recycle()
+        }
+        return triggerInputSubmit(root, expectedValue, field)
+    }
+
     private fun shouldTrustRecentWrite(fieldText: String?, expectedValue: String): Boolean {
         val actual = fieldText?.trim().orEmpty()
         if (actual.isBlank()) return hasRecentExpectedInput(expectedValue)
@@ -4294,8 +4500,25 @@ class UssdNavigationService : AccessibilityService() {
             val verified = candidates.any { candidate ->
                 isVerifiedFieldValue(readFieldText(candidate), expectedValue)
             }
-            if (verified) rememberVerifiedInput(expectedValue)
-            verified
+            val aggressiveVerified = if (verified) {
+                false
+            } else {
+                val aggressiveCandidates = mutableListOf<AccessibilityNodeInfo>()
+                try {
+                    collectAggressiveTextEntryCandidates(root, aggressiveCandidates)
+                    aggressiveCandidates.any { candidate ->
+                        isVerifiedFieldValue(readFieldText(candidate), expectedValue)
+                    }
+                } finally {
+                    aggressiveCandidates.forEach { candidate ->
+                        if (candidate !== existingField) {
+                            runCatching { candidate.recycle() }
+                        }
+                    }
+                }
+            }
+            if (verified || aggressiveVerified) rememberVerifiedInput(expectedValue)
+            verified || aggressiveVerified
         } finally {
             candidates.forEach { candidate ->
                 if (candidate !== existingField) {
@@ -4541,6 +4764,9 @@ class UssdNavigationService : AccessibilityService() {
     ): AccessibilityNodeInfo? =
         mutableListOf<AccessibilityNodeInfo>().let { candidates ->
             collectTextEntryCandidates(root, candidates)
+            if (candidates.isEmpty()) {
+                collectAggressiveTextEntryCandidates(root, candidates)
+            }
             val verifiedMatch = candidates.firstOrNull { candidate ->
                 isVerifiedFieldValue(readFieldText(candidate), expectedValue)
             }
@@ -4553,6 +4779,27 @@ class UssdNavigationService : AccessibilityService() {
             candidates.forEach { it.recycle() }
             result
         }
+
+    private fun isAggressiveActionCandidate(node: AccessibilityNodeInfo): Boolean {
+        val enabled = try { node.isEnabled } catch (_: Exception) { true }
+        if (!enabled) return false
+        val editable = try { node.isEditable } catch (_: Exception) { false }
+        if (editable) return false
+        val actionable = try {
+            node.isClickable || node.isFocusable || node.isLongClickable
+        } catch (_: Exception) {
+            false
+        }
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
+        return actionable && (
+            SEND_VIEW_ID_HINTS.any { viewId.contains(it) } ||
+                SEND_BUTTON_LABELS.any { label.contains(it) || desc.contains(it) } ||
+                label.isNotBlank() ||
+                desc.isNotBlank()
+            )
+    }
 
     private fun obtainActionTarget(node: AccessibilityNodeInfo): AccessibilityNodeInfo {
         var current: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
