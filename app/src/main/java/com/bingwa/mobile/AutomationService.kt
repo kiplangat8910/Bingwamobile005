@@ -121,13 +121,17 @@ class AutomationService : Service() {
                 response = "Blocked: this phone number is blacklisted and cannot receive data bundles.",
                 forcedStatus = TransactionStatus.CANCELLED.value
             )
-            stopSelf()
             return START_NOT_STICKY
         }
-        when {
-            usesAdvancedFlow(request) -> startAdvanced(request)
-            else -> handleSimple(request)
-        }
+        UssdQueue.enqueue(
+            Runnable {
+                Log.d(TAG, "Dequeued USSD request txId=${request.txId} mode=${request.mode}")
+                when {
+                    usesAdvancedFlow(request) -> startAdvanced(request)
+                    else -> handleSimple(request)
+                }
+            }
+        )
         return START_REDELIVER_INTENT
     }
 
@@ -488,8 +492,7 @@ class AutomationService : Service() {
             Log.d(TAG, "Token purchase callback: success=$success")
             cb(success)
             UssdNavigationService.tokenPurchaseCallback = null
-            schedulePostExecutionAirtimeRefresh()
-            stopSelf()
+            finishQueuedExecution(scheduleAirtimeRefresh = true)
             return
         }
 
@@ -497,14 +500,13 @@ class AutomationService : Service() {
         UssdNavigationService.balanceCallback?.let { cb ->
             Log.d(TAG, "Balance callback invoked")
             cb(response)
-            stopSelf()
+            finishQueuedExecution(scheduleAirtimeRefresh = false)
             return
         }
 
         // Save transaction with response
         if (request.txId < 0) {
-            schedulePostExecutionAirtimeRefresh()
-            stopSelf()
+            finishQueuedExecution(scheduleAirtimeRefresh = true)
             return
         }
 
@@ -513,8 +515,7 @@ class AutomationService : Service() {
 
         if (shouldRetryRetriableFinalResponse(status, response)) {
             handleRetriableFinalResponse(request, response, status, transcript)
-            schedulePostExecutionAirtimeRefresh()
-            stopSelf()
+            finishQueuedExecution(scheduleAirtimeRefresh = true)
             return
         }
 
@@ -530,8 +531,17 @@ class AutomationService : Service() {
             "Failed" -> handleFailedWithFallback(request, response)
             else -> Unit
         }
-        schedulePostExecutionAirtimeRefresh()
-        stopSelf()
+        finishQueuedExecution(scheduleAirtimeRefresh = true)
+    }
+
+    private fun finishQueuedExecution(scheduleAirtimeRefresh: Boolean) {
+        if (scheduleAirtimeRefresh) {
+            schedulePostExecutionAirtimeRefresh()
+        }
+        UssdQueue.markCompleted()
+        if (!UssdQueue.hasWork()) {
+            stopSelf()
+        }
     }
 
     private fun handleFailedWithFallback(request: AutomationRequest, response: String) {
