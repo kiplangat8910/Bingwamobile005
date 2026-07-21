@@ -565,6 +565,7 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
     val amountLabel = formatActivityAmount(tx.amount)
     val timeLabel = formatActivityTime(tx)
     val relativeLabel = formatActivityRelativeTime(tx)
+    val statusLabel = activityStatusLabel(tx)
     val statusColor = when (tx.statusEnum) {
         TransactionStatus.SUCCESS -> C.green
         TransactionStatus.FAILED, TransactionStatus.CANCELLED -> C.red
@@ -675,8 +676,30 @@ private fun ActivityRow(tx: Transaction, onClick: () -> Unit) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                Spacer(Modifier.height(6.dp))
+                ActivityStatusPill(
+                    label = statusLabel,
+                    accent = statusColor
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun ActivityStatusPill(label: String, accent: Color) {
+    Surface(
+        color = accent.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.24f))
+    ) {
+        Text(
+            text = label,
+            color = accent,
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        )
     }
 }
 
@@ -806,6 +829,21 @@ private fun formatActivityRelativeTime(tx: Transaction): String {
         minutes < 60L -> "${minutes}m ago"
         hours < 24L -> "${hours}h ago"
         else -> ""
+    }
+}
+
+private fun activityStatusLabel(tx: Transaction): String {
+    val rawStatus = tx.status.trim()
+    return when {
+        rawStatus.equals(TransactionStatus.SUCCESS.value, ignoreCase = true) -> "Completed"
+        rawStatus.equals(TransactionStatus.FAILED.value, ignoreCase = true) -> "Failed"
+        rawStatus.equals(TransactionStatus.CANCELLED.value, ignoreCase = true) -> "Cancelled"
+        rawStatus.equals(TransactionStatus.RETRYING.value, ignoreCase = true) -> "Retrying"
+        rawStatus.equals(TransactionStatus.PROCESSING.value, ignoreCase = true) -> "Processing"
+        rawStatus.equals(TransactionStatus.PENDING.value, ignoreCase = true) -> "Pending"
+        rawStatus.equals("UnderMaintenance", ignoreCase = true) -> "Maintenance"
+        rawStatus.isNotBlank() -> rawStatus
+        else -> transactionExecutionCopy(tx).statusLabel
     }
 }
 
