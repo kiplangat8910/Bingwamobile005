@@ -172,7 +172,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     var responseMessage by remember { mutableStateOf("No final USSD response captured yet.") }
     var responseIsError by remember { mutableStateOf(false) }
     var balanceDisplay by remember {
-        mutableStateOf(BalanceChecker.currentBalanceStr.ifBlank { "KES --" })
+        mutableStateOf(BalanceChecker.currentBalanceStr.ifBlank { "KSh --" })
     }
     var lastBalanceCheckedAt by remember {
         mutableLongStateOf(if (BalanceChecker.currentBalanceStr.isBlank()) 0L else System.currentTimeMillis())
@@ -283,6 +283,17 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
         lastBalanceCheckedAt = checkedAt
     }
 
+    fun publishSharedBalance(display: String, simSelection: Int = selectedRechargeSim) {
+        if (display.isBlank()) return
+        BalanceChecker.balanceResultListener?.invoke(
+            BalanceChecker.BalanceCheckResult(
+                display = display,
+                selectionOverride = simSelection,
+                persistResult = true
+            )
+        )
+    }
+
     fun syncBalanceFromRechargeResponse(rawResponse: String): Boolean {
         val parsedBalance = BalanceChecker.parseBalanceDisplay(rawResponse)
         if (parsedBalance.isBlank()) return false
@@ -294,6 +305,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
             BalanceChecker.currentBalance = parsedAmount
         }
         RelayManager.syncPrimaryAirtimeBalance(ctx, parsedBalance)
+        publishSharedBalance(parsedBalance)
         return true
     }
 
@@ -2082,12 +2094,12 @@ private fun clearUsedPinRecords(context: Context) {
 }
 
 private fun splitScratchBalance(value: String): Pair<String, String> {
-    val normalized = value.trim().ifBlank { "KES --" }
+    val normalized = value.trim().ifBlank { "KSh --" }
     val parts = normalized.split(Regex("\\s+"), limit = 2)
     return if (parts.size == 2 && parts[0].any { it.isLetter() }) {
         parts[0].uppercase(Locale.getDefault()) to parts[1]
     } else {
-        "KES" to normalized
+        "KSH" to normalized
     }
 }
 
@@ -2267,8 +2279,14 @@ private suspend fun startScratchBalanceCheck(
                     if (parsedAmount >= 0) {
                         BalanceChecker.currentBalance = parsedAmount
                     }
-                    BalanceChecker.balanceCallback?.invoke(display)
                     RelayManager.syncPrimaryAirtimeBalance(context, display)
+                    BalanceChecker.balanceResultListener?.invoke(
+                        BalanceChecker.BalanceCheckResult(
+                            display = display,
+                            selectionOverride = simSelection,
+                            persistResult = true
+                        )
+                    )
 
                     if (cont.isActive) {
                         cont.resumeWith(Result.success(ScratchCardRechargeResult.Completed(display)))

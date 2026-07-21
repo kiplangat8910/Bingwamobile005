@@ -638,11 +638,7 @@ class UssdNavigationService : AccessibilityService() {
             lastWindowPkg = windowPkg
 
             val requireStrictPopupScope = shouldRequireStrictPopupScope()
-            val eventDialogText = if (!shouldUseEventTextFallback()) {
-                ""
-            } else {
-                extractDialogTextFromEvent(event)
-            }
+            val eventDialogText = extractDialogTextFromEvent(event)
             val snapshot = if (
                 eventDialogText.isBlank() ||
                 advancedActive ||
@@ -654,7 +650,7 @@ class UssdNavigationService : AccessibilityService() {
             } else {
                 null
             }
-            if (requireStrictPopupScope && snapshot == null) return
+            if (requireStrictPopupScope && snapshot == null && eventDialogText.isBlank()) return
             val dialogText = snapshot?.dialogText
                 ?: normalizeCollapsedText(eventDialogText)
             if (dialogText.isBlank()) return
@@ -863,8 +859,9 @@ class UssdNavigationService : AccessibilityService() {
     ): UssdTreeSnapshot? {
         val strictSnapshot = captureTreeSnapshotStrictDialog(root)
         if (strictSnapshot != null) return strictSnapshot
-        if (requireStrictDialog) return null
-        return captureTreeSnapshot(root)
+        val relaxedSnapshot = captureTreeSnapshot(root)
+        if (requireStrictDialog && !shouldAllowRelaxedDialogFallback(root, relaxedSnapshot)) return null
+        return relaxedSnapshot
     }
 
     private fun obtainInteractionRoot(
@@ -872,8 +869,41 @@ class UssdNavigationService : AccessibilityService() {
         requireStrictDialog: Boolean
     ): AccessibilityNodeInfo? {
         findDialogCaptureRoot(root)?.let { return it }
-        if (requireStrictDialog) return null
+        if (requireStrictDialog && !shouldAllowRelaxedDialogFallback(root)) return null
         return AccessibilityNodeInfo.obtain(root)
+    }
+
+    private fun shouldAllowRelaxedDialogFallback(
+        root: AccessibilityNodeInfo,
+        snapshot: UssdTreeSnapshot? = null
+    ): Boolean {
+        if (!advancedActive &&
+            balanceCallback == null &&
+            tokenPurchaseCallback == null &&
+            !signatureLearningMode &&
+            !isForegroundUiActive()
+        ) {
+            return false
+        }
+        val pkg = root.packageName?.toString().orEmpty()
+        val allowedPkg = pkg.isBlank() ||
+            pkg == "android" ||
+            pkg == "com.android.systemui" ||
+            isPotentialUssdPackage(pkg)
+        if (!allowedPkg) return false
+
+        val effectiveSnapshot = snapshot ?: captureTreeSnapshot(root)
+        val dialogText = effectiveSnapshot.dialogText
+        if (dialogText.isBlank()) return false
+        val lower = dialogText.lowercase()
+        if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return false
+
+        return looksLikeUssdDialog(root, effectiveSnapshot, lower, pkg) ||
+            looksLikeUssdDialogFast(allTextLower = lower, windowPackageName = pkg) ||
+            hasDialogLayout(root, effectiveSnapshot) ||
+            effectiveSnapshot.hasEditableField ||
+            effectiveSnapshot.hasSendButton ||
+            effectiveSnapshot.hasDismissButton
     }
 
     private fun buildScreenSignatureKey(
@@ -1496,7 +1526,6 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun capturePopupTranscript(snapshot: UssdTreeSnapshot?, dialogText: String) {
         if (!shouldRecordPopupTranscript()) return
-        if (signatureLearningMode && snapshot == null) return
         val recordedText = snapshot?.let {
             val menu = parseMenuSignature(it)
             if (signatureLearningMode) {
@@ -4029,7 +4058,7 @@ class UssdNavigationService : AccessibilityService() {
         val actual = fieldText?.trim().orEmpty()
         return when {
             matchesExpectedInput(actual, expectedValue) -> true
-            actual.isNotBlank() && shouldTrustRecentWrite(actual, expectedValue) -> true
+            shouldTrustRecentWrite(actual, expectedValue) -> true
             else -> false
         }
     }
