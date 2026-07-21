@@ -313,9 +313,12 @@ private fun BalanceOverviewCard(
                         )
                         Spacer(Modifier.height(UiDimens.SpacingSm))
                         Text(
-                            if (isRefreshing) "checking balance..." else "tap card to refresh",
+                            if (isRefreshing) "Checking balance" else "Tap to refresh",
                             color = C.t3,
-                            fontSize = 13.sp
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     Column(

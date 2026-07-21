@@ -4001,9 +4001,9 @@ private fun HomeSplitBalanceCard(
     var tapCount by remember { mutableIntStateOf(0) }
     var tapWindowJob by remember { mutableStateOf<Job?>(null) }
     val balanceHelperText = when {
-        isRefreshing -> "Checking balance..."
-        canCheckSlot2 -> "Tap three times to check the balance for SIM 2."
-        else -> "Tap to refresh."
+        isRefreshing -> "Checking balance"
+        canCheckSlot2 -> "Tap three times to check balance for SIM 2"
+        else -> "Tap to refresh"
     }
     val handleCardTap: () -> Unit = {
         if (!isRefreshing) {
@@ -4077,6 +4077,12 @@ private fun HomeSplitBalanceCard(
             if (compact) 8.5.sp else 9.sp,
             if (compact) 8.sp else 8.5.sp
         )
+        val helperFontSize = balanceCaptionFontSize(
+            balanceHelperText,
+            if (compact) 9.sp else 9.5.sp,
+            if (compact) 8.sp else 8.5.sp,
+            if (compact) 7.sp else 7.5.sp
+        )
         val statsSpacing = if (compact) 5.dp else 7.dp
 
         Column(
@@ -4138,8 +4144,10 @@ private fun HomeSplitBalanceCard(
                     Text(
                         balanceHelperText,
                         color = textDimmer,
-                        fontSize = 9.sp,
-                        maxLines = 1
+                        fontSize = helperFontSize,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 Box(
@@ -5944,11 +5952,14 @@ fun VolcanicBalanceCard(
                             )
                         }
                         Text(
-                            if (isRefreshing) "Checking balance..." else "Tap to refresh.",
+                            if (isRefreshing) "Checking balance" else "Tap to refresh",
                             color = C.t3,
                             fontSize = if (compactTop) 10.sp else 11.sp,
                             lineHeight = if (compactTop) 13.sp else 15.sp,
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     Column(
