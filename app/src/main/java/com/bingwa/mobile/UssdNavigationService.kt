@@ -1110,24 +1110,15 @@ class UssdNavigationService : AccessibilityService() {
                             expectedValue = valueToEnter,
                             existingField = inputField
                         )
-                        val trustedFreshWrite = shouldTrustFreshInputWrite(
-                            wroteValue = wroteValue,
-                            expectedValue = valueToEnter,
-                            existingField = inputField,
-                            snapshot = effectiveSnapshot,
-                            dialogTextLower = lower
-                        )
                         val recentVerifiedWrite = inlineVerified ||
-                            hasRecentVerifiedInput(valueToEnter) ||
-                            trustedFreshWrite
+                            hasRecentVerifiedInput(valueToEnter)
                         if (!isFinalSignatureLearningStep(currentStep) &&
                             wroteValue &&
                             recentVerifiedWrite &&
                             tryImmediateVerifiedSend(
                                 root = interactionRoot,
                                 field = inputField,
-                                expectedValue = valueToEnter,
-                                allowRecentExpectedWrite = trustedFreshWrite
+                                expectedValue = valueToEnter
                             )
                         ) {
                             markStepAction(dialogText, root = interactionRoot)
@@ -2252,12 +2243,7 @@ class UssdNavigationService : AccessibilityService() {
 
         if (fieldText == null) {
             val newCount = noFieldCount + 1
-            if ((hasRecentVerifiedInput(expected) || hasRecentExpectedInput(expected)) && newCount >= 2) {
-                handler.post { clickSendButton(expected, 0, skipFieldVerification = true) }
-            } else if (newCount >= NO_FIELD_PATIENCE && (hasRecentVerifiedInput(expected) || hasRecentExpectedInput(expected))) {
-                handler.post { clickSendButton(expected, 0) }
-            }
-            else handler.postDelayed(
+            handler.postDelayed(
                 { verifyThenSend(expected, attempt + 1, newCount) },
                 verificationPollDelay(expected, newCount)
             )
@@ -2358,10 +2344,7 @@ class UssdNavigationService : AccessibilityService() {
         }
         when {
             fieldText == null -> {
-                if (hasRecentVerifiedInput(expected) || hasRecentExpectedInput(expected)) {
-                    handler.post { clickSendButton(expected, 0, skipFieldVerification = true) }
-                }
-                else handler.postDelayed(
+                handler.postDelayed(
                     { verifyThenSend(expected, attempt, 1) },
                     verificationPollDelay(expected, 1)
                 )
@@ -4017,17 +4000,14 @@ class UssdNavigationService : AccessibilityService() {
     private fun tryImmediateVerifiedSend(
         root: AccessibilityNodeInfo,
         field: AccessibilityNodeInfo?,
-        expectedValue: String,
-        allowRecentExpectedWrite: Boolean = false
+        expectedValue: String
     ): Boolean {
         val verified = verifyExpectedInputFromRoot(
             root = root,
             expectedValue = expectedValue,
             existingField = field
         ) ||
-            hasRecentVerifiedInput(expectedValue) ||
-            (allowRecentExpectedWrite && hasRecentExpectedInput(expectedValue)) ||
-            (field == null && hasRecentExpectedInput(expectedValue))
+            hasRecentVerifiedInput(expectedValue)
         if (!verified) return false
         val fieldText = field?.let(::readFieldText)
         val sendBtn = findBestSendActionButton(root)
@@ -4431,13 +4411,7 @@ class UssdNavigationService : AccessibilityService() {
         snapshot: UssdTreeSnapshot,
         dialogTextLower: String
     ): Boolean {
-        if (!wroteValue || !hasRecentExpectedInput(expectedValue)) return false
-        if (existingField != null) return true
-        return snapshot.hasSendButton && (
-            snapshot.hasEditableField ||
-                snapshot.inputStateSignature.isNotBlank() ||
-                dialogSuggestsTypedReplyPrompt(dialogTextLower)
-            )
+        return false
     }
 
     private fun shouldAttemptAggressiveImmediateSubmit(
@@ -4447,7 +4421,7 @@ class UssdNavigationService : AccessibilityService() {
         expectedValue: String,
         field: AccessibilityNodeInfo?
     ): Boolean {
-        if (!hasRecentExpectedInput(expectedValue)) return false
+        if (!hasRecentVerifiedInput(expectedValue)) return false
         if (field == null && !snapshot.hasEditableField && snapshot.inputStateSignature.isBlank()) return false
         return snapshot.hasSendButton ||
             step == "INPUT_PHONE" ||
@@ -4460,7 +4434,12 @@ class UssdNavigationService : AccessibilityService() {
         field: AccessibilityNodeInfo?,
         expectedValue: String
     ): Boolean {
-        if (!hasRecentExpectedInput(expectedValue) && !hasRecentVerifiedInput(expectedValue)) return false
+        val verified = verifyExpectedInputFromRoot(
+            root = root,
+            expectedValue = expectedValue,
+            existingField = field
+        ) || hasRecentVerifiedInput(expectedValue)
+        if (!verified) return false
         val sendBtn = findBestSendActionButton(root)
             ?: findPositiveDialogButton(root)
             ?: findBottomRightActionButton(root)
@@ -4475,9 +4454,7 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun shouldTrustRecentWrite(fieldText: String?, expectedValue: String): Boolean {
-        val actual = fieldText?.trim().orEmpty()
-        if (actual.isBlank()) return hasRecentExpectedInput(expectedValue)
-        return hasRecentExpectedInput(expectedValue) && isLikelyPromptText(actual)
+        return false
     }
 
     private fun isVerifiedFieldValue(fieldText: String?, expectedValue: String): Boolean {
