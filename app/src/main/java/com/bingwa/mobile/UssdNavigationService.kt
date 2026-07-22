@@ -1101,7 +1101,7 @@ class UssdNavigationService : AccessibilityService() {
                     if (inputField != null || shouldPreferTextInput) {
                         val wroteValue = when {
                             inputField != null ->
-                                tryWriteValueToField(inputField, valueToEnter) ||
+                                tryWriteValueToField(inputField, valueToEnter, interactionRoot) ||
                                     writeValueToField(interactionRoot, valueToEnter)
                             else -> writeValueToField(interactionRoot, valueToEnter)
                         }
@@ -2202,7 +2202,7 @@ class UssdNavigationService : AccessibilityService() {
             collectTextEntryCandidates(root, fields)
             if (fields.isNotEmpty()) {
                 fields.sortByDescending { scoreTextEntryCandidate(it) }
-                if (fields.any { field -> tryWriteValueToField(field, value) }) {
+                if (fields.any { field -> tryWriteValueToField(field, value, root) }) {
                     return true
                 }
             }
@@ -2210,7 +2210,7 @@ class UssdNavigationService : AccessibilityService() {
             fields.forEach { it.recycle() }
         }
 
-        if (tryWriteValueToField(root, value)) {
+        if (tryWriteValueToField(root, value, root)) {
             return true
         }
 
@@ -2220,7 +2220,7 @@ class UssdNavigationService : AccessibilityService() {
             aggressiveFields.sortByDescending {
                 scoreTextEntryCandidate(it) + scoreAggressiveTextEntryCandidate(it)
             }
-            return aggressiveFields.any { field -> tryWriteValueToField(field, value) }
+            return aggressiveFields.any { field -> tryWriteValueToField(field, value, root) }
         } finally {
             aggressiveFields.forEach { it.recycle() }
         }
@@ -4544,23 +4544,46 @@ class UssdNavigationService : AccessibilityService() {
         return null
     }
 
-    private fun tryWriteValueToField(field: AccessibilityNodeInfo, value: String): Boolean {
+    private fun tryWriteValueToField(
+        field: AccessibilityNodeInfo,
+        value: String,
+        verificationRoot: AccessibilityNodeInfo? = null
+    ): Boolean {
         val targets = obtainInputTargets(field)
+        var wroteValue = false
         try {
             targets.forEach { target ->
                 val result = writeValueUsingStrategies(target, value)
                 if (result.wroteValue) {
+                    wroteValue = true
                     rememberInputWrite(value)
-                    if (result.likelyVerified) {
+                    val verified = result.likelyVerified ||
+                        verifyWrittenValue(verificationRoot, target, value)
+                    if (verified) {
                         rememberVerifiedInput(value)
+                        return true
                     }
-                    return true
                 }
             }
-            return false
+            return wroteValue && verifyWrittenValue(verificationRoot, field, value)
         } finally {
             targets.forEach { it.recycle() }
         }
+    }
+
+    private fun verifyWrittenValue(
+        verificationRoot: AccessibilityNodeInfo?,
+        field: AccessibilityNodeInfo,
+        expectedValue: String
+    ): Boolean {
+        if (isLikelyDirectWriteVerified(field, expectedValue)) return true
+        val root = verificationRoot ?: return false
+        runCatching { root.refresh() }
+        return verifyExpectedInputFromRoot(
+            root = root,
+            expectedValue = expectedValue,
+            existingField = field
+        )
     }
 
     private fun writeValueUsingStrategies(node: AccessibilityNodeInfo, value: String): InputWriteResult {
