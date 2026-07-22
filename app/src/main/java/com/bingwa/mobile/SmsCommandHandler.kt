@@ -419,6 +419,7 @@ object SmsCommandHandler {
                 intent.putExtra("code", ussdCode)
                 intent.putExtra("phoneNumber", phone)
                 intent.putExtra("txId", txId)
+                intent.putExtra("executionPriority", USSD_EXECUTION_PRIORITY_SPECIAL)
                 ServiceLauncher.startAutomationService(context, intent)
                 sendSms(context, replyTo, "Retry started for transaction #$txId.", replySubId)
                 return

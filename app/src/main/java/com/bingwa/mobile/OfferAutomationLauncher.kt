@@ -10,7 +10,7 @@ fun Context.startOfferAutomation(
     finalCode: String,
     mode: String = offer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE,
     signatureLearning: Boolean = false,
-    executionPriority: String = USSD_EXECUTION_PRIORITY_NORMAL,
+    executionPriority: String = USSD_EXECUTION_PRIORITY_SPECIAL,
     returnToAppAggressively: Boolean = true
 ) {
     val requestedMode = mode.ifBlank { offer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE }

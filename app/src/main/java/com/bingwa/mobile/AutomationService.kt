@@ -146,6 +146,13 @@ class AutomationService : Service() {
         val rawPhoneNumber = safeIntent.getStringExtra("phoneNumber") ?: ""
         val ussdPhoneNumber = rawPhoneNumber.takeIf { it.isBlank() }
             ?: UssdHelper.normalizeRecipientForUssdInput(rawPhoneNumber)
+        val executionPriority = safeIntent.getStringExtra("executionPriority") ?: when (safeIntent.action) {
+            ACTION_RUN_SCHEDULED,
+            ACTION_RETRY_PENDING,
+            ACTION_RETRY_MAINTENANCE,
+            ACTION_RETRY_RETRIABLE_RESPONSE -> USSD_EXECUTION_PRIORITY_SPECIAL
+            else -> USSD_EXECUTION_PRIORITY_NORMAL
+        }
         return AutomationRequest(
             code = code,
             phoneNumber = ussdPhoneNumber,
@@ -159,7 +166,7 @@ class AutomationService : Service() {
             signatureEnabled = safeIntent.getBooleanExtra("signatureEnabled", false),
             signatureMode = (safeIntent.getStringExtra("signatureMode") ?: "STOP").uppercase(),
             signatureLearning = safeIntent.getBooleanExtra("signatureLearning", false),
-            executionPriority = safeIntent.getStringExtra("executionPriority") ?: USSD_EXECUTION_PRIORITY_NORMAL,
+            executionPriority = executionPriority,
             returnToAppAggressively = safeIntent.getBooleanExtra("returnToAppAggressively", true)
         )
     }

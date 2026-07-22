@@ -7022,6 +7022,7 @@ fun ManualScreen(allTxns: MutableList<Transaction>) {
                 simSelection = selectedOffer.simSelection,
                 signatureEnabled = selectedOffer.signatureDetectionEnabled,
                 signatureMode = selectedOffer.signatureAction,
+                executionPriority = USSD_EXECUTION_PRIORITY_SPECIAL,
                 returnToAppAggressively = false
             )
             val ok = ScheduledOfferDispatchStore.schedule(ctx, dispatch)

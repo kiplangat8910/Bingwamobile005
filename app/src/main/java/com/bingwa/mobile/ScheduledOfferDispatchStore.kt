@@ -23,6 +23,7 @@ internal object ScheduledOfferDispatchStore {
         val simSelection: Int,
         val signatureEnabled: Boolean,
         val signatureMode: String,
+        val executionPriority: String,
         val returnToAppAggressively: Boolean
     )
 
@@ -134,6 +135,7 @@ internal object ScheduledOfferDispatchStore {
                     simSelection = obj.optInt("simSelection", OFFER_SIM_USE_GENERAL),
                     signatureEnabled = obj.optBoolean("signatureEnabled", false),
                     signatureMode = obj.optString("signatureMode", "STOP"),
+                    executionPriority = obj.optString("executionPriority", USSD_EXECUTION_PRIORITY_SPECIAL),
                     returnToAppAggressively = obj.optBoolean("returnToAppAggressively", true)
                 )
             }
@@ -151,6 +153,7 @@ internal object ScheduledOfferDispatchStore {
         put("simSelection", simSelection)
         put("signatureEnabled", signatureEnabled)
         put("signatureMode", signatureMode)
+        put("executionPriority", executionPriority)
         put("returnToAppAggressively", returnToAppAggressively)
     }
 
@@ -167,6 +170,7 @@ internal object ScheduledOfferDispatchStore {
             putExtra("signatureEnabled", dispatch.signatureEnabled)
             putExtra("signatureMode", dispatch.signatureMode)
             putExtra("signatureLearning", false)
+            putExtra("executionPriority", dispatch.executionPriority)
             putExtra("returnToAppAggressively", dispatch.returnToAppAggressively)
         }
         return PendingIntent.getService(
@@ -177,4 +181,3 @@ internal object ScheduledOfferDispatchStore {
         )
     }
 }
-

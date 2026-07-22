@@ -140,6 +140,7 @@ class MpesaReceiver : BroadcastReceiver() {
             ServiceLauncher.startAutomationService(context, Intent(context, AutomationService::class.java).apply {
                 putExtra("mode", "SIMPLE")
                 putExtra("code", ussdCode)
+                putExtra("executionPriority", USSD_EXECUTION_PRIORITY_SPECIAL)
             })
         }
 
