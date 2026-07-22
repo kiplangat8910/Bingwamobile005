@@ -182,7 +182,8 @@ object UssdHelper {
                 val keepAppUiVisible = BingwaMobileApp.wasInForegroundRecently()
                 if (keepAppUiVisible) UssdNavigationService.armForegroundUi()
                 context.startActivity(intent)
-                if (keepAppUiVisible) relaunchAppUi(context)
+                // Do not immediately pull Bingwa to foreground after launching the dialer.
+                // On some OEM dialers this steals focus before the USSD popup is rendered.
                 return false
             }
             else { onFailure?.invoke("No dialer"); return false }
