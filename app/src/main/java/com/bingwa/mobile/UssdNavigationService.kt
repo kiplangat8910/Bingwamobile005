@@ -4839,31 +4839,51 @@ class UssdNavigationService : AccessibilityService() {
         return changed
     }
 
-    private fun setTextOnNode(node: AccessibilityNodeInfo, value: String): Boolean {
-        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) return false
-        val replacedDirectly = runCatching {
+    private fun performSetTextAction(node: AccessibilityNodeInfo, value: String): Boolean =
+        runCatching {
             node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
             })
         }.getOrDefault(false)
-        if (replacedDirectly) {
-            collapseInputSelection(node, value)
-            return true
-        }
+
+    private fun clearTextOnNode(node: AccessibilityNodeInfo) {
+        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) return
         runCatching {
             node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
             })
         }
-        val replaced = runCatching {
-            node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
-            })
-        }.getOrDefault(false)
-        if (replaced) {
-            collapseInputSelection(node, value)
+    }
+
+    private fun reinforceTextWrite(node: AccessibilityNodeInfo, value: String): Boolean {
+        var wroteValue = false
+        repeat(2) { attempt ->
+            if (attempt > 0) {
+                primeInputTarget(node, aggressive = true)
+                refreshInputTarget(node)
+                clearTextOnNode(node)
+            }
+            if (performSetTextAction(node, value)) {
+                wroteValue = true
+                collapseInputSelection(node, value)
+                if (isLikelyDirectWriteVerified(node, value)) {
+                    return true
+                }
+            }
         }
-        return replaced
+        return wroteValue
+    }
+
+    private fun setTextOnNode(node: AccessibilityNodeInfo, value: String): Boolean {
+        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) return false
+        if (performSetTextAction(node, value)) {
+            collapseInputSelection(node, value)
+            if (isLikelyDirectWriteVerified(node, value)) {
+                return true
+            }
+        }
+        clearTextOnNode(node)
+        return reinforceTextWrite(node, value)
     }
 
     private fun pasteValueOnNode(node: AccessibilityNodeInfo, value: String): Boolean {
@@ -4872,19 +4892,19 @@ class UssdNavigationService : AccessibilityService() {
         val previousClip = runCatching { clipboard.primaryClip }.getOrNull()
         val hadClip = runCatching { clipboard.hasPrimaryClip() }.getOrDefault(false)
         return try {
-            if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) {
-                runCatching {
-                    node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
-                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
-                    })
-                }
-            }
+            clearTextOnNode(node)
             clipboard.setPrimaryClip(ClipData.newPlainText("ussd_reply", value))
             val pasted = runCatching {
                 node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
             }.getOrDefault(false)
             if (pasted) {
                 collapseInputSelection(node, value)
+                if (isLikelyDirectWriteVerified(node, value)) {
+                    return true
+                }
+                if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) {
+                    return reinforceTextWrite(node, value)
+                }
             }
             pasted
         } finally {
