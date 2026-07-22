@@ -206,6 +206,18 @@ class UssdNavigationService : AccessibilityService() {
             "beneficiary number", "msisdn", "tel", "telephone", "contact", "line number",
             "enter phone", "enter number", "enter mobile", "enter recipient", "enter customer"
         )
+        private val AMOUNT_INPUT_HINTS = listOf(
+            "amount", "ksh", "kes", "price", "cost", "value", "total", "airtime amount", "bundle amount"
+        )
+        private val PIN_INPUT_HINTS = listOf(
+            "pin", "m-pin", "mpin", "password", "passcode", "secret", "security code"
+        )
+        private val ACCOUNT_INPUT_HINTS = listOf(
+            "account", "account number", "id", "identity", "meter", "meter number", "reference", "ref"
+        )
+        private val CODE_INPUT_HINTS = listOf(
+            "code", "voucher", "token", "otp", "confirmation code", "promo", "activation code"
+        )
         private val DISMISS_BUTTON_LABELS = listOf(
             "ok", "cancel", "close", "dismiss", "back", "no", "exit", "annuler", "fermer",
             "non", "إلغاء", "خروج"
@@ -1059,7 +1071,7 @@ class UssdNavigationService : AccessibilityService() {
                 val valueToEnter = resolved.first
                 val selectedMenuLabel = resolved.second
 
-                val inputField = findEditableFieldForStep(interactionRoot, step, dialogText)
+                val inputField = findEditableFieldForStep(interactionRoot, step, dialogText, valueToEnter)
                 try {
                     val dialogAllowsPhoneInput = step == "INPUT_PHONE" && dialogSuggestsPhoneInput(lower)
                     if (step == "INPUT_PHONE" && inputField == null && !dialogAllowsPhoneInput) {
@@ -2449,8 +2461,8 @@ class UssdNavigationService : AccessibilityService() {
                     rememberVerifiedInput(expectedValue)
                 }
             }
-            sendBtn = findBestSendActionButton(root)
-                ?: findPositiveDialogButton(root)
+            sendBtn = findBestSendActionButton(root, fieldRef)
+                ?: findPositiveDialogButton(root, fieldRef)
                 ?: findBottomRightActionButton(root)
 
             if (sendBtn != null) {
@@ -3448,9 +3460,10 @@ class UssdNavigationService : AccessibilityService() {
     private fun findEditableFieldForStep(
         node: AccessibilityNodeInfo,
         step: String,
-        dialogText: String
+        dialogText: String,
+        expectedValue: String
     ): AccessibilityNodeInfo? =
-        findBestEditableField(node) { scoreTextEntryCandidateForStep(it, step, dialogText) }
+        findBestEditableField(node) { scoreTextEntryCandidateForStep(it, step, dialogText, expectedValue) }
 
     private fun findBestEditableField(
         node: AccessibilityNodeInfo,
@@ -3557,9 +3570,11 @@ class UssdNavigationService : AccessibilityService() {
     private fun scoreTextEntryCandidateForStep(
         node: AccessibilityNodeInfo,
         step: String,
-        dialogText: String
+        dialogText: String,
+        expectedValue: String
     ): Int {
         var score = scoreTextEntryCandidate(node)
+        score += scorePromptAlignedFieldCandidate(node, dialogText, expectedValue)
         if (step != "INPUT_PHONE") return score
 
         val lowerDialog = dialogText.lowercase()
@@ -3576,6 +3591,66 @@ class UssdNavigationService : AccessibilityService() {
         if (combined.contains("phone") || combined.contains("mobile") || combined.contains("msisdn")) score += 180
         if (combined.contains("recipient") || combined.contains("customer") || combined.contains("subscriber")) score += 140
         if (dialogSuggestsPhoneInput(lowerDialog) && INPUT_VIEW_ID_HINTS.any { viewId.contains(it) }) score += 90
+        return score
+    }
+
+    private fun nodeFieldMetadata(node: AccessibilityNodeInfo): String {
+        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
+        } else {
+            ""
+        }
+        return listOf(viewId, label, desc, hint).filter { it.isNotBlank() }.joinToString(" ")
+    }
+
+    private fun scoreHintAlignment(
+        metadata: String,
+        dialogLower: String,
+        dialogHints: List<String>,
+        fieldHints: List<String>,
+        bonus: Int
+    ): Int {
+        if (!dialogHints.any { dialogLower.contains(it) }) return 0
+        return if (fieldHints.any { metadata.contains(it) }) bonus else 0
+    }
+
+    private fun scorePromptAlignedFieldCandidate(
+        node: AccessibilityNodeInfo,
+        dialogText: String,
+        expectedValue: String
+    ): Int {
+        val metadata = nodeFieldMetadata(node)
+        if (metadata.isBlank()) return 0
+        val lowerDialog = dialogText.lowercase()
+        var score = 0
+        score += scoreHintAlignment(metadata, lowerDialog, PHONE_INPUT_HINTS, PHONE_INPUT_HINTS, 240)
+        score += scoreHintAlignment(metadata, lowerDialog, AMOUNT_INPUT_HINTS, AMOUNT_INPUT_HINTS, 220)
+        score += scoreHintAlignment(metadata, lowerDialog, PIN_INPUT_HINTS, PIN_INPUT_HINTS, 240)
+        score += scoreHintAlignment(metadata, lowerDialog, ACCOUNT_INPUT_HINTS, ACCOUNT_INPUT_HINTS, 220)
+        score += scoreHintAlignment(metadata, lowerDialog, CODE_INPUT_HINTS, CODE_INPUT_HINTS, 220)
+
+        val normalizedExpected = normalizeInputValue(expectedValue)
+        val expectedPhone = normalizePhoneComparable(expectedValue)
+        when {
+            expectedPhone.isNotBlank() && PHONE_INPUT_HINTS.any { metadata.contains(it) } -> score += 220
+            normalizedExpected.all(Char::isDigit) && normalizedExpected.length in 4..8 &&
+                (PIN_INPUT_HINTS.any { metadata.contains(it) } || CODE_INPUT_HINTS.any { metadata.contains(it) }) -> score += 180
+            normalizedExpected.all(Char::isDigit) && normalizedExpected.length >= 2 &&
+                AMOUNT_INPUT_HINTS.any { metadata.contains(it) } -> score += 150
+        }
+
+        if (PHONE_INPUT_HINTS.any { lowerDialog.contains(it) } &&
+            (AMOUNT_INPUT_HINTS.any { metadata.contains(it) } || PIN_INPUT_HINTS.any { metadata.contains(it) })
+        ) score -= 120
+        if (AMOUNT_INPUT_HINTS.any { lowerDialog.contains(it) } &&
+            PHONE_INPUT_HINTS.any { metadata.contains(it) }
+        ) score -= 110
+        if (PIN_INPUT_HINTS.any { lowerDialog.contains(it) } &&
+            AMOUNT_INPUT_HINTS.any { metadata.contains(it) }
+        ) score -= 100
         return score
     }
 
@@ -3957,16 +4032,19 @@ class UssdNavigationService : AccessibilityService() {
             }
             ?: findActionButtonByViewIdHints(root, SEND_VIEW_ID_HINTS, DISMISS_VIEW_ID_HINTS)
 
-    private fun findBestSendActionButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+    private fun findBestSendActionButton(
+        root: AccessibilityNodeInfo,
+        anchorField: AccessibilityNodeInfo? = null
+    ): AccessibilityNodeInfo? {
         val candidates = mutableListOf<AccessibilityNodeInfo>()
         collectActionCandidates(root, candidates)
         val best = candidates
-            .maxByOrNull { scoreSendActionCandidate(it) }
-            ?.takeIf { scoreSendActionCandidate(it) > 0 }
+            .maxByOrNull { scoreSendActionCandidate(it) + scoreActionRelativeToField(it, anchorField) }
+            ?.takeIf { scoreSendActionCandidate(it) + scoreActionRelativeToField(it, anchorField) > 0 }
             ?.let { AccessibilityNodeInfo.obtain(it) }
         candidates.forEach { it.recycle() }
         if (best != null) return best
-        return findAggressiveSendActionButton(root)
+        return findAggressiveSendActionButton(root, anchorField)
     }
 
     private fun findActionButtonByViewIdHints(
@@ -3989,7 +4067,10 @@ class UssdNavigationService : AccessibilityService() {
             .also { candidates.forEach { it.recycle() } }
     }
 
-    private fun findPositiveDialogButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+    private fun findPositiveDialogButton(
+        root: AccessibilityNodeInfo,
+        anchorField: AccessibilityNodeInfo? = null
+    ): AccessibilityNodeInfo? {
         val candidates = mutableListOf<AccessibilityNodeInfo>()
         collectActionCandidates(root, candidates)
         return candidates
@@ -3999,7 +4080,7 @@ class UssdNavigationService : AccessibilityService() {
                 val desc = normalizeActionLabel(node.contentDescription?.toString())
                 label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS
             }
-            .maxByOrNull { scoreActionCandidate(it) }
+            .maxByOrNull { scoreActionCandidate(it) + scoreActionRelativeToField(it, anchorField) }
             ?.let { AccessibilityNodeInfo.obtain(it) }
             .also { candidates.forEach { it.recycle() } }
     }
@@ -4091,14 +4172,49 @@ class UssdNavigationService : AccessibilityService() {
         return score
     }
 
-    private fun findAggressiveSendActionButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+    private fun findAggressiveSendActionButton(
+        root: AccessibilityNodeInfo,
+        anchorField: AccessibilityNodeInfo? = null
+    ): AccessibilityNodeInfo? {
         val candidates = mutableListOf<AccessibilityNodeInfo>()
         collectAggressiveActionCandidates(root, candidates)
         return candidates
-            .maxByOrNull { scoreSendActionCandidate(it) + scoreAggressiveActionCandidate(it) }
-            ?.takeIf { scoreSendActionCandidate(it) + scoreAggressiveActionCandidate(it) > 0 }
+            .maxByOrNull {
+                scoreSendActionCandidate(it) + scoreAggressiveActionCandidate(it) + scoreActionRelativeToField(it, anchorField)
+            }
+            ?.takeIf {
+                scoreSendActionCandidate(it) + scoreAggressiveActionCandidate(it) + scoreActionRelativeToField(it, anchorField) > 0
+            }
             ?.let { AccessibilityNodeInfo.obtain(it) }
             .also { candidates.forEach { it.recycle() } }
+    }
+
+    private fun scoreActionRelativeToField(
+        actionNode: AccessibilityNodeInfo,
+        anchorField: AccessibilityNodeInfo?
+    ): Int {
+        if (anchorField == null) return 0
+        val actionBounds = Rect()
+        val fieldBounds = Rect()
+        if (!runCatching { actionNode.getBoundsInScreen(actionBounds) }.isSuccess) return 0
+        if (!runCatching { anchorField.getBoundsInScreen(fieldBounds) }.isSuccess) return 0
+        if (actionBounds.width() <= 0 || actionBounds.height() <= 0 || fieldBounds.width() <= 0 || fieldBounds.height() <= 0) {
+            return 0
+        }
+        var score = 0
+        val actionCenterX = actionBounds.centerX()
+        val actionCenterY = actionBounds.centerY()
+        val fieldCenterX = fieldBounds.centerX()
+        val fieldCenterY = fieldBounds.centerY()
+        if (actionCenterX >= fieldCenterX) score += 120 else score -= 60
+        if (actionCenterY >= fieldCenterY - 24) score += 110 else score -= 50
+        if (actionBounds.left >= fieldBounds.left) score += 40
+        if (actionBounds.top >= fieldBounds.top - 24) score += 30
+        val verticalGap = actionBounds.top - fieldBounds.bottom
+        if (verticalGap in -24..220) score += 70
+        val horizontalGap = actionBounds.left - fieldBounds.right
+        if (horizontalGap in -48..260) score += 70
+        return score
     }
 
     private fun scoreAggressiveActionCandidate(node: AccessibilityNodeInfo): Int {
@@ -4170,8 +4286,8 @@ class UssdNavigationService : AccessibilityService() {
             hasRecentVerifiedInput(expectedValue)
         if (!verified) return false
         val fieldText = field?.let(::readFieldText)
-        val sendBtn = findBestSendActionButton(root)
-            ?: findPositiveDialogButton(root)
+        val sendBtn = findBestSendActionButton(root, field)
+            ?: findPositiveDialogButton(root, field)
             ?: findBottomRightActionButton(root)
         try {
             if (sendBtn != null && performClick(sendBtn)) {
@@ -4601,8 +4717,8 @@ class UssdNavigationService : AccessibilityService() {
         expectedValue: String
     ): Boolean {
         if (!hasRecentVerifiedInput(expectedValue)) return false
-        val sendBtn = findBestSendActionButton(root)
-            ?: findPositiveDialogButton(root)
+        val sendBtn = findBestSendActionButton(root, field)
+            ?: findPositiveDialogButton(root, field)
             ?: findBottomRightActionButton(root)
         try {
             if (sendBtn != null && performClick(sendBtn)) {
@@ -5130,12 +5246,33 @@ class UssdNavigationService : AccessibilityService() {
             val preferred = verifiedMatch
                 ?: candidates.maxByOrNull { candidate ->
                     scoreTextEntryCandidate(candidate) +
+                        scoreExpectedInputFieldCandidate(candidate, expectedValue) +
                         if (matchesExpectedInput(readFieldText(candidate), expectedValue)) 700 else 0
                 }
             val result = preferred?.let { AccessibilityNodeInfo.obtain(it) }
             candidates.forEach { it.recycle() }
             result
         }
+
+    private fun scoreExpectedInputFieldCandidate(
+        node: AccessibilityNodeInfo,
+        expectedValue: String
+    ): Int {
+        val metadata = nodeFieldMetadata(node)
+        if (metadata.isBlank()) return 0
+        val normalizedExpected = normalizeInputValue(expectedValue)
+        val expectedPhone = normalizePhoneComparable(expectedValue)
+        var score = 0
+        if (expectedPhone.isNotBlank() && PHONE_INPUT_HINTS.any { metadata.contains(it) }) score += 260
+        if (normalizedExpected.all(Char::isDigit) && normalizedExpected.length in 4..8 &&
+            (PIN_INPUT_HINTS.any { metadata.contains(it) } || CODE_INPUT_HINTS.any { metadata.contains(it) })
+        ) score += 220
+        if (normalizedExpected.all(Char::isDigit) && normalizedExpected.length >= 2 &&
+            AMOUNT_INPUT_HINTS.any { metadata.contains(it) }
+        ) score += 160
+        if (normalizedExpected.any(Char::isLetter) && CODE_INPUT_HINTS.any { metadata.contains(it) }) score += 120
+        return score
+    }
 
     private fun isAggressiveActionCandidate(node: AccessibilityNodeInfo): Boolean {
         val enabled = try { node.isEnabled } catch (_: Exception) { true }
