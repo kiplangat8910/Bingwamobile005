@@ -93,13 +93,13 @@ class UssdNavigationService : AccessibilityService() {
         private const val PENDING_ADVANCE_TIMEOUT_MS = 3_000L
         private const val ROOT_REACQUIRE_TIMEOUT_MS  = 5_000L
         private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 3_500L
-        private const val NETWORK_DELAY_STEP_TIMEOUT_MS = 11_000L
-        private const val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 13_000L
-        private const val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 10_000L
-        private const val NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS = 8_500L
-        private const val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 8_000L
-        private const val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 8_500L
-        private const val NETWORK_DELAY_ACTION_GRACE_MS = 12_000L
+        private const val NETWORK_DELAY_STEP_TIMEOUT_MS = 16_000L
+        private const val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 18_000L
+        private const val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 16_000L
+        private const val NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS = 15_000L
+        private const val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 15_000L
+        private const val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 15_000L
+        private const val NETWORK_DELAY_ACTION_GRACE_MS = 18_000L
         private const val PENDING_STEP_ADVANCE_KICK_MS = 4L
         private const val VERIFY_POLL_MS         = 4L
         private const val RAPID_POST_POPUP_POLL_MS = 2L
@@ -336,6 +336,7 @@ class UssdNavigationService : AccessibilityService() {
     private var lastScreenSignatureKey = ""
     private var pendingExpectedValue: String? = null
     private var pendingPhase: PendingPhase = PendingPhase.NONE
+    private var pendingAdvanceFromKey: String = ""
     private var pendingSinceElapsed: Long = 0L
     private var pendingAttempts: Int = 0
     private var lastStepActionKey: String = ""
@@ -1180,7 +1181,12 @@ class UssdNavigationService : AccessibilityService() {
                             if (delay <= 0L) handler.post { verifyLearningFinalInputThenDismiss(valueToEnter, 0, 0) }
                             else handler.postDelayed({ verifyLearningFinalInputThenDismiss(valueToEnter, 0, 0) }, delay)
                         } else {
-                            startPendingAdvance(valueToEnter)
+                            startPendingAdvance(
+                                expectedValue = valueToEnter,
+                                root = interactionRoot,
+                                dialogText = dialogText,
+                                snapshot = effectiveSnapshot
+                            )
                         }
                         return
                     }
@@ -2802,13 +2808,26 @@ class UssdNavigationService : AccessibilityService() {
         clearPendingAdvanceKick()
         pendingExpectedValue = null
         pendingPhase = PendingPhase.NONE
+        pendingAdvanceFromKey = ""
         pendingSinceElapsed = 0L
         pendingAttempts = 0
     }
 
-    private fun startPendingAdvance(expectedValue: String) {
+    private fun startPendingAdvance(
+        expectedValue: String,
+        root: AccessibilityNodeInfo,
+        dialogText: String,
+        snapshot: UssdTreeSnapshot? = null
+    ) {
         pendingExpectedValue = expectedValue
         pendingPhase = if (hasRecentVerifiedInput(expectedValue)) PendingPhase.WAIT_SEND else PendingPhase.WAIT_VERIFY
+        pendingAdvanceFromKey = buildTransitionSignatureKey(
+            windowId = resolveWindowId(root),
+            windowPkg = root.packageName?.toString().orEmpty(),
+            root = root,
+            snapshot = snapshot,
+            dialogText = dialogText
+        )
         pendingSinceElapsed = SystemClock.elapsedRealtime()
         pendingAttempts = 0
         isProcessing = false
@@ -2867,6 +2886,13 @@ class UssdNavigationService : AccessibilityService() {
             return
         }
         try {
+            if (shouldAdvanceFromChangedPendingPopup(interactionRoot, expected)) {
+                clearPendingAdvance()
+                advanceStep()
+                pendingProcessToken = SystemClock.elapsedRealtime()
+                scheduleProcessStep(dialogChanged = true)
+                return
+            }
             when (pendingPhase) {
                 PendingPhase.WAIT_VERIFY -> {
                     val field = findEditableField(interactionRoot)
@@ -2926,6 +2952,31 @@ class UssdNavigationService : AccessibilityService() {
         } finally {
             interactionRoot.recycle()
         }
+    }
+
+    private fun shouldAdvanceFromChangedPendingPopup(
+        root: AccessibilityNodeInfo,
+        expectedValue: String
+    ): Boolean {
+        val fromKey = pendingAdvanceFromKey
+        if (fromKey.isBlank()) return false
+        val requireStrictPopupScope = shouldRequireStrictPopupScope()
+        val snapshot = capturePreferredPopupSnapshot(root, requireStrictDialog = requireStrictPopupScope)
+        val dialogText = snapshot?.dialogText ?: normalizeCollapsedText(extractAllText(root))
+        if (dialogText.isBlank()) return false
+        val currentKey = buildTransitionSignatureKey(
+            windowId = resolveWindowId(root),
+            windowPkg = root.packageName?.toString().orEmpty(),
+            root = root,
+            snapshot = snapshot,
+            dialogText = dialogText
+        )
+        if (currentKey == fromKey) return false
+        if (verifyExpectedInputFromRoot(root, expectedValue)) {
+            pendingAdvanceFromKey = currentKey
+            return false
+        }
+        return true
     }
 
     private fun clearCallbacks() {
