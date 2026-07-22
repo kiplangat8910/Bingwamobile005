@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
@@ -443,12 +444,21 @@ fun cancelScheduledRetry(context: Context, txId: Int) {
         val intent = Intent(context, AutomationService::class.java).apply {
             action = AutomationService.ACTION_RETRY_PENDING
         }
-        val pi = PendingIntent.getService(
-            context,
-            txId,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+        val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            PendingIntent.getForegroundService(
+                context,
+                txId,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        } else {
+            PendingIntent.getService(
+                context,
+                txId,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        }
         val am = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
         am?.cancel(pi)
         pi.cancel()
@@ -479,12 +489,21 @@ fun scheduleRetryTomorrowForTransaction(context: Context, tx: Transaction, offer
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
-        val pi = PendingIntent.getService(
-            context,
-            tx.id,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+        val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            PendingIntent.getForegroundService(
+                context,
+                tx.id,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        } else {
+            PendingIntent.getService(
+                context,
+                tx.id,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        }
         AlarmCompat.scheduleRtcWakeup(
             context = context,
             triggerAtMillis = tomorrow.timeInMillis,

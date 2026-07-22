@@ -38,12 +38,21 @@ class AutomationService : Service() {
                 val intent = Intent(context, AutomationService::class.java).apply {
                     action = ACTION_RETRY_RETRIABLE_RESPONSE
                 }
-                val pi = PendingIntent.getService(
-                    context,
-                    txId,
-                    intent,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
+                val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    PendingIntent.getForegroundService(
+                        context,
+                        txId,
+                        intent,
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                    )
+                } else {
+                    PendingIntent.getService(
+                        context,
+                        txId,
+                        intent,
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                    )
+                }
                 val alarm = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
                 alarm?.cancel(pi)
                 pi.cancel()
@@ -755,12 +764,21 @@ class AutomationService : Service() {
         return runCatching {
             val triggerAt = System.currentTimeMillis() + delayMs
             val intent = buildAutomationIntent(this, request, ACTION_RETRY_RETRIABLE_RESPONSE)
-            val pi = PendingIntent.getService(
-                this,
-                request.txId,
-                intent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
+            val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                PendingIntent.getForegroundService(
+                    this,
+                    request.txId,
+                    intent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            } else {
+                PendingIntent.getService(
+                    this,
+                    request.txId,
+                    intent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            }
             val scheduled = AlarmCompat.scheduleRtcWakeup(
                 context = this,
                 triggerAtMillis = triggerAt,
@@ -949,10 +967,21 @@ class AutomationService : Service() {
                 set(Calendar.MILLISECOND, 0)
             }
             val intent = buildAutomationIntent(this, request, ACTION_RETRY_PENDING)
-            val pi = PendingIntent.getService(
-                this, request.txId, intent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
+            val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                PendingIntent.getForegroundService(
+                    this,
+                    request.txId,
+                    intent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            } else {
+                PendingIntent.getService(
+                    this,
+                    request.txId,
+                    intent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            }
             val scheduled = AlarmCompat.scheduleRtcWakeup(
                 context = this,
                 triggerAtMillis = tomorrow.timeInMillis,

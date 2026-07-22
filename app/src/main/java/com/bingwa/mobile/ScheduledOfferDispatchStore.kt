@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -52,12 +53,22 @@ internal object ScheduledOfferDispatchStore {
         remove(context, txId)
         runCatching {
             val am = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return@runCatching
-            val pi = PendingIntent.getService(
-                context,
-                txId,
-                Intent(context, AutomationService::class.java).apply { action = AutomationService.ACTION_RUN_SCHEDULED },
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
+            val piIntent = Intent(context, AutomationService::class.java).apply { action = AutomationService.ACTION_RUN_SCHEDULED }
+            val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                PendingIntent.getForegroundService(
+                    context,
+                    txId,
+                    piIntent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            } else {
+                PendingIntent.getService(
+                    context,
+                    txId,
+                    piIntent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            }
             am.cancel(pi)
             pi.cancel()
         }
@@ -169,12 +180,20 @@ internal object ScheduledOfferDispatchStore {
             putExtra("signatureLearning", false)
             putExtra("returnToAppAggressively", dispatch.returnToAppAggressively)
         }
-        return PendingIntent.getService(
-            context,
-            dispatch.txId,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            PendingIntent.getForegroundService(
+                context,
+                dispatch.txId,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        } else {
+            PendingIntent.getService(
+                context,
+                dispatch.txId,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        }
     }
 }
-
