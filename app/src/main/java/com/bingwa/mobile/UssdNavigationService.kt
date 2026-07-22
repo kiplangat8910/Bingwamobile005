@@ -100,6 +100,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val RAPID_POST_POPUP_SEND_RETRY_MS = 2L
         private const val MAX_VERIFY_ATTEMPTS    = 10
         private const val MAX_SEND_ATTEMPTS      = 5
+        private const val FORCEFUL_WRITE_PASSES  = 3
         private const val NO_FIELD_PATIENCE      = 4
         private const val INPUT_TARGET_DEPTH     = 8
         private const val INPUT_DESCENT_DEPTH    = 4
@@ -4549,26 +4550,36 @@ class UssdNavigationService : AccessibilityService() {
         value: String,
         verificationRoot: AccessibilityNodeInfo? = null
     ): Boolean {
-        val targets = obtainInputTargets(field)
         var wroteValue = false
-        try {
-            targets.forEach { target ->
-                val result = writeValueUsingStrategies(target, value)
-                if (result.wroteValue) {
-                    wroteValue = true
-                    rememberInputWrite(value)
-                    val verified = result.likelyVerified ||
-                        verifyWrittenValue(verificationRoot, target, value)
-                    if (verified) {
-                        rememberVerifiedInput(value)
-                        return true
+        for (pass in 0 until FORCEFUL_WRITE_PASSES) {
+            val targets = obtainInputTargets(field)
+            try {
+                targets.forEach { target ->
+                    val result = writeValueUsingStrategies(target, value)
+                    if (result.wroteValue) {
+                        wroteValue = true
+                        rememberInputWrite(value)
+                        val verified = result.likelyVerified ||
+                            verifyWrittenValue(verificationRoot, target, value)
+                        if (verified) {
+                            rememberVerifiedInput(value)
+                            return true
+                        }
                     }
                 }
+                if (wroteValue && verifyWrittenValue(verificationRoot, field, value)) {
+                    rememberVerifiedInput(value)
+                    return true
+                }
+            } finally {
+                targets.forEach { it.recycle() }
             }
-            return wroteValue && verifyWrittenValue(verificationRoot, field, value)
-        } finally {
-            targets.forEach { it.recycle() }
+            refreshInputTarget(field)
+            if (verificationRoot != null) {
+                runCatching { verificationRoot.refresh() }
+            }
         }
+        return wroteValue && verifyWrittenValue(verificationRoot, field, value)
     }
 
     private fun verifyWrittenValue(
