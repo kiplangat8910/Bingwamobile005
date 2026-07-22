@@ -103,6 +103,9 @@ class UssdNavigationService : AccessibilityService() {
         private const val FORCEFUL_WRITE_PASSES  = 5
         private const val WRITE_VERIFICATION_PASSES = 4
         private const val WRITE_VERIFICATION_SETTLE_MS = 18L
+        private const val DIRECT_WRITE_VERIFY_PASSES = 3
+        private const val SET_TEXT_BURST_ATTEMPTS = 2
+        private const val PASTE_BURST_ATTEMPTS = 2
         private const val NO_FIELD_PATIENCE      = 4
         private const val INPUT_TARGET_DEPTH     = 8
         private const val INPUT_DESCENT_DEPTH    = 4
@@ -427,6 +430,9 @@ class UssdNavigationService : AccessibilityService() {
 
     private val maxSendRetryDelayMs: Long
         get() = timingForDevice(48L, 84L)
+
+    private val writeVerificationSettleMs: Long
+        get() = timingForDevice(WRITE_VERIFICATION_SETTLE_MS, 28L)
 
     private val errorKeywords = listOf(
         "connection problem", "invalid mmi", "mmi code", "network error", "invalid", "failed",
@@ -4607,10 +4613,12 @@ class UssdNavigationService : AccessibilityService() {
     ): Boolean {
         repeat(WRITE_VERIFICATION_PASSES) { attempt ->
             if (attempt > 0) {
-                SystemClock.sleep(WRITE_VERIFICATION_SETTLE_MS)
                 runCatching { field.refresh() }
                 verificationRoot?.let { root ->
                     runCatching { root.refresh() }
+                }
+                if (attempt >= 2) {
+                    SystemClock.sleep(writeVerificationSettleMs)
                 }
             }
             if (verifyWrittenValue(verificationRoot, field, expectedValue)) {
@@ -4622,45 +4630,86 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun writeValueUsingStrategies(node: AccessibilityNodeInfo, value: String): InputWriteResult {
         primeInputTarget(node)
-        if (setTextOnNode(node, value)) {
-            return InputWriteResult(
-                wroteValue = true,
-                likelyVerified = isLikelyDirectWriteVerified(node, value)
-            )
-        }
+        attemptSetTextBurst(node, value)?.let { return it }
         primeInputTarget(node, aggressive = true)
-        if (setTextOnNode(node, value)) {
-            return InputWriteResult(
-                wroteValue = true,
-                likelyVerified = isLikelyDirectWriteVerified(node, value)
-            )
-        }
+        attemptSetTextBurst(node, value, aggressive = true)?.let { return it }
         if (supportsSilentSetText(node) && primeInputTarget(node, aggressive = true)) {
             refreshInputTarget(node)
-            if (setTextOnNode(node, value)) {
-                return InputWriteResult(
-                    wroteValue = true,
-                    likelyVerified = isLikelyDirectWriteVerified(node, value)
-                )
-            }
+            attemptSetTextBurst(node, value, aggressive = true)?.let { return it }
         }
         primeInputTarget(node, aggressive = true)
-        if (pasteValueOnNode(node, value)) {
-            return InputWriteResult(
-                wroteValue = true,
-                likelyVerified = isLikelyDirectWriteVerified(node, value)
-            )
-        }
+        attemptPasteBurst(node, value)?.let { return it }
         if (primeInputTarget(node, aggressive = true)) {
             refreshInputTarget(node)
-            if (pasteValueOnNode(node, value)) {
-                return InputWriteResult(
-                    wroteValue = true,
-                    likelyVerified = isLikelyDirectWriteVerified(node, value)
-                )
-            }
+            attemptPasteBurst(node, value, aggressive = true)?.let { return it }
         }
         return InputWriteResult(wroteValue = false, likelyVerified = false)
+    }
+
+    private fun attemptSetTextBurst(
+        node: AccessibilityNodeInfo,
+        value: String,
+        aggressive: Boolean = false
+    ): InputWriteResult? {
+        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) return null
+        repeat(SET_TEXT_BURST_ATTEMPTS) { attempt ->
+            if (attempt > 0) {
+                if (aggressive) {
+                    primeInputTarget(node, aggressive = true)
+                } else {
+                    refreshInputTarget(node)
+                }
+            }
+            if (setTextOnNode(node, value)) {
+                val likelyVerified = verifyDirectWriteBurst(node, value)
+                if (likelyVerified || attempt == SET_TEXT_BURST_ATTEMPTS - 1) {
+                    return InputWriteResult(
+                        wroteValue = true,
+                        likelyVerified = likelyVerified
+                    )
+                }
+            }
+        }
+        return null
+    }
+
+    private fun attemptPasteBurst(
+        node: AccessibilityNodeInfo,
+        value: String,
+        aggressive: Boolean = false
+    ): InputWriteResult? {
+        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)) return null
+        repeat(PASTE_BURST_ATTEMPTS) { attempt ->
+            if (attempt > 0) {
+                if (aggressive) {
+                    primeInputTarget(node, aggressive = true)
+                } else {
+                    refreshInputTarget(node)
+                }
+            }
+            if (pasteValueOnNode(node, value)) {
+                val likelyVerified = verifyDirectWriteBurst(node, value)
+                if (likelyVerified || attempt == PASTE_BURST_ATTEMPTS - 1) {
+                    return InputWriteResult(
+                        wroteValue = true,
+                        likelyVerified = likelyVerified
+                    )
+                }
+            }
+        }
+        return null
+    }
+
+    private fun verifyDirectWriteBurst(node: AccessibilityNodeInfo, expectedValue: String): Boolean {
+        repeat(DIRECT_WRITE_VERIFY_PASSES) { attempt ->
+            if (attempt > 0) {
+                refreshInputTarget(node)
+            }
+            if (isLikelyDirectWriteVerified(node, expectedValue)) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun obtainInputTargets(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
