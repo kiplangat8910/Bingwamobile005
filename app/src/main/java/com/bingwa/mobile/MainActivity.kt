@@ -2795,7 +2795,6 @@ fun BingwaApp() {
     var airBal by remember { mutableStateOf(BalanceChecker.getLastKnownBalanceDisplay(ctx)) }
     var slot2PreviewBalance by remember { mutableStateOf<String?>(null) }
     var slot2PreviewNonce by remember { mutableIntStateOf(0) }
-    var showSlot2HintPrompt by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     var running by remember { mutableStateOf(appPrefs.safeGetBoolean("automation_enabled", true)) }
     var remainingMs by remember { mutableLongStateOf(unlimitedManager.remainingMs()) }
@@ -2837,18 +2836,6 @@ fun BingwaApp() {
         if (slot2PreviewBalance == null) return@LaunchedEffect
         delay(4_000L)
         slot2PreviewBalance = null
-    }
-
-    LaunchedEffect(canPreviewSlot2, defaultAirBal, slot2PreviewBalance) {
-        if (!canPreviewSlot2 || defaultAirBal.isBlank() || slot2PreviewBalance != null) {
-            showSlot2HintPrompt = false
-            return@LaunchedEffect
-        }
-        showSlot2HintPrompt = true
-        delay(5_000L)
-        if (slot2PreviewBalance == null) {
-            showSlot2HintPrompt = false
-        }
     }
 
     DisposableEffect(Unit) {
@@ -2954,19 +2941,18 @@ fun BingwaApp() {
         Box(Modifier.fillMaxSize().background(C.bg).padding(pad)) {
             AnimatedContent(targetState = screen, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) }, label = "screen") { s ->
                 val unlimitedLabel = unlimitedManager.getActivePlan()?.label?.takeIf { remainingMs > 0L }
-                val showSlot2Hint = canPreviewSlot2 && defaultAirBal.isNotBlank() && showSlot2HintPrompt
                 when (s) {
                     Screen.Home     -> HomeScreenVolcanic(
                         tokenBal = tokenBal,
                         airBal = displayedAirBal,
                         isRefreshing = isRefreshing,
-                        canCheckSlot2 = showSlot2Hint,
+                        canCheckSlot2 = canPreviewSlot2,
                         isShowingSlot2Preview = slot2PreviewBalance != null,
                         txns = txns,
                         running = running,
                         unlimitedLabel = unlimitedLabel,
                         unlimitedRemaining = unlimitedLabel?.let { formatRemainingTimeHome(remainingMs) },
-                        onRefresh = {
+                        onCheckSlot1 = {
                             slot2PreviewBalance = null
                             if (relayCfg.enabled && relayCfg.role == "RELAY") {
                                 airBal = mirroredPrimaryAirtime.ifBlank { airBal }
@@ -2976,7 +2962,7 @@ fun BingwaApp() {
                             }
                         },
                         onCheckSlot2 = {
-                            if (showSlot2Hint && !isRefreshing) {
+                            if (canPreviewSlot2 && !isRefreshing) {
                                 slot2PreviewBalance = null
                                 isRefreshing = true
                                 if (!requestBalanceCheckSafely(
@@ -3408,7 +3394,7 @@ fun HomeScreenVolcanic(
     running: Boolean,
     unlimitedLabel: String?,
     unlimitedRemaining: String?,
-    onRefresh: () -> Unit,
+    onCheckSlot1: () -> Unit,
     onCheckSlot2: () -> Unit,
     onToggleRunning: () -> Unit
 ) {
@@ -3521,7 +3507,7 @@ fun HomeScreenVolcanic(
                             canCheckSlot2 = canCheckSlot2,
                             isShowingSlot2Preview = isShowingSlot2Preview,
                             spin = spin,
-                            onRefresh = onRefresh,
+                            onCheckSlot1 = onCheckSlot1,
                             onCheckSlot2 = onCheckSlot2
                         )
                         HomeActivityHeading(automatedCount = automatedTxns.size)
@@ -3983,7 +3969,7 @@ private fun HomeSplitBalanceCard(
     canCheckSlot2: Boolean,
     isShowingSlot2Preview: Boolean,
     spin: Float,
-    onRefresh: () -> Unit,
+    onCheckSlot1: () -> Unit,
     onCheckSlot2: () -> Unit
 ) {
     val amber = Color(0xFFFFB454)
@@ -3997,47 +3983,12 @@ private fun HomeSplitBalanceCard(
     val cardBg = Color(0xFF1C2123)
     val line = Color(0xFF333B3E)
     val lineSoft = Color(0xFF262D2F)
-    val scope = rememberCoroutineScope()
-    var tapCount by remember { mutableIntStateOf(0) }
-    var tapWindowJob by remember { mutableStateOf<Job?>(null) }
     val balanceHelperText = when {
+        isRefreshing && isShowingSlot2Preview -> "Checking SIM 2 balance"
         isRefreshing -> "Checking balance"
-        canCheckSlot2 -> "Tap three times to check balance for SIM 2"
-        else -> "Tap to refresh"
-    }
-    val handleCardTap: () -> Unit = {
-        if (!isRefreshing) {
-            tapCount += 1
-            if (canCheckSlot2 && tapCount >= 3) {
-                tapWindowJob?.cancel()
-                tapWindowJob = null
-                tapCount = 0
-                onCheckSlot2()
-            } else {
-                tapWindowJob?.cancel()
-                tapWindowJob = scope.launch {
-                    delay(320L)
-                    val finalTapCount = tapCount
-                    tapCount = 0
-                    tapWindowJob = null
-                    if (canCheckSlot2 && finalTapCount >= 3) {
-                        onCheckSlot2()
-                    } else {
-                        onRefresh()
-                    }
-                }
-            }
-        }
-    }
-    DisposableEffect(isRefreshing, canCheckSlot2) {
-        if (isRefreshing || !canCheckSlot2) {
-            tapWindowJob?.cancel()
-            tapWindowJob = null
-            tapCount = 0
-        }
-        onDispose {
-            tapWindowJob?.cancel()
-        }
+        isShowingSlot2Preview -> "Showing SIM 2 balance preview"
+        canCheckSlot2 -> "Choose a SIM to check balance"
+        else -> "Check balance"
     }
     BoxWithConstraints(
         modifier = Modifier
@@ -4053,7 +4004,6 @@ private fun HomeSplitBalanceCard(
                 )
             )
             .border(1.dp, lineSoft, RoundedCornerShape(18.dp))
-            .clickable(onClick = handleCardTap)
             .padding(horizontal = 13.dp, vertical = 10.dp)
     ) {
         val compact = maxWidth < 380.dp
@@ -4145,10 +4095,31 @@ private fun HomeSplitBalanceCard(
                         balanceHelperText,
                         color = textDimmer,
                         fontSize = helperFontSize,
-                        maxLines = 1,
-                        softWrap = false,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
+                    Spacer(Modifier.height(7.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        HomeBalanceActionChip(
+                            label = "SIM 1",
+                            tint = amber,
+                            enabled = !isRefreshing,
+                            highlighted = !isShowingSlot2Preview,
+                            onClick = onCheckSlot1
+                        )
+                        if (canCheckSlot2 || isShowingSlot2Preview) {
+                            HomeBalanceActionChip(
+                                label = if (isShowingSlot2Preview) "SIM 2 Active" else "SIM 2",
+                                tint = cyan,
+                                enabled = !isRefreshing,
+                                highlighted = isShowingSlot2Preview,
+                                onClick = onCheckSlot2
+                            )
+                        }
+                    }
                 }
                 Box(
                     modifier = Modifier
@@ -4212,6 +4183,45 @@ private fun HomeSplitBalanceCard(
                 failedAccent = coral,
                 completedAccent = completedAccent,
                 scheduledAccent = cyan
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeBalanceActionChip(
+    label: String,
+    tint: Color,
+    enabled: Boolean,
+    highlighted: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(999.dp),
+        color = if (highlighted) tint.copy(alpha = 0.18f) else Color(0xFF202628),
+        border = BorderStroke(1.dp, tint.copy(alpha = if (highlighted) 0.52f else 0.28f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(tint.copy(alpha = if (enabled) 1f else 0.55f))
+            )
+            Text(
+                text = label,
+                color = if (enabled) Color(0xFFEEF2F1) else Color(0xFF8A9396),
+                fontSize = 9.5.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp,
+                maxLines = 1
             )
         }
     }
