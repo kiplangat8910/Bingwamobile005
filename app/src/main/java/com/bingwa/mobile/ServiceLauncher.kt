@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 object ServiceLauncher {
     private const val TAG = "ServiceLauncher"
     private const val FALLBACK_START_DELAY_MS = 5_000L
+    private const val BOOT_RECOVERY_DELAY_MS = 20_000L
 
     fun startBalanceChecker(context: Context): Boolean {
         return startForegroundServiceSafely(
@@ -26,13 +27,39 @@ object ServiceLauncher {
         )
     }
 
+    fun scheduleBalanceCheckerStart(context: Context, delayMs: Long = BOOT_RECOVERY_DELAY_MS): Boolean {
+        return scheduleServiceStart(
+            context = context,
+            intent = Intent(context, BalanceChecker::class.java),
+            label = "Background balance monitoring",
+            delayMs = delayMs,
+            preferExact = false
+        )
+    }
+
+    fun scheduleRelayHotspotStart(context: Context, delayMs: Long = BOOT_RECOVERY_DELAY_MS): Boolean {
+        return scheduleServiceStart(
+            context = context,
+            intent = Intent(context, HotspotRelayService::class.java),
+            label = "Relay hotspot service",
+            delayMs = delayMs,
+            preferExact = false
+        )
+    }
+
     fun startForegroundServiceSafely(context: Context, intent: Intent, label: String): Boolean {
         return runCatching {
             ContextCompat.startForegroundService(context, intent)
             true
         }.getOrElse { error ->
             Log.e(TAG, "Unable to start $label", error)
-            scheduleStartFallback(context, intent, label)
+            scheduleServiceStart(
+                context = context,
+                intent = intent,
+                label = label,
+                delayMs = FALLBACK_START_DELAY_MS,
+                preferExact = false
+            )
             OfferNotifications.notify(
                 context,
                 "Phone blocked background start",
@@ -42,10 +69,16 @@ object ServiceLauncher {
         }
     }
 
-    private fun scheduleStartFallback(context: Context, intent: Intent, label: String) {
-        runCatching {
+    private fun scheduleServiceStart(
+        context: Context,
+        intent: Intent,
+        label: String,
+        delayMs: Long,
+        preferExact: Boolean
+    ): Boolean {
+        return runCatching {
             val safeContext = context.applicationContext
-            val component = intent.component ?: return@runCatching
+            val component = intent.component ?: return@runCatching false
             val requestCode = resolveFallbackRequestCode(intent, label)
             val pi = PendingIntent.getService(
                 safeContext,
@@ -55,14 +88,14 @@ object ServiceLauncher {
             )
             AlarmCompat.scheduleRtcWakeup(
                 context = safeContext,
-                triggerAtMillis = System.currentTimeMillis() + FALLBACK_START_DELAY_MS,
+                triggerAtMillis = System.currentTimeMillis() + delayMs,
                 pendingIntent = pi,
-                preferExact = false,
+                preferExact = preferExact,
                 allowWhileIdle = true
             )
         }.onFailure { error ->
             Log.w(TAG, "Unable to schedule fallback start for $label", error)
-        }
+        }.getOrDefault(false)
     }
 
     private fun resolveFallbackRequestCode(intent: Intent, label: String): Int {

@@ -24,12 +24,16 @@ class UnderMaintenanceRetryReceiver : BroadcastReceiver() {
             val pi = PendingIntent.getBroadcast(context, 0,
                 Intent(context, UnderMaintenanceRetryReceiver::class.java),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-            val interval = 2 * 60 * 1000L
+            val interval = when {
+                Build.VERSION.SDK_INT >= 35 -> 15 * 60 * 1000L
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> 5 * 60 * 1000L
+                else -> 2 * 60 * 1000L
+            }
             AlarmCompat.scheduleRtcWakeup(
                 context = context,
                 triggerAtMillis = System.currentTimeMillis() + interval,
                 pendingIntent = pi,
-                preferExact = true,
+                preferExact = Build.VERSION.SDK_INT < 35,
                 allowWhileIdle = true
             )
         }
