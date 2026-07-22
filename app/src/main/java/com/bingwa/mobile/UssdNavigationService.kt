@@ -100,7 +100,9 @@ class UssdNavigationService : AccessibilityService() {
         private const val RAPID_POST_POPUP_SEND_RETRY_MS = 2L
         private const val MAX_VERIFY_ATTEMPTS    = 10
         private const val MAX_SEND_ATTEMPTS      = 5
-        private const val FORCEFUL_WRITE_PASSES  = 3
+        private const val FORCEFUL_WRITE_PASSES  = 5
+        private const val WRITE_VERIFICATION_PASSES = 4
+        private const val WRITE_VERIFICATION_SETTLE_MS = 18L
         private const val NO_FIELD_PATIENCE      = 4
         private const val INPUT_TARGET_DEPTH     = 8
         private const val INPUT_DESCENT_DEPTH    = 4
@@ -4560,26 +4562,27 @@ class UssdNavigationService : AccessibilityService() {
                         wroteValue = true
                         rememberInputWrite(value)
                         val verified = result.likelyVerified ||
-                            verifyWrittenValue(verificationRoot, target, value)
+                            verifyWrittenValueWithRetries(verificationRoot, target, value)
                         if (verified) {
                             rememberVerifiedInput(value)
                             return true
                         }
                     }
                 }
-                if (wroteValue && verifyWrittenValue(verificationRoot, field, value)) {
+                if (wroteValue && verifyWrittenValueWithRetries(verificationRoot, field, value)) {
                     rememberVerifiedInput(value)
                     return true
                 }
             } finally {
                 targets.forEach { it.recycle() }
             }
+            primeInputTarget(field, aggressive = true)
             refreshInputTarget(field)
             if (verificationRoot != null) {
                 runCatching { verificationRoot.refresh() }
             }
         }
-        return wroteValue && verifyWrittenValue(verificationRoot, field, value)
+        return wroteValue && verifyWrittenValueWithRetries(verificationRoot, field, value)
     }
 
     private fun verifyWrittenValue(
@@ -4597,22 +4600,42 @@ class UssdNavigationService : AccessibilityService() {
         )
     }
 
+    private fun verifyWrittenValueWithRetries(
+        verificationRoot: AccessibilityNodeInfo?,
+        field: AccessibilityNodeInfo,
+        expectedValue: String
+    ): Boolean {
+        repeat(WRITE_VERIFICATION_PASSES) { attempt ->
+            if (attempt > 0) {
+                SystemClock.sleep(WRITE_VERIFICATION_SETTLE_MS)
+                runCatching { field.refresh() }
+                verificationRoot?.let { root ->
+                    runCatching { root.refresh() }
+                }
+            }
+            if (verifyWrittenValue(verificationRoot, field, expectedValue)) {
+                return true
+            }
+        }
+        return false
+    }
+
     private fun writeValueUsingStrategies(node: AccessibilityNodeInfo, value: String): InputWriteResult {
+        primeInputTarget(node)
         if (setTextOnNode(node, value)) {
             return InputWriteResult(
                 wroteValue = true,
                 likelyVerified = isLikelyDirectWriteVerified(node, value)
             )
         }
-        focusInputTarget(node)
-        refreshInputTarget(node)
+        primeInputTarget(node, aggressive = true)
         if (setTextOnNode(node, value)) {
             return InputWriteResult(
                 wroteValue = true,
                 likelyVerified = isLikelyDirectWriteVerified(node, value)
             )
         }
-        if (supportsSilentSetText(node) && activateInputTarget(node)) {
+        if (supportsSilentSetText(node) && primeInputTarget(node, aggressive = true)) {
             refreshInputTarget(node)
             if (setTextOnNode(node, value)) {
                 return InputWriteResult(
@@ -4621,15 +4644,14 @@ class UssdNavigationService : AccessibilityService() {
                 )
             }
         }
-        focusInputTarget(node)
-        refreshInputTarget(node)
+        primeInputTarget(node, aggressive = true)
         if (pasteValueOnNode(node, value)) {
             return InputWriteResult(
                 wroteValue = true,
                 likelyVerified = isLikelyDirectWriteVerified(node, value)
             )
         }
-        if (activateInputTarget(node)) {
+        if (primeInputTarget(node, aggressive = true)) {
             refreshInputTarget(node)
             if (pasteValueOnNode(node, value)) {
                 return InputWriteResult(
@@ -4656,7 +4678,47 @@ class UssdNavigationService : AccessibilityService() {
             current = try { current.parent?.let { AccessibilityNodeInfo.obtain(it) } } catch (_: Exception) { null }
             depth++
         }
-        return targets
+        return rankAndDedupeInputTargets(targets)
+    }
+
+    private fun rankAndDedupeInputTargets(targets: MutableList<AccessibilityNodeInfo>): List<AccessibilityNodeInfo> {
+        if (targets.size <= 1) return targets
+        val ranked = targets.sortedByDescending { scoreDirectInputTarget(it) }
+        val seen = HashSet<String>(ranked.size)
+        val result = mutableListOf<AccessibilityNodeInfo>()
+        ranked.forEach { target ->
+            val key = buildInputTargetKey(target)
+            if (seen.add(key)) {
+                result += target
+            } else {
+                target.recycle()
+            }
+        }
+        return result
+    }
+
+    private fun scoreDirectInputTarget(node: AccessibilityNodeInfo): Int {
+        var score = scoreTextEntryCandidate(node) + scoreAggressiveTextEntryCandidate(node)
+        if (try { node.isEditable } catch (_: Exception) { false }) score += 320
+        if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) score += 260
+        if (supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)) score += 140
+        if (try { node.isFocused } catch (_: Exception) { false }) score += 90
+        if (try { node.isFocusable } catch (_: Exception) { false }) score += 60
+        return score
+    }
+
+    private fun buildInputTargetKey(node: AccessibilityNodeInfo): String {
+        val signature = buildInputNodeSignature(node)
+        if (signature.isNotBlank()) return signature
+        val bounds = Rect()
+        runCatching { node.getBoundsInScreen(bounds) }
+        val className = node.className?.toString().orEmpty()
+        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
+        return listOf(
+            className,
+            viewId,
+            "${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}"
+        ).joinToString("|")
     }
 
     private fun collectNearbyInputTargets(
@@ -4710,6 +4772,24 @@ class UssdNavigationService : AccessibilityService() {
         runCatching { node.refresh() }
     }
 
+    private fun primeInputTarget(node: AccessibilityNodeInfo, aggressive: Boolean = false): Boolean {
+        var changed = false
+        if (refocusInputTarget(node)) {
+            changed = true
+        }
+        if (activateInputTarget(node)) {
+            changed = true
+        }
+        if (aggressive &&
+            supportsAction(node, AccessibilityNodeInfo.ACTION_LONG_CLICK) &&
+            runCatching { node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK) }.getOrDefault(false)
+        ) {
+            changed = true
+        }
+        refreshInputTarget(node)
+        return changed
+    }
+
     private fun setTextOnNode(node: AccessibilityNodeInfo, value: String): Boolean {
         if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) return false
         val replacedDirectly = runCatching {
@@ -4743,6 +4823,13 @@ class UssdNavigationService : AccessibilityService() {
         val previousClip = runCatching { clipboard.primaryClip }.getOrNull()
         val hadClip = runCatching { clipboard.hasPrimaryClip() }.getOrDefault(false)
         return try {
+            if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) {
+                runCatching {
+                    node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
+                    })
+                }
+            }
             clipboard.setPrimaryClip(ClipData.newPlainText("ussd_reply", value))
             val pasted = runCatching {
                 node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
