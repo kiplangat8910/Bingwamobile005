@@ -107,12 +107,12 @@ class UssdNavigationService : AccessibilityService() {
         private const val RAPID_POST_POPUP_SEND_RETRY_MS = 2L
         private const val MAX_VERIFY_ATTEMPTS    = 10
         private const val MAX_SEND_ATTEMPTS      = 5
-        private const val FORCEFUL_WRITE_PASSES  = 5
-        private const val WRITE_VERIFICATION_PASSES = 4
+        private const val FORCEFUL_WRITE_PASSES  = 6
+        private const val WRITE_VERIFICATION_PASSES = 5
         private const val WRITE_VERIFICATION_SETTLE_MS = 18L
         private const val DIRECT_WRITE_VERIFY_PASSES = 3
-        private const val SET_TEXT_BURST_ATTEMPTS = 2
-        private const val PASTE_BURST_ATTEMPTS = 2
+        private const val SET_TEXT_BURST_ATTEMPTS = 3
+        private const val PASTE_BURST_ATTEMPTS = 3
         private const val NO_FIELD_PATIENCE      = 4
         private const val INPUT_TARGET_DEPTH     = 8
         private const val INPUT_DESCENT_DEPTH    = 4
@@ -1468,6 +1468,15 @@ class UssdNavigationService : AccessibilityService() {
         return minOf(base + (attempt.toLong() * increment), maxSendRetryDelayMs)
     }
 
+    private fun shouldForcePendingFieldRewrite(
+        expectedValue: String,
+        fieldPresent: Boolean
+    ): Boolean {
+        if (fieldPresent) return true
+        if (!hasRecentExpectedInput(expectedValue)) return true
+        return shouldUseExtendedNetworkDelayWindow(expectedValue) && !hasRecentVerifiedInput(expectedValue)
+    }
+
     private fun captureSignatureStepIfNeeded(
         stepIndex: Int,
         rawStep: String,
@@ -2417,7 +2426,7 @@ class UssdNavigationService : AccessibilityService() {
         val root = getUssdRoot() ?: run {
             handler.postDelayed(
                 { clickSendButton(expectedValue, attempt + 1, skipFieldVerification) },
-                sendRetryDelay(attempt)
+                sendRetryDelay(attempt, expectedValue)
             )
             return
         }
@@ -2896,8 +2905,8 @@ class UssdNavigationService : AccessibilityService() {
             when (pendingPhase) {
                 PendingPhase.WAIT_VERIFY -> {
                     val field = findEditableField(interactionRoot)
-                    val verified = try {
-                        if (field != null) {
+                    try {
+                        val verified = if (field != null) {
                             verifyExpectedInputFromRoot(
                                 root = interactionRoot,
                                 expectedValue = expected,
@@ -2906,28 +2915,37 @@ class UssdNavigationService : AccessibilityService() {
                         } else {
                             hasRecentVerifiedInput(expected)
                         }
-                    } finally {
-                        runCatching { field?.recycle() }
-                    }
 
-                    if (verified) {
-                        pendingPhase = PendingPhase.WAIT_SEND
-                        attemptPendingAdvance(root)
-                        return
-                    }
-
-                    // One corrective write, then wait for the next event.
-                    if (pendingAttempts == 0 && !hasRecentExpectedInput(expected)) {
-                        pendingAttempts++
-                        val wroteValue = writeValueToField(interactionRoot, expected)
-                        if (wroteValue && hasRecentVerifiedInput(expected)) {
+                        if (verified) {
                             pendingPhase = PendingPhase.WAIT_SEND
                             attemptPendingAdvance(root)
                             return
                         }
+
+                        // Re-write as soon as a delayed popup finally exposes the real field.
+                        if (pendingAttempts < 2 && shouldForcePendingFieldRewrite(expected, field != null)) {
+                            pendingAttempts++
+                            val wroteValue = try {
+                                if (field != null) {
+                                    tryWriteValueToField(field, expected, interactionRoot) ||
+                                        writeValueToField(interactionRoot, expected)
+                                } else {
+                                    writeValueToField(interactionRoot, expected)
+                                }
+                            } catch (_: Exception) {
+                                false
+                            }
+                            if (wroteValue && verifyExpectedInputFromRoot(interactionRoot, expected, field)) {
+                                pendingPhase = PendingPhase.WAIT_SEND
+                                attemptPendingAdvance(root)
+                                return
+                            }
+                        }
+                        schedulePendingAdvanceKick(delayMs = pendingAdvanceKickDelay(expected, pendingPhase))
+                        isProcessing = false
+                    } finally {
+                        runCatching { field?.recycle() }
                     }
-                    schedulePendingAdvanceKick(delayMs = pendingAdvanceKickDelay(expected, pendingPhase))
-                    isProcessing = false
                 }
 
                 PendingPhase.WAIT_SEND -> {
