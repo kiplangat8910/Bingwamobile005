@@ -46,7 +46,10 @@ object SilentUssd {
         Log.d(TAG, "execute(tm): code=$code  sdk=${Build.VERSION.SDK_INT}")
 
         synchronized(this) {
-            clearLocked()
+            if (inProgress) {
+                onFailure("USSD execution already in progress")
+                return false
+            }
             successCb = onSuccess
             failureCb = onFailure
             inProgress = true

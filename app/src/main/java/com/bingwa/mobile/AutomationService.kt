@@ -17,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import java.util.Calendar
 
 class AutomationService : Service() {
+    private var foregroundReady = false
 
     companion object {
         private const val TAG = "AutomationService"
@@ -83,14 +84,22 @@ class AutomationService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForegroundCompat(
+        foregroundReady = tryStartForegroundCompat(
             notificationId = NOTIFICATION_ID,
             notification = buildNotification(),
-            foregroundServiceType = ForegroundServiceTypes.dataSync
+            foregroundServiceType = ForegroundServiceTypes.dataSync,
+            serviceLabel = "USSD automation"
         )
+        if (!foregroundReady) {
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!foregroundReady) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val request = buildRequest(intent) ?: run {
             stopSelf()
             return START_NOT_STICKY
@@ -214,7 +223,7 @@ class AutomationService : Service() {
             processResponse(request, "Selected SIM slot is unavailable", forcedStatus = "Failed")
             return
         }
-        val started = SilentUssd.execute(
+        val started = SilentUssdOptimized.execute(
             telephonyManager = tm,
             ussdCode = request.code,
             onSuccess = { response ->
@@ -222,29 +231,75 @@ class AutomationService : Service() {
                 processResponse(request, response)
             },
             onFailure = { error ->
-                val nextTarget = simTargets.getOrNull(attemptIndex + 1)
-                if (nextTarget != null) {
-                    Log.w(
-                        TAG,
-                        "SIMPLE failed txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}: '$error'"
-                    )
-                    attemptSimpleDispatch(request, baseTm, simTargets, attemptIndex + 1)
-                } else {
-                    Log.e(TAG, "SIMPLE failed txId=${request.txId} on $slotLabel error='$error'")
-                    processResponse(request, error)
+                val legacyStarted = SilentUssd.execute(
+                    telephonyManager = tm,
+                    ussdCode = request.code,
+                    onSuccess = { legacyResponse ->
+                        Log.d(TAG, "SIMPLE legacy success txId=${request.txId} via $slotLabel response='$legacyResponse'")
+                        processResponse(request, legacyResponse)
+                    },
+                    onFailure = { legacyError ->
+                        val nextTarget = simTargets.getOrNull(attemptIndex + 1)
+                        if (nextTarget != null) {
+                            Log.w(
+                                TAG,
+                                "SIMPLE failed txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}: '$legacyError'"
+                            )
+                            attemptSimpleDispatch(request, baseTm, simTargets, attemptIndex + 1)
+                        } else {
+                            Log.e(TAG, "SIMPLE failed txId=${request.txId} on $slotLabel error='$legacyError'")
+                            processResponse(request, legacyError)
+                        }
+                    }
+                )
+                if (!legacyStarted) {
+                    val nextTarget = simTargets.getOrNull(attemptIndex + 1)
+                    if (nextTarget != null) {
+                        Log.w(
+                            TAG,
+                            "SIMPLE optimized USSD could not continue txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}: '$error'"
+                        )
+                        attemptSimpleDispatch(request, baseTm, simTargets, attemptIndex + 1)
+                    } else {
+                        Log.e(TAG, "SIMPLE optimized USSD could not continue txId=${request.txId} on $slotLabel error='$error'")
+                        processResponse(request, error)
+                    }
                 }
             }
         )
         if (!started) {
-            val nextTarget = simTargets.getOrNull(attemptIndex + 1)
-            if (nextTarget != null) {
-                Log.w(
-                    TAG,
-                    "SIMPLE could not start txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}"
-                )
-                attemptSimpleDispatch(request, baseTm, simTargets, attemptIndex + 1)
-            } else {
-                processResponse(request, "Silent USSD is not supported on this phone", forcedStatus = "Failed")
+            val legacyStarted = SilentUssd.execute(
+                telephonyManager = tm,
+                ussdCode = request.code,
+                onSuccess = { response ->
+                    Log.d(TAG, "SIMPLE legacy success txId=${request.txId} via $slotLabel response='$response'")
+                    processResponse(request, response)
+                },
+                onFailure = { error ->
+                    val nextTarget = simTargets.getOrNull(attemptIndex + 1)
+                    if (nextTarget != null) {
+                        Log.w(
+                            TAG,
+                            "SIMPLE legacy failed txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}: '$error'"
+                        )
+                        attemptSimpleDispatch(request, baseTm, simTargets, attemptIndex + 1)
+                    } else {
+                        Log.e(TAG, "SIMPLE legacy failed txId=${request.txId} on $slotLabel error='$error'")
+                        processResponse(request, error)
+                    }
+                }
+            )
+            if (!legacyStarted) {
+                val nextTarget = simTargets.getOrNull(attemptIndex + 1)
+                if (nextTarget != null) {
+                    Log.w(
+                        TAG,
+                        "SIMPLE could not start txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}"
+                    )
+                    attemptSimpleDispatch(request, baseTm, simTargets, attemptIndex + 1)
+                } else {
+                    processResponse(request, "Silent USSD is not supported on this phone", forcedStatus = "Failed")
+                }
             }
         }
     }

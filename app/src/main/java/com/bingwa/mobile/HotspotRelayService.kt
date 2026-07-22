@@ -20,6 +20,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
 class HotspotRelayService : Service() {
+    private var foregroundReady = false
     @Volatile private var running = false
     @Volatile private var lastRelayContactElapsed = 0L
     @Volatile private var clearedForDisconnect = false
@@ -31,14 +32,22 @@ class HotspotRelayService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForegroundCompat(
+        foregroundReady = tryStartForegroundCompat(
             notificationId = NOTIFICATION_ID,
             notification = buildNotification(),
-            foregroundServiceType = ForegroundServiceTypes.dataSync
+            foregroundServiceType = ForegroundServiceTypes.dataSync,
+            serviceLabel = "Relay hotspot service"
         )
+        if (!foregroundReady) {
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!foregroundReady) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val cfg = RelayManager.load(this)
         if (!cfg.enabled || cfg.role != "RELAY" || cfg.method != "HOTSPOT") {
             stopSelf()

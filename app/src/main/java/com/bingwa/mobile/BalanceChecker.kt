@@ -14,6 +14,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 
 class BalanceChecker : Service() {
+    private var foregroundReady = false
 
     data class BalanceCheckResult(
         val display: String,
@@ -403,6 +404,10 @@ class BalanceChecker : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!foregroundReady) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val automationEnabled = applicationContext
             .getSharedPreferences("app_settings", Context.MODE_PRIVATE)
             .getBoolean("automation_enabled", true)
@@ -420,11 +425,15 @@ class BalanceChecker : Service() {
         super.onCreate()
         getLastKnownBalanceDisplay(applicationContext)
         createNotificationChannel()
-        startForegroundCompat(
+        foregroundReady = tryStartForegroundCompat(
             notificationId = NOTIFICATION_ID,
             notification = buildNotification(),
-            foregroundServiceType = ForegroundServiceTypes.dataSync
+            foregroundServiceType = ForegroundServiceTypes.dataSync,
+            serviceLabel = "Background balance monitoring"
         )
+        if (!foregroundReady) {
+            stopSelf()
+        }
     }
 
     override fun onDestroy() {
