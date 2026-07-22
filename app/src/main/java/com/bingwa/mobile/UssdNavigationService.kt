@@ -93,6 +93,13 @@ class UssdNavigationService : AccessibilityService() {
         private const val PENDING_ADVANCE_TIMEOUT_MS = 3_000L
         private const val ROOT_REACQUIRE_TIMEOUT_MS  = 5_000L
         private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 3_500L
+        private const val NETWORK_DELAY_STEP_TIMEOUT_MS = 11_000L
+        private const val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 13_000L
+        private const val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 10_000L
+        private const val NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS = 8_500L
+        private const val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 8_000L
+        private const val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 8_500L
+        private const val NETWORK_DELAY_ACTION_GRACE_MS = 12_000L
         private const val PENDING_STEP_ADVANCE_KICK_MS = 4L
         private const val VERIFY_POLL_MS         = 4L
         private const val RAPID_POST_POPUP_POLL_MS = 2L
@@ -2649,13 +2656,39 @@ class UssdNavigationService : AccessibilityService() {
     private fun currentStepTimeoutMs(): Long {
         val now = SystemClock.elapsedRealtime()
         return when {
-            pendingPhase != PendingPhase.NONE || pendingStepAdvanceFromKey.isNotBlank() -> PENDING_STEP_TIMEOUT_MS
-            currentStep >= advancedSteps.size -> FINAL_RESPONSE_TIMEOUT_MS
+            pendingPhase != PendingPhase.NONE || pendingStepAdvanceFromKey.isNotBlank() ->
+                if (shouldUseExtendedNetworkDelayWindow()) NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS
+                else PENDING_STEP_TIMEOUT_MS
+            currentStep >= advancedSteps.size ->
+                if (isWaitingOnTransientNetworkResponse()) NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS
+                else FINAL_RESPONSE_TIMEOUT_MS
             !hasSeenAdvancedPopup -> STARTUP_STEP_TIMEOUT_MS
             hasRecentUssdUiEvent() -> FINAL_RESPONSE_TIMEOUT_MS
+            shouldUseExtendedNetworkDelayWindow() -> NETWORK_DELAY_STEP_TIMEOUT_MS
             retryWindowStartedAt > 0L && (now - retryWindowStartedAt) <= STARTUP_UI_KEEP_VISIBLE_MS -> STARTUP_STEP_TIMEOUT_MS
             else -> STEP_TIMEOUT_MS
         }
+    }
+
+    private fun hasRecentStepAction(waitWindowMs: Long = NETWORK_DELAY_ACTION_GRACE_MS): Boolean {
+        if (lastStepActionKey.isBlank() || lastStepActionElapsed <= 0L) return false
+        return SystemClock.elapsedRealtime() - lastStepActionElapsed <= waitWindowMs
+    }
+
+    private fun isWaitingOnTransientNetworkResponse(): Boolean {
+        val normalizedFinal = normalizeMenuText(lastFinalResponse)
+        return normalizedFinal.isNotBlank() && isTransientResponseText(normalizedFinal)
+    }
+
+    private fun shouldUseExtendedNetworkDelayWindow(expectedValue: String? = pendingExpectedValue): Boolean {
+        if (isWaitingOnTransientNetworkResponse()) return true
+        if (hasRecentStepAction()) return true
+        if (expectedValue != null &&
+            (hasRecentExpectedInput(expectedValue) || hasRecentVerifiedInput(expectedValue))
+        ) {
+            return true
+        }
+        return false
     }
 
     private fun shouldExtendStepTimeoutWindow(): Boolean {
@@ -2671,7 +2704,7 @@ class UssdNavigationService : AccessibilityService() {
                 isTransientResponseText(normalizedFinal) ||
                 hasRecentUssdUiEvent()
         }
-        return hasRecentUssdUiEvent()
+        return hasRecentUssdUiEvent() || shouldUseExtendedNetworkDelayWindow()
     }
 
     private fun cleanupAdvanced() {
@@ -2783,9 +2816,14 @@ class UssdNavigationService : AccessibilityService() {
     private fun attemptPendingAdvanceWithRoot(existingRoot: AccessibilityNodeInfo?) {
         if (!advancedActive) { clearPendingAdvance(); isProcessing = false; return }
         clearPendingAdvanceKick()
+        val pendingTimeoutMs = if (shouldUseExtendedNetworkDelayWindow(pendingExpectedValue)) {
+            NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS
+        } else {
+            PENDING_ADVANCE_TIMEOUT_MS
+        }
         val root = existingRoot ?: getUssdRoot() ?: run {
             if (pendingSinceElapsed > 0L &&
-                SystemClock.elapsedRealtime() - pendingSinceElapsed > PENDING_ADVANCE_TIMEOUT_MS
+                SystemClock.elapsedRealtime() - pendingSinceElapsed > pendingTimeoutMs
             ) {
                 clearPendingAdvance()
                 isProcessing = false
@@ -2806,8 +2844,13 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun attemptPendingAdvance(root: AccessibilityNodeInfo) {
         val expected = pendingExpectedValue ?: run { clearPendingAdvance(); return }
+        val pendingTimeoutMs = if (shouldUseExtendedNetworkDelayWindow(expected)) {
+            NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS
+        } else {
+            PENDING_ADVANCE_TIMEOUT_MS
+        }
         val elapsed = SystemClock.elapsedRealtime() - pendingSinceElapsed
-        if (elapsed > PENDING_ADVANCE_TIMEOUT_MS) {
+        if (elapsed > pendingTimeoutMs) {
             clearPendingAdvance()
             isProcessing = false
             dismissErrorAndRestart()
@@ -3057,7 +3100,12 @@ class UssdNavigationService : AccessibilityService() {
             waitingForRootSinceElapsed = now
         }
         val elapsed = now - waitingForRootSinceElapsed
-        if (elapsed > ROOT_REACQUIRE_TIMEOUT_MS) {
+        val rootRecoveryTimeoutMs = if (shouldUseExtendedNetworkDelayWindow()) {
+            NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS
+        } else {
+            ROOT_REACQUIRE_TIMEOUT_MS
+        }
+        if (elapsed > rootRecoveryTimeoutMs) {
             clearRootRecoveryState()
             handler.post { dismissErrorAndRestart() }
             return
@@ -3141,7 +3189,12 @@ class UssdNavigationService : AccessibilityService() {
             dismissErrorAndRestart()
         }
         pendingStepAdvanceTimeoutRunnable = timeoutTask
-        handler.postDelayed(timeoutTask, PENDING_STEP_ADVANCE_TIMEOUT_MS)
+        val timeoutMs = if (shouldUseExtendedNetworkDelayWindow()) {
+            NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS
+        } else {
+            PENDING_STEP_ADVANCE_TIMEOUT_MS
+        }
+        handler.postDelayed(timeoutTask, timeoutMs)
         schedulePendingStepAdvanceKick()
         isProcessing = false
     }
@@ -3225,7 +3278,12 @@ class UssdNavigationService : AccessibilityService() {
         val fromKey = pendingStepAdvanceFromKey
         if (fromKey.isBlank()) return false
         val elapsed = SystemClock.elapsedRealtime() - pendingStepAdvanceSinceElapsed
-        if (elapsed > PENDING_STEP_ADVANCE_TIMEOUT_MS) {
+        val timeoutMs = if (shouldUseExtendedNetworkDelayWindow()) {
+            NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS
+        } else {
+            PENDING_STEP_ADVANCE_TIMEOUT_MS
+        }
+        if (elapsed > timeoutMs) {
             clearPendingStepAdvance()
             isProcessing = false
             dismissErrorAndRestart()
