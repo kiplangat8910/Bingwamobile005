@@ -5,7 +5,7 @@ import android.os.Handler
 import android.os.Looper
 
 object UssdQueue {
-    private const val NEXT_EXECUTION_DELAY_MS = 2_000L
+    private const val NEXT_EXECUTION_DELAY_MS = 300L
     private val specialPriorityPending = ArrayDeque<Runnable>()
     private val highPriorityPending = ArrayDeque<Runnable>()
     private val normalPriorityPending = ArrayDeque<Runnable>()

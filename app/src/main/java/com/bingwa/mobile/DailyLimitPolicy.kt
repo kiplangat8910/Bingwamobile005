@@ -324,6 +324,7 @@ object DailyLimitPolicy {
             txId = txId,
             finalCode = finalCode,
             mode = offer?.executionMode ?: OFFER_EXECUTION_MODE_SIMPLE,
+            executionPriority = USSD_EXECUTION_PRIORITY_HIGH,
             returnToAppAggressively = false
         )
         val offerLabel = offer?.name ?: originalTx.description

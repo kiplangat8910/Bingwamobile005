@@ -470,6 +470,7 @@ object SmsCommandHandler {
             txId,
             finalCode,
             offer.executionMode,
+            executionPriority = USSD_EXECUTION_PRIORITY_HIGH,
             returnToAppAggressively = false
         )
         sendSms(context, replyTo, "Dispatch started: ${offer.name} → $phone (transaction #$txId).", replySubId)

@@ -479,6 +479,7 @@ object RelayManager {
             txId,
             finalCode,
             offer.executionMode,
+            executionPriority = USSD_EXECUTION_PRIORITY_HIGH,
             returnToAppAggressively = false
         )
         if (resultDestPhone != null) RelayResultTracker.trackAndReply(context, txId, resultDestPhone)

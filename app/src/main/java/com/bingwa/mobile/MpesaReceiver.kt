@@ -554,6 +554,7 @@ class MpesaReceiver : BroadcastReceiver() {
                 txId,
                 finalCode,
                 mode,
+                executionPriority = USSD_EXECUTION_PRIORITY_HIGH,
                 // Prefer the fastest dispatch behavior for SMS-triggered sales as well.
                 returnToAppAggressively = true
             )

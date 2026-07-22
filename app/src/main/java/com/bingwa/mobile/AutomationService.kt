@@ -719,7 +719,8 @@ class AutomationService : Service() {
                 phoneNumber = request.phoneNumber,
                 txId = fallbackTxId,
                 finalCode = finalCode,
-                mode = fallbackOffer.executionMode
+                mode = fallbackOffer.executionMode,
+                executionPriority = USSD_EXECUTION_PRIORITY_HIGH
             )
             true
         }

@@ -3,12 +3,13 @@ package com.bingwa.mobile
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 
 object ServiceLauncher {
     private const val TAG = "ServiceLauncher"
-    private const val FALLBACK_START_DELAY_MS = 5_000L
+    private const val FALLBACK_START_DELAY_MS = 250L
 
     fun startBalanceChecker(context: Context): Boolean {
         return startForegroundServiceSafely(
@@ -47,12 +48,23 @@ object ServiceLauncher {
             val safeContext = context.applicationContext
             val component = intent.component ?: return@runCatching
             val requestCode = resolveFallbackRequestCode(intent, label)
-            val pi = PendingIntent.getService(
-                safeContext,
-                requestCode,
-                Intent(intent).setComponent(component),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
+            val fallbackIntent = Intent(intent).setComponent(component)
+            val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            val pi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                PendingIntent.getForegroundService(
+                    safeContext,
+                    requestCode,
+                    fallbackIntent,
+                    flags
+                )
+            } else {
+                PendingIntent.getService(
+                    safeContext,
+                    requestCode,
+                    fallbackIntent,
+                    flags
+                )
+            }
             AlarmCompat.scheduleRtcWakeup(
                 context = safeContext,
                 triggerAtMillis = System.currentTimeMillis() + FALLBACK_START_DELAY_MS,
