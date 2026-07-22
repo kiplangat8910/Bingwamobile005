@@ -1739,6 +1739,9 @@ class UssdNavigationService : AccessibilityService() {
         return elapsed in 0..STEP_TRANSITION_GUARD_MS
     }
 
+    private fun resolveWindowId(root: AccessibilityNodeInfo): Int =
+        runCatching { root.windowId }.getOrDefault(lastWindowId)
+
     private fun parseMenuSignature(snapshot: UssdTreeSnapshot): ParsedMenuSignature? {
         val cacheKey = snapshot.normalizedDialogText
         if (cacheKey.isNotBlank() && cacheKey == lastMenuSignatureKey) {
@@ -3176,7 +3179,7 @@ class UssdNavigationService : AccessibilityService() {
         pendingStepAdvanceSinceElapsed = SystemClock.elapsedRealtime()
         val snapshot = captureTreeSnapshot(root)
         pendingStepAdvanceFromKey = buildTransitionSignatureKey(
-            windowId = lastWindowId,
+            windowId = resolveWindowId(root),
             windowPkg = root.packageName?.toString().orEmpty(),
             root = root,
             snapshot = snapshot,
@@ -3225,7 +3228,12 @@ class UssdNavigationService : AccessibilityService() {
         pendingStepAdvanceKickRunnable = null
 
         val elapsed = SystemClock.elapsedRealtime() - pendingStepAdvanceSinceElapsed
-        if (elapsed > PENDING_STEP_ADVANCE_TIMEOUT_MS) {
+        val timeoutMs = if (shouldUseExtendedNetworkDelayWindow()) {
+            NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS
+        } else {
+            PENDING_STEP_ADVANCE_TIMEOUT_MS
+        }
+        if (elapsed > timeoutMs) {
             clearPendingStepAdvance()
             isProcessing = false
             dismissErrorAndRestart()
@@ -3248,7 +3256,7 @@ class UssdNavigationService : AccessibilityService() {
                 return
             }
             val currentKey = buildTransitionSignatureKey(
-                windowId = lastWindowId,
+                windowId = resolveWindowId(root),
                 windowPkg = root.packageName?.toString().orEmpty(),
                 root = root,
                 snapshot = snapshot,

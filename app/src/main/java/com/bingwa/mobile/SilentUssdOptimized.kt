@@ -11,10 +11,11 @@ import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 object SilentUssdOptimized {
     private const val TAG = "SilentUssd"
-    private const val TIMEOUT_MS = 12_000L  // was 20_000L - faster timeout
+    private const val TIMEOUT_MS = 3_000L
 
     @Volatile private var successCb: ((String) -> Unit)? = null
     @Volatile private var failureCb: ((String) -> Unit)? = null
@@ -22,6 +23,8 @@ object SilentUssdOptimized {
     private val handler = Handler(Looper.getMainLooper())
     private val isProcessing = AtomicBoolean(false)
     private val methodCache = mutableMapOf<String, Method>()
+    private val requestCounter = AtomicLong(0L)
+    @Volatile private var activeRequestId: Long = 0L
 
     fun execute(
         context: Context,
@@ -47,21 +50,26 @@ object SilentUssdOptimized {
         }
 
         val code = normaliseCode(ussdCode)
+        val requestId = requestCounter.incrementAndGet()
         Log.d(TAG, "execute: code=$code sdk=${Build.VERSION.SDK_INT}")
 
         successCb = onSuccess
         failureCb = onFailure
-        armTimeout(code)
+        activeRequestId = requestId
+        armTimeout(requestId, code)
 
         // Try public API first (fastest on Android 8+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (tryPublicApi(telephonyManager, code)) return true
+            if (tryPublicApi(telephonyManager, code, requestId)) return true
         }
 
         // Fall back to reflection for older devices
-        if (tryReflectionApi(telephonyManager, code)) return true
+        if (tryReflectionApi(telephonyManager, code, requestId)) return true
 
         isProcessing.set(false)
+        activeRequestId = 0L
+        successCb = null
+        failureCb = null
         cancelTimeout()
         return false
     }
@@ -76,7 +84,7 @@ object SilentUssdOptimized {
     fun isExecutionInProgress(): Boolean = isProcessing.get()
 
     @SuppressLint("MissingPermission")
-    private fun tryPublicApi(tm: TelephonyManager, code: String): Boolean {
+    private fun tryPublicApi(tm: TelephonyManager, code: String, requestId: Long): Boolean {
         return try {
             tm.sendUssdRequest(code, object : TelephonyManager.UssdResponseCallback() {
                 override fun onReceiveUssdResponse(
@@ -86,7 +94,7 @@ object SilentUssdOptimized {
                 ) {
                     Log.d(TAG, "publicApi onReceiveUssdResponse")
                     val cleanResponse = extractUssdPopupResponse(response.toString())
-                    deliverSuccess(cleanResponse)
+                    deliverSuccess(requestId, cleanResponse)
                 }
 
                 override fun onReceiveUssdResponseFailed(
@@ -95,7 +103,7 @@ object SilentUssdOptimized {
                     failureCode: Int
                 ) {
                     Log.w(TAG, "publicApi onReceiveUssdResponseFailed: $failureCode")
-                    deliverFailure("USSD failed: $failureCode")
+                    deliverFailure(requestId, "USSD failed: $failureCode")
                 }
             }, handler)
             true
@@ -105,7 +113,7 @@ object SilentUssdOptimized {
         }
     }
 
-    private fun tryReflectionApi(tm: TelephonyManager, code: String): Boolean {
+    private fun tryReflectionApi(tm: TelephonyManager, code: String, requestId: Long): Boolean {
         val candidates = listOf(
             "android.telephony.TelephonyManager" to "sendUssdRequest",
             "com.android.internal.telephony.Phone" to "sendUssdResponse",
@@ -117,7 +125,7 @@ object SilentUssdOptimized {
                 val callbackClass = Class.forName("android.telephony.TelephonyManager\$UssdResponseCallback")
                     ?: Class.forName("android.telephony.UssdResponseCallback")
 
-                val proxy = buildCallbackProxy(callbackClass)
+                val proxy = buildCallbackProxy(callbackClass, requestId)
                 val targetClass = if (className == "android.telephony.TelephonyManager") tm.javaClass
                 else Class.forName(className)
 
@@ -143,7 +151,7 @@ object SilentUssdOptimized {
         return false
     }
 
-    private fun buildCallbackProxy(callbackClass: Class<*>): Any {
+    private fun buildCallbackProxy(callbackClass: Class<*>, requestId: Long): Any {
         return Proxy.newProxyInstance(
             callbackClass.classLoader,
             arrayOf(callbackClass),
@@ -155,11 +163,11 @@ object SilentUssdOptimized {
                                 ?: args?.getOrNull(2) as? CharSequence
                                 ?: args?.getOrNull(1) as? CharSequence
                             val cleanResponse = extractUssdPopupResponse(response?.toString() ?: "")
-                            deliverSuccess(cleanResponse)
+                            deliverSuccess(requestId, cleanResponse)
                         }
                         "onReceiveUssdResponseFailed" -> {
                             val failureCode = args?.filterIsInstance<Int>()?.firstOrNull() ?: -1
-                            deliverFailure("USSD failed: $failureCode")
+                            deliverFailure(requestId, "USSD failed: $failureCode")
                         }
                     }
                     return null
@@ -197,29 +205,39 @@ object SilentUssdOptimized {
         } catch (_: Exception) { false }
     }
 
-    private fun deliverSuccess(response: String) {
+    private fun deliverSuccess(requestId: Long, response: String) {
+        if (requestId != activeRequestId) {
+            Log.d(TAG, "Ignoring stale USSD success for requestId=$requestId")
+            return
+        }
         cancelTimeout()
         val cb = successCb
         successCb = null
         failureCb = null
+        activeRequestId = 0L
         isProcessing.set(false)
         handler.post { cb?.invoke(response) }
     }
 
-    private fun deliverFailure(reason: String) {
+    private fun deliverFailure(requestId: Long, reason: String) {
+        if (requestId != activeRequestId) {
+            Log.d(TAG, "Ignoring stale USSD failure for requestId=$requestId")
+            return
+        }
         cancelTimeout()
         val cb = failureCb
         successCb = null
         failureCb = null
+        activeRequestId = 0L
         isProcessing.set(false)
         handler.post { cb?.invoke(reason) }
     }
 
-    private fun armTimeout(code: String) {
+    private fun armTimeout(requestId: Long, code: String) {
         cancelTimeout()
         val timeout = Runnable {
             Log.w(TAG, "USSD timeout for $code")
-            deliverFailure("Timeout")
+            deliverFailure(requestId, "Timeout")
         }
         timeoutRunnable = timeout
         handler.postDelayed(timeout, TIMEOUT_MS)
