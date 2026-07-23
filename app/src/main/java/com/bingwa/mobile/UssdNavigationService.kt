@@ -78,12 +78,12 @@ class UssdNavigationService : AccessibilityService() {
         private const val MAX_RETRY_WINDOW_MS    = 60_000L
         private const val SHOW_RUNNING_OVERLAY   = false
         private const val STEP_DELAY_MS          = 20L
-        private const val EVENT_HOT_POLL_MS      = 2L
-        private const val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 12L
-        private const val DUPLICATE_EVENT_WINDOW_MS = 24L
-        private const val FAST_VERIFY_POLL_MS    = 2L
-        private const val HOT_SEND_RETRY_DELAY_MS = 3L
-        private const val SEND_RETRY_DELAY_MS    = 4L
+        private const val EVENT_HOT_POLL_MS      = 1L
+        private const val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 8L
+        private const val DUPLICATE_EVENT_WINDOW_MS = 16L
+        private const val FAST_VERIFY_POLL_MS    = 1L
+        private const val HOT_SEND_RETRY_DELAY_MS = 2L
+        private const val SEND_RETRY_DELAY_MS    = 3L
         private const val POST_WRITE_VERIFY_POLL_MS = 1L
         private const val POST_WRITE_SEND_RETRY_MS = 2L
         private const val STEP_TIMEOUT_MS           = 4_500L
@@ -101,7 +101,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 15_000L
         private const val NETWORK_DELAY_ACTION_GRACE_MS = 18_000L
         // Fallback safety kick; hot-popup flows use a much shorter adaptive delay.
-        private const val PENDING_STEP_ADVANCE_KICK_MS = 120L
+        private const val PENDING_STEP_ADVANCE_KICK_MS = 80L
         private const val VERIFY_POLL_MS         = 4L
         private const val RAPID_POST_POPUP_POLL_MS = 2L
         private const val RAPID_POST_POPUP_VERIFY_MS = 1L
@@ -128,7 +128,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val TAP_GESTURE_DURATION_MS = 10L
         private const val REDIAL_COOLDOWN_MS     = 200L
         private const val PENDING_ADVANCE_KICK_MS = 4L
-        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 6L
+        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 4L
         private const val DIALOG_DISMISS_SETTLE_MS = 20L
         private const val UI_KEEP_VISIBLE_INTERVAL_MS = 500L
         private const val STARTUP_UI_KEEP_VISIBLE_MS = 8_000L
