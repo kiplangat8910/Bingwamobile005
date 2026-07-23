@@ -100,7 +100,8 @@ class UssdNavigationService : AccessibilityService() {
         private const val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 15_000L
         private const val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 15_000L
         private const val NETWORK_DELAY_ACTION_GRACE_MS = 18_000L
-        private const val PENDING_STEP_ADVANCE_KICK_MS = 4L
+        // Give OEM USSD dialogs a brief moment to settle before the safety re-check runs.
+        private const val PENDING_STEP_ADVANCE_KICK_MS = 120L
         private const val VERIFY_POLL_MS         = 4L
         private const val RAPID_POST_POPUP_POLL_MS = 2L
         private const val RAPID_POST_POPUP_VERIFY_MS = 1L
@@ -966,6 +967,39 @@ class UssdNavigationService : AccessibilityService() {
             ""
         }
         return "$windowId|$windowPkg|$cls|$flags|$normalized"
+    }
+
+    private fun buildStepAdvanceSignatureKey(
+        windowId: Int,
+        windowPkg: String,
+        root: AccessibilityNodeInfo,
+        snapshot: UssdTreeSnapshot?,
+        dialogText: String
+    ): String {
+        val cls = root.className?.toString().orEmpty()
+        val normalized = normalizeCollapsedText(dialogText)
+        val flags = if (snapshot != null) {
+            "${snapshot.hasEditableField}|${snapshot.hasSendButton}|${snapshot.hasDismissButton}"
+        } else {
+            ""
+        }
+        val menuFingerprint = when {
+            snapshot != null -> {
+                parseMenuSignature(snapshot)?.let { menu ->
+                    buildString {
+                        append(menu.normalizedTitle)
+                        append('|')
+                        append(
+                            menu.options.entries.joinToString(";") { (key, value) ->
+                                "$key:${normalizeMenuText(value)}"
+                            }
+                        )
+                    }
+                }.orEmpty()
+            }
+            else -> ""
+        }
+        return "$windowId|$windowPkg|$cls|$flags|$normalized|$menuFingerprint"
     }
 
     private fun processStep() {
@@ -3247,7 +3281,7 @@ class UssdNavigationService : AccessibilityService() {
         clearPendingStepAdvance()
         pendingStepAdvanceSinceElapsed = SystemClock.elapsedRealtime()
         val snapshot = captureTreeSnapshot(root)
-        pendingStepAdvanceFromKey = buildTransitionSignatureKey(
+        pendingStepAdvanceFromKey = buildStepAdvanceSignatureKey(
             windowId = resolveWindowId(root),
             windowPkg = root.packageName?.toString().orEmpty(),
             root = root,
@@ -3324,7 +3358,7 @@ class UssdNavigationService : AccessibilityService() {
                 isProcessing = false
                 return
             }
-            val currentKey = buildTransitionSignatureKey(
+            val currentKey = buildStepAdvanceSignatureKey(
                 windowId = resolveWindowId(root),
                 windowPkg = root.packageName?.toString().orEmpty(),
                 root = root,
@@ -3366,7 +3400,7 @@ class UssdNavigationService : AccessibilityService() {
             dismissErrorAndRestart()
             return true
         }
-        val currentKey = buildTransitionSignatureKey(
+        val currentKey = buildStepAdvanceSignatureKey(
             windowId = windowId,
             windowPkg = windowPkg,
             root = root,
