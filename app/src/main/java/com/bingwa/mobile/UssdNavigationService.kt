@@ -100,7 +100,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 15_000L
         private const val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 15_000L
         private const val NETWORK_DELAY_ACTION_GRACE_MS = 18_000L
-        // Give OEM USSD dialogs a brief moment to settle before the safety re-check runs.
+        // Fallback safety kick; hot-popup flows use a much shorter adaptive delay.
         private const val PENDING_STEP_ADVANCE_KICK_MS = 120L
         private const val VERIFY_POLL_MS         = 4L
         private const val RAPID_POST_POPUP_POLL_MS = 2L
@@ -509,6 +509,7 @@ class UssdNavigationService : AccessibilityService() {
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 AccessibilityEvent.TYPE_WINDOWS_CHANGED or
                 AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
+                AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED or
                 AccessibilityEvent.TYPE_VIEW_FOCUSED or
                 AccessibilityEvent.TYPE_VIEW_CLICKED or
                 AccessibilityEvent.TYPE_VIEW_SCROLLED
@@ -603,6 +604,7 @@ class UssdNavigationService : AccessibilityService() {
             event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED &&
+            event.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_VIEW_FOCUSED &&
             event.eventType != AccessibilityEvent.TYPE_VIEW_CLICKED &&
             event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED
@@ -3302,7 +3304,7 @@ class UssdNavigationService : AccessibilityService() {
             PENDING_STEP_ADVANCE_TIMEOUT_MS
         }
         handler.postDelayed(timeoutTask, timeoutMs)
-        schedulePendingStepAdvanceKick()
+        schedulePendingStepAdvanceKick(delayMs = pendingStepAdvanceKickDelay())
         isProcessing = false
     }
 
@@ -3316,6 +3318,13 @@ class UssdNavigationService : AccessibilityService() {
         pendingStepAdvanceKickRunnable = task
         if (delayMs <= 0L) handler.post(task) else handler.postDelayed(task, delayMs)
     }
+
+    private fun pendingStepAdvanceKickDelay(): Long =
+        when {
+            hasRecentUssdUiEvent() -> eventHotPollMs
+            hasSeenAdvancedPopup -> rapidPostPopupPollMs
+            else -> PENDING_STEP_ADVANCE_KICK_MS
+        }
 
     private fun attemptPendingStepAdvanceWithRoot(existingRoot: AccessibilityNodeInfo?) {
         if (!advancedActive) {
@@ -3345,7 +3354,7 @@ class UssdNavigationService : AccessibilityService() {
         }
 
         val root = existingRoot ?: getUssdRoot() ?: run {
-            schedulePendingStepAdvanceKick()
+            schedulePendingStepAdvanceKick(delayMs = pendingStepAdvanceKickDelay())
             isProcessing = false
             return
         }
@@ -3355,7 +3364,7 @@ class UssdNavigationService : AccessibilityService() {
             val dialogText = snapshot?.dialogText
                 ?: normalizeCollapsedText(extractAllText(root))
             if (dialogText.isBlank()) {
-                schedulePendingStepAdvanceKick()
+                schedulePendingStepAdvanceKick(delayMs = pendingStepAdvanceKickDelay())
                 isProcessing = false
                 return
             }
@@ -3367,7 +3376,7 @@ class UssdNavigationService : AccessibilityService() {
                 dialogText = dialogText
             )
             if (currentKey == fromKey) {
-                schedulePendingStepAdvanceKick()
+                schedulePendingStepAdvanceKick(delayMs = pendingStepAdvanceKickDelay())
                 isProcessing = false
                 return
             }
@@ -3409,7 +3418,7 @@ class UssdNavigationService : AccessibilityService() {
             dialogText = dialogText
         )
         if (currentKey == fromKey) {
-            schedulePendingStepAdvanceKick()
+            schedulePendingStepAdvanceKick(delayMs = pendingStepAdvanceKickDelay())
             return true
         }
         clearPendingStepAdvance()
