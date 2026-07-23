@@ -77,22 +77,22 @@ class UssdNavigationService : AccessibilityService() {
 
         private const val MAX_RETRY_WINDOW_MS    = 60_000L
         private const val SHOW_RUNNING_OVERLAY   = false
-        private const val STEP_DELAY_MS          = 20L
-        private const val EVENT_HOT_POLL_MS      = 1L
-        private const val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 8L
-        private const val DUPLICATE_EVENT_WINDOW_MS = 16L
-        private const val FAST_VERIFY_POLL_MS    = 1L
-        private const val HOT_SEND_RETRY_DELAY_MS = 2L
-        private const val SEND_RETRY_DELAY_MS    = 3L
-        private const val POST_WRITE_VERIFY_POLL_MS = 1L
-        private const val POST_WRITE_SEND_RETRY_MS = 2L
+        private const val STEP_DELAY_MS          = 30L
+        private const val EVENT_HOT_POLL_MS      = 8L
+        private const val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 32L
+        private const val DUPLICATE_EVENT_WINDOW_MS = 32L
+        private const val FAST_VERIFY_POLL_MS    = 8L
+        private const val HOT_SEND_RETRY_DELAY_MS = 10L
+        private const val SEND_RETRY_DELAY_MS    = 14L
+        private const val POST_WRITE_VERIFY_POLL_MS = 6L
+        private const val POST_WRITE_SEND_RETRY_MS = 10L
         private const val STEP_TIMEOUT_MS           = 4_500L
         private const val STARTUP_STEP_TIMEOUT_MS   = 7_000L
         private const val FINAL_RESPONSE_TIMEOUT_MS = 6_500L
         private const val PENDING_STEP_TIMEOUT_MS   = 6_000L
-        private const val PENDING_ADVANCE_TIMEOUT_MS = 3_000L
+        private const val PENDING_ADVANCE_TIMEOUT_MS = 6_000L
         private const val ROOT_REACQUIRE_TIMEOUT_MS  = 5_000L
-        private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 3_500L
+        private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 6_000L
         private const val NETWORK_DELAY_STEP_TIMEOUT_MS = 16_000L
         private const val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 18_000L
         private const val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 16_000L
@@ -101,16 +101,16 @@ class UssdNavigationService : AccessibilityService() {
         private const val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 15_000L
         private const val NETWORK_DELAY_ACTION_GRACE_MS = 18_000L
         // Fallback safety kick; hot-popup flows use a much shorter adaptive delay.
-        private const val PENDING_STEP_ADVANCE_KICK_MS = 80L
-        private const val VERIFY_POLL_MS         = 4L
-        private const val RAPID_POST_POPUP_POLL_MS = 2L
-        private const val RAPID_POST_POPUP_VERIFY_MS = 1L
-        private const val RAPID_POST_POPUP_SEND_RETRY_MS = 2L
+        private const val PENDING_STEP_ADVANCE_KICK_MS = 140L
+        private const val VERIFY_POLL_MS         = 16L
+        private const val RAPID_POST_POPUP_POLL_MS = 8L
+        private const val RAPID_POST_POPUP_VERIFY_MS = 6L
+        private const val RAPID_POST_POPUP_SEND_RETRY_MS = 8L
         private const val MAX_VERIFY_ATTEMPTS    = 10
         private const val MAX_SEND_ATTEMPTS      = 5
         private const val FORCEFUL_WRITE_PASSES  = 6
         private const val WRITE_VERIFICATION_PASSES = 5
-        private const val WRITE_VERIFICATION_SETTLE_MS = 8L
+        private const val WRITE_VERIFICATION_SETTLE_MS = 16L
         private const val DIRECT_WRITE_VERIFY_PASSES = 3
         private const val SET_TEXT_BURST_ATTEMPTS = 3
         private const val PASTE_BURST_ATTEMPTS = 3
@@ -121,14 +121,14 @@ class UssdNavigationService : AccessibilityService() {
         private const val RECENT_INPUT_GRACE_MS  = 4_000L
         private const val RECENT_VERIFIED_INPUT_GRACE_MS = 6_500L
         private const val RECENT_UI_EVENT_GRACE_MS = 1_200L
-        private const val RECENT_USSD_CONTEXT_WINDOW_MS = 220L
-        private const val GESTURE_SETTLE_MS      = 3L
-        private const val POST_GESTURE_WAIT_MS   = 2L
-        private const val POPUP_STABILITY_DELAY_MS = 2L
-        private const val TAP_GESTURE_DURATION_MS = 10L
-        private const val REDIAL_COOLDOWN_MS     = 200L
-        private const val PENDING_ADVANCE_KICK_MS = 4L
-        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 4L
+        private const val RECENT_USSD_CONTEXT_WINDOW_MS = 420L
+        private const val GESTURE_SETTLE_MS      = 12L
+        private const val POST_GESTURE_WAIT_MS   = 10L
+        private const val POPUP_STABILITY_DELAY_MS = 14L
+        private const val TAP_GESTURE_DURATION_MS = 24L
+        private const val REDIAL_COOLDOWN_MS     = 300L
+        private const val PENDING_ADVANCE_KICK_MS = 16L
+        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 18L
         private const val DIALOG_DISMISS_SETTLE_MS = 20L
         private const val UI_KEEP_VISIBLE_INTERVAL_MS = 500L
         private const val STARTUP_UI_KEEP_VISIBLE_MS = 8_000L
@@ -4642,9 +4642,10 @@ class UssdNavigationService : AccessibilityService() {
         if (!hasRecentVerifiedInput(expectedValue)) return false
         if (field == null && !snapshot.hasEditableField && snapshot.inputStateSignature.isBlank()) return false
         return snapshot.hasSendButton ||
-            step == "INPUT_PHONE" ||
-            field == null ||
-            dialogSuggestsTypedReplyPrompt(dialogTextLower)
+            (field != null && (
+                step == "INPUT_PHONE" ||
+                    dialogSuggestsTypedReplyPrompt(dialogTextLower)
+                ))
     }
 
     private fun tryAggressiveImmediateSubmitAfterWrite(
@@ -4668,7 +4669,7 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun shouldTrustRecentWrite(fieldText: String?, expectedValue: String): Boolean {
         val actual = fieldText?.trim().orEmpty()
-        if (actual.isBlank()) return hasRecentVerifiedInput(expectedValue)
+        if (actual.isBlank()) return false
         return hasRecentVerifiedInput(expectedValue) && isLikelyPromptText(actual)
     }
 
