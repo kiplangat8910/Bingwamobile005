@@ -110,7 +110,7 @@ class UssdNavigationService : AccessibilityService() {
         private const val MAX_SEND_ATTEMPTS      = 5
         private const val FORCEFUL_WRITE_PASSES  = 6
         private const val WRITE_VERIFICATION_PASSES = 5
-        private const val WRITE_VERIFICATION_SETTLE_MS = 18L
+        private const val WRITE_VERIFICATION_SETTLE_MS = 8L
         private const val DIRECT_WRITE_VERIFY_PASSES = 3
         private const val SET_TEXT_BURST_ATTEMPTS = 3
         private const val PASTE_BURST_ATTEMPTS = 3
@@ -1177,7 +1177,8 @@ class UssdNavigationService : AccessibilityService() {
                             tryImmediateVerifiedSend(
                                 root = interactionRoot,
                                 field = inputField,
-                                expectedValue = valueToEnter
+                                expectedValue = valueToEnter,
+                                alreadyVerified = inlineVerified
                             )
                         ) {
                             markStepAction(dialogText, root = interactionRoot)
@@ -4194,16 +4195,24 @@ class UssdNavigationService : AccessibilityService() {
     private fun tryImmediateVerifiedSend(
         root: AccessibilityNodeInfo,
         field: AccessibilityNodeInfo?,
-        expectedValue: String
+        expectedValue: String,
+        alreadyVerified: Boolean = false
     ): Boolean {
-        val verified = verifyExpectedInputFromRoot(
-            root = root,
-            expectedValue = expectedValue,
-            existingField = field
-        ) ||
-            hasRecentVerifiedInput(expectedValue)
-        if (!verified) return false
         val fieldText = field?.let(::readFieldText)
+        val verified = when {
+            alreadyVerified -> true
+            fieldText != null && isVerifiedFieldValue(fieldText, expectedValue) -> {
+                rememberVerifiedInput(expectedValue)
+                true
+            }
+            field == null && hasRecentVerifiedInput(expectedValue) -> true
+            else -> verifyExpectedInputFromRoot(
+                root = root,
+                expectedValue = expectedValue,
+                existingField = field
+            )
+        }
+        if (!verified) return false
         val sendBtn = findBestSendActionButton(root)
             ?: findPositiveDialogButton(root)
             ?: findBottomRightActionButton(root)
