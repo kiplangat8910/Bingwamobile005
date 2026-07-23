@@ -399,37 +399,37 @@ class UssdNavigationService : AccessibilityService() {
         get() = timingForDevice(EVENT_HOT_POLL_MS, 16L)
 
     private val fastVerifyPollMs: Long
-        get() = timingForDevice(FAST_VERIFY_POLL_MS, 20L)
+        get() = timingForDevice(FAST_VERIFY_POLL_MS, 14L)
 
     private val verifyPollMs: Long
-        get() = timingForDevice(VERIFY_POLL_MS, 36L)
+        get() = timingForDevice(VERIFY_POLL_MS, 24L)
 
     private val postWriteVerifyPollMs: Long
-        get() = timingForDevice(POST_WRITE_VERIFY_POLL_MS, 18L)
+        get() = timingForDevice(POST_WRITE_VERIFY_POLL_MS, 12L)
 
     private val hotSendRetryDelayMs: Long
-        get() = timingForDevice(HOT_SEND_RETRY_DELAY_MS, 20L)
+        get() = timingForDevice(HOT_SEND_RETRY_DELAY_MS, 14L)
 
     private val sendRetryDelayMs: Long
-        get() = timingForDevice(SEND_RETRY_DELAY_MS, 28L)
+        get() = timingForDevice(SEND_RETRY_DELAY_MS, 20L)
 
     private val postWriteSendRetryMs: Long
-        get() = timingForDevice(POST_WRITE_SEND_RETRY_MS, 18L)
+        get() = timingForDevice(POST_WRITE_SEND_RETRY_MS, 12L)
 
     private val rapidPostPopupPollMs: Long
         get() = timingForDevice(RAPID_POST_POPUP_POLL_MS, 16L)
 
     private val rapidPostPopupVerifyMs: Long
-        get() = timingForDevice(RAPID_POST_POPUP_VERIFY_MS, 16L)
+        get() = timingForDevice(RAPID_POST_POPUP_VERIFY_MS, 10L)
 
     private val rapidPostPopupSendRetryMs: Long
-        get() = timingForDevice(RAPID_POST_POPUP_SEND_RETRY_MS, 20L)
+        get() = timingForDevice(RAPID_POST_POPUP_SEND_RETRY_MS, 12L)
 
     private val pendingAdvanceKickMs: Long
-        get() = timingForDevice(PENDING_ADVANCE_KICK_MS, 24L)
+        get() = timingForDevice(PENDING_ADVANCE_KICK_MS, 16L)
 
     private val rootReacquireRetryDelayMs: Long
-        get() = timingForDevice(ROOT_REACQUIRE_RETRY_DELAY_MS, 48L)
+        get() = timingForDevice(ROOT_REACQUIRE_RETRY_DELAY_MS, 32L)
 
     private val sendRetryIncrementMs: Long
         get() = timingForDevice(6L, 12L)
