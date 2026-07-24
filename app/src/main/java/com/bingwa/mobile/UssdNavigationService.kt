@@ -1152,6 +1152,8 @@ class UssdNavigationService : AccessibilityService() {
                         }
                     }
                     if (inputField != null || shouldPreferTextInput) {
+                        // Reset stale verification markers so each popup earns a fresh confirmed write.
+                        clearInputWriteMarker()
                         val wroteValue = when {
                             inputField != null ->
                                 tryWriteValueToField(inputField, valueToEnter, interactionRoot) ||
@@ -2866,7 +2868,7 @@ class UssdNavigationService : AccessibilityService() {
         snapshot: UssdTreeSnapshot? = null
     ) {
         pendingExpectedValue = expectedValue
-        pendingPhase = if (hasRecentVerifiedInput(expectedValue)) PendingPhase.WAIT_SEND else PendingPhase.WAIT_VERIFY
+        pendingPhase = PendingPhase.WAIT_VERIFY
         pendingAdvanceFromKey = buildTransitionSignatureKey(
             windowId = resolveWindowId(root),
             windowPkg = root.packageName?.toString().orEmpty(),
@@ -4214,7 +4216,6 @@ class UssdNavigationService : AccessibilityService() {
                 rememberVerifiedInput(expectedValue)
                 true
             }
-            field == null && hasRecentVerifiedInput(expectedValue) -> true
             else -> verifyExpectedInputFromRoot(
                 root = root,
                 expectedValue = expectedValue,
@@ -4232,8 +4233,7 @@ class UssdNavigationService : AccessibilityService() {
         } finally {
             sendBtn?.recycle()
         }
-        val canSubmitFromField = fieldText != null || hasRecentVerifiedInput(expectedValue)
-        return canSubmitFromField && triggerInputSubmit(root, expectedValue, field)
+        return fieldText != null && triggerInputSubmit(root, expectedValue, field)
     }
 
     private fun performImeAction(node: AccessibilityNodeInfo): Boolean {
@@ -4667,19 +4667,9 @@ class UssdNavigationService : AccessibilityService() {
         return triggerInputSubmit(root, expectedValue, field)
     }
 
-    private fun shouldTrustRecentWrite(fieldText: String?, expectedValue: String): Boolean {
-        val actual = fieldText?.trim().orEmpty()
-        if (actual.isBlank()) return false
-        return hasRecentVerifiedInput(expectedValue) && isLikelyPromptText(actual)
-    }
-
     private fun isVerifiedFieldValue(fieldText: String?, expectedValue: String): Boolean {
         val actual = fieldText?.trim().orEmpty()
-        return when {
-            matchesExpectedInput(actual, expectedValue) -> true
-            shouldTrustRecentWrite(actual, expectedValue) -> true
-            else -> false
-        }
+        return matchesExpectedInput(actual, expectedValue)
     }
 
     private fun verifyExpectedInputFromRoot(
