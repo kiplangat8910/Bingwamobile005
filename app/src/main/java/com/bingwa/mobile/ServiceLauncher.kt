@@ -9,13 +9,16 @@ import androidx.core.content.ContextCompat
 object ServiceLauncher {
     private const val TAG = "ServiceLauncher"
     private const val FALLBACK_START_DELAY_MS = 5_000L
+    private const val FAST_RETRY_DELAY_MS = 750L
     private const val BOOT_RECOVERY_DELAY_MS = 20_000L
 
     fun startBalanceChecker(context: Context): Boolean {
         return startForegroundServiceSafely(
             context = context,
             intent = Intent(context, BalanceChecker::class.java),
-            label = "Background balance monitoring"
+            label = "Background balance monitoring",
+            fallbackDelayMs = if (BingwaMobileApp.wasInForegroundRecently()) FAST_RETRY_DELAY_MS else FALLBACK_START_DELAY_MS,
+            preferExactFallback = BingwaMobileApp.wasInForegroundRecently()
         )
     }
 
@@ -23,7 +26,9 @@ object ServiceLauncher {
         return startForegroundServiceSafely(
             context = context,
             intent = intent,
-            label = "USSD automation"
+            label = "USSD automation",
+            fallbackDelayMs = FAST_RETRY_DELAY_MS,
+            preferExactFallback = true
         )
     }
 
@@ -47,7 +52,13 @@ object ServiceLauncher {
         )
     }
 
-    fun startForegroundServiceSafely(context: Context, intent: Intent, label: String): Boolean {
+    fun startForegroundServiceSafely(
+        context: Context,
+        intent: Intent,
+        label: String,
+        fallbackDelayMs: Long = FALLBACK_START_DELAY_MS,
+        preferExactFallback: Boolean = false
+    ): Boolean {
         return runCatching {
             ContextCompat.startForegroundService(context, intent)
             true
@@ -57,8 +68,8 @@ object ServiceLauncher {
                 context = context,
                 intent = intent,
                 label = label,
-                delayMs = FALLBACK_START_DELAY_MS,
-                preferExact = false
+                delayMs = fallbackDelayMs,
+                preferExact = preferExactFallback
             )
             OfferNotifications.notify(
                 context,

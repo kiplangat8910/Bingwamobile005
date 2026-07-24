@@ -45,6 +45,7 @@ class BalanceChecker : Service() {
         private var timeoutRunnable: Runnable? = null
         private var pendingRefreshRunnable: Runnable? = null
         @Volatile private var activeRequestContext: BalanceRequestContext? = null
+        @Volatile private var queuedBusyRetryContext: BalanceRequestContext? = null
 
         private data class BalanceRequestContext(
             val selectionOverride: Int? = null,
@@ -73,11 +74,20 @@ class BalanceChecker : Service() {
         ): Boolean {
             val appContext = context.applicationContext
             val now = System.currentTimeMillis()
+            val requestContext = BalanceRequestContext(
+                selectionOverride = selectionOverride,
+                persistResult = persistResult
+            )
             if (checking) {
-                Log.d(TAG, "check already in flight — skipping")
-                return false
+                Log.d(TAG, "check already in flight — ${if (specialHandling) "keeping existing request" else "skipping"}")
+                return specialHandling
             }
             if (selectionOverride == null && isUssdSessionBusy()) {
+                if (specialHandling) {
+                    queueBusyRetry(appContext, requestContext)
+                    Log.d(TAG, "another USSD task is active — queued balance check for immediate retry")
+                    return true
+                }
                 Log.d(TAG, "another USSD task is active — skipping balance check")
                 return false
             }
@@ -92,10 +102,6 @@ class BalanceChecker : Service() {
             }
             checking = true
             lastCheckStartedAt = now
-            val requestContext = BalanceRequestContext(
-                selectionOverride = selectionOverride,
-                persistResult = persistResult
-            )
             activeRequestContext = requestContext
             armTimeout()
             val balanceUssd = resolveBalanceUssdCode(context, selectionOverride)
@@ -359,6 +365,36 @@ class BalanceChecker : Service() {
             UssdNavigationService.isBusyForBalanceCheck() ||
                 SilentUssd.isExecutionInProgress() ||
                 SilentUssdOptimized.isExecutionInProgress()
+
+        private fun queueBusyRetry(context: Context, requestContext: BalanceRequestContext) {
+            val shouldQueue = synchronized(this) {
+                if (queuedBusyRetryContext == requestContext) {
+                    false
+                } else {
+                    queuedBusyRetryContext = requestContext
+                    true
+                }
+            }
+            if (!shouldQueue) return
+
+            UssdQueue.enqueue(
+                task = Runnable {
+                    synchronized(this) {
+                        if (queuedBusyRetryContext == requestContext) {
+                            queuedBusyRetryContext = null
+                        }
+                    }
+                    requestBalanceCheck(
+                        context = context,
+                        selectionOverride = requestContext.selectionOverride,
+                        persistResult = requestContext.persistResult,
+                        ignoreCooldown = true,
+                        specialHandling = true
+                    )
+                },
+                priority = USSD_EXECUTION_PRIORITY_SPECIAL
+            )
+        }
 
         fun getLastKnownBalanceDisplay(context: Context): String {
             val cached = currentBalanceStr.trim()
