@@ -3,29 +3,16 @@ package com.bingwa.mobile
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
-import android.app.ActivityManager
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
+import android.app.*
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
-import android.graphics.Path
-import android.graphics.PixelFormat
-import android.graphics.Rect
-import android.graphics.Typeface
+import android.graphics.*
 import android.graphics.drawable.GradientDrawable
-import android.os.Build
-import android.os.Bundle
-import android.os.Handler
-import android.os.HandlerThread
-import android.os.Looper
-import android.os.SystemClock
-import android.util.TypedValue
+import android.os.*
 import android.util.Log
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -36,322 +23,94 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+
 class UssdNavigationService : AccessibilityService() {
 
     companion object {
-        const val TAG = "UssdNavigation"
-        @Volatile
+        const val TAG = "UssdNav"
+
+        // Public state (volatile for cross‑thread visibility)
+        @Volatile var airtimeBalance = "N/A"
+        @Volatile var balanceCallback: ((String) -> Unit)? = null
+        @Volatile var tokenPurchaseCallback: ((Boolean) -> Unit)? = null
+
+        @Volatile var advancedSteps: List<String> = emptyList()
+        @Volatile var advancedPhoneNumber = ""
+        @Volatile var advancedDialCode = ""
+        @Volatile var advancedOfferId = -1
+        @Volatile var advancedOfferName = ""
+        @Volatile var advancedActive = false
+        @Volatile var advancedInProgress = false
+        @Volatile var currentStep = 0
+        @Volatile var retryCount = 0
+        @Volatile var retryWindowStartedAt = 0L
+        @Volatile var lastRedialElapsed = 0L
+
+        @Volatile var signatureGuardEnabled = false
+        @Volatile var signatureAction = "STOP"          // "STOP" or "ADJUST"
+        @Volatile var signatureLearningMode = false
+        @Volatile var loadedSignatureSteps: List<UssdSignatureStep> = emptyList()
+
+        @Volatile var onDispatchComplete: ((AdvancedDispatchResult) -> Unit)? = null
+
         private var activeInstance: UssdNavigationService? = null
-        @Volatile
-        private var pendingAdvancedArm: Boolean = false
-
-        var airtimeBalance          = "N/A"
-        var balanceCallback         : ((String) -> Unit)?  = null
-        var tokenPurchaseCallback   : ((Boolean) -> Unit)? = null
-
-        var advancedSteps           : List<String> = emptyList()
-        var advancedPhoneNumber     : String       = ""
-        var advancedDialCode        : String       = ""
-        var advancedOfferId         : Int          = -1
-        var advancedOfferName       : String       = ""
-        var advancedActive          : Boolean      = false
-        var advancedInProgress      : Boolean      = false
-        var currentStep             : Int          = 0
-        var retryCount              : Int          = 0
-        var retryWindowStartedAt    : Long         = 0L
-        var lastRedialElapsed       : Long         = 0L
-        var signatureGuardEnabled   : Boolean      = false
-        var signatureAction         : String       = "STOP"
-        var signatureLearningMode   : Boolean      = false
-        var loadedSignatureSteps    : List<UssdSignatureStep> = emptyList()
-
-        var onDispatchComplete      : ((result: AdvancedDispatchResult) -> Unit)? = null
-        @Volatile
-        private var foregroundUiActive: Boolean = false
-        @Volatile
-        private var foregroundUiUntilElapsed: Long = 0L
-        @Volatile
-        private var keepAppUiVisibleEnabled: Boolean = true
-        @Volatile
-        private var uiReturnSuppressed: Boolean = false
-
-        private const val MAX_RETRY_WINDOW_MS    = 60_000L
-        private const val SHOW_RUNNING_OVERLAY   = false
-        private const val STEP_DELAY_MS          = 30L
-        private const val EVENT_HOT_POLL_MS      = 8L
-        private const val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 32L
-        private const val DUPLICATE_EVENT_WINDOW_MS = 32L
-        private const val FAST_VERIFY_POLL_MS    = 8L
-        private const val HOT_SEND_RETRY_DELAY_MS = 10L
-        private const val SEND_RETRY_DELAY_MS    = 14L
-        private const val POST_WRITE_VERIFY_POLL_MS = 6L
-        private const val POST_WRITE_SEND_RETRY_MS = 10L
-        private const val STEP_TIMEOUT_MS           = 4_500L
-        private const val STARTUP_STEP_TIMEOUT_MS   = 7_000L
-        private const val FINAL_RESPONSE_TIMEOUT_MS = 6_500L
-        private const val PENDING_STEP_TIMEOUT_MS   = 6_000L
-        private const val PENDING_ADVANCE_TIMEOUT_MS = 6_000L
-        private const val ROOT_REACQUIRE_TIMEOUT_MS  = 5_000L
-        private const val PENDING_STEP_ADVANCE_TIMEOUT_MS = 6_000L
-        private const val NETWORK_DELAY_STEP_TIMEOUT_MS = 16_000L
-        private const val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 18_000L
-        private const val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 16_000L
-        private const val NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS = 15_000L
-        private const val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 15_000L
-        private const val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 15_000L
-        private const val NETWORK_DELAY_ACTION_GRACE_MS = 18_000L
-        // Fallback safety kick; hot-popup flows use a much shorter adaptive delay.
-        private const val PENDING_STEP_ADVANCE_KICK_MS = 140L
-        private const val VERIFY_POLL_MS         = 16L
-        private const val RAPID_POST_POPUP_POLL_MS = 8L
-        private const val RAPID_POST_POPUP_VERIFY_MS = 6L
-        private const val RAPID_POST_POPUP_SEND_RETRY_MS = 8L
-        private const val MAX_VERIFY_ATTEMPTS    = 10
-        private const val MAX_SEND_ATTEMPTS      = 5
-        private const val FORCEFUL_WRITE_PASSES  = 6
-        private const val WRITE_VERIFICATION_PASSES = 5
-        private const val WRITE_VERIFICATION_SETTLE_MS = 16L
-        private const val DIRECT_WRITE_VERIFY_PASSES = 3
-        private const val SET_TEXT_BURST_ATTEMPTS = 3
-        private const val PASTE_BURST_ATTEMPTS = 3
-        private const val NO_FIELD_PATIENCE      = 4
-        private const val INPUT_TARGET_DEPTH     = 8
-        private const val INPUT_DESCENT_DEPTH    = 4
-        private const val INPUT_NEARBY_SCOPE_DEPTH = 2
-        private const val RECENT_INPUT_GRACE_MS  = 4_000L
-        private const val RECENT_VERIFIED_INPUT_GRACE_MS = 6_500L
-        private const val RECENT_UI_EVENT_GRACE_MS = 1_200L
-        private const val RECENT_USSD_CONTEXT_WINDOW_MS = 420L
-        private const val GESTURE_SETTLE_MS      = 12L
-        private const val POST_GESTURE_WAIT_MS   = 10L
-        private const val POPUP_STABILITY_DELAY_MS = 14L
-        private const val TAP_GESTURE_DURATION_MS = 24L
-        private const val REDIAL_COOLDOWN_MS     = 300L
-        private const val PENDING_ADVANCE_KICK_MS = 16L
-        private const val ROOT_REACQUIRE_RETRY_DELAY_MS = 18L
-        private const val DIALOG_DISMISS_SETTLE_MS = 20L
-        private const val UI_KEEP_VISIBLE_INTERVAL_MS = 500L
-        private const val STARTUP_UI_KEEP_VISIBLE_MS = 8_000L
-        private const val STEP_TRANSITION_GUARD_MS = 240L
-        private const val CHANNEL_ID             = "bingwa_ussd"
-        private const val NOTIFICATION_ID        = 2001
-        private val MULTI_SPACE_REGEX = Regex("\\s+")
-        private val NON_ALPHANUMERIC_REGEX = Regex("[^a-z0-9]+")
-        private val MENU_OPTION_REGEX = Regex("""^(\d+)\s*[\)\].:\-]?\s*(.+)$""")
-        private val MENU_OPTION_NUMBER_ONLY_REGEX = Regex("""^(\d+)\s*[\)\].:\-]?$""")
-
-        private val USSD_PACKAGES = setOf(
-            "com.android.phone", "com.android.server.telecom", "com.google.android.dialer",
-            "com.samsung.android.incallui", "com.samsung.android.app.telephonyui",
-            "com.samsung.android.dialer", "com.android.incallui", "com.android.dialer",
-            "com.mediatek.phone", "com.transsion.phone", "com.infinix.phone",
-            "com.tecno.phone", "com.itel.phone", "com.transsion.incallui",
-            "com.mediatek.incallui", "com.android.contacts", "com.huawei.contacts",
-            "com.huawei.incallui", "com.vivo.contacts", "com.vivo.dialer",
-            "com.hihonor.dialer", "com.heytap.dialer", "com.coloros.dialer",
-            "com.oplus.dialer", "com.oneplus.dialer", "com.realme.dialer",
-            "com.miui.securitycenter", "com.miui.phone", "com.android.mms",
-            "com.google.android.apps.tachyon", "com.sprd.contacts"
-        )
-        private val USSD_PACKAGE_HINTS = listOf(
-            "phone", "dialer", "telecom", "incall", "callui", "telephony", "ussd",
-            "miui", "coloros", "heytap", "oplus", "honor", "transsion", "vivo", "realme",
-            "samsung", "huawei", "infinix", "tecno", "itel", "mediatek", "sprd"
-        )
-        private val BLOCKED_PACKAGES = setOf(
-            "com.bingwa.mobile", "com.android.systemui", "com.android.launcher",
-            "com.google.android.apps.nexuslauncher", "com.miui.home",
-            "com.sec.android.app.launcher", "com.huawei.android.launcher",
-            "com.android.settings", "com.google.android.gms", "com.android.keyguard",
-            "com.android.packageinstaller"
-        )
-        private val LAUNCHER_PACKAGES = setOf(
-            "com.android.launcher",
-            "com.google.android.apps.nexuslauncher",
-            "com.miui.home",
-            "com.sec.android.app.launcher",
-            "com.huawei.android.launcher"
-        )
-        private val USSD_HINTS = listOf(
-            "enter", "ussd", "choose", "select", "option", "menu", "number", "amount",
-            "sambaza", "tuma", "please enter", "enter phone", "enter amount",
-            "safaricom", "airtel", "telkom", "faiba", "reply", "continue", "submit",
-            "balance", "airtime", "ksh", "kes", "bundle", "data", "account", "pin",
-            "send money", "confirm", "retry", "proceed", "voucher", "recipient", "mobile",
-            "entrez", "montant", "numéro", "solde", "continuer", "confirmer",
-            "أدخل", "رصيد", "تأكيد", "press", "dial", "call", "response", "respond", "tap"
-        )
-        private val SEND_BUTTON_LABELS = listOf(
-            "send", "ok", "tuma", "call", "sambaza", "enda", "confirm",
-            "reply", "next", "continue", "submit", "proceed", "accept", "yes", "done",
-            "confirmar", "envoyer", "suivant", "continuer", "oui", "go", "enter", "dial",
-            "execute", "موافق", "إرسال"
-        )
-        private val SEND_VIEW_ID_HINTS = listOf(
-            "send", "submit", "reply", "continue", "next", "confirm", "positive", "ok",
-            "button1", "positivebutton", "positive_button", "dialog_button", "send_button",
-            "action_button", "btn_ok", "btn_confirm", "btn_send", "btn_positive",
-            "alertdialog_button", "right_button", "primary_button"
-        )
-        private val INPUT_VIEW_ID_HINTS = listOf(
-            "input", "reply", "entry", "message", "ussd", "number", "phone", "amount", "pin",
-            "edit", "text", "answer", "field", "value", "data", "query", "response"
-        )
-        private val INPUT_FIELD_HINTS = listOf(
-            "enter", "input", "reply", "phone", "number", "amount", "pin", "account", "mobile", "recipient",
-            "text", "answer", "value", "type here", "write here"
-        )
-        private val PHONE_INPUT_HINTS = listOf(
-            "phone", "phone number", "number", "mobile", "mobile number", "recipient", "recipient number",
-            "customer", "customer number", "subscriber", "subscriber number", "beneficiary",
-            "beneficiary number", "msisdn", "tel", "telephone", "contact", "line number",
-            "enter phone", "enter number", "enter mobile", "enter recipient", "enter customer"
-        )
-        private val DISMISS_BUTTON_LABELS = listOf(
-            "ok", "cancel", "close", "dismiss", "back", "no", "exit", "annuler", "fermer",
-            "non", "إلغاء", "خروج"
-        )
-        private val DISMISS_VIEW_ID_HINTS = listOf(
-            "cancel", "dismiss", "close", "negative", "back", "no", "exit",
-            "button2", "negativebutton", "negative_button", "btn_cancel", "btn_dismiss",
-            "btn_negative", "left_button"
-        )
-        private val NON_USSD_DIALOG_HINTS = listOf(
-            "choose sim", "select sim", "sim 1", "sim 2", "sim1", "sim2", "default sim",
-            "complete action", "use by default", "just once", "always",
-            "allow", "deny", "permission", "grant", "not now",
-            "isn't responding", "is not responding", "stopped", "keeps stopping", "close app"
-        )
-        private val TRANSIENT_RESPONSE_HINTS = listOf(
-            "ussd running", "running", "processing", "please wait", "wait", "loading",
-            "requesting", "sending", "fetching", "working", "in progress"
-        )
-        private val EDITABLE_CLASS_HINTS = listOf(
-            "EditText", "TextInputEditText", "AutoCompleteTextView",
-            "MultiAutoCompleteTextView", "ExtractEditText",
-            "com.samsung.android.widget.SamsungEditText", "android.widget.EditText"
-        )
-
-        private val adjustedStepInputs = linkedMapOf<Int, String>()
-        private val learnedSignatureSteps = mutableListOf<UssdSignatureStep>()
-        private val learningCaptures = mutableListOf<UssdLearningCapture>()
-        private val popupTranscript = mutableListOf<String>()
-        private val detectedChangeNotes = mutableListOf<String>()
-        private var signatureChangeDetected = false
-        private var signatureAutoAdjusted = false
-
-        fun resetSignatureTracking() {
-            adjustedStepInputs.clear()
-            learnedSignatureSteps.clear()
-            learningCaptures.clear()
-            popupTranscript.clear()
-            detectedChangeNotes.clear()
-            signatureChangeDetected = false
-            signatureAutoAdjusted = false
-        }
-
-        fun refreshRunningOverlay() {
-            activeInstance?.let { instance ->
-                instance.handler.post { instance.updateRunningOverlay() }
-            }
-        }
+        private var pendingArm = false
 
         fun beginAdvancedSessionMonitoring() {
-            activeInstance?.let { instance ->
-                pendingAdvancedArm = false
-                instance.handler.post { instance.handleAdvancedSessionArmed() }
-            } ?: run {
-                pendingAdvancedArm = true
-            }
+            activeInstance?.let { it.handler.post { it.handleAdvancedSessionArmed() } }
+                ?: run { pendingArm = true }
         }
 
-        fun armForegroundUi(timeoutMs: Long = 120_000L) {
-            foregroundUiActive = true
-            foregroundUiUntilElapsed = SystemClock.elapsedRealtime() + timeoutMs
-            refreshRunningOverlay()
-        }
-
-        fun disarmForegroundUi() {
-            if (!foregroundUiActive) return
-            foregroundUiActive = false
-            foregroundUiUntilElapsed = 0L
-            refreshRunningOverlay()
-        }
-
-        fun configureUiReturn(keepVisible: Boolean) {
-            keepAppUiVisibleEnabled = keepVisible
-            uiReturnSuppressed = false
-            refreshRunningOverlay()
-        }
-
-        fun suppressUiReturn() {
-            uiReturnSuppressed = true
-            refreshRunningOverlay()
-        }
-
-        fun onAppUiForegrounded() {
-            if (uiReturnSuppressed) {
-                uiReturnSuppressed = false
-                refreshRunningOverlay()
-            }
-        }
-
-        fun isBusyForBalanceCheck(): Boolean =
-            advancedActive ||
-                advancedInProgress ||
-                signatureLearningMode ||
-                tokenPurchaseCallback != null ||
-                isForegroundUiActive()
-
-        private fun refreshForegroundUi(timeoutMs: Long = 35_000L) {
-            if (!foregroundUiActive) return
-            foregroundUiUntilElapsed = SystemClock.elapsedRealtime() + timeoutMs
-        }
-
-        private fun isForegroundUiActive(): Boolean =
-            foregroundUiActive && SystemClock.elapsedRealtime() < foregroundUiUntilElapsed
+        fun resetSignatureTracking() { /* handled internally */ }
+        fun refreshRunningOverlay() { activeInstance?.updateOverlay() }
     }
 
-    private val handler            = Handler(Looper.getMainLooper())
+    // region Internal Helpers (all functionality is inside this service – no external dependencies)
+    private val handler = Handler(Looper.getMainLooper())
     private lateinit var bgHandler: Handler
     private lateinit var bgThread: HandlerThread
-    private var isProcessing       = false
-    private var lastDialogText     = ""
+    private var windowManager: WindowManager? = null
+
+    private var isProcessing = false
+    private var lastDialogText = ""
+    private var lastFinalResponse = ""
+
+    // Step timeouts
     private var stepTimeoutRunnable: Runnable? = null
     private var processStepRunnable: Runnable? = null
-    private var lastFinalResponse  = ""
+
+    // Input write markers
     private var lastInputWriteValue = ""
     private var lastInputWriteElapsed = 0L
     private var lastVerifiedInputValue = ""
     private var lastVerifiedInputElapsed = 0L
+
+    // Pending operations
     private var pendingProcessToken = 0L
-    private var lastWindowPkg = ""
-    private var lastWindowId = -1
-    private var lastRelevantEventElapsed = 0L
-    private var hasSeenAdvancedPopup = false
-    private var hasSeenForegroundPopup = false
-    private var lastMenuSignatureKey = ""
-    private var lastMenuSignature: ParsedMenuSignature? = null
-    private var loadedSignatureLookupSource: List<UssdSignatureStep> = emptyList()
-    private var loadedSignatureLookup: Map<Int, LearnedSignatureContext> = emptyMap()
-    private var lastScreenSignatureKey = ""
     private var pendingExpectedValue: String? = null
-    private var pendingPhase: PendingPhase = PendingPhase.NONE
-    private var pendingAdvanceFromKey: String = ""
-    private var pendingSinceElapsed: Long = 0L
-    private var pendingAttempts: Int = 0
-    private var lastStepActionKey: String = ""
-    private var lastStepActionElapsed: Long = 0L
-    private var lastUiReturnElapsed: Long = 0L
-    private var pendingStepAdvanceFromKey: String = ""
-    private var pendingStepAdvanceSinceElapsed: Long = 0L
+    private var pendingPhase = PendingPhase.NONE
+    private var pendingAdvanceFromKey = ""
+    private var pendingSinceElapsed = 0L
+    private var pendingAttempts = 0
+    private var pendingAdvanceKickRunnable: Runnable? = null
+
+    private var pendingStepAdvanceFromKey = ""
+    private var pendingStepAdvanceSinceElapsed = 0L
     private var pendingStepAdvanceTimeoutRunnable: Runnable? = null
     private var pendingStepAdvanceKickRunnable: Runnable? = null
-    private var pendingAdvanceKickRunnable: Runnable? = null
-    private var uiKeepVisibleRunnable: Runnable? = null
-    private var waitingForRootSinceElapsed: Long = 0L
+
+    // Window state
+    private var lastWindowId = -1
+    private var lastWindowPkg = ""
+    private var lastRelevantEventElapsed = 0L
+    private var lastStepActionKey = ""
+    private var lastStepActionElapsed = 0L
+    private var lastUiReturnElapsed = 0L
     private var lastEventFingerprint = ""
     private var lastEventElapsed = 0L
+    private var lastScreenSignatureKey = ""
+
+    // Recent USSD context cache (to avoid repeated scans)
     private var recentUssdRoot: AccessibilityNodeInfo? = null
     private var recentUssdSnapshot: UssdTreeSnapshot? = null
     private var recentUssdWindowId = -1
@@ -359,144 +118,42 @@ class UssdNavigationService : AccessibilityService() {
     private var recentUssdDialogText = ""
     private var recentUssdStrictDialog = false
     private var recentUssdCapturedElapsed = 0L
-    private var windowManager: WindowManager? = null
-    private var runningOverlayView: View? = null
-    private var runningOverlayStatusText: TextView? = null
-    private var runningOverlayDetailText: TextView? = null
-    private val useRelaxedAccessibilityTimings: Boolean by lazy(LazyThreadSafetyMode.NONE) {
-        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        val isLowRamDevice = activityManager?.isLowRamDevice == true
-        isLowRamDevice || Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
-    }
-    private val useAggressiveVerifiedPopupFastPath: Boolean
-        get() = !useRelaxedAccessibilityTimings && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-    private enum class PendingPhase { NONE, WAIT_VERIFY, WAIT_SEND }
+    private var waitingForRootSinceElapsed = 0L
 
-    private data class InputWriteResult(
-        val wroteValue: Boolean,
-        val likelyVerified: Boolean
-    )
+    // Overlay & foreground state
+    private var overlayView: View? = null
+    private var overlayStatusText: TextView? = null
+    private var overlayDetailText: TextView? = null
+    private var uiKeepVisibleRunnable: Runnable? = null
+    private var foregroundUiActive = false
+    private var foregroundUiUntilElapsed = 0L
+    private var keepAppUiVisibleEnabled = true
+    private var uiReturnSuppressed = false
+    private var hasSeenAdvancedPopup = false
+    private var hasSeenForegroundPopup = false
 
-    private data class RecentUssdContext(
-        val root: AccessibilityNodeInfo,
-        val snapshot: UssdTreeSnapshot?,
-        val windowId: Int,
-        val windowPkg: String,
-        val dialogText: String,
-        val strictDialog: Boolean
-    )
+    // Signature tracking
+    private val adjustedStepInputs = linkedMapOf<Int, String>()
+    private val learnedSignatureSteps = mutableListOf<UssdSignatureStep>()
+    private val learningCaptures = mutableListOf<UssdLearningCapture>()
+    private val popupTranscript = mutableListOf<String>()
+    private val detectedChangeNotes = mutableListOf<String>()
+    private var signatureChangeDetected = false
+    private var signatureAutoAdjusted = false
+    private var loadedSignatureLookupSource: List<UssdSignatureStep> = emptyList()
+    private var loadedSignatureLookup: Map<Int, LearnedSignatureContext> = emptyMap()
 
-    private fun timingForDevice(modernMs: Long, relaxedMs: Long): Long =
-        if (useRelaxedAccessibilityTimings) relaxedMs else modernMs
-
-    private val accessibilityNotificationTimeoutMs: Long
-        get() = timingForDevice(ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS, 24L)
-
-    private val duplicateEventWindowMs: Long
-        get() = timingForDevice(DUPLICATE_EVENT_WINDOW_MS, 48L)
-
-    private val eventHotPollMs: Long
-        get() = timingForDevice(EVENT_HOT_POLL_MS, 16L)
-
-    private val fastVerifyPollMs: Long
-        get() = timingForDevice(FAST_VERIFY_POLL_MS, 20L)
-
-    private val verifyPollMs: Long
-        get() = timingForDevice(VERIFY_POLL_MS, 36L)
-
-    private val postWriteVerifyPollMs: Long
-        get() = timingForDevice(POST_WRITE_VERIFY_POLL_MS, 18L)
-
-    private val hotSendRetryDelayMs: Long
-        get() = timingForDevice(HOT_SEND_RETRY_DELAY_MS, 20L)
-
-    private val sendRetryDelayMs: Long
-        get() = timingForDevice(SEND_RETRY_DELAY_MS, 28L)
-
-    private val postWriteSendRetryMs: Long
-        get() = timingForDevice(POST_WRITE_SEND_RETRY_MS, 18L)
-
-    private val rapidPostPopupPollMs: Long
-        get() = timingForDevice(RAPID_POST_POPUP_POLL_MS, 16L)
-
-    private val rapidPostPopupVerifyMs: Long
-        get() = timingForDevice(RAPID_POST_POPUP_VERIFY_MS, 16L)
-
-    private val rapidPostPopupSendRetryMs: Long
-        get() = timingForDevice(RAPID_POST_POPUP_SEND_RETRY_MS, 20L)
-
-    private val pendingAdvanceKickMs: Long
-        get() = timingForDevice(PENDING_ADVANCE_KICK_MS, 24L)
-
-    private val rootReacquireRetryDelayMs: Long
-        get() = timingForDevice(ROOT_REACQUIRE_RETRY_DELAY_MS, 48L)
-
-    private val sendRetryIncrementMs: Long
-        get() = timingForDevice(6L, 12L)
-
-    private val fastSendRetryIncrementMs: Long
-        get() = timingForDevice(4L, 8L)
-
-    private val maxSendRetryDelayMs: Long
-        get() = timingForDevice(48L, 84L)
-
-    private val writeVerificationSettleMs: Long
-        get() = timingForDevice(WRITE_VERIFICATION_SETTLE_MS, 28L)
-
-    private val errorKeywords = listOf(
-        "connection problem", "invalid mmi", "mmi code", "network error", "invalid", "failed",
-        "cancelled", "try again", "unavailable", "problem", "request timeout",
-        "busy", "sim error", "not available", "service unavailable", "temporary error",
-        "session expired", "not registered", "maintenance", "maintainance"
-    )
-
-    private fun handleAdvancedSessionArmed() {
-        if (!advancedActive || advancedSteps.isEmpty()) return
-        if (retryWindowStartedAt <= 0L) retryWindowStartedAt = SystemClock.elapsedRealtime()
-        hasSeenAdvancedPopup = false
-        hasSeenForegroundPopup = false
-        isProcessing = false
-        lastDialogText = ""
-        lastFinalResponse = ""
-        lastWindowPkg = ""
-        lastWindowId = -1
-        lastMenuSignatureKey = ""
-        lastMenuSignature = null
-        lastScreenSignatureKey = ""
-        lastStepActionKey = ""
-        lastStepActionElapsed = 0L
-        lastRelevantEventElapsed = SystemClock.elapsedRealtime()
-        pendingProcessToken = lastRelevantEventElapsed
-        lastUiReturnElapsed = 0L
-        lastEventFingerprint = ""
-        lastEventElapsed = 0L
-        clearRootRecoveryState()
-        clearPendingAdvance()
-        clearPendingStepAdvance()
-        clearInputWriteMarker()
-        if (shouldKeepAppUiVisible()) {
-            requestAppUiBehindPopup(force = true)
-            startKeepingAppUiVisible()
-        }
-        updateRunningOverlay()
-        startStepTimeout()
-    }
-
+    // region Lifecycle
     override fun onCreate() {
         super.onCreate()
         activeInstance = this
-        bgThread = HandlerThread("UssdNavigationBg").apply { start() }
+        bgThread = HandlerThread("UssdNavBg").apply { start() }
         bgHandler = Handler(bgThread.looper)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
         createNotificationChannel()
-        startForegroundCompat(
-            notificationId = NOTIFICATION_ID,
-            notification = buildNotification(),
-            foregroundServiceType = ForegroundServiceTypes.dataSync
-        )
-        updateRunningOverlay()
-        if (pendingAdvancedArm) {
-            pendingAdvancedArm = false
+        startForegroundCompat()
+        if (pendingArm) {
+            pendingArm = false
             handler.post { handleAdvancedSessionArmed() }
         }
     }
@@ -505,24 +162,23 @@ class UssdNavigationService : AccessibilityService() {
         super.onServiceConnected()
         activeInstance = this
         serviceInfo = AccessibilityServiceInfo().apply {
-            eventTypes  = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
-                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                AccessibilityEvent.TYPE_WINDOWS_CHANGED or
-                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
-                AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED or
-                AccessibilityEvent.TYPE_VIEW_FOCUSED or
-                AccessibilityEvent.TYPE_VIEW_CLICKED or
-                AccessibilityEvent.TYPE_VIEW_SCROLLED
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+                    AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                    AccessibilityEvent.TYPE_WINDOWS_CHANGED or
+                    AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
+                    AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED or
+                    AccessibilityEvent.TYPE_VIEW_FOCUSED or
+                    AccessibilityEvent.TYPE_VIEW_CLICKED or
+                    AccessibilityEvent.TYPE_VIEW_SCROLLED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
-                AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
-                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-                AccessibilityServiceInfo.DEFAULT
-            // Small coalescing window trims duplicate bursts without adding perceptible latency.
-            notificationTimeout = accessibilityNotificationTimeoutMs
+                    AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
+                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                    AccessibilityServiceInfo.DEFAULT
+            notificationTimeout = 32L
         }
-        if (pendingAdvancedArm) {
-            pendingAdvancedArm = false
+        if (pendingArm) {
+            pendingArm = false
             handler.post { handleAdvancedSessionArmed() }
         }
     }
@@ -532,210 +188,97 @@ class UssdNavigationService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         stopForegroundCompat()
-        runCatching { bgThread.quitSafely() }
+        bgThread.quitSafely()
         if (activeInstance === this) activeInstance = null
         cleanupAdvanced()
         clearCallbacks()
+        hideOverlay()
     }
+    // endregion
 
-    @Suppress("DEPRECATION")
-    private fun stopForegroundCompat() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
-        else stopForeground(true)
-    }
-
-    private fun updateRunningOverlay() {
-        if (!shouldShowRunningOverlay()) {
-            hideRunningOverlay()
-            return
-        }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return
-        val wm = windowManager ?: return
-        val overlay = runningOverlayView ?: run {
-            val view = buildRunningOverlayView()
-            val params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                y = dp(18)
-            }
-            val added = runCatching {
-                wm.addView(view, params)
-                true
-            }.getOrElse {
-                Log.w(TAG, "Unable to show running overlay", it)
-                false
-            }
-            if (!added) {
-                clearRunningOverlayReferences()
-                return
-            }
-            view
-        }
-        runningOverlayStatusText?.text = buildRunningOverlayStatusText()
-        runningOverlayDetailText?.text = buildRunningOverlayDetailText()
-        overlay.visibility = View.VISIBLE
-    }
-
-    private fun hideRunningOverlay() {
-        val wm = windowManager ?: return
-        val overlay = runningOverlayView ?: return
-        runCatching { wm.removeView(overlay) }
-            .onFailure { Log.w(TAG, "Unable to remove running overlay", it) }
-        clearRunningOverlayReferences()
-    }
-
-    private fun clearRunningOverlayReferences() {
-        runningOverlayView = null
-        runningOverlayStatusText = null
-        runningOverlayDetailText = null
-    }
-
+    // region Accessibility Event Handling (core logic)
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null) return
+        event ?: return
         if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null && !isForegroundUiActive()) return
-        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
-            event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-            event.eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED &&
-            event.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED &&
-            event.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED &&
-            event.eventType != AccessibilityEvent.TYPE_VIEW_FOCUSED &&
-            event.eventType != AccessibilityEvent.TYPE_VIEW_CLICKED &&
-            event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED
+
+        val type = event.eventType
+        if (type !in setOf(
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+                AccessibilityEvent.TYPE_WINDOWS_CHANGED,
+                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED,
+                AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED,
+                AccessibilityEvent.TYPE_VIEW_FOCUSED,
+                AccessibilityEvent.TYPE_VIEW_CLICKED,
+                AccessibilityEvent.TYPE_VIEW_SCROLLED
+            )
         ) return
+
         if (shouldSkipDuplicateEvent(event)) return
         val pkg = event.packageName?.toString() ?: ""
-        if (advancedActive &&
-            pkg in LAUNCHER_PACKAGES &&
-            (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED)
-        ) {
-            suppressUiReturn()
-            stopKeepingAppUiVisible()
-            updateRunningOverlay()
-            return
-        }
-        if (foregroundUiActive &&
-            !advancedActive &&
-            pkg in LAUNCHER_PACKAGES &&
-            (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED)
-        ) {
-            disarmForegroundUi()
-            stopKeepingAppUiVisible()
-            hasSeenForegroundPopup = false
-            updateRunningOverlay()
-            return
-        }
-        val allowUnknownPkg = pkg.isBlank() || pkg == "android"
-        val otherAppInFront = (advancedActive || isForegroundUiActive()) &&
-            !allowUnknownPkg &&
-            pkg != "com.bingwa.mobile" &&
-            pkg != "com.android.systemui" &&
-            !isPotentialUssdPackage(pkg)
-        if (otherAppInFront) {
-            if (advancedActive) suppressUiReturn()
-            if (isForegroundUiActive() && !advancedActive) {
-                disarmForegroundUi()
-                hasSeenForegroundPopup = false
-            }
-            stopKeepingAppUiVisible()
-            updateRunningOverlay()
-            return
-        }
-        val allowSystemUi = pkg == "com.android.systemui" &&
-                (advancedActive || balanceCallback != null || tokenPurchaseCallback != null || signatureLearningMode || isForegroundUiActive())
-        if (pkg in BLOCKED_PACKAGES && !allowSystemUi) return
-        val windowId = event.windowId
-        val windowChanged = windowId != lastWindowId
-        lastWindowId = windowId
 
-        val root = obtainRootFromEvent(event) ?: getUssdRoot() ?: return
+        // Launcher windows → suppress UI return
+        if (pkg in LAUNCHER_PACKAGES && (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || type == AccessibilityEvent.TYPE_WINDOWS_CHANGED)) {
+            if (advancedActive) { uiReturnSuppressed = true; updateOverlay() }
+            else if (isForegroundUiActive()) { disarmForegroundUi(); hasSeenForegroundPopup = false; updateOverlay() }
+            return
+        }
+
+        // Non‑USSD foreground apps → disarm
+        if (!isPotentialUssdPackage(pkg) && pkg != "android" && pkg != "com.android.systemui") {
+            if (advancedActive) { uiReturnSuppressed = true; updateOverlay() }
+            if (isForegroundUiActive() && !advancedActive) { disarmForegroundUi(); hasSeenForegroundPopup = false; updateOverlay() }
+            return
+        }
+
+        val windowId = event.windowId
+        val root = obtainRootFromEvent(event) ?: return
         try {
             val windowPkg = root.packageName?.toString() ?: ""
-            val allowBlockedWindow = windowPkg == "com.android.systemui" && shouldAllowSystemUiDialogRoot(root, windowPkg)
-            if (windowPkg in BLOCKED_PACKAGES && !allowBlockedWindow) return
+            if (windowPkg in BLOCKED_PACKAGES && !shouldAllowSystemUi(root, windowPkg)) return
+            lastWindowId = windowId
             lastWindowPkg = windowPkg
 
-            val requireStrictPopupScope = shouldRequireStrictPopupScope()
-            val eventDialogText = extractDialogTextFromEvent(event)
-            val snapshot = if (
-                eventDialogText.isBlank() ||
-                advancedActive ||
-                isForegroundUiActive() ||
-                balanceCallback != null ||
-                tokenPurchaseCallback != null
-            ) {
-                capturePreferredPopupSnapshot(root, requireStrictDialog = requireStrictPopupScope)
-            } else {
-                null
-            }
-            if (requireStrictPopupScope && snapshot == null && eventDialogText.isBlank()) return
-            val dialogText = snapshot?.dialogText
-                ?: normalizeCollapsedText(eventDialogText)
+            val requireStrict = shouldRequireStrictPopupScope()
+            val snapshot = if (advancedActive || isForegroundUiActive() || balanceCallback != null || tokenPurchaseCallback != null) {
+                capturePreferredPopupSnapshot(root, requireStrict)
+            } else null
+            val dialogText = snapshot?.dialogText ?: normalizeCollapsedText(extractDialogText(event))
             if (dialogText.isBlank()) return
+
             val lower = dialogText.lowercase()
             if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return
-            val looksLikeDialog = when {
-                snapshot != null -> looksLikeUssdDialog(
-                    root = root,
-                    snapshot = snapshot,
-                    allTextLower = lower,
-                    windowPackageName = windowPkg
-                )
-                else -> looksLikeUssdDialogFast(allTextLower = lower, windowPackageName = windowPkg)
+
+            val looksLikeDialog = if (snapshot != null) {
+                looksLikeUssdDialog(root, snapshot, lower, windowPkg)
+            } else {
+                looksLikeUssdDialogFast(lower, windowPkg)
             }
             if (!looksLikeDialog) return
-            lastRelevantEventElapsed = SystemClock.elapsedRealtime()
-            rememberRecentUssdContext(
-                root = root,
-                snapshot = snapshot,
-                windowId = windowId,
-                windowPkg = windowPkg,
-                dialogText = dialogText,
-                strictDialog = requireStrictPopupScope
-            )
 
+            lastRelevantEventElapsed = SystemClock.elapsedRealtime()
+            rememberRecentUssdContext(root, snapshot, windowId, windowPkg, dialogText, requireStrict)
+
+            // ------- Advanced flow -------
             if (advancedActive && advancedSteps.isNotEmpty()) {
                 if (!hasSeenAdvancedPopup) {
                     hasSeenAdvancedPopup = true
-                    updateRunningOverlay()
+                    updateOverlay()
                     requestAppUiBehindPopup(force = true)
                     startKeepingAppUiVisible()
-                } else if (windowChanged) {
+                } else if (windowId != lastWindowId) {
                     requestAppUiBehindPopup()
                     startKeepingAppUiVisible()
                 }
+
                 cancelStepTimeout()
                 lastFinalResponse = dialogText
-                capturePopupTranscript(snapshot, dialogText)
+
                 if (signatureLearningMode) {
-                    val learningSnapshot = snapshot ?: return
-                    val learningLower = learningSnapshot.dialogText.lowercase()
-                    if (!NON_USSD_DIALOG_HINTS.any { learningLower.contains(it) } &&
-                        looksLikeUssdDialog(
-                            root = root,
-                            snapshot = learningSnapshot,
-                            allTextLower = learningLower,
-                            windowPackageName = windowPkg
-                        )
-                    ) {
-                        captureLearningDialog(learningSnapshot)
-                    }
+                    captureLearningDialogIfNeeded(snapshot, root, windowPkg)
                 }
 
-                // Prevent "next-step" injections on the same dialog right after we click Send/OK.
-                if (shouldWaitForStepTransition(
-                        dialogText = dialogText,
-                        windowChanged = windowChanged,
-                        root = root,
-                        snapshot = snapshot
-                    )
-                ) return
+                if (shouldWaitForStepTransition(dialogText, windowId, root, snapshot)) return
 
                 if (errorKeywords.any { lower.contains(it) }) {
                     if (signatureLearningMode && currentStep >= advancedSteps.size) {
@@ -745,33 +288,22 @@ class UssdNavigationService : AccessibilityService() {
                     }
                     return
                 }
-                if (currentStep >= advancedSteps.size && isTransientResponseText(lower)) return
-                if (pendingStepAdvanceFromKey.isNotBlank() &&
-                    handlePendingStepAdvance(
-                        windowId = windowId,
-                        windowPkg = windowPkg,
-                        root = root,
-                        snapshot = snapshot,
-                        dialogText = dialogText
-                    )
-                ) return
-                val dialogChanged = windowChanged || dialogText != lastDialogText
+
+                if (currentStep >= advancedSteps.size && isTransientResponse(lower)) return
+
+                if (pendingStepAdvanceFromKey.isNotBlank() && handlePendingStepAdvance(windowId, windowPkg, root, snapshot, dialogText)) {
+                    return
+                }
+
+                val dialogChanged = windowId != lastWindowId || dialogText != lastDialogText
                 lastDialogText = dialogText
+
                 if (!isProcessing) {
-                    // If we already wrote an input and are waiting to verify/send, handle that immediately
-                    // on the next relevant event (event-driven, no polling loops).
                     if (pendingPhase != PendingPhase.NONE) {
                         attemptPendingAdvance(root)
                         return
                     }
-                    val screenKey = buildScreenSignatureKey(
-                        stepIndex = currentStep,
-                        windowId = windowId,
-                        windowPkg = windowPkg,
-                        root = root,
-                        snapshot = snapshot,
-                        dialogText = dialogText
-                    )
+                    val screenKey = buildScreenSignatureKey(currentStep, windowId, windowPkg, root, snapshot, dialogText)
                     if (!dialogChanged && screenKey == lastScreenSignatureKey) return
                     lastScreenSignatureKey = screenKey
                     pendingProcessToken = SystemClock.elapsedRealtime()
@@ -780,526 +312,74 @@ class UssdNavigationService : AccessibilityService() {
                 return
             }
 
+            // Foreground UI mode
             if (isForegroundUiActive()) {
                 refreshForegroundUi()
                 if (!hasSeenForegroundPopup) {
                     hasSeenForegroundPopup = true
-                    updateRunningOverlay()
+                    updateOverlay()
                     requestAppUiBehindPopup(force = true)
                     startKeepingAppUiVisible()
-                } else if (windowChanged) {
+                } else if (windowId != lastWindowId) {
                     requestAppUiBehindPopup()
                     startKeepingAppUiVisible()
                 }
                 return
             }
 
+            // Balance / token callbacks
             handleCallbackDialogs(lower, dialogText)
         } finally {
             root.recycle()
         }
     }
 
-    private fun extractDialogTextFromEvent(event: AccessibilityEvent): String {
-        val parts = mutableListOf<String>()
-        runCatching {
-            event.text?.forEach { cs ->
-                val s = cs?.toString()?.trim().orEmpty()
-                if (s.isNotBlank()) parts += s
-            }
-        }
-        return normalizeCollapsedText(parts.distinct().joinToString(" "))
-    }
-
+    // region Event Dedup
     private fun shouldSkipDuplicateEvent(event: AccessibilityEvent): Boolean {
         val now = SystemClock.elapsedRealtime()
         val fingerprint = buildEventFingerprint(event)
-        val isDuplicate = fingerprint.isNotBlank() &&
-            fingerprint == lastEventFingerprint &&
-            now - lastEventElapsed <= duplicateEventWindowMs
+        val duplicate = fingerprint.isNotBlank() && fingerprint == lastEventFingerprint && now - lastEventElapsed <= DUPLICATE_EVENT_WINDOW_MS
         lastEventFingerprint = fingerprint
         lastEventElapsed = now
-        return isDuplicate
+        return duplicate
     }
 
     private fun buildEventFingerprint(event: AccessibilityEvent): String {
         val pkg = event.packageName?.toString().orEmpty()
         val cls = event.className?.toString().orEmpty()
-        val text = extractDialogTextFromEvent(event)
+        val text = extractDialogText(event)
         val contentType = runCatching { event.contentChangeTypes }.getOrDefault(0)
         return "${event.eventType}|${event.windowId}|$contentType|$pkg|$cls|$text"
     }
 
-    private fun looksLikeUssdDialogFast(allTextLower: String, windowPackageName: String): Boolean {
-        val hasUssdLanguage = USSD_HINTS.any { allTextLower.contains(it) } ||
-            errorKeywords.any { allTextLower.contains(it) }
-        val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(allTextLower)
-        if (windowPackageName == "android" || windowPackageName.isBlank()) {
-            if (!advancedActive && !isForegroundUiActive()) return false
-            return hasUssdLanguage || menuLike
-        }
-        val likelyUssdPackage = isPotentialUssdPackage(windowPackageName)
-        if (!likelyUssdPackage && !advancedActive && !isForegroundUiActive()) return false
-        if (advancedActive || isForegroundUiActive()) {
-            if (hasSeenAdvancedPopup || hasSeenForegroundPopup) return true
-            return hasUssdLanguage || menuLike
-        }
-        return likelyUssdPackage && hasUssdLanguage
+    private fun extractDialogText(event: AccessibilityEvent): String {
+        val parts = mutableListOf<String>()
+        runCatching { event.text?.forEach { cs -> cs?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { parts += it } } }
+        return normalizeCollapsedText(parts.distinct().joinToString(" "))
     }
+    // endregion
 
-    private fun looksLikeUssdDialog(
-        root: AccessibilityNodeInfo,
-        snapshot: UssdTreeSnapshot,
-        allTextLower: String,
-        windowPackageName: String
-    ): Boolean {
-        val hasUssdLanguage = USSD_HINTS.any { allTextLower.contains(it) }
-        val hasEditField = snapshot.hasEditableField
-        val hasSendButton = snapshot.hasSendButton
-        val hasDismissButton = snapshot.hasDismissButton
-        val hasMenuOptions = parseMenuSignature(snapshot) != null
-        val likelyUssdPackage = isPotentialUssdPackage(windowPackageName) ||
-            ((windowPackageName == "android" || windowPackageName.isBlank()) && (hasUssdLanguage || hasMenuOptions))
-        val hasDialogLayout = hasDialogLayout(root, snapshot)
-        return (hasEditField && (hasSendButton || hasUssdLanguage || hasMenuOptions))
-                || ((hasSendButton || hasDismissButton) && (hasUssdLanguage || hasMenuOptions))
-                || (hasMenuOptions && hasUssdLanguage)
-                || (hasDialogLayout && likelyUssdPackage && (hasEditField || hasSendButton || hasDismissButton))
-                || ((advancedActive || isForegroundUiActive()) && likelyUssdPackage && (hasEditField || hasSendButton || hasDismissButton || hasMenuOptions))
-    }
-
-    private fun shouldRequireStrictPopupScope(): Boolean {
-        if (signatureLearningMode) return true
-        if (!advancedActive) return false
-        if (pendingPhase != PendingPhase.NONE || !pendingExpectedValue.isNullOrBlank()) return true
-        val step = advancedSteps.getOrNull(currentStep).orEmpty()
-        return step == "INPUT_PHONE" || (step.isNotBlank() && !step.all(Char::isDigit))
-    }
-
-    private fun shouldUseEventTextFallback(): Boolean =
-        !advancedActive &&
-            !signatureLearningMode &&
-            !isForegroundUiActive() &&
-            balanceCallback == null &&
-            tokenPurchaseCallback == null
-
-    private fun capturePreferredPopupSnapshot(
-        root: AccessibilityNodeInfo,
-        requireStrictDialog: Boolean
-    ): UssdTreeSnapshot? {
-        val strictSnapshot = captureTreeSnapshotStrictDialog(root)
-        if (strictSnapshot != null) return strictSnapshot
-        val relaxedSnapshot = captureTreeSnapshot(root)
-        if (requireStrictDialog && !shouldAllowRelaxedDialogFallback(root, relaxedSnapshot)) return null
-        return relaxedSnapshot
-    }
-
-    private fun obtainInteractionRoot(
-        root: AccessibilityNodeInfo,
-        requireStrictDialog: Boolean
-    ): AccessibilityNodeInfo? {
-        findDialogCaptureRoot(root)?.let { return it }
-        if (requireStrictDialog && !shouldAllowRelaxedDialogFallback(root)) return null
-        return AccessibilityNodeInfo.obtain(root)
-    }
-
-    private fun shouldAllowRelaxedDialogFallback(
-        root: AccessibilityNodeInfo,
-        snapshot: UssdTreeSnapshot? = null
-    ): Boolean {
-        if (!advancedActive &&
-            balanceCallback == null &&
-            tokenPurchaseCallback == null &&
-            !signatureLearningMode &&
-            !isForegroundUiActive()
-        ) {
-            return false
-        }
-        val pkg = root.packageName?.toString().orEmpty()
-        val allowedPkg = pkg.isBlank() ||
-            pkg == "android" ||
-            pkg == "com.android.systemui" ||
-            isPotentialUssdPackage(pkg)
-        if (!allowedPkg) return false
-
-        val effectiveSnapshot = snapshot ?: captureTreeSnapshot(root)
-        val dialogText = effectiveSnapshot.dialogText
-        if (dialogText.isBlank()) return false
-        val lower = dialogText.lowercase()
-        if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return false
-
-        return looksLikeUssdDialog(root, effectiveSnapshot, lower, pkg) ||
-            looksLikeUssdDialogFast(allTextLower = lower, windowPackageName = pkg) ||
-            hasDialogLayout(root, effectiveSnapshot) ||
-            effectiveSnapshot.hasEditableField ||
-            effectiveSnapshot.hasSendButton ||
-            effectiveSnapshot.hasDismissButton
-    }
-
-    private fun buildScreenSignatureKey(
-        stepIndex: Int,
-        windowId: Int,
-        windowPkg: String,
-        root: AccessibilityNodeInfo,
-        snapshot: UssdTreeSnapshot?,
-        dialogText: String
-    ): String {
-        val cls = root.className?.toString().orEmpty()
-        val normalized = normalizeCollapsedText(dialogText)
-        val flags = if (snapshot != null) {
-            "${snapshot.hasEditableField}|${snapshot.hasSendButton}|${snapshot.hasDismissButton}|${snapshot.inputStateSignature}"
-        } else {
-            ""
-        }
-        return "$stepIndex|$windowId|$windowPkg|$cls|$flags|$normalized"
-    }
-
-    private fun buildTransitionSignatureKey(
-        windowId: Int,
-        windowPkg: String,
-        root: AccessibilityNodeInfo,
-        snapshot: UssdTreeSnapshot?,
-        dialogText: String
-    ): String {
-        val cls = root.className?.toString().orEmpty()
-        val normalized = normalizeCollapsedText(dialogText)
-        val flags = if (snapshot != null) {
-            "${snapshot.hasEditableField}|${snapshot.hasSendButton}|${snapshot.hasDismissButton}|${snapshot.inputStateSignature}"
-        } else {
-            ""
-        }
-        return "$windowId|$windowPkg|$cls|$flags|$normalized"
-    }
-
-    private fun buildStepAdvanceSignatureKey(
-        windowId: Int,
-        windowPkg: String,
-        root: AccessibilityNodeInfo,
-        snapshot: UssdTreeSnapshot?,
-        dialogText: String
-    ): String {
-        val cls = root.className?.toString().orEmpty()
-        val normalized = normalizeCollapsedText(dialogText)
-        val flags = if (snapshot != null) {
-            "${snapshot.hasEditableField}|${snapshot.hasSendButton}|${snapshot.hasDismissButton}"
-        } else {
-            ""
-        }
-        val menuFingerprint = when {
-            snapshot != null -> {
-                parseMenuSignature(snapshot)?.let { menu ->
-                    buildString {
-                        append(menu.normalizedTitle)
-                        append('|')
-                        append(
-                            menu.options.entries.joinToString(";") { (key, value) ->
-                                "$key:${normalizeMenuText(value)}"
-                            }
-                        )
-                    }
-                }.orEmpty()
-            }
-            else -> ""
-        }
-        return "$windowId|$windowPkg|$cls|$flags|$normalized|$menuFingerprint"
-    }
-
-    private fun processStep() {
-        if (!advancedActive) { isProcessing = false; return }
-        if (pendingStepAdvanceFromKey.isNotBlank()) { isProcessing = false; return }
-        val requireStrictPopupScope = shouldRequireStrictPopupScope()
-        val recentContext = obtainRecentUssdContext(requireStrictDialog = requireStrictPopupScope)
-        val root = recentContext?.root ?: getUssdRoot() ?: run {
-            if (shouldWaitForRootRecovery()) {
-                isProcessing = false
-                waitForRootRecovery()
-            } else {
-                clearRootRecoveryState()
-                isProcessing = false
-                handler.postDelayed({ restartFromBeginning() }, 700)
-            }
-            return
-        }
-        try {
-            clearRootRecoveryState()
-            val windowPkg = recentContext?.windowPkg ?: (root.packageName?.toString() ?: "")
-            val effectiveSnapshot = recentContext?.snapshot ?: capturePreferredPopupSnapshot(
-                root = root,
-                requireStrictDialog = requireStrictPopupScope
-            )
-            if (effectiveSnapshot == null) {
-                isProcessing = false
-                pendingProcessToken = SystemClock.elapsedRealtime()
-                scheduleProcessStep(dialogChanged = false)
-                return
-            }
-            val interactionRoot = obtainInteractionRoot(
-                root = root,
-                requireStrictDialog = requireStrictPopupScope
-            ) ?: run {
-                isProcessing = false
-                pendingProcessToken = SystemClock.elapsedRealtime()
-                scheduleProcessStep(dialogChanged = false)
-                return
-            }
-            try {
-                val freshDialogText = effectiveSnapshot.dialogText
-                val dialogText = freshDialogText.ifBlank { lastFinalResponse }
-                val lower = dialogText.lowercase()
-                if (shouldWaitForStepTransition(
-                        dialogText = dialogText,
-                        windowChanged = false,
-                        root = interactionRoot,
-                        snapshot = effectiveSnapshot
-                    )
-                ) {
-                    isProcessing = false
-                    pendingProcessToken = SystemClock.elapsedRealtime()
-                    scheduleProcessStep(dialogChanged = false)
-                    return
-                }
-                if (dialogText.isNotBlank()) {
-                    lastFinalResponse = dialogText
-                }
-                if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) {
-                    isProcessing = false
-                    return
-                }
-                if (!looksLikeUssdDialogFast(allTextLower = lower, windowPackageName = windowPkg)) {
-                    isProcessing = false
-                    return
-                }
-                if (currentStep >= advancedSteps.size) {
-                    if (shouldWaitForFinalResponse(effectiveSnapshot, dialogText)) {
-                        isProcessing = false
-                        pendingProcessToken = SystemClock.elapsedRealtime()
-                        scheduleProcessStep(dialogChanged = false, overrideDelayMs = rapidPostPopupPollMs)
-                        return
-                    }
-                    val finalText = lastFinalResponse
-                    Log.d(TAG, "All steps complete, finalText='$finalText'")
-                    finishAdvancedDispatch(finalText)
-                    return
-                }
-
-                val step = advancedSteps[currentStep]
-                val menuSignature = parseMenuSignature(effectiveSnapshot)
-                if (step != "INPUT_PHONE") {
-                    captureSignatureStepIfNeeded(currentStep, step, menuSignature, effectiveSnapshot, dialogText)
-                }
-                val resolved = resolveStepInput(currentStep, step, menuSignature)
-                if (!advancedActive) {
-                    isProcessing = false
-                    return
-                }
-                val valueToEnter = resolved.first
-                val selectedMenuLabel = resolved.second
-
-                val inputField = findEditableFieldForStep(interactionRoot, step, dialogText)
-                try {
-                    val dialogAllowsPhoneInput = step == "INPUT_PHONE" && dialogSuggestsPhoneInput(lower)
-                    if (step == "INPUT_PHONE" && inputField == null && !dialogAllowsPhoneInput) {
-                        // Wait for the correct prompt/dialog instead of blindly injecting the phone number.
-                        isProcessing = false
-                        pendingProcessToken = SystemClock.elapsedRealtime()
-                        scheduleProcessStep(dialogChanged = false)
-                        return
-                    }
-                    val likelyTypedMenuReply = shouldTreatNumericReplyAsTextInput(
-                        step = step,
-                        valueToEnter = valueToEnter,
-                        snapshot = effectiveSnapshot,
-                        dialogTextLower = lower,
-                        menuSignature = menuSignature
-                    )
-                    val shouldPreferTextInput = inputField != null ||
-                        shouldTreatStepAsTextInput(
-                            step = step,
-                            valueToEnter = valueToEnter,
-                            selectedMenuLabel = selectedMenuLabel
-                        ) ||
-                        likelyTypedMenuReply ||
-                        dialogSuggestsTextInput(lower) ||
-                        dialogAllowsPhoneInput
-                    if (!shouldPreferTextInput &&
-                        step.all(Char::isDigit) &&
-                        menuSignature != null &&
-                        menuSignature.options.isNotEmpty()
-                    ) {
-                        // Only enforce menu-option matching when this popup behaves like a menu.
-                        // Typed reply prompts can still contain numbered text from the previous step.
-                        if (!menuSignature.options.containsKey(valueToEnter)) {
-                            isProcessing = false
-                            pendingProcessToken = SystemClock.elapsedRealtime()
-                            scheduleProcessStep(dialogChanged = false)
-                            return
-                        }
-                    }
-                    if (inputField == null &&
-                        shouldPreferTextInput &&
-                        !dialogSuggestsTextInput(lower) &&
-                        !dialogAllowsPhoneInput &&
-                        !likelyTypedMenuReply
-                    ) {
-                        if (!effectiveSnapshot.hasEditableField) {
-                            val opportunisticWrite = writeValueToField(interactionRoot, valueToEnter)
-                            if (!opportunisticWrite) {
-                                isProcessing = false
-                                pendingProcessToken = SystemClock.elapsedRealtime()
-                                scheduleProcessStep(dialogChanged = false)
-                                return
-                            }
-                        }
-                    }
-                    if (inputField != null || shouldPreferTextInput) {
-                        val wroteValue = ensureExpectedValueWritten(
-                            root = interactionRoot,
-                            expectedValue = valueToEnter,
-                            preferredField = inputField
-                        )
-                        val inlineVerified = verifyExpectedInputFromRoot(
-                            root = interactionRoot,
-                            expectedValue = valueToEnter,
-                            existingField = inputField
-                        )
-                        val trustedFreshWrite = shouldTrustFreshInputWrite(
-                            wroteValue = wroteValue,
-                            expectedValue = valueToEnter,
-                            existingField = inputField,
-                            snapshot = effectiveSnapshot,
-                            dialogTextLower = lower
-                        )
-                        val recentVerifiedWrite = inlineVerified ||
-                            hasRecentVerifiedInput(valueToEnter) ||
-                            trustedFreshWrite
-                        if (!isFinalSignatureLearningStep(currentStep) &&
-                            wroteValue &&
-                            recentVerifiedWrite &&
-                            tryImmediateVerifiedSend(
-                                root = interactionRoot,
-                                field = inputField,
-                                expectedValue = valueToEnter,
-                                alreadyVerified = inlineVerified
-                            )
-                        ) {
-                            markStepAction(dialogText, root = interactionRoot)
-                            startPendingStepAdvance(interactionRoot, dialogText)
-                            return
-                        }
-                        if (!isFinalSignatureLearningStep(currentStep) &&
-                            wroteValue &&
-                            shouldAttemptAggressiveImmediateSubmit(
-                                snapshot = effectiveSnapshot,
-                                dialogTextLower = lower,
-                                step = step,
-                                expectedValue = valueToEnter,
-                                field = inputField
-                            ) &&
-                            tryAggressiveImmediateSubmitAfterWrite(
-                                root = interactionRoot,
-                                field = inputField,
-                                expectedValue = valueToEnter
-                            )
-                        ) {
-                            markStepAction(dialogText, root = interactionRoot)
-                            startPendingStepAdvance(interactionRoot, dialogText)
-                            return
-                        }
-                        // Fast path: stop polling loops. Set a pending phase and let the next accessibility
-                        // event drive verification/send immediately (with a short safety kick).
-                        if (isFinalSignatureLearningStep(currentStep)) {
-                            // Keep legacy behavior for learning flows (we don't want to risk changing capture timing).
-                            val delay = when {
-                                wroteValue && hasSeenAdvancedPopup -> rapidPostPopupVerifyMs
-                                wroteValue -> fastVerifyPollMs
-                                else -> verifyPollMs
-                            }
-                            if (delay <= 0L) handler.post { verifyLearningFinalInputThenDismiss(valueToEnter, 0, 0) }
-                            else handler.postDelayed({ verifyLearningFinalInputThenDismiss(valueToEnter, 0, 0) }, delay)
-                        } else {
-                            startPendingAdvance(
-                                expectedValue = valueToEnter,
-                                root = interactionRoot,
-                                dialogText = dialogText,
-                                snapshot = effectiveSnapshot
-                            )
-                        }
-                        return
-                    }
-                } finally {
-                    inputField?.recycle()
-                }
-
-                val menuBtn = locateMenuButton(interactionRoot, valueToEnter, selectedMenuLabel)
-
-                if (menuBtn != null) {
-                    val clicked = try { performClick(menuBtn) } finally { menuBtn.recycle() }
-                    if (clicked) {
-                        markStepAction(dialogText, root = interactionRoot, snapshot = effectiveSnapshot)
-                        startPendingStepAdvance(interactionRoot, dialogText)
-                        return
-                    }
-                    isProcessing = false
-                    dismissErrorAndRestart()
-                    return
-                }
-
-                if (menuSignature != null || hasSeenAdvancedPopup) {
-                    isProcessing = false
-                    pendingProcessToken = SystemClock.elapsedRealtime()
-                    scheduleProcessStep(dialogChanged = false)
-                    return
-                }
-
-                isProcessing = false
-                dismissErrorAndRestart()
-            } finally {
-                interactionRoot.recycle()
-            }
-        } finally {
-            root.recycle()
-        }
-    }
-
-    private fun isFinalSignatureLearningStep(stepIndex: Int): Boolean =
-        signatureLearningMode && stepIndex == advancedSteps.lastIndex
-
+    // region Root & Window Acquisition (official APIs)
     private fun getUssdRoot(): AccessibilityNodeInfo? {
-        val allowSystemWindows = advancedActive || balanceCallback != null || tokenPurchaseCallback != null || signatureLearningMode || isForegroundUiActive()
-        val primary = rootInActiveWindow
-        if (primary != null) {
-            val pkg = primary.packageName?.toString() ?: ""
-            val allowBlocked = pkg !in BLOCKED_PACKAGES || shouldAllowSystemUiDialogRoot(primary, pkg)
-            if (
-                allowBlocked &&
-                (isPotentialUssdPackage(pkg) ||
-                        shouldAllowAndroidDialogRoot(primary, pkg) ||
-                        shouldAllowSystemUiDialogRoot(primary, pkg))
-            ) {
-                return primary
+        // 1) Try active window
+        val active = rootInActiveWindow
+        if (active != null) {
+            val pkg = active.packageName?.toString() ?: ""
+            if (isPotentialUssdPackage(pkg) || shouldAllowSystemUi(active, pkg) || pkg == "android") {
+                return active
             }
-            primary.recycle()
+            active.recycle()
         }
+
+        // 2) Use getWindows() (official API, works on all Android versions with accessibility)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            val visibleWindows = try { windows } catch (_: Exception) { return null }
-            for (window in visibleWindows) {
-                if (!allowSystemWindows) {
-                    if (window.type == AccessibilityWindowInfo.TYPE_SYSTEM ||
-                        window.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY
-                    ) continue
-                }
-                val root = try { window.root } catch (_: Exception) { null } ?: continue
+            val windows = try { windows } catch (_: Exception) { return null }
+            for (win in windows) {
+                // Skip overlays if not needed
+                if (win.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) continue
+                val root = try { win.root } catch (_: Exception) { null } ?: continue
                 val pkg = root.packageName?.toString() ?: ""
-                val allowBlocked = pkg !in BLOCKED_PACKAGES || shouldAllowSystemUiDialogRoot(root, pkg)
-                if (!allowBlocked) {
-                    root.recycle()
-                    continue
-                }
-                if (
-                    isPotentialUssdPackage(pkg) ||
-                    shouldAllowAndroidDialogRoot(root, pkg) ||
-                    shouldAllowSystemUiDialogRoot(root, pkg)
-                ) {
+                if (isPotentialUssdPackage(pkg) || shouldAllowSystemUi(root, pkg) || pkg == "android") {
                     return root
                 }
                 root.recycle()
@@ -1329,84 +409,46 @@ class UssdNavigationService : AccessibilityService() {
             current?.recycle()
             source.recycle()
         }
-
         val candidate = result ?: return null
         val pkg = candidate.packageName?.toString() ?: ""
-        val allowBlocked = pkg !in BLOCKED_PACKAGES || shouldAllowSystemUiDialogRoot(candidate, pkg)
-        val allowed = allowBlocked &&
-            (isPotentialUssdPackage(pkg) ||
-                shouldAllowAndroidDialogRoot(candidate, pkg) ||
-                shouldAllowSystemUiDialogRoot(candidate, pkg))
-        if (!allowed) {
+        if (!isPotentialUssdPackage(pkg) && !shouldAllowSystemUi(candidate, pkg) && pkg != "android") {
             candidate.recycle()
             return null
         }
         return candidate
     }
 
-    private fun shouldAllowSystemUiDialogRoot(root: AccessibilityNodeInfo, pkg: String): Boolean {
+    private fun shouldAllowSystemUi(root: AccessibilityNodeInfo, pkg: String): Boolean {
         if (pkg != "com.android.systemui") return false
-        if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null && !signatureLearningMode && !isForegroundUiActive()) return false
+        if (!advancedActive && !isForegroundUiActive() && balanceCallback == null && tokenPurchaseCallback == null && !signatureLearningMode) return false
         if (!hasDialogLayout(root)) return false
-        val summary = scanNodeSummary(root)
-        val dialogText = normalizeCollapsedText(summary.textTokens.joinToString(" "))
-        if (dialogText.isBlank()) return false
-        val lower = dialogText.lowercase()
+        val text = normalizeCollapsedText(extractAllText(root))
+        if (text.isBlank()) return false
+        val lower = text.lowercase()
         if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return false
-        val hasAction = summary.hasSendButton || summary.hasDismissButton || summary.hasEditableField
+        val hasAction = hasSendOrOkButton(root) || hasDismissButton(root) || hasEditableField(root)
         if (!hasAction) return false
         val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(lower)
         val hasUssdLanguage = USSD_HINTS.any { lower.contains(it) } || errorKeywords.any { lower.contains(it) }
-        val startupRelaxed = advancedActive &&
-            !hasSeenUssdPopup() &&
-            (SystemClock.elapsedRealtime() - lastRelevantEventElapsed) <= STARTUP_UI_KEEP_VISIBLE_MS
-        return hasUssdLanguage || menuLike || startupRelaxed
+        return hasUssdLanguage || menuLike
     }
 
-    private fun shouldAllowAndroidDialogRoot(root: AccessibilityNodeInfo, pkg: String): Boolean {
-        if (!(pkg.isBlank() || pkg == "android")) return false
-        if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null && !isForegroundUiActive()) return false
-        if (!hasDialogLayout(root)) return false
-        val summary = scanNodeSummary(root)
-        val dialogText = normalizeCollapsedText(summary.textTokens.joinToString(" "))
-        if (dialogText.isBlank()) return false
-        val lower = dialogText.lowercase()
-        if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return false
-        val hasAction = summary.hasSendButton || summary.hasDismissButton || summary.hasEditableField
-        if (!hasAction) return false
-        val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(lower)
-        val hasUssdLanguage = USSD_HINTS.any { lower.contains(it) } || errorKeywords.any { lower.contains(it) }
-        val startupRelaxed = advancedActive &&
-            !hasSeenUssdPopup() &&
-            (SystemClock.elapsedRealtime() - lastRelevantEventElapsed) <= STARTUP_UI_KEEP_VISIBLE_MS
-        return hasUssdLanguage || menuLike || startupRelaxed
+    private fun isPotentialUssdPackage(pkg: String): Boolean {
+        if (pkg.isBlank() || pkg == "android") return false
+        if (pkg in USSD_PACKAGES) return true
+        val lower = pkg.lowercase()
+        return USSD_PACKAGE_HINTS.any { lower.contains(it) }
     }
 
-    private data class MenuOptionDescriptor(
-        val key: String,
-        val label: String,
-        val normalizedLabel: String,
-        val tokens: Set<String>
-    )
+    private fun hasDialogLayout(node: AccessibilityNodeInfo): Boolean {
+        val cls = node.className?.toString().orEmpty()
+        return cls.contains("Dialog", ignoreCase = true) ||
+                cls.contains("AlertDialog", ignoreCase = true) ||
+                cls.contains("BottomSheet", ignoreCase = true)
+    }
+    // endregion
 
-    private data class ParsedMenuSignature(
-        val title: String,
-        val options: LinkedHashMap<String, String>,
-        val normalizedTitle: String,
-        val titleTokens: Set<String>,
-        val optionDescriptors: List<MenuOptionDescriptor>,
-        val normalizedOptionLabels: Set<String>
-    )
-
-    private data class LearnedSignatureContext(
-        val step: UssdSignatureStep,
-        val normalizedSelectedLabel: String,
-        val selectedLabelTokens: Set<String>,
-        val normalizedMenuTitle: String,
-        val menuTitleTokens: Set<String>,
-        val normalizedOptionSnapshot: Set<String>
-    )
-
+    // region Snapshot & Parsing
     private data class UssdTreeSnapshot(
         val dialogText: String,
         val normalizedDialogText: String,
@@ -1417,1639 +459,445 @@ class UssdNavigationService : AccessibilityService() {
         val inputStateSignature: String
     )
 
-    private data class DialogCaptureCandidate(
-        val node: AccessibilityNodeInfo,
-        val score: Int
-    )
+    private fun capturePreferredPopupSnapshot(root: AccessibilityNodeInfo, requireStrict: Boolean): UssdTreeSnapshot? {
+        val strict = captureStrictSnapshot(root)
+        if (strict != null) return strict
+        if (requireStrict && !shouldAllowRelaxedFallback(root)) return null
+        return captureSnapshot(root)
+    }
 
-    private data class StructuredMenuBlock(
-        val titleLines: List<String>,
-        val options: LinkedHashMap<String, String>
-    )
+    private fun captureStrictSnapshot(root: AccessibilityNodeInfo): UssdTreeSnapshot? {
+        val captureRoot = findDialogCaptureRoot(root) ?: return null
+        return try { buildSnapshot(captureRoot) } finally { captureRoot.recycle() }
+    }
 
-    private data class MenuOptionMatch(
-        val optionKey: String,
-        val optionLabel: String,
-        val autoAdjustSafe: Boolean
-    )
+    private fun captureSnapshot(root: AccessibilityNodeInfo): UssdTreeSnapshot {
+        val captureRoot = findDialogCaptureRoot(root) ?: AccessibilityNodeInfo.obtain(root)
+        return try { buildSnapshot(captureRoot) } finally { captureRoot.recycle() }
+    }
 
-    private data class ScoredMenuOptionMatch(
-        val descriptor: MenuOptionDescriptor,
-        val sharedTokenCount: Int,
-        val strongSharedTokenCount: Int,
-        val expectedTokenCount: Int,
-        val candidateTokenCount: Int,
-        val score: Double
-    )
+    private fun buildSnapshot(node: AccessibilityNodeInfo): UssdTreeSnapshot {
+        val acc = TreeScanAccumulator()
+        collectTreeSnapshot(node, acc)
+        val dialogText = normalizeCollapsedText(acc.textTokens.joinToString(" "))
+        return UssdTreeSnapshot(
+            dialogText = dialogText,
+            normalizedDialogText = dialogText,
+            textTokens = acc.textTokens.toList(),
+            hasEditableField = acc.hasEditableField,
+            hasSendButton = acc.hasSendButton,
+            hasDismissButton = acc.hasDismissButton,
+            inputStateSignature = acc.bestInputSignature
+        )
+    }
 
-    private fun scheduleProcessStep(dialogChanged: Boolean, overrideDelayMs: Long? = null) {
+    private class TreeScanAccumulator {
+        val textTokens = mutableListOf<String>()
+        var hasEditableField = false
+        var hasSendButton = false
+        var hasDismissButton = false
+        var bestInputSignature = ""
+        var bestInputScore = Int.MIN_VALUE
+    }
+
+    private fun collectTreeSnapshot(node: AccessibilityNodeInfo, acc: TreeScanAccumulator) {
+        try {
+            node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { acc.textTokens += it }
+            node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { acc.textTokens += it }
+            if (isTextEntryNode(node)) {
+                acc.hasEditableField = true
+                val score = scoreTextEntryCandidate(node)
+                if (score >= acc.bestInputScore) {
+                    acc.bestInputScore = score
+                    acc.bestInputSignature = buildInputNodeSignature(node)
+                }
+            }
+            if (isSendActionNode(node)) acc.hasSendButton = true
+            if (isDismissActionNode(node)) acc.hasDismissButton = true
+            for (i in 0 until node.childCount) {
+                val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+                collectTreeSnapshot(child, acc)
+                child.recycle()
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun findDialogCaptureRoot(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val rootBounds = Rect().also { runCatching { root.getBoundsInScreen(it) } }
+        val candidates = mutableListOf<DialogCaptureCandidate>()
+        collectDialogCandidates(root, rootBounds, candidates, 0)
+        return candidates.maxByOrNull { it.score }?.node?.let { AccessibilityNodeInfo.obtain(it) }
+    }
+
+    private data class DialogCaptureCandidate(val node: AccessibilityNodeInfo, val score: Int)
+
+    private fun collectDialogCandidates(node: AccessibilityNodeInfo, rootBounds: Rect, into: MutableList<DialogCaptureCandidate>, depth: Int) {
+        val score = scoreDialogCandidate(node, rootBounds, depth)
+        if (score > 0) into += DialogCaptureCandidate(AccessibilityNodeInfo.obtain(node), score)
+        for (i in 0 until node.childCount) {
+            val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+            collectDialogCandidates(child, rootBounds, into, depth + 1)
+            child.recycle()
+        }
+    }
+
+    private fun scoreDialogCandidate(node: AccessibilityNodeInfo, rootBounds: Rect, depth: Int): Int {
+        val childCount = try { node.childCount } catch (_: Exception) { 0 }
+        if (childCount == 0) return 0
+        val bounds = Rect().also { runCatching { node.getBoundsInScreen(it) } }
+        val area = bounds.width().toLong() * bounds.height().toLong()
+        val rootArea = rootBounds.width().toLong() * rootBounds.height().toLong()
+        if (area <= 0 || rootArea <= 0) return 0
+        val ratio = area.toFloat() / rootArea.toFloat()
+        if (ratio < 0.03f) return 0
+
+        val acc = TreeScanAccumulator()
+        collectTreeSnapshot(node, acc)
+        val text = acc.textTokens.joinToString(" ").lowercase()
+        if (text.isBlank()) return 0
+        if (NON_USSD_DIALOG_HINTS.any { text.contains(it) }) return 0
+
+        val hasAction = acc.hasSendButton || acc.hasDismissButton || acc.hasEditableField
+        val hasMenu = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(text)
+        val hasUssdLang = USSD_HINTS.any { text.contains(it) } || errorKeywords.any { text.contains(it) }
+        if (!hasAction && !hasMenu) return 0
+        if (!hasUssdLang && !hasMenu && !advancedActive && !isForegroundUiActive()) return 0
+
+        var score = 0
+        if (acc.hasEditableField) score += 380
+        if (acc.hasSendButton) score += 260
+        if (acc.hasDismissButton) score += 120
+        if (hasMenu) score += 260 + (parseMenuOptions(acc.textTokens)?.size ?: 0) * 45
+        if (hasUssdLang) score += 220
+        if (node.className?.toString().orEmpty().contains("Dialog", ignoreCase = true)) score += 180
+        if (childCount in 1..8) score += 140
+        else if (childCount in 1..14) score += 70
+        else score -= minOf(childCount, 32) * 18
+        if (ratio in 0.08f..0.86f) score += 180
+        else if (ratio > 0.96f) score -= 220
+        if (bounds.left > rootBounds.left || bounds.top > rootBounds.top || bounds.right < rootBounds.right || bounds.bottom < rootBounds.bottom) score += 80
+        score += maxOf(0, 42 - depth * 4)
+        return score.takeIf { it > 0 } ?: 0
+    }
+
+    private fun parseMenuOptions(tokens: List<String>): LinkedHashMap<String, String>? {
+        val lines = tokens.map { normalizeCollapsedText(it) }.filter { it.isNotBlank() }
+        for (i in lines.indices) {
+            val match = Regex("""^(\d+)\s*[\)\].:\-]?\s*(.+)$""").find(lines[i])
+            if (match != null && (match.groupValues[1] == "0" || match.groupValues[1] == "1")) {
+                val opts = linkedMapOf<String, String>()
+                var idx = i
+                while (idx < lines.size) {
+                    val line = lines[idx]
+                    val m = Regex("""^(\d+)\s*[\)\].:\-]?\s*(.+)$""").find(line)
+                    if (m != null) {
+                        val key = m.groupValues[1]
+                        val label = normalizeCollapsedText(m.groupValues[2])
+                        if (label.isBlank()) break
+                        opts[key] = label
+                        idx++
+                    } else {
+                        break
+                    }
+                }
+                if (opts.size >= 2 && opts.keys.mapNotNull { it.toIntOrNull() }.sorted() == opts.keys.map { it.toInt() }.sorted()) {
+                    return opts
+                }
+            }
+        }
+        return null
+    }
+
+    private fun shouldAllowRelaxedFallback(root: AccessibilityNodeInfo): Boolean {
+        if (!advancedActive && !isForegroundUiActive() && balanceCallback == null && tokenPurchaseCallback == null && !signatureLearningMode) return false
+        val pkg = root.packageName?.toString().orEmpty()
+        if (!isPotentialUssdPackage(pkg) && pkg != "android" && pkg != "com.android.systemui") return false
+        val snapshot = captureSnapshot(root)
+        val lower = snapshot.dialogText.lowercase()
+        if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return false
+        return looksLikeUssdDialog(root, snapshot, lower, pkg) || hasDialogLayout(root)
+    }
+
+    private fun looksLikeUssdDialog(root: AccessibilityNodeInfo, snapshot: UssdTreeSnapshot, lower: String, pkg: String): Boolean {
+        val hasUssdLang = USSD_HINTS.any { lower.contains(it) }
+        val hasMenu = parseMenuOptions(snapshot.textTokens) != null
+        val likelyPkg = isPotentialUssdPackage(pkg) || (pkg == "android" && (hasUssdLang || hasMenu))
+        return (snapshot.hasEditableField && (snapshot.hasSendButton || hasUssdLang || hasMenu)) ||
+                ((snapshot.hasSendButton || snapshot.hasDismissButton) && (hasUssdLang || hasMenu)) ||
+                (hasMenu && hasUssdLang) ||
+                (hasDialogLayout(root) && likelyPkg && (snapshot.hasEditableField || snapshot.hasSendButton || snapshot.hasDismissButton))
+    }
+
+    private fun looksLikeUssdDialogFast(lower: String, pkg: String): Boolean {
+        val hasUssdLang = USSD_HINTS.any { lower.contains(it) } || errorKeywords.any { lower.contains(it) }
+        val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(lower)
+        if (pkg == "android" || pkg.isBlank()) return advancedActive || isForegroundUiActive() || (hasUssdLang || menuLike)
+        return isPotentialUssdPackage(pkg) && (hasUssdLang || menuLike)
+    }
+    // endregion
+
+    // region Step Processing
+    private fun scheduleProcessStep(dialogChanged: Boolean, overrideDelay: Long? = null) {
         processStepRunnable?.let { handler.removeCallbacks(it) }
         val token = pendingProcessToken
-        val delayMs = overrideDelayMs ?: when {
+        val delay = overrideDelay ?: when {
             dialogChanged && hasFreshRecentUssdContext() -> 0L
-            hasSeenAdvancedPopup && dialogChanged -> rapidPostPopupPollMs
-            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> rapidPostPopupVerifyMs
-            dialogChanged && hasRecentUssdUiEvent() -> eventHotPollMs
+            hasSeenAdvancedPopup && dialogChanged -> RAPID_POST_POPUP_POLL_MS
+            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> RAPID_POST_POPUP_VERIFY_MS
+            dialogChanged && hasRecentUssdUiEvent() -> EVENT_HOT_POLL_MS
             dialogChanged -> POPUP_STABILITY_DELAY_MS
-            hasRecentUssdUiEvent() -> fastVerifyPollMs
-            else -> verifyPollMs
+            hasRecentUssdUiEvent() -> FAST_VERIFY_POLL_MS
+            else -> VERIFY_POLL_MS
         }
         val task = Runnable {
             processStepRunnable = null
-            if (pendingProcessToken != token) return@Runnable
-            if (!advancedActive || isProcessing) return@Runnable
+            if (pendingProcessToken != token || !advancedActive || isProcessing) return@Runnable
             isProcessing = true
             processStep()
         }
         processStepRunnable = task
-        if (delayMs <= 0L) handler.post(task) else handler.postDelayed(task, delayMs)
+        if (delay <= 0) handler.post(task) else handler.postDelayed(task, delay)
     }
 
-    private fun verificationPollDelay(expected: String, noFieldCount: Int = 0): Long =
-        when {
-            hasRecentExpectedInput(expected) && hasRecentUssdUiEvent() -> postWriteVerifyPollMs
-            hasRecentExpectedInput(expected) -> postWriteVerifyPollMs
-            hasSeenAdvancedPopup && noFieldCount > 0 -> rapidPostPopupVerifyMs
-            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> rapidPostPopupVerifyMs
-            hasRecentUssdUiEvent() && noFieldCount > 0 -> eventHotPollMs
-            noFieldCount > 0 -> fastVerifyPollMs
-            hasRecentUssdUiEvent() -> fastVerifyPollMs
-            else -> verifyPollMs
-        }
+    private fun processStep() {
+        if (!advancedActive) { isProcessing = false; return }
+        if (pendingStepAdvanceFromKey.isNotBlank()) { isProcessing = false; return }
 
-    private fun hasRecentUssdUiEvent(): Boolean =
-        SystemClock.elapsedRealtime() - lastRelevantEventElapsed <= RECENT_UI_EVENT_GRACE_MS
-
-    private fun sendRetryDelay(attempt: Int, expectedValue: String? = null): Long {
-        val hasRecentWrite = expectedValue?.let { hasRecentExpectedInput(it) } == true
-        val hasRecentVerification = expectedValue?.let { hasRecentVerifiedInput(it) } == true
-        if (useAggressiveVerifiedPopupFastPath &&
-            attempt <= 1 &&
-            (hasRecentVerification || (hasRecentWrite && hasRecentUssdUiEvent()))
-        ) {
-            return 0L
-        }
-        val base = when {
-            hasRecentVerification || hasRecentWrite -> postWriteSendRetryMs
-            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> rapidPostPopupSendRetryMs
-            hasSeenAdvancedPopup -> hotSendRetryDelayMs
-            hasRecentUssdUiEvent() -> hotSendRetryDelayMs
-            else -> sendRetryDelayMs
-        }
-        val increment = when {
-            hasRecentVerification || hasRecentWrite -> fastSendRetryIncrementMs
-            hasSeenAdvancedPopup -> fastSendRetryIncrementMs
-            else -> sendRetryIncrementMs
-        }
-        return minOf(base + (attempt.toLong() * increment), maxSendRetryDelayMs)
-    }
-
-    private fun shouldForcePendingFieldRewrite(
-        expectedValue: String,
-        fieldPresent: Boolean
-    ): Boolean {
-        if (fieldPresent) return true
-        if (!hasRecentExpectedInput(expectedValue)) return true
-        return shouldUseExtendedNetworkDelayWindow(expectedValue) && !hasRecentVerifiedInput(expectedValue)
-    }
-
-    private fun captureSignatureStepIfNeeded(
-        stepIndex: Int,
-        rawStep: String,
-        menu: ParsedMenuSignature?,
-        snapshot: UssdTreeSnapshot,
-        dialogText: String
-    ) {
-        if (!signatureLearningMode || !rawStep.all(Char::isDigit) || menu == null) return
-        val optionLabel = menu.options[rawStep] ?: return
-        val captured = UssdSignatureStep(
-            stepIndex = stepIndex,
-            expectedInput = rawStep,
-            menuTitle = menu.title,
-            menuText = formatRecordedDialogText(snapshot.textTokens, dialogText),
-            selectedOptionLabel = optionLabel,
-            menuOptionsSnapshot = menu.options.values
-                .map { normalizeCollapsedText(it) }
-                .filter { it.isNotBlank() }
-        )
-        val existingIndex = learnedSignatureSteps.indexOfFirst { it.stepIndex == stepIndex }
-        if (existingIndex >= 0) learnedSignatureSteps[existingIndex] = captured else learnedSignatureSteps.add(captured)
-    }
-
-    private fun recordedInputForStep(stepIndex: Int, rawStep: String): String =
-        when {
-            rawStep == "INPUT_PHONE" -> advancedPhoneNumber
-            stepIndex >= 0 -> adjustedStepInputs[stepIndex].takeUnless { it.isNullOrBlank() } ?: rawStep
-            else -> rawStep
-        }
-
-    private fun selectedOptionLabelForInput(
-        enteredInput: String,
-        rawStep: String,
-        menu: ParsedMenuSignature?
-    ): String =
-        when {
-            rawStep == "INPUT_PHONE" -> "Enter phone number"
-            enteredInput.all(Char::isDigit) -> menu?.options?.get(enteredInput)
-                ?: menu?.options?.get(rawStep)
-                .orEmpty()
-            else -> ""
-        }
-
-    private fun resolveStepInput(stepIndex: Int, rawStep: String, menu: ParsedMenuSignature?): Pair<String, String?> {
-        if (rawStep == "INPUT_PHONE") {
-            adjustedStepInputs[stepIndex] = rawStep
-            return UssdHelper.normalizeRecipientForUssdInput(advancedPhoneNumber) to null
-        }
-        if (!rawStep.all(Char::isDigit) || !signatureGuardEnabled) {
-            adjustedStepInputs[stepIndex] = rawStep
-            return rawStep to menu?.options?.get(rawStep)
-        }
-        val learned = getLoadedSignatureContext(stepIndex) ?: run {
-            adjustedStepInputs[stepIndex] = rawStep
-            return rawStep to menu?.options?.get(rawStep)
-        }
-        if (menu == null || menu.options.isEmpty()) {
-            adjustedStepInputs[stepIndex] = rawStep
-            return rawStep to null
-        }
-
-        val match = findBestMenuOptionMatch(menu, learned)
-        if (match == null) {
-            val message = buildChangeMessage(
-                learned = learned.step,
-                actualOption = null,
-                actualLabel = null
-            )
-            signatureChangeDetected = true
-            detectedChangeNotes += message
-            failForSignatureChange(message)
-            return rawStep to null
-        }
-        if (match.optionKey != rawStep) {
-            signatureChangeDetected = true
-            detectedChangeNotes += buildChangeMessage(
-                learned = learned.step,
-                actualOption = match.optionKey,
-                actualLabel = match.optionLabel
-            )
-            if (signatureAction != "ADJUST" || !match.autoAdjustSafe) {
-                failForSignatureChange(detectedChangeNotes.last())
-                return rawStep to null
-            }
-            signatureAutoAdjusted = true
-            adjustedStepInputs[stepIndex] = match.optionKey
-            return match.optionKey to match.optionLabel
-        }
-        adjustedStepInputs[stepIndex] = rawStep
-        return rawStep to match.optionLabel
-    }
-
-    private fun buildChangeMessage(
-        learned: UssdSignatureStep,
-        actualOption: String?,
-        actualLabel: String?
-    ): String {
-        val menuLabel = learned.menuTitle.ifBlank { advancedOfferName.ifBlank { "the USSD menu" } }
-        return if (actualOption.isNullOrBlank() || actualLabel.isNullOrBlank()) {
-            "Detected a menu change in $menuLabel. The learned option '${learned.selectedOptionLabel}' is no longer available as selection ${learned.expectedInput}"
-        } else {
-            "Detected a menu change in $menuLabel. '${learned.selectedOptionLabel}' moved from option ${learned.expectedInput} to option $actualOption"
-        }
-    }
-
-    private fun failForSignatureChange(message: String) {
-        lastFinalResponse = message
-        onDispatchComplete?.invoke(buildDispatchResult(message))
-        tokenPurchaseCallback?.invoke(false)
-        closeCurrentUssdUi()
-        advancedInProgress = false
-        updateRunningOverlay()
-        cleanupAdvanced()
-    }
-
-    private fun finishAdvancedDispatch(finalText: String) {
-        onDispatchComplete?.invoke(buildDispatchResult(finalText))
-        if (!signatureLearningMode) tokenPurchaseCallback?.invoke(true)
-        closeCurrentUssdUi()
-        advancedInProgress = false
-        updateRunningOverlay()
-        cleanupAdvanced()
-    }
-
-    private fun buildDispatchResult(finalResponse: String): AdvancedDispatchResult {
-        val sigList: List<UssdSignatureStep>
-        val capList: List<UssdLearningCapture>
-        val transcript: List<String>
-        sigList = learnedSignatureSteps.toList()
-        capList = learningCaptures.toList()
-        transcript = popupTranscript.toList()
-        return AdvancedDispatchResult(
-            finalResponse = finalResponse,
-            changeDetected = signatureChangeDetected,
-            autoAdjusted = signatureAutoAdjusted,
-            learningCompleted = signatureLearningMode && (sigList.isNotEmpty() || capList.isNotEmpty()),
-            suggestedCode = if (signatureChangeDetected) buildSuggestedCode() else "",
-            changeSummary = detectedChangeNotes.joinToString(". "),
-            learnedSignature = sigList,
-            learningCaptures = capList,
-            popupTranscript = transcript
-        )
-    }
-
-    private fun shouldRecordPopupTranscript(): Boolean =
-        signatureLearningMode || signatureGuardEnabled
-
-    private fun capturePopupTranscript(snapshot: UssdTreeSnapshot?, dialogText: String) {
-        if (!shouldRecordPopupTranscript()) return
-        val recordedText = snapshot?.let {
-            val menu = parseMenuSignature(it)
-            if (signatureLearningMode) {
-                formatLearningRecordedDialogText(snapshot = it, menu = menu)
+        val requireStrict = shouldRequireStrictPopupScope()
+        val context = obtainRecentUssdContext(requireStrict) ?: run {
+            if (shouldWaitForRootRecovery()) {
+                isProcessing = false
+                waitForRootRecovery()
             } else {
-                formatRecordedDialogText(it.textTokens, it.dialogText)
+                isProcessing = false
+                handler.postDelayed({ restartFromBeginning() }, 700)
             }
-        } ?: formatRecordedDialogText(emptyList(), dialogText)
-        if (recordedText.isBlank()) return
-        if (popupTranscript.lastOrNull() == recordedText) return
-        popupTranscript += recordedText
-    }
-
-    private fun captureLearningDialog(snapshot: UssdTreeSnapshot) {
-        val menu = parseMenuSignature(snapshot) ?: return
-        val recordedText = formatLearningRecordedDialogText(snapshot, menu)
-        if (recordedText.isBlank()) return
-
-        val captureIndex = when {
-            advancedSteps.isEmpty() -> -1
-            currentStep >= advancedSteps.size -> advancedSteps.lastIndex
-            else -> currentStep
+            return
         }
-        val rawStep = advancedSteps.getOrNull(captureIndex).orEmpty()
-        val enteredInput = recordedInputForStep(captureIndex, rawStep)
-        val selectedOptionLabel = selectedOptionLabelForInput(enteredInput, rawStep, menu)
-        val capture = UssdLearningCapture(
-            stepIndex = captureIndex,
-            enteredInput = enteredInput,
-            selectedOptionLabel = selectedOptionLabel,
-            popupText = recordedText
-        )
-        val existingIndex = learningCaptures.indexOfFirst {
-            it.stepIndex == capture.stepIndex &&
-                normalizeMenuText(it.popupText) == normalizeMenuText(capture.popupText)
-        }
-        if (existingIndex >= 0) {
-            val existing = learningCaptures[existingIndex]
-            learningCaptures[existingIndex] = existing.copy(
-                enteredInput = capture.enteredInput.ifBlank { existing.enteredInput },
-                selectedOptionLabel = capture.selectedOptionLabel.ifBlank { existing.selectedOptionLabel },
-                popupText = if (capture.popupText.length >= existing.popupText.length) capture.popupText else existing.popupText
-            )
-        } else {
-            learningCaptures += capture
-        }
-    }
 
-    private fun buildSuggestedCode(): String {
-        val dialBase = advancedDialCode.trim().replace("%23", "").trimEnd('#')
-        val steps = advancedSteps.mapIndexed { index, step ->
-            when {
-                step == "INPUT_PHONE" -> "pn"
-                adjustedStepInputs[index].isNullOrBlank() -> step
-                else -> adjustedStepInputs[index] ?: step
+        val root = context.root
+        try {
+            val snapshot = context.snapshot ?: capturePreferredPopupSnapshot(root, requireStrict)
+                ?: run { isProcessing = false; scheduleProcessStep(false); return }
+
+            val dialogText = snapshot.dialogText.ifBlank { lastFinalResponse }
+            val lower = dialogText.lowercase()
+
+            if (shouldWaitForStepTransition(dialogText, context.windowId, root, snapshot)) {
+                isProcessing = false
+                scheduleProcessStep(false)
+                return
             }
-        }
-        return if (steps.isEmpty()) "$dialBase#" else "$dialBase*${steps.joinToString("*")}#"
-    }
 
-    private fun normalizeMenuText(text: String): String =
-        text.lowercase()
-            .replace(NON_ALPHANUMERIC_REGEX, " ")
-            .replace(MULTI_SPACE_REGEX, " ")
-            .trim()
+            if (dialogText.isNotBlank()) lastFinalResponse = dialogText
+            if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) { isProcessing = false; return }
+            if (!looksLikeUssdDialogFast(lower, context.windowPkg)) { isProcessing = false; return }
 
-    private fun buildLearnedSignatureContext(step: UssdSignatureStep): LearnedSignatureContext {
-        val normalizedSelectedLabel = normalizeMenuText(step.selectedOptionLabel)
-        val normalizedMenuTitle = normalizeMenuText(step.menuTitle)
-        return LearnedSignatureContext(
-            step = step,
-            normalizedSelectedLabel = normalizedSelectedLabel,
-            selectedLabelTokens = tokenizeMenuLabel(normalizedSelectedLabel),
-            normalizedMenuTitle = normalizedMenuTitle,
-            menuTitleTokens = tokenizeMenuLabel(normalizedMenuTitle),
-            normalizedOptionSnapshot = step.menuOptionsSnapshot
-                .asSequence()
-                .map(::normalizeMenuText)
-                .filter { it.isNotBlank() }
-                .toSet()
-        )
-    }
-
-    private fun getLoadedSignatureContext(stepIndex: Int): LearnedSignatureContext? {
-        if (loadedSignatureLookupSource !== loadedSignatureSteps) {
-            loadedSignatureLookupSource = loadedSignatureSteps
-            loadedSignatureLookup = loadedSignatureSteps
-                .asSequence()
-                .map(::buildLearnedSignatureContext)
-                .associateBy { it.step.stepIndex }
-        }
-        return loadedSignatureLookup[stepIndex]
-    }
-
-    private fun markStepAction(
-        dialogText: String,
-        root: AccessibilityNodeInfo? = null,
-        snapshot: UssdTreeSnapshot? = null
-    ) {
-        lastStepActionKey = buildDialogStateKey(
-            dialogText = dialogText,
-            inputStateSignature = snapshot?.inputStateSignature ?: root?.let(::captureInputStateSignature).orEmpty()
-        )
-        lastStepActionElapsed = SystemClock.elapsedRealtime()
-    }
-
-    private fun shouldWaitForStepTransition(
-        dialogText: String,
-        windowChanged: Boolean,
-        root: AccessibilityNodeInfo? = null,
-        snapshot: UssdTreeSnapshot? = null
-    ): Boolean {
-        val key = buildDialogStateKey(
-            dialogText = dialogText,
-            inputStateSignature = snapshot?.inputStateSignature ?: root?.let(::captureInputStateSignature).orEmpty()
-        )
-        if (lastStepActionKey.isBlank() || key.isBlank()) return false
-        if (key != lastStepActionKey) {
-            // Screen changed; clear the guard and proceed normally.
-            lastStepActionKey = ""
-            lastStepActionElapsed = 0L
-            return false
-        }
-        if (windowChanged) return false
-        val elapsed = SystemClock.elapsedRealtime() - lastStepActionElapsed
-        return elapsed in 0..STEP_TRANSITION_GUARD_MS
-    }
-
-    private fun resolveWindowId(root: AccessibilityNodeInfo): Int =
-        runCatching { root.windowId }.getOrDefault(lastWindowId)
-
-    private fun parseMenuSignature(snapshot: UssdTreeSnapshot): ParsedMenuSignature? {
-        val cacheKey = snapshot.normalizedDialogText
-        if (cacheKey.isNotBlank() && cacheKey == lastMenuSignatureKey) {
-            return lastMenuSignature
-        }
-        val parsed = buildMenuSignature(snapshot.textTokens)
-        if (cacheKey.isNotBlank()) {
-            lastMenuSignatureKey = cacheKey
-            lastMenuSignature = parsed
-        }
-        return parsed
-    }
-
-    private fun parseMenuSignature(
-        root: AccessibilityNodeInfo,
-        dialogText: String = extractAllText(root)
-    ): ParsedMenuSignature? {
-        val cacheKey = normalizeCollapsedText(dialogText)
-        if (cacheKey.isNotBlank() && cacheKey == lastMenuSignatureKey) {
-            return lastMenuSignature
-        }
-        val parsed = buildMenuSignature(extractTextTokens(root))
-        if (cacheKey.isNotBlank()) {
-            lastMenuSignatureKey = cacheKey
-            lastMenuSignature = parsed
-        }
-        return parsed
-    }
-
-    private fun buildMenuSignature(tokens: List<String>): ParsedMenuSignature? {
-        val normalizedTokens = normalizeDialogLines(tokens)
-        val menuBlock = extractStructuredMenuBlock(normalizedTokens) ?: return null
-        val options = menuBlock.options
-        val title = menuBlock.titleLines
-            .distinct()
-            .takeLast(2)
-            .joinToString(" / ")
-        val normalizedTitle = normalizeMenuText(title)
-        val optionDescriptors = options.entries.map { (key, label) ->
-            val normalizedLabel = normalizeMenuText(label)
-            MenuOptionDescriptor(
-                key = key,
-                label = label,
-                normalizedLabel = normalizedLabel,
-                tokens = tokenizeMenuLabel(normalizedLabel)
-            )
-        }
-        return ParsedMenuSignature(
-            title = title,
-            options = LinkedHashMap(options),
-            normalizedTitle = normalizedTitle,
-            titleTokens = tokenizeMenuLabel(normalizedTitle),
-            optionDescriptors = optionDescriptors,
-            normalizedOptionLabels = optionDescriptors
-                .asSequence()
-                .map { it.normalizedLabel }
-                .filter { it.isNotBlank() }
-                .toSet()
-        )
-    }
-
-    private fun normalizeDialogLines(tokens: List<String>): List<String> {
-        val collapsed = mutableListOf<String>()
-        tokens.forEach { token ->
-            token.lineSequence().forEach { line ->
-                val normalizedLine = normalizeCollapsedText(line)
-                if (normalizedLine.isNotBlank() && collapsed.lastOrNull() != normalizedLine) {
-                    collapsed += normalizedLine
+            if (currentStep >= advancedSteps.size) {
+                if (shouldWaitForFinalResponse(snapshot, dialogText)) {
+                    isProcessing = false
+                    scheduleProcessStep(false, RAPID_POST_POPUP_POLL_MS)
+                    return
                 }
-            }
-        }
-        return collapsed
-    }
-
-    private fun extractStructuredMenuBlock(lines: List<String>): StructuredMenuBlock? {
-        if (lines.isEmpty()) return null
-        var bestBlock: StructuredMenuBlock? = null
-        for (startIndex in lines.indices) {
-            val token = lines[startIndex]
-            val key = parseStructuredMenuKey(token) ?: continue
-            if (key != "0" && key != "1") continue
-            val candidate = collectStructuredMenuBlock(lines, startIndex) ?: continue
-            val currentBest = bestBlock
-            if (
-                currentBest == null ||
-                candidate.options.size > currentBest.options.size ||
-                (
-                    candidate.options.size == currentBest.options.size &&
-                        candidate.titleLines.size > currentBest.titleLines.size
-                    )
-            ) {
-                bestBlock = candidate
-            }
-        }
-        return bestBlock
-    }
-
-    private fun collectStructuredMenuBlock(
-        lines: List<String>,
-        startIndex: Int
-    ): StructuredMenuBlock? {
-        val options = linkedMapOf<String, String>()
-        var pendingOptionKey: String? = null
-
-        for (index in startIndex until lines.size) {
-            val token = lines[index]
-            val normalizedAction = normalizeActionLabel(token)
-            if (normalizedAction in SEND_BUTTON_LABELS || normalizedAction in DISMISS_BUTTON_LABELS) {
-                if (options.isNotEmpty()) break
-                continue
+                finishAdvancedDispatch(lastFinalResponse)
+                return
             }
 
-            val numberedOption = MENU_OPTION_REGEX.matchEntire(token)
-            if (numberedOption != null) {
-                val key = numberedOption.groupValues[1]
-                if (!isNextStructuredMenuKey(options, key)) {
-                    if (options.isNotEmpty()) break
-                    return null
+            val step = advancedSteps[currentStep]
+            val menu = parseMenuFromSnapshot(snapshot)
+            if (step != "INPUT_PHONE") {
+                captureSignatureStepIfNeeded(currentStep, step, menu, snapshot, dialogText)
+            }
+
+            val (valueToEnter, selectedLabel) = resolveStepInput(currentStep, step, menu)
+            if (!advancedActive) { isProcessing = false; return }
+
+            val inputField = findEditableFieldForStep(root, step, dialogText)
+            try {
+                val dialogAllowsPhone = step == "INPUT_PHONE" && dialogSuggestsPhoneInput(lower)
+                if (step == "INPUT_PHONE" && inputField == null && !dialogAllowsPhone) {
+                    isProcessing = false
+                    scheduleProcessStep(false)
+                    return
                 }
-                val label = normalizeCollapsedText(numberedOption.groupValues[2])
-                if (label.isBlank()) break
-                options[key] = label
-                pendingOptionKey = null
-                continue
-            }
 
-            val numberOnly = MENU_OPTION_NUMBER_ONLY_REGEX.matchEntire(token)
-            if (numberOnly != null) {
-                val key = numberOnly.groupValues[1]
-                if (!isNextStructuredMenuKey(options, key)) {
-                    if (options.isNotEmpty()) break
-                    return null
-                }
-                pendingOptionKey = key
-                continue
-            }
+                val shouldPreferText = inputField != null ||
+                        shouldTreatAsTextInput(step, valueToEnter, selectedLabel) ||
+                        shouldTreatNumericReplyAsTextInput(step, valueToEnter, snapshot, lower, menu) ||
+                        dialogSuggestsTextInput(lower) ||
+                        dialogAllowsPhone
 
-            val deferredKey = pendingOptionKey
-            if (deferredKey != null) {
-                if (!looksLikeMenuLabel(token)) break
-                options[deferredKey] = token
-                pendingOptionKey = null
-                continue
-            }
-
-            if (options.isNotEmpty()) break
-        }
-
-        if (pendingOptionKey != null) return null
-        if (!looksLikeStructuredUssdMenu(LinkedHashMap(options))) return null
-
-        val titleLines = lines
-            .take(startIndex)
-            .takeLast(2)
-            .map(::normalizeCollapsedText)
-            .filter { line ->
-                line.isNotBlank() &&
-                    normalizeActionLabel(line) !in SEND_BUTTON_LABELS &&
-                    normalizeActionLabel(line) !in DISMISS_BUTTON_LABELS
-            }
-
-        return StructuredMenuBlock(
-            titleLines = titleLines,
-            options = LinkedHashMap(options)
-        )
-    }
-
-    private fun parseStructuredMenuKey(token: String): String? =
-        MENU_OPTION_REGEX.matchEntire(token)?.groupValues?.get(1)
-            ?: MENU_OPTION_NUMBER_ONLY_REGEX.matchEntire(token)?.groupValues?.get(1)
-
-    private fun isNextStructuredMenuKey(
-        options: LinkedHashMap<String, String>,
-        key: String
-    ): Boolean {
-        val numericKey = key.toIntOrNull() ?: return false
-        if (options.isEmpty()) return numericKey == 0 || numericKey == 1
-        val lastKey = options.keys.lastOrNull()?.toIntOrNull() ?: return false
-        return numericKey == lastKey + 1
-    }
-
-    private fun formatRecordedDialogText(tokens: List<String>, fallbackText: String = ""): String {
-        val normalizedLines = normalizeDialogLines(tokens)
-        extractStructuredMenuBlock(normalizedLines)?.let { menuBlock ->
-            return buildList {
-                menuBlock.titleLines.forEach(::add)
-                menuBlock.options.forEach { (key, label) -> add("$key. ${normalizeCollapsedText(label)}") }
-            }
-                .map(::normalizeCollapsedText)
-                .filter { it.isNotBlank() }
-                .distinct()
-                .joinToString("\n")
-        }
-        if (normalizedLines.isEmpty()) return normalizeCollapsedText(fallbackText)
-
-        val recordedLines = mutableListOf<String>()
-        var pendingOptionKey: String? = null
-
-        for (token in normalizedLines) {
-            val numberedOption = MENU_OPTION_REGEX.find(token)
-            if (numberedOption != null) {
-                pendingOptionKey = null
-                val key = numberedOption.groupValues[1]
-                val label = normalizeCollapsedText(numberedOption.groupValues[2])
-                recordedLines += if (label.isBlank()) key else "$key. $label"
-                continue
-            }
-
-            val numberOnly = MENU_OPTION_NUMBER_ONLY_REGEX.find(token)
-            if (numberOnly != null) {
-                pendingOptionKey = numberOnly.groupValues[1]
-                continue
-            }
-
-            val deferredKey = pendingOptionKey
-            if (deferredKey != null && looksLikeMenuLabel(token)) {
-                recordedLines += "$deferredKey. $token"
-                pendingOptionKey = null
-                continue
-            }
-
-            if (deferredKey != null) {
-                recordedLines += deferredKey
-                pendingOptionKey = null
-            }
-
-            recordedLines += token
-        }
-
-        pendingOptionKey?.let(recordedLines::add)
-
-        return recordedLines
-            .map(::normalizeCollapsedText)
-            .filter { it.isNotBlank() }
-            .let { lines ->
-                if (lines.size < 2) lines else buildList {
-                    lines.forEach { line ->
-                        if (lastOrNull() != line) add(line)
+                if (!shouldPreferText && step.all(Char::isDigit) && menu != null && menu.isNotEmpty()) {
+                    if (!menu.containsKey(valueToEnter)) {
+                        isProcessing = false
+                        scheduleProcessStep(false)
+                        return
                     }
                 }
-            }
-            .joinToString("\n")
-    }
 
-    private fun formatLearningRecordedDialogText(
-        snapshot: UssdTreeSnapshot,
-        menu: ParsedMenuSignature?
-    ): String {
-        if (menu == null) return ""
-        extractStructuredMenuBlock(normalizeDialogLines(snapshot.textTokens))?.let { menuBlock ->
-            return buildList {
-                menuBlock.titleLines.forEach(::add)
-                menuBlock.options.forEach { (key, label) -> add("$key. ${normalizeCollapsedText(label)}") }
-            }.joinToString("\n")
-        }
-        val lines = buildList {
-            menu.title
-                .takeIf { it.isNotBlank() }
-                ?.let(::normalizeCollapsedText)
-                ?.takeIf { it.isNotBlank() }
-                ?.let(::add)
-            menu.options.forEach { (key, label) ->
-                val normalizedLabel = normalizeCollapsedText(label)
-                if (normalizedLabel.isBlank()) add(key) else add("$key. $normalizedLabel")
-            }
-        }
-        if (lines.isNotEmpty()) {
-            return lines.joinToString("\n")
-        }
-        return formatRecordedDialogText(snapshot.textTokens, snapshot.dialogText)
-    }
-
-    private fun looksLikeMenuLabel(token: String): Boolean {
-        val normalized = normalizeActionLabel(token)
-        if (normalized.isBlank()) return false
-        if (normalized in SEND_BUTTON_LABELS || normalized in DISMISS_BUTTON_LABELS) return false
-        return normalized.any(Char::isLetterOrDigit)
-    }
-
-    private fun findBestMenuOptionMatch(
-        menu: ParsedMenuSignature,
-        learned: LearnedSignatureContext
-    ): MenuOptionMatch? {
-        val normalizedExpected = learned.normalizedSelectedLabel
-        if (normalizedExpected.isBlank()) return null
-        if (!isMenuContextCompatible(menu, learned)) return null
-
-        val exactMatches = menu.optionDescriptors
-            .asSequence()
-            .filter { descriptor -> descriptor.normalizedLabel == normalizedExpected }
-            .map { descriptor ->
-                MenuOptionMatch(
-                    optionKey = descriptor.key,
-                    optionLabel = descriptor.label,
-                    autoAdjustSafe = true
-                )
-            }
-            .toList()
-        return when (exactMatches.size) {
-            1 -> exactMatches.first()
-            else -> {
-                exactMatches.firstOrNull { it.optionKey == learned.step.expectedInput }?.let { return it }
-                var bestMatch: ScoredMenuOptionMatch? = null
-                var runnerUp: ScoredMenuOptionMatch? = null
-                menu.optionDescriptors.forEach { descriptor ->
-                    val scored = scoreMenuOptionMatch(
-                        expectedTokens = learned.selectedLabelTokens,
-                        descriptor = descriptor
-                    ) ?: return@forEach
-                    if (bestMatch == null || scored.score > bestMatch!!.score) {
-                        runnerUp = bestMatch
-                        bestMatch = scored
-                    } else if (runnerUp == null || scored.score > runnerUp!!.score) {
-                        runnerUp = scored
+                if (inputField == null && shouldPreferText && !dialogSuggestsTextInput(lower) && !dialogAllowsPhone && !shouldTreatNumericReplyAsTextInput(step, valueToEnter, snapshot, lower, menu)) {
+                    if (!snapshot.hasEditableField) {
+                        if (!writeValueToField(root, valueToEnter)) {
+                            isProcessing = false
+                            scheduleProcessStep(false)
+                            return
+                        }
                     }
                 }
-                val resolvedBestMatch = bestMatch ?: return null
-                val uniqueEnough = runnerUp == null || (resolvedBestMatch.score - runnerUp.score) >= 0.18
-                if (!uniqueEnough) return null
 
-                val expectedTokens = learned.selectedLabelTokens
-                val candidateTokens = resolvedBestMatch.descriptor.tokens
-                val hasStrongAnchor = resolvedBestMatch.strongSharedTokenCount >= minOf(2, resolvedBestMatch.expectedTokenCount.coerceAtLeast(1))
-                val hasNumericAnchor = expectedTokens
-                    .intersect(candidateTokens)
-                    .any { token -> token.any(Char::isDigit) }
-                val safeToAdjust = resolvedBestMatch.score >= 0.72 &&
-                    resolvedBestMatch.sharedTokenCount >= 1 &&
-                    (hasStrongAnchor || hasNumericAnchor)
-                val strongEnoughToReport = resolvedBestMatch.score >= 0.48 &&
-                    resolvedBestMatch.sharedTokenCount >= 1 &&
-                    resolvedBestMatch.candidateTokenCount > 0
-                if (!strongEnoughToReport) return null
+                if (inputField != null || shouldPreferText) {
+                    val wrote = ensureExpectedValueWritten(root, valueToEnter, inputField)
+                    val verified = verifyExpectedInput(root, valueToEnter, inputField)
+                    val trusted = shouldTrustFreshWrite(wrote, valueToEnter, inputField, snapshot, lower)
+                    val recentVerified = verified || hasRecentVerifiedInput(valueToEnter) || trusted
 
-                MenuOptionMatch(
-                    optionKey = resolvedBestMatch.descriptor.key,
-                    optionLabel = resolvedBestMatch.descriptor.label,
-                    autoAdjustSafe = safeToAdjust
-                )
+                    if (!isFinalLearningStep(currentStep) && wrote && recentVerified &&
+                        tryImmediateVerifiedSend(root, inputField, valueToEnter, verified)) {
+                        markStepAction(dialogText, root, snapshot)
+                        startPendingStepAdvance(root, dialogText)
+                        return
+                    }
+
+                    if (!isFinalLearningStep(currentStep) && wrote &&
+                        shouldAttemptAggressiveImmediateSubmit(snapshot, lower, step, valueToEnter, inputField) &&
+                        tryAggressiveImmediateSubmit(root, inputField, valueToEnter)) {
+                        markStepAction(dialogText, root, snapshot)
+                        startPendingStepAdvance(root, dialogText)
+                        return
+                    }
+
+                    if (isFinalLearningStep(currentStep)) {
+                        val delay = if (wrote && hasSeenAdvancedPopup) RAPID_POST_POPUP_VERIFY_MS else if (wrote) FAST_VERIFY_POLL_MS else VERIFY_POLL_MS
+                        handler.postDelayed({ verifyLearningFinalInputThenDismiss(valueToEnter, 0) }, delay)
+                    } else {
+                        startPendingAdvance(valueToEnter, root, dialogText, snapshot)
+                    }
+                    return
+                }
+
+                // Menu button click
+                val menuBtn = findMenuButton(root, valueToEnter, selectedLabel)
+                if (menuBtn != null) {
+                    if (performClick(menuBtn)) {
+                        markStepAction(dialogText, root, snapshot)
+                        startPendingStepAdvance(root, dialogText)
+                        return
+                    }
+                    isProcessing = false
+                    dismissErrorAndRestart()
+                    return
+                }
+
+                if (menu != null || hasSeenAdvancedPopup) {
+                    isProcessing = false
+                    scheduleProcessStep(false)
+                    return
+                }
+
+                isProcessing = false
+                dismissErrorAndRestart()
+            } finally {
+                inputField?.recycle()
             }
+        } finally {
+            root.recycle()
         }
     }
 
-    private fun scoreMenuOptionMatch(
-        expectedTokens: Set<String>,
-        descriptor: MenuOptionDescriptor
-    ): ScoredMenuOptionMatch? {
-        val candidateTokens = descriptor.tokens
-        if (expectedTokens.isEmpty() || candidateTokens.isEmpty()) return null
-
-        val sharedTokens = expectedTokens.intersect(candidateTokens)
-        if (sharedTokens.isEmpty()) return null
-
-        val sharedCount = sharedTokens.size
-        val precision = sharedCount.toDouble() / candidateTokens.size.toDouble()
-        val recall = sharedCount.toDouble() / expectedTokens.size.toDouble()
-        val f1Score = if (precision + recall == 0.0) 0.0 else (2 * precision * recall) / (precision + recall)
-        val strongSharedCount = sharedTokens.count { token ->
-            token.any(Char::isDigit) || token.length >= 4
-        }
-        return ScoredMenuOptionMatch(
-            descriptor = descriptor,
-            sharedTokenCount = sharedCount,
-            strongSharedTokenCount = strongSharedCount,
-            expectedTokenCount = expectedTokens.size,
-            candidateTokenCount = candidateTokens.size,
-            score = f1Score
-        )
-    }
-
-    private fun tokenizeMenuLabel(value: String): Set<String> =
-        value.split(' ')
-            .asSequence()
-            .map { token -> token.trim() }
-            .filter { token -> token.length >= 2 || token.any(Char::isDigit) }
-            .toSet()
-
-    private fun titlesLookCompatible(
-        learnedTitle: String,
-        learnedTokens: Set<String>,
-        currentTitle: String,
-        currentTokens: Set<String>
-    ): Boolean {
-        if (learnedTitle.isBlank() || currentTitle.isBlank()) return true
-        if (learnedTitle == currentTitle) return true
-        if (learnedTitle.contains(currentTitle) || currentTitle.contains(learnedTitle)) return true
-        if (learnedTokens.isEmpty() || currentTokens.isEmpty()) return true
-        val sharedCount = learnedTokens.intersect(currentTokens).size
-        val requiredShared = minOf(2, learnedTokens.size, currentTokens.size).coerceAtLeast(1)
-        return sharedCount >= requiredShared
-    }
-
-    private fun isMenuContextCompatible(menu: ParsedMenuSignature, learned: LearnedSignatureContext): Boolean {
-        if (!titlesLookCompatible(
-                learnedTitle = learned.normalizedMenuTitle,
-                learnedTokens = learned.menuTitleTokens,
-                currentTitle = menu.normalizedTitle,
-                currentTokens = menu.titleTokens
-            )
-        ) {
-            return false
-        }
-
-        val learnedSnapshot = learned.normalizedOptionSnapshot
-        val currentSnapshot = menu.normalizedOptionLabels
-        if (learnedSnapshot.isEmpty() || currentSnapshot.isEmpty()) return true
-
-        val overlapCount = learnedSnapshot.intersect(currentSnapshot).size
-        val requiredOverlap = when (minOf(learnedSnapshot.size, currentSnapshot.size)) {
-            0 -> 0
-            1, 2, 3 -> 1
-            else -> 2
-        }
-        return overlapCount >= requiredOverlap
-    }
-
-    private fun isTransientResponseText(lower: String): Boolean =
-        TRANSIENT_RESPONSE_HINTS.any { hint -> lower.contains(hint) }
-
-    private fun hasMeaningfulResponseText(snapshot: UssdTreeSnapshot, dialogText: String): Boolean {
-        if (dialogText.isBlank()) return false
-        val lines = normalizeDialogLines(snapshot.textTokens.ifEmpty { listOf(dialogText) })
-        if (lines.isEmpty()) return false
-        return lines.any { line ->
-            val normalized = normalizeActionLabel(line)
-            normalized.isNotBlank() &&
-                normalized !in SEND_BUTTON_LABELS &&
-                normalized !in DISMISS_BUTTON_LABELS &&
-                normalized.length >= 3
-        }
+    private fun parseMenuFromSnapshot(snapshot: UssdTreeSnapshot): LinkedHashMap<String, String>? {
+        val lines = snapshot.textTokens.map { normalizeCollapsedText(it) }.filter { it.isNotBlank() }
+        return parseMenuOptions(lines)
     }
 
     private fun shouldWaitForFinalResponse(snapshot: UssdTreeSnapshot, dialogText: String): Boolean {
         val normalized = normalizeMenuText(dialogText)
-        val stateKey = buildDialogStateKey(dialogText, snapshot.inputStateSignature)
+        val key = buildDialogStateKey(dialogText, snapshot.inputStateSignature)
         if (!hasMeaningfulResponseText(snapshot, dialogText)) return true
-        if (isTransientResponseText(normalized)) return true
-        return lastStepActionKey.isNotBlank() && stateKey == lastStepActionKey
+        if (isTransientResponse(normalized)) return true
+        return lastStepActionKey.isNotBlank() && key == lastStepActionKey
     }
 
-    private fun extractTextTokens(node: AccessibilityNodeInfo, into: MutableList<String> = mutableListOf()): List<String> {
-        try {
-            node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { into += it }
-            node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { into += it }
-            for (i in 0 until node.childCount) {
-                val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-                extractTextTokens(child, into)
-                child.recycle()
-            }
-        } catch (_: Exception) {}
-        return into
+    private fun hasMeaningfulResponseText(snapshot: UssdTreeSnapshot, dialogText: String): Boolean {
+        val lines = snapshot.textTokens.ifEmpty { listOf(dialogText) }.map { normalizeActionLabel(it) }.filter { it.isNotBlank() }
+        return lines.any { it !in SEND_BUTTON_LABELS && it !in DISMISS_BUTTON_LABELS && it.length >= 3 }
     }
 
-    private fun writeValueToField(value: String): Boolean {
-        val root = getUssdRoot() ?: return false
-        return try {
-            writeValueToField(root, value)
-        } finally {
-            root.recycle()
-        }
+    private fun shouldWaitForStepTransition(dialogText: String, windowId: Int, root: AccessibilityNodeInfo?, snapshot: UssdTreeSnapshot?): Boolean {
+        val sig = snapshot?.inputStateSignature ?: root?.let { captureInputStateSignature(it) }.orEmpty()
+        val key = buildDialogStateKey(dialogText, sig)
+        if (lastStepActionKey.isBlank() || key.isBlank()) return false
+        if (key != lastStepActionKey) { lastStepActionKey = ""; lastStepActionElapsed = 0L; return false }
+        if (windowId != lastWindowId) return false
+        return SystemClock.elapsedRealtime() - lastStepActionElapsed <= STEP_TRANSITION_GUARD_MS
     }
 
-    private fun writeValueToField(root: AccessibilityNodeInfo, value: String): Boolean {
-        val windowPkg = root.packageName?.toString() ?: ""
-        if (windowPkg.isNotEmpty() && windowPkg != "android" && !isPotentialUssdPackage(windowPkg)) {
-            return false
-        }
-        val requireStrictPopupScope = shouldRequireStrictPopupScope()
-        val snapshot = capturePreferredPopupSnapshot(root, requireStrictDialog = requireStrictPopupScope)
-            ?: return false
-        val lower = snapshot.dialogText.lowercase()
-        if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) {
-            return false
-        }
-        val fields = mutableListOf<AccessibilityNodeInfo>()
-        try {
-            collectTextEntryCandidates(root, fields)
-            if (fields.isNotEmpty()) {
-                fields.sortByDescending { scoreTextEntryCandidate(it) }
-                if (fields.any { field -> tryWriteValueToField(field, value, root) }) {
-                    return true
-                }
-            }
-        } finally {
-            fields.forEach { it.recycle() }
-        }
-
-        if (tryWriteValueToField(root, value, root)) {
-            return true
-        }
-
-        val aggressiveFields = mutableListOf<AccessibilityNodeInfo>()
-        try {
-            collectAggressiveTextEntryCandidates(root, aggressiveFields)
-            aggressiveFields.sortByDescending {
-                scoreTextEntryCandidate(it) + scoreAggressiveTextEntryCandidate(it)
-            }
-            return aggressiveFields.any { field -> tryWriteValueToField(field, value, root) }
-        } finally {
-            aggressiveFields.forEach { it.recycle() }
-        }
+    private fun buildDialogStateKey(dialogText: String, inputSig: String): String {
+        val normalized = normalizeMenuText(dialogText)
+        return if (normalized.isBlank()) "" else "$normalized|${normalizeCollapsedText(inputSig)}"
     }
+    // endregion
 
-    private fun ensureExpectedValueWritten(
-        root: AccessibilityNodeInfo,
-        expectedValue: String,
-        preferredField: AccessibilityNodeInfo? = null
-    ): Boolean {
-        if (verifyExpectedInputFromRoot(root, expectedValue, preferredField)) {
-            return true
-        }
-
-        if (preferredField != null && tryWriteValueToField(preferredField, expectedValue, root)) {
-            return true
-        }
-
-        val verifiedField = findEditableFieldMatchingExpectedInput(root, expectedValue)
-        try {
-            if (verifiedField != null && verifiedField !== preferredField) {
-                if (verifyExpectedInputFromRoot(root, expectedValue, verifiedField)) {
-                    return true
-                }
-                if (tryWriteValueToField(verifiedField, expectedValue, root)) {
-                    return true
-                }
-            }
-        } finally {
-            runCatching { verifiedField?.recycle() }
-        }
-
-        val candidates = mutableListOf<AccessibilityNodeInfo>()
-        try {
-            collectTextEntryCandidates(root, candidates)
-            if (candidates.isEmpty()) {
-                collectAggressiveTextEntryCandidates(root, candidates)
-            }
-            candidates.sortByDescending { candidate ->
-                scoreTextEntryCandidate(candidate) +
-                    if (matchesExpectedInput(readFieldText(candidate), expectedValue)) 700 else 0
-            }
-            for (candidate in candidates) {
-                if (tryWriteValueToField(candidate, expectedValue, root)) {
-                    return true
-                }
-            }
-        } finally {
-            candidates.forEach { candidate -> runCatching { candidate.recycle() } }
-        }
-
-        return writeValueToField(root, expectedValue) &&
-            verifyExpectedInputFromRoot(root, expectedValue, preferredField)
-    }
-
-    private fun verifyThenSend(expected: String, attempt: Int, noFieldCount: Int = 0) {
-        if (!advancedActive) { isProcessing = false; return }
-        if (attempt >= MAX_VERIFY_ATTEMPTS) {
-            isProcessing = false; handler.post { dismissErrorAndRestart() }; return
-        }
-        val root = getUssdRoot() ?: run {
-            handler.postDelayed(
-                { verifyThenSend(expected, attempt + 1, noFieldCount) },
-                verificationPollDelay(expected, noFieldCount)
-            )
-            return
-        }
-        var fieldText : String? = null
-        var fieldRef  : AccessibilityNodeInfo? = null
-        var verified = false
-        try {
-            fieldRef  = findFieldForExpectedValue(root, expected)
-            if (fieldRef != null) {
-                fieldText = readFieldText(fieldRef)
-                verified = verifyExpectedInputFromRoot(root, expected, fieldRef)
-            }
-        } finally { fieldRef?.recycle(); root.recycle() }
-
-        if (fieldText == null) {
-            val newCount = noFieldCount + 1
-            if (hasRecentVerifiedInput(expected) && newCount >= 2) {
-                handler.post { clickSendButton(expected, 0, skipFieldVerification = true) }
-            } else if (newCount >= NO_FIELD_PATIENCE && hasRecentVerifiedInput(expected)) {
-                handler.post { clickSendButton(expected, 0) }
-            }
-            else handler.postDelayed(
-                { verifyThenSend(expected, attempt + 1, newCount) },
-                verificationPollDelay(expected, newCount)
-            )
-            return
-        }
-        if (verified || isVerifiedFieldValue(fieldText, expected)) {
-            rememberVerifiedInput(expected)
-            handler.post { clickSendButton(expected, 0, skipFieldVerification = true) }
-        } else {
-            // Avoid expensive re-writes if we very recently injected the same value.
-            if (!hasRecentExpectedInput(expected)) {
-                writeValueToField(expected)
-            }
-            handler.postDelayed(
-                { verifyThenSend(expected, attempt + 1, 0) },
-                verificationPollDelay(expected)
-            )
-        }
-    }
-
-    private fun verifyLearningFinalInputThenDismiss(expected: String, attempt: Int, noFieldCount: Int = 0) {
-        if (!advancedActive) { isProcessing = false; return }
-        if (attempt >= MAX_VERIFY_ATTEMPTS) {
-            if (hasRecentExpectedInput(expected)) {
-                handler.post { finishLearningWithoutFinalSubmission() }
-            } else {
-                isProcessing = false
-                handler.post { dismissErrorAndRestart() }
-            }
-            return
-        }
-        val root = getUssdRoot() ?: run {
-            handler.postDelayed(
-                { verifyLearningFinalInputThenDismiss(expected, attempt + 1, noFieldCount) },
-                verificationPollDelay(expected, noFieldCount)
-            )
-            return
-        }
-        var fieldText: String? = null
-        var fieldRef: AccessibilityNodeInfo? = null
-        var verified = false
-        try {
-            fieldRef = findFieldForExpectedValue(root, expected)
-            if (fieldRef != null) {
-                fieldText = readFieldText(fieldRef)
-                verified = verifyExpectedInputFromRoot(root, expected, fieldRef)
-            }
-        } finally {
-            fieldRef?.recycle()
-            root.recycle()
-        }
-
-        when {
-            fieldText == null -> {
-                val newCount = noFieldCount + 1
-                if (hasRecentVerifiedInput(expected) && newCount >= 1) {
-                    handler.post { finishLearningWithoutFinalSubmission() }
-                } else if (newCount >= NO_FIELD_PATIENCE) {
-                    isProcessing = false
-                    handler.post { dismissErrorAndRestart() }
-                } else {
-                    handler.postDelayed(
-                        { verifyLearningFinalInputThenDismiss(expected, attempt + 1, newCount) },
-                        verificationPollDelay(expected, newCount)
-                    )
-                }
-            }
-            verified || isVerifiedFieldValue(fieldText, expected) -> {
-                rememberVerifiedInput(expected)
-                handler.post { finishLearningWithoutFinalSubmission() }
-            }
-            else -> {
-                if (!hasRecentExpectedInput(expected)) {
-                    writeValueToField(expected)
-                }
-                handler.postDelayed(
-                    { verifyLearningFinalInputThenDismiss(expected, attempt + 1, 0) },
-                    verificationPollDelay(expected)
-                )
-            }
-        }
-    }
-
-    private fun doubleConfirmThenSend(expected: String, attempt: Int) {
-        if (!advancedActive) { isProcessing = false; return }
-        var fieldText: String? = null
-        var fieldRef : AccessibilityNodeInfo? = null
-        var verified = false
-        val root = getUssdRoot()
-        if (root != null) {
-            try {
-                fieldRef  = findFieldForExpectedValue(root, expected)
-                if (fieldRef != null) {
-                    fieldText = readFieldText(fieldRef)
-                    verified = verifyExpectedInputFromRoot(root, expected, fieldRef)
-                }
-            } finally { fieldRef?.recycle(); root.recycle() }
-        }
-        when {
-            fieldText == null -> {
-                if (hasRecentVerifiedInput(expected)) {
-                    handler.post { clickSendButton(expected, 0, skipFieldVerification = true) }
-                }
-                else handler.postDelayed(
-                    { verifyThenSend(expected, attempt, 1) },
-                    verificationPollDelay(expected, 1)
-                )
-            }
-            verified || isVerifiedFieldValue(fieldText, expected) -> {
-                rememberVerifiedInput(expected)
-                handler.post { clickSendButton(expected, 0, skipFieldVerification = true) }
-            }
-            else -> {
-                writeValueToField(expected)
-                handler.postDelayed(
-                    { verifyThenSend(expected, attempt, 0) },
-                    verificationPollDelay(expected)
-                )
-            }
-        }
-    }
-
-    private fun clickSendButton(expectedValue: String, attempt: Int, skipFieldVerification: Boolean = false) {
-        if (!advancedActive) { isProcessing = false; return }
-        if (pendingStepAdvanceFromKey.isNotBlank()) { isProcessing = false; return }
-        if (attempt >= MAX_SEND_ATTEMPTS) {
-            isProcessing = false; handler.post { dismissErrorAndRestart() }; return
-        }
-        if (skipFieldVerification && !hasRecentVerifiedInput(expectedValue)) {
-            handler.post { verifyThenSend(expectedValue, 0) }
-            return
-        }
-        val root = getUssdRoot() ?: run {
-            handler.postDelayed(
-                { clickSendButton(expectedValue, attempt + 1, skipFieldVerification) },
-                sendRetryDelay(attempt, expectedValue)
-            )
-            return
-        }
-        var fieldText: String? = null
-        var fieldRef : AccessibilityNodeInfo? = null
-        var sendBtn  : AccessibilityNodeInfo? = null
-        try {
-            if (!skipFieldVerification) {
-                fieldRef = findFieldForExpectedValue(root, expectedValue)
-                if (fieldRef != null) {
-                    fieldText = readFieldText(fieldRef)
-                }
-                if (fieldText != null &&
-                    !isVerifiedFieldValue(fieldText, expectedValue)
-                ) {
-                    handler.post { verifyThenSend(expectedValue, 0) }
-                    return
-                }
-                if (fieldText != null && isVerifiedFieldValue(fieldText, expectedValue)) {
-                    rememberVerifiedInput(expectedValue)
-                }
-            }
-            sendBtn = findBestSendActionButton(root)
-                ?: findPositiveDialogButton(root)
-                ?: findBottomRightActionButton(root)
-
-            if (sendBtn != null) {
-                val clicked = performClick(sendBtn)
-                sendBtn.recycle(); sendBtn = null
-                if (clicked) {
-                    val text = extractAllText(root)
-                    markStepAction(text)
-                    startPendingStepAdvance(root, text)
-                    return
-                }
-                else {
-                    if (fieldText != null && triggerInputSubmit(root, expectedValue, fieldRef)) {
-                        val text = extractAllText(root)
-                        markStepAction(text)
-                        startPendingStepAdvance(root, text)
-                        return
-                    }
-                    handler.postDelayed(
-                        { clickSendButton(expectedValue, attempt + 1, skipFieldVerification) },
-                        sendRetryDelay(attempt, expectedValue)
-                    )
-                }
-            } else {
-                if ((fieldText != null || skipFieldVerification) && triggerInputSubmit(root, expectedValue, fieldRef)) {
-                    val text = extractAllText(root)
-                    markStepAction(text)
-                    startPendingStepAdvance(root, text)
-                    return
-                }
-                // Avoid re-scanning/re-writing on every retry when we already know we injected this value recently.
-                if (!hasRecentExpectedInput(expectedValue) && attempt < 2) {
-                    writeValueToField(expectedValue)
-                }
-                handler.postDelayed(
-                    { clickSendButton(expectedValue, attempt + 1, skipFieldVerification) },
-                    sendRetryDelay(attempt, expectedValue) + hotSendRetryDelayMs
-                )
-            }
-        } finally {
-            fieldRef?.recycle()
-            sendBtn?.recycle()
-            try { root.recycle() } catch (_: Exception) {}
-        }
-    }
-
-    private fun advanceStep() {
-        currentStep++
-        isProcessing   = false
-        lastDialogText = ""
-        lastScreenSignatureKey = ""
-        clearRootRecoveryState()
-        clearPendingAdvance()
-        clearPendingStepAdvance()
-        clearInputWriteMarker()
-        requestAppUiBehindPopup()
-        updateRunningOverlay()
-        startStepTimeout()
-    }
-
-    private fun finishLearningWithoutFinalSubmission() {
-        val finalText = lastFinalResponse.ifBlank {
-            "Signature learning captured without submitting the final step"
-        }
-        currentStep = advancedSteps.size
-        isProcessing = false
-        clearInputWriteMarker()
-        closeCurrentUssdUi()
-        onDispatchComplete?.invoke(buildDispatchResult(finalText))
-        advancedInProgress = false
-        updateRunningOverlay()
-        cleanupAdvanced()
-    }
-
-    private fun dismissErrorAndRestart() {
-        clearPendingStepAdvance()
-        val dismissed = closeCurrentUssdUi()
-        val delay = if (dismissed) DIALOG_DISMISS_SETTLE_MS else 0L
-        handler.postDelayed({ restartFromBeginning() }, delay)
-    }
-
-    private fun dismissCurrentDialog(): Boolean {
-        val root = getUssdRoot()
-        if (root != null) {
-            try {
-                val btn = findActionButton(root, DISMISS_BUTTON_LABELS)
-                if (btn != null) {
-                    return try { performClick(btn) } finally { btn.recycle() }
-                }
-            } finally {
-                root.recycle()
-            }
-        }
-        return false
-    }
-
-    private fun closeCurrentUssdUi(): Boolean {
-        if (dismissCurrentDialog()) return true
-        val root = getUssdRoot() ?: return false
-        return try {
-            val pkg = root.packageName?.toString().orEmpty()
-            val dialogText = normalizeCollapsedText(extractAllText(root))
-            val lower = dialogText.lowercase()
-            val looksLikeVisibleUssd = dialogText.isNotBlank() &&
-                !NON_USSD_DIALOG_HINTS.any { lower.contains(it) } &&
-                (
-                    looksLikeUssdDialogFast(allTextLower = lower, windowPackageName = pkg) ||
-                        hasDialogLayout(root) ||
-                        hasEditableField(root) ||
-                        hasSendOrOkButton(root) ||
-                        hasDismissButton(root)
-                    )
-            if (!looksLikeVisibleUssd) return false
-            performGlobalAction(GLOBAL_ACTION_BACK)
-        } finally {
-            root.recycle()
-        }
-    }
-
-    private fun restartFromBeginning() {
-        val now = SystemClock.elapsedRealtime()
-        if (retryWindowStartedAt <= 0L) retryWindowStartedAt = now
-        if (now - retryWindowStartedAt >= MAX_RETRY_WINDOW_MS) {
-            val failMsg = if (lastFinalResponse.isNotBlank()) lastFinalResponse else "FAILED after 1 minute of retries"
-            onDispatchComplete?.invoke(buildDispatchResult(failMsg))
-            tokenPurchaseCallback?.invoke(false)
-            tokenPurchaseCallback = null
-            cleanupAdvanced()
-            return
-        }
-        retryCount++
-        currentStep    = 0
-        isProcessing   = false
-        hasSeenAdvancedPopup = false
-        hasSeenForegroundPopup = false
-        lastDialogText = ""
-        lastScreenSignatureKey = ""
-        lastStepActionKey = ""
-        lastStepActionElapsed = 0L
-        lastUiReturnElapsed = 0L
-        lastEventFingerprint = ""
-        lastEventElapsed = 0L
-        lastWindowId = -1
-        lastWindowPkg = ""
-        clearRootRecoveryState()
-        clearPendingAdvance()
-        clearPendingStepAdvance()
-        pendingProcessToken = 0L
-        clearInputWriteMarker()
-        clearRecentUssdContext()
-        requestAppUiBehindPopup(force = true)
-        updateRunningOverlay()
-        redialAdvancedIfNeeded()
-        startStepTimeout()
-    }
-
-    private fun redialAdvancedIfNeeded() {
-        val dialCode = advancedDialCode.trim()
-        if (dialCode.isBlank()) return
-        val now = SystemClock.elapsedRealtime()
-        if (now - lastRedialElapsed < REDIAL_COOLDOWN_MS) return
-        lastRedialElapsed = now
-        runCatching {
-            val i = UssdHelper.buildCallIntent(this, dialCode)
-            startActivity(i)
-            if (shouldKeepAppUiVisible()) UssdHelper.relaunchAppUi(this)
-        }
-    }
-
-    private fun handleCallbackDialogs(lower: String, dialogText: String) {
-        tokenPurchaseCallback?.let { cb ->
-            when {
-                lower.contains("you have transferred") ||
-                (lower.contains("transfer") && lower.contains("successful")) -> {
-                    cb(true); closeCurrentUssdUi(); clearCallbacks(); return
-                }
-                lower.contains("insufficient") || lower.contains("failed") || lower.contains("cancelled") -> {
-                    cb(false); closeCurrentUssdUi(); clearCallbacks(); return
-                }
-                else -> {}
-            }
-        }
-
-        balanceCallback?.let { cb ->
-            val hasBalance = lower.contains("balance") || lower.contains("airtime")
-                    || lower.contains("ksh") || lower.contains("kes")
-                    || dialogText.matches(Regex(""".*\d[\d,]*\.?\d*.*""", RegexOption.DOT_MATCHES_ALL))
-            if (hasBalance) {
-                airtimeBalance = dialogText
-                val display = BalanceChecker.parseBalanceDisplay(dialogText)
-                val intVal  = BalanceChecker.parseBalanceInt(dialogText)
-                BalanceChecker.currentBalance    = intVal
-                BalanceChecker.persistLastKnownBalance(applicationContext, display)
-                BalanceChecker.balanceCallback?.invoke(display)
-                closeCurrentUssdUi()
-                clearCallbacks()
-            }
-        }
-    }
-
-    private fun startStepTimeout() {
-        cancelStepTimeout()
-        val timeout = Runnable {
-            if (shouldExtendStepTimeoutWindow()) {
-                startStepTimeout()
-                return@Runnable
-            }
-            val dismissed = closeCurrentUssdUi()
-            val delay = if (dismissed) DIALOG_DISMISS_SETTLE_MS else 0L
-            handler.postDelayed({ restartFromBeginning() }, delay)
-        }
-        stepTimeoutRunnable = timeout
-        handler.postDelayed(timeout, currentStepTimeoutMs())
-    }
-
-    private fun cancelStepTimeout() {
-        stepTimeoutRunnable?.let { handler.removeCallbacks(it) }
-        stepTimeoutRunnable = null
-    }
-
-    private fun currentStepTimeoutMs(): Long {
-        val now = SystemClock.elapsedRealtime()
-        return when {
-            pendingPhase != PendingPhase.NONE || pendingStepAdvanceFromKey.isNotBlank() ->
-                if (shouldUseExtendedNetworkDelayWindow()) NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS
-                else PENDING_STEP_TIMEOUT_MS
-            currentStep >= advancedSteps.size ->
-                if (isWaitingOnTransientNetworkResponse()) NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS
-                else FINAL_RESPONSE_TIMEOUT_MS
-            !hasSeenAdvancedPopup -> STARTUP_STEP_TIMEOUT_MS
-            hasRecentUssdUiEvent() -> FINAL_RESPONSE_TIMEOUT_MS
-            shouldUseExtendedNetworkDelayWindow() -> NETWORK_DELAY_STEP_TIMEOUT_MS
-            retryWindowStartedAt > 0L && (now - retryWindowStartedAt) <= STARTUP_UI_KEEP_VISIBLE_MS -> STARTUP_STEP_TIMEOUT_MS
-            else -> STEP_TIMEOUT_MS
-        }
-    }
-
-    private fun hasRecentStepAction(waitWindowMs: Long = NETWORK_DELAY_ACTION_GRACE_MS): Boolean {
-        if (lastStepActionKey.isBlank() || lastStepActionElapsed <= 0L) return false
-        return SystemClock.elapsedRealtime() - lastStepActionElapsed <= waitWindowMs
-    }
-
-    private fun isWaitingOnTransientNetworkResponse(): Boolean {
-        val normalizedFinal = normalizeMenuText(lastFinalResponse)
-        return normalizedFinal.isNotBlank() && isTransientResponseText(normalizedFinal)
-    }
-
-    private fun shouldUseExtendedNetworkDelayWindow(expectedValue: String? = pendingExpectedValue): Boolean {
-        if (isWaitingOnTransientNetworkResponse()) return true
-        if (hasRecentStepAction()) return true
-        if (expectedValue != null &&
-            (hasRecentExpectedInput(expectedValue) || hasRecentVerifiedInput(expectedValue))
-        ) {
-            return true
-        }
-        return false
-    }
-
-    private fun shouldExtendStepTimeoutWindow(): Boolean {
-        if (!advancedActive) return false
-        if (pendingPhase != PendingPhase.NONE || pendingStepAdvanceFromKey.isNotBlank()) return true
-        if (!hasSeenAdvancedPopup) {
-            return retryWindowStartedAt <= 0L ||
-                (SystemClock.elapsedRealtime() - retryWindowStartedAt) <= STARTUP_UI_KEEP_VISIBLE_MS
-        }
-        if (currentStep >= advancedSteps.size) {
-            val normalizedFinal = normalizeMenuText(lastFinalResponse)
-            return normalizedFinal.isBlank() ||
-                isTransientResponseText(normalizedFinal) ||
-                hasRecentUssdUiEvent()
-        }
-        return hasRecentUssdUiEvent() || shouldUseExtendedNetworkDelayWindow()
-    }
-
-    private fun cleanupAdvanced() {
-        stopKeepingAppUiVisible()
-        cancelStepTimeout()
-        processStepRunnable?.let { handler.removeCallbacks(it) }
-        processStepRunnable = null
-        handler.removeCallbacksAndMessages(null)
-        currentStep         = 0
-        advancedSteps       = emptyList()
-        advancedPhoneNumber = ""
-        advancedDialCode    = ""
-        advancedOfferId     = -1
-        advancedOfferName   = ""
-        retryWindowStartedAt = 0L
-        advancedActive      = false
-        advancedInProgress  = false
-        hideRunningOverlay()
-        isProcessing        = false
-        retryCount          = 0
-        lastRedialElapsed   = 0L
-        signatureGuardEnabled = false
-        signatureAction     = "STOP"
-        signatureLearningMode = false
-        loadedSignatureSteps = emptyList()
-        lastDialogText      = ""
-        lastFinalResponse   = ""
-        pendingProcessToken = 0L
-        lastWindowPkg       = ""
-        lastWindowId        = -1
-        lastRelevantEventElapsed = 0L
-        lastEventFingerprint = ""
-        lastEventElapsed = 0L
-        hasSeenAdvancedPopup = false
-        hasSeenForegroundPopup = false
-        lastMenuSignatureKey = ""
-        lastMenuSignature = null
-        loadedSignatureLookupSource = emptyList()
-        loadedSignatureLookup = emptyMap()
-        lastScreenSignatureKey = ""
-        lastStepActionKey = ""
-        lastStepActionElapsed = 0L
-        lastUiReturnElapsed = 0L
-        clearRootRecoveryState()
-        clearPendingAdvance()
-        clearPendingStepAdvance()
-        clearInputWriteMarker()
-        clearRecentUssdContext()
-        onDispatchComplete  = null
-        tokenPurchaseCallback = null
-        resetSignatureTracking()
-        configureUiReturn(true)
-    }
-
-    private fun clearPendingAdvanceKick() {
-        pendingAdvanceKickRunnable?.let { handler.removeCallbacks(it) }
-        pendingAdvanceKickRunnable = null
-    }
-
-    private fun pendingAdvanceKickDelay(expectedValue: String, phase: PendingPhase): Long =
-        when {
-            useAggressiveVerifiedPopupFastPath &&
-                phase == PendingPhase.WAIT_SEND &&
-                (hasRecentVerifiedInput(expectedValue) ||
-                    (hasRecentExpectedInput(expectedValue) && hasRecentUssdUiEvent())) -> 0L
-            useAggressiveVerifiedPopupFastPath &&
-                phase == PendingPhase.WAIT_VERIFY &&
-                hasRecentExpectedInput(expectedValue) &&
-                hasRecentUssdUiEvent() -> 0L
-            phase == PendingPhase.WAIT_SEND && hasRecentVerifiedInput(expectedValue) -> 0L
-            hasSeenAdvancedPopup && hasRecentVerifiedInput(expectedValue) -> 0L
-            hasRecentExpectedInput(expectedValue) && hasRecentUssdUiEvent() -> postWriteVerifyPollMs
-            hasRecentExpectedInput(expectedValue) -> postWriteVerifyPollMs
-            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> rapidPostPopupVerifyMs
-            hasRecentVerifiedInput(expectedValue) -> hotSendRetryDelayMs
-            hasRecentUssdUiEvent() -> fastVerifyPollMs
-            else -> pendingAdvanceKickMs
-        }
-
-    private fun schedulePendingAdvanceKick(delayMs: Long = rootReacquireRetryDelayMs) {
-        if (!advancedActive || pendingPhase == PendingPhase.NONE) return
-        clearPendingAdvanceKick()
-        val task = Runnable {
-            pendingAdvanceKickRunnable = null
-            attemptPendingAdvanceWithRoot(null)
-        }
-        pendingAdvanceKickRunnable = task
-        if (delayMs <= 0L) handler.post(task) else handler.postDelayed(task, delayMs)
-    }
-
-    private fun clearPendingAdvance() {
-        clearPendingAdvanceKick()
-        pendingExpectedValue = null
-        pendingPhase = PendingPhase.NONE
-        pendingAdvanceFromKey = ""
-        pendingSinceElapsed = 0L
-        pendingAttempts = 0
-    }
-
-    private fun startPendingAdvance(
-        expectedValue: String,
-        root: AccessibilityNodeInfo,
-        dialogText: String,
-        snapshot: UssdTreeSnapshot? = null
-    ) {
-        pendingExpectedValue = expectedValue
-        pendingPhase = if (hasRecentVerifiedInput(expectedValue)) PendingPhase.WAIT_SEND else PendingPhase.WAIT_VERIFY
-        pendingAdvanceFromKey = buildTransitionSignatureKey(
-            windowId = resolveWindowId(root),
-            windowPkg = root.packageName?.toString().orEmpty(),
-            root = root,
-            snapshot = snapshot,
-            dialogText = dialogText
-        )
+    // region Pending Operations
+    private fun startPendingAdvance(expected: String, root: AccessibilityNodeInfo, dialogText: String, snapshot: UssdTreeSnapshot?) {
+        pendingExpectedValue = expected
+        pendingPhase = if (hasRecentVerifiedInput(expected)) PendingPhase.WAIT_SEND else PendingPhase.WAIT_VERIFY
+        pendingAdvanceFromKey = buildTransitionSignatureKey(root, dialogText, snapshot)
         pendingSinceElapsed = SystemClock.elapsedRealtime()
         pendingAttempts = 0
         isProcessing = false
-        // Safety kick in case OEM doesn't emit a useful event after ACTION_SET_TEXT.
-        schedulePendingAdvanceKick(delayMs = pendingAdvanceKickDelay(expectedValue, pendingPhase))
-    }
-
-    private fun attemptPendingAdvanceWithRoot(existingRoot: AccessibilityNodeInfo?) {
-        if (!advancedActive) { clearPendingAdvance(); isProcessing = false; return }
-        clearPendingAdvanceKick()
-        val pendingTimeoutMs = if (shouldUseExtendedNetworkDelayWindow(pendingExpectedValue)) {
-            NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS
-        } else {
-            PENDING_ADVANCE_TIMEOUT_MS
-        }
-        val root = existingRoot ?: getUssdRoot() ?: run {
-            if (pendingSinceElapsed > 0L &&
-                SystemClock.elapsedRealtime() - pendingSinceElapsed > pendingTimeoutMs
-            ) {
-                clearPendingAdvance()
-                isProcessing = false
-                dismissErrorAndRestart()
-            } else {
-                val expected = pendingExpectedValue
-                val delayMs = expected?.let { pendingAdvanceKickDelay(it, pendingPhase) } ?: rootReacquireRetryDelayMs
-                schedulePendingAdvanceKick(delayMs = delayMs)
-            }
-            return
-        }
-        try {
-            attemptPendingAdvance(root)
-        } finally {
-            if (existingRoot == null) runCatching { root.recycle() }
-        }
+        schedulePendingAdvanceKick()
     }
 
     private fun attemptPendingAdvance(root: AccessibilityNodeInfo) {
         val expected = pendingExpectedValue ?: run { clearPendingAdvance(); return }
-        val pendingTimeoutMs = if (shouldUseExtendedNetworkDelayWindow(expected)) {
-            NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS
-        } else {
-            PENDING_ADVANCE_TIMEOUT_MS
-        }
-        val elapsed = SystemClock.elapsedRealtime() - pendingSinceElapsed
-        if (elapsed > pendingTimeoutMs) {
-            clearPendingAdvance()
-            isProcessing = false
-            dismissErrorAndRestart()
-            return
+        if (SystemClock.elapsedRealtime() - pendingSinceElapsed > pendingAdvanceTimeout()) {
+            clearPendingAdvance(); isProcessing = false; dismissErrorAndRestart(); return
         }
 
-        val requireStrictPopupScope = shouldRequireStrictPopupScope()
-        val interactionRoot = obtainInteractionRoot(root, requireStrictDialog = requireStrictPopupScope) ?: run {
-            schedulePendingAdvanceKick(delayMs = pendingAdvanceKickDelay(expected, pendingPhase))
-            isProcessing = false
-            return
+        val interactionRoot = obtainInteractionRoot(root, shouldRequireStrictPopupScope()) ?: run {
+            schedulePendingAdvanceKick(); isProcessing = false; return
         }
         try {
             if (shouldAdvanceFromChangedPendingPopup(interactionRoot, expected)) {
-                clearPendingAdvance()
-                advanceStep()
-                pendingProcessToken = SystemClock.elapsedRealtime()
-                scheduleProcessStep(dialogChanged = true)
-                return
+                clearPendingAdvance(); advanceStep(); scheduleProcessStep(true); return
             }
+
             when (pendingPhase) {
                 PendingPhase.WAIT_VERIFY -> {
                     val field = findFieldForExpectedValue(interactionRoot, expected)
                     try {
-                        val verified = if (field != null) {
-                            verifyExpectedInputFromRoot(
-                                root = interactionRoot,
-                                expectedValue = expected,
-                                existingField = field
-                            )
-                        } else {
-                            hasRecentVerifiedInput(expected)
-                        }
-
+                        val verified = field?.let { verifyExpectedInput(interactionRoot, expected, it) } ?: hasRecentVerifiedInput(expected)
                         if (verified) {
                             pendingPhase = PendingPhase.WAIT_SEND
                             attemptPendingAdvance(root)
                             return
                         }
-
-                        // Re-write as soon as a delayed popup finally exposes the real field.
                         if (pendingAttempts < 2 && shouldForcePendingFieldRewrite(expected, field != null)) {
                             pendingAttempts++
-                            val wroteValue = try {
-                                ensureExpectedValueWritten(
-                                    root = interactionRoot,
-                                    expectedValue = expected,
-                                    preferredField = field
-                                )
-                            } catch (_: Exception) {
-                                false
-                            }
-                            if (wroteValue && verifyExpectedInputFromRoot(interactionRoot, expected, field)) {
+                            if (ensureExpectedValueWritten(interactionRoot, expected, field) &&
+                                verifyExpectedInput(interactionRoot, expected, field)) {
                                 pendingPhase = PendingPhase.WAIT_SEND
                                 attemptPendingAdvance(root)
                                 return
                             }
                         }
-                        schedulePendingAdvanceKick(delayMs = pendingAdvanceKickDelay(expected, pendingPhase))
+                        schedulePendingAdvanceKick()
                         isProcessing = false
                     } finally {
-                        runCatching { field?.recycle() }
+                        field?.recycle()
                     }
                 }
-
                 PendingPhase.WAIT_SEND -> {
-                    val sent = tryImmediateVerifiedSend(interactionRoot, field = null, expectedValue = expected)
-                    if (sent) {
+                    if (tryImmediateVerifiedSend(interactionRoot, null, expected)) {
                         clearPendingAdvance()
-                        val text = capturePreferredPopupSnapshot(
-                            root = interactionRoot,
-                            requireStrictDialog = requireStrictPopupScope
-                        )?.dialogText.orEmpty()
+                        val text = capturePreferredPopupSnapshot(interactionRoot, shouldRequireStrictPopupScope())?.dialogText.orEmpty()
                         markStepAction(text)
                         startPendingStepAdvance(interactionRoot, text)
                     } else {
-                        // Let the next event re-try, but avoid expensive work here.
-                        schedulePendingAdvanceKick(delayMs = pendingAdvanceKickDelay(expected, pendingPhase))
+                        schedulePendingAdvanceKick()
                         isProcessing = false
                     }
                 }
-
                 PendingPhase.NONE -> Unit
             }
         } finally {
@@ -3057,182 +905,103 @@ class UssdNavigationService : AccessibilityService() {
         }
     }
 
-    private fun shouldAdvanceFromChangedPendingPopup(
-        root: AccessibilityNodeInfo,
-        expectedValue: String
-    ): Boolean {
+    private fun shouldAdvanceFromChangedPendingPopup(root: AccessibilityNodeInfo, expected: String): Boolean {
         val fromKey = pendingAdvanceFromKey
         if (fromKey.isBlank()) return false
-        val requireStrictPopupScope = shouldRequireStrictPopupScope()
-        val snapshot = capturePreferredPopupSnapshot(root, requireStrictDialog = requireStrictPopupScope)
+        val snapshot = capturePreferredPopupSnapshot(root, shouldRequireStrictPopupScope())
         val dialogText = snapshot?.dialogText ?: normalizeCollapsedText(extractAllText(root))
         if (dialogText.isBlank()) return false
-        val currentKey = buildTransitionSignatureKey(
-            windowId = resolveWindowId(root),
-            windowPkg = root.packageName?.toString().orEmpty(),
-            root = root,
-            snapshot = snapshot,
-            dialogText = dialogText
-        )
+        val currentKey = buildTransitionSignatureKey(root, dialogText, snapshot)
         if (currentKey == fromKey) return false
-        if (verifyExpectedInputFromRoot(root, expectedValue)) {
+        if (verifyExpectedInput(root, expected)) {
             pendingAdvanceFromKey = currentKey
             return false
         }
         return true
     }
 
-    private fun clearCallbacks() {
-        lastDialogText      = ""
-        tokenPurchaseCallback = null
-        balanceCallback     = null
-        onDispatchComplete  = null
+    private fun clearPendingAdvance() {
+        pendingAdvanceKickRunnable?.let { handler.removeCallbacks(it) }
+        pendingAdvanceKickRunnable = null
+        pendingExpectedValue = null
+        pendingPhase = PendingPhase.NONE
+        pendingAdvanceFromKey = ""
+        pendingSinceElapsed = 0L
+        pendingAttempts = 0
     }
 
-    private fun shouldKeepAppUiVisible(): Boolean =
-        keepAppUiVisibleEnabled &&
-            !uiReturnSuppressed &&
-            ((advancedActive && advancedInProgress) || isForegroundUiActive())
-
-    private fun hasSeenUssdPopup(): Boolean =
-        hasSeenAdvancedPopup || hasSeenForegroundPopup
-
-    private fun shouldShowRunningOverlay(): Boolean =
-        SHOW_RUNNING_OVERLAY && ((advancedInProgress || (advancedActive && advancedSteps.isNotEmpty())) || isForegroundUiActive())
-
-    private fun requestAppUiBehindPopup(force: Boolean = false) {
-        if (!shouldKeepAppUiVisible()) return
-        val now = SystemClock.elapsedRealtime()
-        if (!force && now - lastUiReturnElapsed < 900L) return
-        lastUiReturnElapsed = now
-        UssdHelper.relaunchAppUi(this, delayMs = if (force) 60L else 120L)
+    private fun schedulePendingAdvanceKick() {
+        if (pendingPhase == PendingPhase.NONE) return
+        clearPendingAdvanceKick()
+        val expected = pendingExpectedValue ?: return
+        val delay = when {
+            pendingPhase == PendingPhase.WAIT_SEND && hasRecentVerifiedInput(expected) -> 0L
+            pendingPhase == PendingPhase.WAIT_VERIFY && hasRecentExpectedInput(expected) && hasRecentUssdUiEvent() -> 0L
+            hasRecentExpectedInput(expected) && hasRecentUssdUiEvent() -> POST_WRITE_VERIFY_POLL_MS
+            hasRecentExpectedInput(expected) -> POST_WRITE_VERIFY_POLL_MS
+            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> RAPID_POST_POPUP_VERIFY_MS
+            hasRecentVerifiedInput(expected) -> HOT_SEND_RETRY_DELAY_MS
+            hasRecentUssdUiEvent() -> FAST_VERIFY_POLL_MS
+            else -> PENDING_ADVANCE_KICK_MS
+        }
+        val task = Runnable {
+            pendingAdvanceKickRunnable = null
+            attemptPendingAdvanceWithRoot(null)
+        }
+        pendingAdvanceKickRunnable = task
+        if (delay <= 0) handler.post(task) else handler.postDelayed(task, delay)
     }
 
-    private fun startKeepingAppUiVisible() {
-        uiKeepVisibleRunnable?.let { handler.removeCallbacks(it) }
-        val task = object : Runnable {
-            override fun run() {
-                val foregroundExpired = foregroundUiActive && !isForegroundUiActive()
-                if (foregroundExpired) {
-                    disarmForegroundUi()
-                    hasSeenForegroundPopup = false
-                    updateRunningOverlay()
-                }
-                val startupWindowActive = advancedActive &&
-                    !hasSeenUssdPopup() &&
-                    (SystemClock.elapsedRealtime() - lastRelevantEventElapsed) <= STARTUP_UI_KEEP_VISIBLE_MS
-                val canKeepVisible = shouldKeepAppUiVisible() &&
-                    (startupWindowActive || (hasSeenUssdPopup() && hasRecentUssdUiEvent()))
-                if (!canKeepVisible) {
-                    uiKeepVisibleRunnable = null
-                    return
-                }
-                requestAppUiBehindPopup(force = true)
-                handler.postDelayed(this, UI_KEEP_VISIBLE_INTERVAL_MS)
+    private fun clearPendingAdvanceKick() {
+        pendingAdvanceKickRunnable?.let { handler.removeCallbacks(it) }
+        pendingAdvanceKickRunnable = null
+    }
+
+    private fun attemptPendingAdvanceWithRoot(existingRoot: AccessibilityNodeInfo?) {
+        if (!advancedActive) { clearPendingAdvance(); isProcessing = false; return }
+        clearPendingAdvanceKick()
+        val root = existingRoot ?: getUssdRoot() ?: run {
+            schedulePendingAdvanceKick(); return
+        }
+        try { attemptPendingAdvance(root) } finally { if (existingRoot == null) root.recycle() }
+    }
+    // endregion
+
+    // region Step Advance (after a successful action)
+    private fun startPendingStepAdvance(root: AccessibilityNodeInfo, dialogText: String) {
+        clearPendingStepAdvance()
+        pendingStepAdvanceSinceElapsed = SystemClock.elapsedRealtime()
+        val snapshot = capturePreferredPopupSnapshot(root, shouldRequireStrictPopupScope())
+        pendingStepAdvanceFromKey = buildStepAdvanceSignatureKey(root, dialogText, snapshot)
+        val timeoutTask = Runnable {
+            if (pendingStepAdvanceFromKey.isNotBlank()) {
+                clearPendingStepAdvance()
+                isProcessing = false
+                dismissErrorAndRestart()
             }
         }
-        uiKeepVisibleRunnable = task
-        handler.postDelayed(task, UI_KEEP_VISIBLE_INTERVAL_MS)
+        pendingStepAdvanceTimeoutRunnable = timeoutTask
+        handler.postDelayed(timeoutTask, stepAdvanceTimeoutMs())
+        schedulePendingStepAdvanceKick()
+        isProcessing = false
     }
 
-    private fun stopKeepingAppUiVisible() {
-        uiKeepVisibleRunnable?.let { handler.removeCallbacks(it) }
-        uiKeepVisibleRunnable = null
+    private fun handlePendingStepAdvance(windowId: Int, windowPkg: String, root: AccessibilityNodeInfo, snapshot: UssdTreeSnapshot?, dialogText: String): Boolean {
+        val fromKey = pendingStepAdvanceFromKey
+        if (fromKey.isBlank()) return false
+        if (SystemClock.elapsedRealtime() - pendingStepAdvanceSinceElapsed > stepAdvanceTimeoutMs()) {
+            clearPendingStepAdvance(); isProcessing = false; dismissErrorAndRestart(); return true
+        }
+        val currentKey = buildStepAdvanceSignatureKey(root, dialogText, snapshot)
+        if (currentKey == fromKey) {
+            schedulePendingStepAdvanceKick()
+            return true
+        }
+        clearPendingStepAdvance()
+        advanceStep()
+        scheduleProcessStep(true)
+        return true
     }
-
-    private fun buildRunningOverlayView(): View {
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            val paddingH = dp(14)
-            val paddingV = dp(10)
-            setPadding(paddingH, paddingV, paddingH, paddingV)
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(16).toFloat()
-                setColor(Color.parseColor("#E61A1A1A"))
-                setStroke(dp(1), Color.parseColor("#3329B6F6"))
-            }
-            elevation = dp(8).toFloat()
-        }
-
-        val status = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            setTypeface(typeface, Typeface.BOLD)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-        }
-        val detail = TextView(this).apply {
-            setTextColor(Color.parseColor("#FFD7E3F4"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setLineSpacing(0f, 1.05f)
-        }
-        val progress = ProgressBar(this).apply {
-            isIndeterminate = true
-            alpha = 0.9f
-        }
-
-        container.addView(
-            status,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-        )
-        container.addView(
-            detail,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(4) }
-        )
-        container.addView(
-            progress,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.END
-                topMargin = dp(6)
-            }
-        )
-
-        runningOverlayView = container
-        runningOverlayStatusText = status
-        runningOverlayDetailText = detail
-        return container
-    }
-
-    private fun buildRunningOverlayStatusText(): String = when {
-        retryCount > 0 -> "Bingwa Mobile USSD retrying"
-        !hasSeenAdvancedPopup -> "Bingwa Mobile opening USSD"
-        currentStep >= advancedSteps.size -> "Bingwa Mobile finishing USSD"
-        else -> "Bingwa Mobile USSD running"
-    }
-
-    private fun buildRunningOverlayDetailText(): String {
-        val detailParts = mutableListOf<String>()
-        advancedOfferName.takeIf { it.isNotBlank() }?.let { detailParts += it }
-        when {
-            advancedSteps.isEmpty() -> detailParts += "Waiting for the network menu"
-            currentStep >= advancedSteps.size -> detailParts += "Finalizing network response"
-            advancedSteps.getOrNull(currentStep) == "INPUT_PHONE" -> {
-                val progress = "Step ${currentStep + 1} of ${advancedSteps.size}"
-                detailParts += "$progress, entering phone number"
-            }
-            else -> detailParts += "Step ${currentStep + 1} of ${advancedSteps.size}"
-        }
-        if (retryCount > 0) {
-            detailParts += "Retry $retryCount within 1-minute window"
-        }
-        return detailParts.joinToString("  |  ")
-            .ifBlank { "USSD session is still active while Bingwa stays visible here" }
-    }
-
-    private fun dp(value: Int): Int =
-        TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP,
-            value.toFloat(),
-            resources.displayMetrics
-        ).toInt()
 
     private fun clearPendingStepAdvance() {
         pendingStepAdvanceFromKey = ""
@@ -3243,339 +1012,395 @@ class UssdNavigationService : AccessibilityService() {
         pendingStepAdvanceKickRunnable = null
     }
 
-    private fun shouldWaitForRootRecovery(): Boolean {
-        if (!advancedActive) return false
-        return hasSeenAdvancedPopup ||
-            pendingPhase != PendingPhase.NONE ||
-            pendingStepAdvanceFromKey.isNotBlank() ||
-            hasRecentUssdUiEvent()
-    }
-
-    private fun waitForRootRecovery() {
-        val now = SystemClock.elapsedRealtime()
-        if (waitingForRootSinceElapsed == 0L) {
-            waitingForRootSinceElapsed = now
-        }
-        val elapsed = now - waitingForRootSinceElapsed
-        val rootRecoveryTimeoutMs = if (shouldUseExtendedNetworkDelayWindow()) {
-            NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS
-        } else {
-            ROOT_REACQUIRE_TIMEOUT_MS
-        }
-        if (elapsed > rootRecoveryTimeoutMs) {
-            clearRootRecoveryState()
-            handler.post { dismissErrorAndRestart() }
-            return
-        }
-        pendingProcessToken = now
-        scheduleProcessStep(dialogChanged = false, overrideDelayMs = rootReacquireRetryDelayMs)
-    }
-
-    private fun clearRootRecoveryState() {
-        waitingForRootSinceElapsed = 0L
-    }
-
-    private fun rememberRecentUssdContext(
-        root: AccessibilityNodeInfo,
-        snapshot: UssdTreeSnapshot?,
-        windowId: Int,
-        windowPkg: String,
-        dialogText: String,
-        strictDialog: Boolean
-    ) {
-        recentUssdRoot?.let { existing ->
-            if (existing !== root) {
-                runCatching { existing.recycle() }
-            }
-        }
-        recentUssdRoot = AccessibilityNodeInfo.obtain(root)
-        recentUssdSnapshot = snapshot
-        recentUssdWindowId = windowId
-        recentUssdWindowPkg = windowPkg
-        recentUssdDialogText = dialogText
-        recentUssdStrictDialog = strictDialog
-        recentUssdCapturedElapsed = SystemClock.elapsedRealtime()
-    }
-
-    private fun hasFreshRecentUssdContext(requireStrictDialog: Boolean = false): Boolean {
-        if (recentUssdCapturedElapsed <= 0L) return false
-        if (SystemClock.elapsedRealtime() - recentUssdCapturedElapsed > RECENT_USSD_CONTEXT_WINDOW_MS) return false
-        if (requireStrictDialog && !recentUssdStrictDialog) return false
-        return recentUssdRoot != null
-    }
-
-    private fun obtainRecentUssdContext(requireStrictDialog: Boolean = false): RecentUssdContext? {
-        if (!hasFreshRecentUssdContext(requireStrictDialog = requireStrictDialog)) return null
-        val root = recentUssdRoot ?: return null
-        return RecentUssdContext(
-            root = AccessibilityNodeInfo.obtain(root),
-            snapshot = recentUssdSnapshot,
-            windowId = recentUssdWindowId,
-            windowPkg = recentUssdWindowPkg,
-            dialogText = recentUssdDialogText,
-            strictDialog = recentUssdStrictDialog
-        )
-    }
-
-    private fun clearRecentUssdContext() {
-        recentUssdRoot?.let { runCatching { it.recycle() } }
-        recentUssdRoot = null
-        recentUssdSnapshot = null
-        recentUssdWindowId = -1
-        recentUssdWindowPkg = ""
-        recentUssdDialogText = ""
-        recentUssdStrictDialog = false
-        recentUssdCapturedElapsed = 0L
-    }
-
-    private fun startPendingStepAdvance(root: AccessibilityNodeInfo, dialogText: String) {
-        clearPendingStepAdvance()
-        pendingStepAdvanceSinceElapsed = SystemClock.elapsedRealtime()
-        val snapshot = captureTreeSnapshot(root)
-        pendingStepAdvanceFromKey = buildStepAdvanceSignatureKey(
-            windowId = resolveWindowId(root),
-            windowPkg = root.packageName?.toString().orEmpty(),
-            root = root,
-            snapshot = snapshot,
-            dialogText = dialogText
-        )
-        val timeoutTask = Runnable {
-            if (pendingStepAdvanceFromKey.isBlank()) return@Runnable
-            clearPendingStepAdvance()
-            isProcessing = false
-            dismissErrorAndRestart()
-        }
-        pendingStepAdvanceTimeoutRunnable = timeoutTask
-        val timeoutMs = if (shouldUseExtendedNetworkDelayWindow()) {
-            NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS
-        } else {
-            PENDING_STEP_ADVANCE_TIMEOUT_MS
-        }
-        handler.postDelayed(timeoutTask, timeoutMs)
-        schedulePendingStepAdvanceKick(delayMs = pendingStepAdvanceKickDelay())
-        isProcessing = false
-    }
-
-    private fun schedulePendingStepAdvanceKick(delayMs: Long = PENDING_STEP_ADVANCE_KICK_MS) {
-        if (!advancedActive || pendingStepAdvanceFromKey.isBlank()) return
+    private fun schedulePendingStepAdvanceKick() {
+        if (pendingStepAdvanceFromKey.isBlank()) return
         pendingStepAdvanceKickRunnable?.let { handler.removeCallbacks(it) }
         val task = Runnable {
             pendingStepAdvanceKickRunnable = null
             attemptPendingStepAdvanceWithRoot(null)
         }
         pendingStepAdvanceKickRunnable = task
-        if (delayMs <= 0L) handler.post(task) else handler.postDelayed(task, delayMs)
+        val delay = if (hasRecentUssdUiEvent()) EVENT_HOT_POLL_MS else if (hasSeenAdvancedPopup) RAPID_POST_POPUP_POLL_MS else PENDING_STEP_ADVANCE_KICK_MS
+        handler.postDelayed(task, delay)
     }
 
-    private fun pendingStepAdvanceKickDelay(): Long =
-        when {
-            hasRecentUssdUiEvent() -> eventHotPollMs
-            hasSeenAdvancedPopup -> rapidPostPopupPollMs
-            else -> PENDING_STEP_ADVANCE_KICK_MS
-        }
-
     private fun attemptPendingStepAdvanceWithRoot(existingRoot: AccessibilityNodeInfo?) {
-        if (!advancedActive) {
-            clearPendingStepAdvance()
-            isProcessing = false
-            return
-        }
+        if (!advancedActive) { clearPendingStepAdvance(); isProcessing = false; return }
         val fromKey = pendingStepAdvanceFromKey
-        if (fromKey.isBlank()) {
-            isProcessing = false
-            return
-        }
-        pendingStepAdvanceKickRunnable?.let { handler.removeCallbacks(it) }
+        if (fromKey.isBlank()) { isProcessing = false; return }
         pendingStepAdvanceKickRunnable = null
 
-        val elapsed = SystemClock.elapsedRealtime() - pendingStepAdvanceSinceElapsed
-        val timeoutMs = if (shouldUseExtendedNetworkDelayWindow()) {
-            NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS
-        } else {
-            PENDING_STEP_ADVANCE_TIMEOUT_MS
-        }
-        if (elapsed > timeoutMs) {
-            clearPendingStepAdvance()
-            isProcessing = false
-            dismissErrorAndRestart()
-            return
+        if (SystemClock.elapsedRealtime() - pendingStepAdvanceSinceElapsed > stepAdvanceTimeoutMs()) {
+            clearPendingStepAdvance(); isProcessing = false; dismissErrorAndRestart(); return
         }
 
         val root = existingRoot ?: getUssdRoot() ?: run {
-            schedulePendingStepAdvanceKick(delayMs = pendingStepAdvanceKickDelay())
-            isProcessing = false
-            return
+            schedulePendingStepAdvanceKick(); isProcessing = false; return
         }
         try {
-            val requireStrictPopupScope = shouldRequireStrictPopupScope()
-            val snapshot = capturePreferredPopupSnapshot(root, requireStrictDialog = requireStrictPopupScope)
-            val dialogText = snapshot?.dialogText
-                ?: normalizeCollapsedText(extractAllText(root))
-            if (dialogText.isBlank()) {
-                schedulePendingStepAdvanceKick(delayMs = pendingStepAdvanceKickDelay())
-                isProcessing = false
-                return
-            }
-            val currentKey = buildStepAdvanceSignatureKey(
-                windowId = resolveWindowId(root),
-                windowPkg = root.packageName?.toString().orEmpty(),
-                root = root,
-                snapshot = snapshot,
-                dialogText = dialogText
-            )
+            val snapshot = capturePreferredPopupSnapshot(root, shouldRequireStrictPopupScope())
+            val dialogText = snapshot?.dialogText ?: normalizeCollapsedText(extractAllText(root))
+            if (dialogText.isBlank()) { schedulePendingStepAdvanceKick(); isProcessing = false; return }
+            val currentKey = buildStepAdvanceSignatureKey(root, dialogText, snapshot)
             if (currentKey == fromKey) {
-                schedulePendingStepAdvanceKick(delayMs = pendingStepAdvanceKickDelay())
-                isProcessing = false
-                return
+                schedulePendingStepAdvanceKick(); isProcessing = false; return
             }
             clearPendingStepAdvance()
             advanceStep()
-            pendingProcessToken = SystemClock.elapsedRealtime()
-            scheduleProcessStep(dialogChanged = true)
+            scheduleProcessStep(true)
         } finally {
-            if (existingRoot == null) runCatching { root.recycle() }
+            if (existingRoot == null) root.recycle()
         }
     }
 
-    private fun handlePendingStepAdvance(
-        windowId: Int,
-        windowPkg: String,
-        root: AccessibilityNodeInfo,
-        snapshot: UssdTreeSnapshot?,
-        dialogText: String
-    ): Boolean {
-        val fromKey = pendingStepAdvanceFromKey
-        if (fromKey.isBlank()) return false
-        val elapsed = SystemClock.elapsedRealtime() - pendingStepAdvanceSinceElapsed
-        val timeoutMs = if (shouldUseExtendedNetworkDelayWindow()) {
-            NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS
-        } else {
-            PENDING_STEP_ADVANCE_TIMEOUT_MS
-        }
-        if (elapsed > timeoutMs) {
-            clearPendingStepAdvance()
-            isProcessing = false
-            dismissErrorAndRestart()
-            return true
-        }
-        val currentKey = buildStepAdvanceSignatureKey(
-            windowId = windowId,
-            windowPkg = windowPkg,
-            root = root,
-            snapshot = snapshot,
-            dialogText = dialogText
-        )
-        if (currentKey == fromKey) {
-            schedulePendingStepAdvanceKick(delayMs = pendingStepAdvanceKickDelay())
-            return true
-        }
+    private fun advanceStep() {
+        currentStep++
+        isProcessing = false
+        lastDialogText = ""
+        lastScreenSignatureKey = ""
+        clearPendingAdvance()
         clearPendingStepAdvance()
-        advanceStep()
-        pendingProcessToken = SystemClock.elapsedRealtime()
-        scheduleProcessStep(dialogChanged = true)
-        return true
+        clearInputWriteMarkers()
+        requestAppUiBehindPopup()
+        updateOverlay()
+        startStepTimeout()
     }
 
-    private inline fun safeFind(root: AccessibilityNodeInfo, finder: (AccessibilityNodeInfo) -> AccessibilityNodeInfo?): AccessibilityNodeInfo? =
-        try { finder(root) } catch (_: Exception) { null }
-
-    private fun isPotentialUssdPackage(pkg: String): Boolean {
-        if (pkg.isBlank() || pkg == "android") return false
-        if (pkg in USSD_PACKAGES) return true
-        val lower = pkg.lowercase()
-        return USSD_PACKAGE_HINTS.any { lower.contains(it) }
+    private fun stepAdvanceTimeoutMs(): Long {
+        return if (shouldUseExtendedTimeout()) NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS else PENDING_STEP_ADVANCE_TIMEOUT_MS
     }
 
-    private fun hasDialogLayout(node: AccessibilityNodeInfo, snapshot: UssdTreeSnapshot? = null): Boolean {
-        val className = node.className?.toString().orEmpty()
-        return className.contains("Dialog", ignoreCase = true) ||
-            className.contains("AlertDialog", ignoreCase = true) ||
-            className.contains("BottomSheet", ignoreCase = true) ||
-            (node.childCount in 1..6 && (
-                snapshot?.hasSendButton == true ||
-                    snapshot?.hasDismissButton == true ||
-                    (snapshot == null && (hasSendOrOkButton(node) || hasDismissButton(node)))
-                ))
+    private fun pendingAdvanceTimeout(): Long {
+        return if (shouldUseExtendedTimeout()) NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS else PENDING_ADVANCE_TIMEOUT_MS
+    }
+    // endregion
+
+    // region Input Writing (official ACTION_SET_TEXT and fallbacks)
+    private fun writeValueToField(root: AccessibilityNodeInfo, value: String): Boolean {
+        val fields = mutableListOf<AccessibilityNodeInfo>()
+        collectTextEntryCandidates(root, fields)
+        if (fields.isEmpty()) collectAggressiveTextEntryCandidates(root, fields)
+        fields.sortByDescending { scoreTextEntryCandidate(it) }
+        return fields.any { tryWriteValueToField(it, value, root) }
     }
 
-    private fun hasEditableField(node: AccessibilityNodeInfo): Boolean {
-        if (isTextEntryNode(node)) return true
-        for (i in 0 until node.childCount) {
-            val c = node.getChild(i) ?: continue
-            val found = hasEditableField(c); c.recycle()
-            if (found) return true
-        }
-        return false
-    }
+    private fun ensureExpectedValueWritten(root: AccessibilityNodeInfo, expected: String, preferredField: AccessibilityNodeInfo?): Boolean {
+        if (verifyExpectedInput(root, expected, preferredField)) return true
+        if (preferredField != null && tryWriteValueToField(preferredField, expected, root)) return true
 
-    private fun hasSendOrOkButton(node: AccessibilityNodeInfo): Boolean {
-        val t = normalizeActionLabel(node.text?.toString())
-        val d = normalizeActionLabel(node.contentDescription?.toString())
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        if (t in SEND_BUTTON_LABELS || d in SEND_BUTTON_LABELS || SEND_VIEW_ID_HINTS.any { viewId.contains(it) }) return true
-        for (i in 0 until node.childCount) {
-            val c = node.getChild(i) ?: continue
-            val found = hasSendOrOkButton(c); c.recycle()
-            if (found) return true
-        }
-        return false
-    }
-
-    private fun hasDismissButton(node: AccessibilityNodeInfo): Boolean {
-        val t = normalizeActionLabel(node.text?.toString())
-        val d = normalizeActionLabel(node.contentDescription?.toString())
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        if (t in DISMISS_BUTTON_LABELS || d in DISMISS_BUTTON_LABELS || DISMISS_VIEW_ID_HINTS.any { viewId.contains(it) }) return true
-        for (i in 0 until node.childCount) {
-            val c = node.getChild(i) ?: continue
-            val found = hasDismissButton(c); c.recycle()
-            if (found) return true
-        }
-        return false
-    }
-
-    private fun findEditableField(node: AccessibilityNodeInfo): AccessibilityNodeInfo? =
-        findBestEditableField(node) { scoreTextEntryCandidate(it) }
-
-    private fun findEditableFieldForStep(
-        node: AccessibilityNodeInfo,
-        step: String,
-        dialogText: String
-    ): AccessibilityNodeInfo? =
-        findBestEditableField(node) { scoreTextEntryCandidateForStep(it, step, dialogText) }
-
-    private fun findBestEditableField(
-        node: AccessibilityNodeInfo,
-        scorer: (AccessibilityNodeInfo) -> Int
-    ): AccessibilityNodeInfo? {
-        val directTargets = obtainInputTargets(node)
+        val field = findFieldForExpectedValue(root, expected)
         try {
-            directTargets.maxByOrNull(scorer)?.let { best ->
-                return AccessibilityNodeInfo.obtain(best)
+            if (field != null && field !== preferredField) {
+                if (verifyExpectedInput(root, expected, field)) return true
+                if (tryWriteValueToField(field, expected, root)) return true
             }
         } finally {
-            directTargets.forEach { it.recycle() }
+            field?.recycle()
         }
 
         val candidates = mutableListOf<AccessibilityNodeInfo>()
-        try {
-            collectTextEntryCandidates(node, candidates)
-            candidates.maxByOrNull(scorer)?.let { best ->
-                return AccessibilityNodeInfo.obtain(best)
-            }
-        } finally {
-            candidates.forEach { it.recycle() }
-        }
+        collectTextEntryCandidates(root, candidates)
+        if (candidates.isEmpty()) collectAggressiveTextEntryCandidates(root, candidates)
+        candidates.sortByDescending { scoreTextEntryCandidate(it) + if (matchesExpectedInput(readFieldText(it), expected)) 700 else 0 }
+        return candidates.any { tryWriteValueToField(it, expected, root) }
+    }
 
-        val aggressiveCandidates = mutableListOf<AccessibilityNodeInfo>()
-        try {
-            collectAggressiveTextEntryCandidates(node, aggressiveCandidates)
-            return aggressiveCandidates.maxByOrNull {
-                scorer(it) + scoreAggressiveTextEntryCandidate(it)
-            }?.let { AccessibilityNodeInfo.obtain(it) }
-        } finally {
-            aggressiveCandidates.forEach { it.recycle() }
+    private fun tryWriteValueToField(field: AccessibilityNodeInfo, value: String, verificationRoot: AccessibilityNodeInfo? = null): Boolean {
+        var wrote = false
+        for (pass in 0 until FORCEFUL_WRITE_PASSES) {
+            val targets = obtainInputTargets(field)
+            try {
+                targets.forEach { target ->
+                    val result = writeValueUsingStrategies(target, value)
+                    if (result.wroteValue) {
+                        wrote = true
+                        rememberInputWrite(value)
+                        if (result.likelyVerified || verifyWrittenValueWithRetries(verificationRoot, target, value)) {
+                            rememberVerifiedInput(value)
+                            return true
+                        }
+                    }
+                }
+                if (wrote && verifyWrittenValueWithRetries(verificationRoot, field, value)) {
+                    rememberVerifiedInput(value)
+                    return true
+                }
+            } finally {
+                targets.forEach { it.recycle() }
+            }
+            primeInputTarget(field, true)
+            refreshInputTarget(field)
+            verificationRoot?.refresh()
         }
+        return wrote && verifyWrittenValueWithRetries(verificationRoot, field, value)
+    }
+
+    private fun writeValueUsingStrategies(node: AccessibilityNodeInfo, value: String): InputWriteResult {
+        primeInputTarget(node)
+        attemptSetTextBurst(node, value)?.let { return it }
+        primeInputTarget(node, true)
+        attemptSetTextBurst(node, value, true)?.let { return it }
+        if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) && primeInputTarget(node, true)) {
+            refreshInputTarget(node)
+            attemptSetTextBurst(node, value, true)?.let { return it }
+        }
+        primeInputTarget(node, true)
+        attemptPasteBurst(node, value)?.let { return it }
+        return InputWriteResult(false, false)
+    }
+
+    private fun attemptSetTextBurst(node: AccessibilityNodeInfo, value: String, aggressive: Boolean = false): InputWriteResult? {
+        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) return null
+        repeat(SET_TEXT_BURST_ATTEMPTS) { attempt ->
+            if (attempt > 0) {
+                if (aggressive) primeInputTarget(node, true) else refreshInputTarget(node)
+            }
+            if (setTextOnNode(node, value)) {
+                val likely = isLikelyDirectWriteVerified(node, value)
+                if (likely || attempt == SET_TEXT_BURST_ATTEMPTS - 1) {
+                    return InputWriteResult(true, likely)
+                }
+            }
+        }
+        return null
+    }
+
+    private fun attemptPasteBurst(node: AccessibilityNodeInfo, value: String, aggressive: Boolean = false): InputWriteResult? {
+        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)) return null
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return null
+        val previousClip = runCatching { clipboard.primaryClip }.getOrNull()
+        val hadClip = runCatching { clipboard.hasPrimaryClip() }.getOrDefault(false)
+        return try {
+            clipboard.setPrimaryClip(ClipData.newPlainText("ussd_reply", value))
+            repeat(PASTE_BURST_ATTEMPTS) { attempt ->
+                if (attempt > 0) {
+                    if (aggressive) primeInputTarget(node, true) else refreshInputTarget(node)
+                }
+                if (runCatching { node.performAction(AccessibilityNodeInfo.ACTION_PASTE) }.getOrDefault(false)) {
+                    val likely = isLikelyDirectWriteVerified(node, value)
+                    if (likely || attempt == PASTE_BURST_ATTEMPTS - 1) {
+                        return InputWriteResult(true, likely)
+                    }
+                }
+            }
+            null
+        } finally {
+            runCatching {
+                if (hadClip && previousClip != null) clipboard.setPrimaryClip(previousClip)
+                else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+            }
+        }
+    }
+
+    private fun setTextOnNode(node: AccessibilityNodeInfo, value: String): Boolean {
+        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) return false
+        if (runCatching {
+                node.performAction(
+                    AccessibilityNodeInfo.ACTION_SET_TEXT,
+                    Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value) }
+                )
+            }.getOrDefault(false)
+        ) {
+            collapseInputSelection(node, value)
+            if (isLikelyDirectWriteVerified(node, value)) return true
+        }
+        // fallback: clear and retry
+        runCatching {
+            node.performAction(
+                AccessibilityNodeInfo.ACTION_SET_TEXT,
+                Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "") }
+            )
+        }
+        return reinforceTextWrite(node, value)
+    }
+
+    private fun reinforceTextWrite(node: AccessibilityNodeInfo, value: String): Boolean {
+        repeat(2) { attempt ->
+            if (attempt > 0) {
+                primeInputTarget(node, true)
+                refreshInputTarget(node)
+                runCatching {
+                    node.performAction(
+                        AccessibilityNodeInfo.ACTION_SET_TEXT,
+                        Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "") }
+                    )
+                }
+            }
+            if (runCatching {
+                    node.performAction(
+                        AccessibilityNodeInfo.ACTION_SET_TEXT,
+                        Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value) }
+                    )
+                }.getOrDefault(false)
+            ) {
+                collapseInputSelection(node, value)
+                if (isLikelyDirectWriteVerified(node, value)) return true
+            }
+        }
+        return false
+    }
+
+    private fun isLikelyDirectWriteVerified(node: AccessibilityNodeInfo, expected: String): Boolean {
+        refreshInputTarget(node)
+        val read = readFieldText(node)
+        return matchesExpectedInput(read, expected)
+    }
+
+    private fun collapseInputSelection(node: AccessibilityNodeInfo, value: String) {
+        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_SELECTION)) return
+        val pos = value.length
+        runCatching {
+            node.performAction(
+                AccessibilityNodeInfo.ACTION_SET_SELECTION,
+                Bundle().apply {
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, pos)
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, pos)
+                }
+            )
+        }
+    }
+
+    private fun verifyWrittenValueWithRetries(verificationRoot: AccessibilityNodeInfo?, field: AccessibilityNodeInfo, expected: String): Boolean {
+        repeat(WRITE_VERIFICATION_PASSES) { attempt ->
+            if (attempt > 0) {
+                refreshInputTarget(field)
+                verificationRoot?.refresh()
+                if (attempt >= 2) SystemClock.sleep(WRITE_VERIFICATION_SETTLE_MS)
+            }
+            if (verifyExpectedInput(verificationRoot, expected, field)) return true
+        }
+        return false
+    }
+
+    private fun obtainInputTargets(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
+        val targets = mutableListOf<AccessibilityNodeInfo>()
+        collectPreferredInputTargets(node, targets, 0)
+        collectNearbyInputTargets(node, targets, 0)
+        var current: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
+        var depth = 0
+        while (current != null && depth < INPUT_TARGET_DEPTH) {
+            if (supportsDirectInput(current)) targets += current else current.recycle()
+            current = try { current.parent?.let { AccessibilityNodeInfo.obtain(it) } } catch (_: Exception) { null }
+            depth++
+        }
+        return rankAndDedupe(targets)
+    }
+
+    private fun rankAndDedupe(targets: MutableList<AccessibilityNodeInfo>): List<AccessibilityNodeInfo> {
+        if (targets.size <= 1) return targets
+        val seen = HashSet<String>()
+        return targets.sortedByDescending { scoreDirectInputTarget(it) }
+            .filter { node -> seen.add(buildInputTargetKey(node)) }
+            .toList()
+    }
+
+    private fun collectPreferredInputTargets(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>, depth: Int) {
+        if (depth > INPUT_DESCENT_DEPTH) return
+        try {
+            if (supportsDirectInput(node)) into += AccessibilityNodeInfo.obtain(node)
+            for (i in 0 until node.childCount) {
+                val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+                collectPreferredInputTargets(child, into, depth + 1)
+                child.recycle()
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun collectNearbyInputTargets(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>, ancestorDepth: Int) {
+        if (ancestorDepth >= INPUT_NEARBY_SCOPE_DEPTH) return
+        val parent = try { node.parent } catch (_: Exception) { null } ?: return
+        try {
+            for (i in 0 until parent.childCount) {
+                val sibling = try { parent.getChild(i) } catch (_: Exception) { null } ?: continue
+                collectPreferredInputTargets(sibling, into, 0)
+                sibling.recycle()
+            }
+            collectNearbyInputTargets(parent, into, ancestorDepth + 1)
+        } finally {
+            parent.recycle()
+        }
+    }
+
+    private fun supportsDirectInput(node: AccessibilityNodeInfo): Boolean =
+        isTextEntryNode(node) || supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) || isHiddenInputProxyCandidate(node)
+
+    private fun primeInputTarget(node: AccessibilityNodeInfo, aggressive: Boolean = false): Boolean {
+        var changed = false
+        if (refocusInputTarget(node)) changed = true
+        if (activateInputTarget(node)) changed = true
+        if (aggressive && supportsAction(node, AccessibilityNodeInfo.ACTION_LONG_CLICK) &&
+            runCatching { node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK) }.getOrDefault(false)
+        ) changed = true
+        refreshInputTarget(node)
+        return changed
+    }
+
+    private fun refocusInputTarget(node: AccessibilityNodeInfo): Boolean =
+        runCatching { node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) }.getOrDefault(false) ||
+                (Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
+                        runCatching { node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS) }.getOrDefault(false))
+
+    private fun activateInputTarget(node: AccessibilityNodeInfo): Boolean {
+        if (!isSafeInputActivationCandidate(node)) return false
+        return runCatching { node.performAction(AccessibilityNodeInfo.ACTION_CLICK) }.getOrDefault(false) ||
+                performTapGesture(node)
+    }
+
+    private fun isSafeInputActivationCandidate(node: AccessibilityNodeInfo): Boolean {
+        val cls = node.className?.toString().orEmpty()
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) normalizeActionLabel(runCatching { node.hintText?.toString() }.getOrNull()) else ""
+        val editable = runCatching { node.isEditable }.getOrDefault(false)
+        val enabled = runCatching { node.isEnabled }.getOrDefault(true)
+        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) runCatching { node.isVisibleToUser }.getOrDefault(true) else true
+        return enabled && visible && (editable || supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
+                EDITABLE_CLASS_HINTS.any { cls.contains(it, ignoreCase = true) } || hasInputViewHint(viewId, hint))
+    }
+
+    private fun refreshInputTarget(node: AccessibilityNodeInfo) = runCatching { node.refresh() }
+
+    private fun supportsAction(node: AccessibilityNodeInfo, actionId: Int): Boolean =
+        runCatching { node.actionList?.any { it.id == actionId } }.getOrDefault(false)
+
+    private fun isTextEntryNode(node: AccessibilityNodeInfo): Boolean {
+        val cls = node.className?.toString().orEmpty()
+        val editable = runCatching { node.isEditable }.getOrDefault(false)
+        val enabled = runCatching { node.isEnabled }.getOrDefault(true)
+        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) runCatching { node.isVisibleToUser }.getOrDefault(true) else true
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) normalizeActionLabel(runCatching { node.hintText?.toString() }.getOrNull()) else ""
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        if (!enabled || !visible) return false
+        if (cls.contains("Button", ignoreCase = true) || cls.contains("ImageButton", ignoreCase = true)) return false
+        if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS || label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS) return false
+        return editable ||
+                EDITABLE_CLASS_HINTS.any { cls.contains(it, ignoreCase = true) } ||
+                supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
+                (supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE) && (EDITABLE_CLASS_HINTS.any { cls.contains(it, ignoreCase = true) } || hasInputViewHint(viewId, hint))) ||
+                (hasInputViewHint(viewId, hint) && (runCatching { node.isFocusable || node.isFocused }.getOrDefault(false) || runCatching { node.isClickable }.getOrDefault(false))) ||
+                (hasInputLabelHint(label, desc) && (editable || supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)))
+    }
+
+    private fun isHiddenInputProxyCandidate(node: AccessibilityNodeInfo): Boolean {
+        val cls = node.className?.toString().orEmpty()
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) normalizeActionLabel(runCatching { node.hintText?.toString() }.getOrNull()) else ""
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        val enabled = runCatching { node.isEnabled }.getOrDefault(true)
+        val editable = runCatching { node.isEditable }.getOrDefault(false)
+        val focusable = runCatching { node.isFocusable || node.isFocused || node.isClickable || node.isLongClickable }.getOrDefault(false)
+        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) runCatching { node.isVisibleToUser }.getOrDefault(true) else true
+        val hasSetText = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)
+        val hasPaste = supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
+        if (!enabled || editable) return false
+        if (cls.contains("Button", ignoreCase = true) || cls.contains("ImageButton", ignoreCase = true)) return false
+        if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS || label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS) return false
+        if (!visible && !hasSetText && !hasPaste) return false
+        return (hasSetText || hasPaste) &&
+                (EDITABLE_CLASS_HINTS.any { cls.contains(it, ignoreCase = true) } || hasInputViewHint(viewId, hint) || hasInputLabelHint(label, desc) || focusable) ||
+                (focusable && (hasInputViewHint(viewId, hint) || hasInputLabelHint(label, desc)))
     }
 
     private fun collectTextEntryCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>) {
@@ -3593,9 +1418,7 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun collectAggressiveTextEntryCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>) {
         try {
-            if (isAggressiveTextEntryCandidate(node)) {
-                into += AccessibilityNodeInfo.obtain(node)
-            }
+            if (isAggressiveTextEntryCandidate(node)) into += AccessibilityNodeInfo.obtain(node)
             for (i in 0 until node.childCount) {
                 val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
                 collectAggressiveTextEntryCandidates(child, into)
@@ -3604,496 +1427,241 @@ class UssdNavigationService : AccessibilityService() {
         } catch (_: Exception) {}
     }
 
-    private fun scoreTextEntryCandidate(node: AccessibilityNodeInfo): Int {
-        val className = node.className?.toString().orEmpty()
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
+    private fun isLooseInputCandidate(node: AccessibilityNodeInfo): Boolean {
+        val cls = node.className?.toString().orEmpty()
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) normalizeActionLabel(runCatching { node.hintText?.toString() }.getOrNull()) else ""
         val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
-        } else {
-            ""
-        }
-        val bounds = Rect()
-        runCatching { node.getBoundsInScreen(bounds) }
+        val enabled = runCatching { node.isEnabled }.getOrDefault(true)
+        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) runCatching { node.isVisibleToUser }.getOrDefault(true) else true
+        val focusable = runCatching { node.isFocusable || node.isFocused }.getOrDefault(false)
+        val clickable = runCatching { node.isClickable || node.isLongClickable }.getOrDefault(false)
+        val editable = runCatching { node.isEditable }.getOrDefault(false)
+        if (editable) return false
+        if (cls.contains("Button", ignoreCase = true) || cls.contains("ImageButton", ignoreCase = true)) return false
+        if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS || label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS) return false
+        if (label.isNotBlank() && label.length > 24) return false
+        val hasWritable = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) || supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
+        val hasViewHint = hasInputViewHint(viewId, hint)
+        return enabled && visible && ((hasWritable && (EDITABLE_CLASS_HINTS.any { cls.contains(it, ignoreCase = true) } || hasViewHint || focusable)) ||
+                (hasViewHint && (focusable || clickable)))
+    }
+
+    private fun isAggressiveTextEntryCandidate(node: AccessibilityNodeInfo): Boolean {
+        val cls = node.className?.toString().orEmpty()
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) normalizeActionLabel(runCatching { node.hintText?.toString() }.getOrNull()) else ""
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        val enabled = runCatching { node.isEnabled }.getOrDefault(true)
+        val editable = runCatching { node.isEditable }.getOrDefault(false)
+        val writable = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) || supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
+        val focusable = runCatching { node.isFocusable || node.isFocused || node.isClickable || node.isLongClickable }.getOrDefault(false)
+        if (cls.contains("Button", ignoreCase = true) || cls.contains("ImageButton", ignoreCase = true)) return false
+        if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS || label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS) return false
+        return enabled && (editable ||
+                isHiddenInputProxyCandidate(node) ||
+                isLooseInputCandidate(node) ||
+                (writable && (EDITABLE_CLASS_HINTS.any { cls.contains(it, ignoreCase = true) } || hasInputViewHint(viewId, hint) || focusable)) ||
+                (focusable && (hasInputViewHint(viewId, hint) || hasInputLabelHint(label, desc))))
+    }
+
+    private fun hasInputViewHint(viewId: String, hint: String): Boolean =
+        INPUT_VIEW_ID_HINTS.any { viewId.contains(it) } || INPUT_FIELD_HINTS.any { hint.contains(it) }
+
+    private fun hasInputLabelHint(label: String, desc: String): Boolean =
+        INPUT_FIELD_HINTS.any { label.contains(it) || desc.contains(it) }
+
+    private fun scoreTextEntryCandidate(node: AccessibilityNodeInfo): Int {
+        val cls = node.className?.toString().orEmpty()
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) normalizeActionLabel(runCatching { node.hintText?.toString() }.getOrNull()) else ""
+        val bounds = Rect().also { runCatching { node.getBoundsInScreen(it) } }
         var score = 0
-        if (try { node.isEditable } catch (_: Exception) { false }) score += 500
+        if (runCatching { node.isEditable }.getOrDefault(false)) score += 500
         if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) score += 320
         if (supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)) score += 140
-        if (EDITABLE_CLASS_HINTS.any { className.equals(it, ignoreCase = true) || className.contains(it, ignoreCase = true) }) score += 300
-        if (className.contains("EditText", ignoreCase = true)) score += 240
-        if (className.contains("Text", ignoreCase = true)) score += 90
+        if (EDITABLE_CLASS_HINTS.any { cls.equals(it, ignoreCase = true) || cls.contains(it, ignoreCase = true) }) score += 300
+        if (cls.contains("EditText", ignoreCase = true)) score += 240
+        if (cls.contains("Text", ignoreCase = true)) score += 90
         if (INPUT_VIEW_ID_HINTS.any { viewId.contains(it) }) score += 180
         if (INPUT_FIELD_HINTS.any { label.contains(it) || desc.contains(it) || hint.contains(it) }) score += 120
-        if (isLooseInputCandidate(node)) score += 110
-        if (isHiddenInputProxyCandidate(node)) score += 150
-        if (try { node.isFocused } catch (_: Exception) { false }) score += 90
-        if (try { node.isFocusable } catch (_: Exception) { false }) score += 70
-        if (try { node.isClickable } catch (_: Exception) { false }) score += 40
-        val currentValue = readFieldText(node)?.trim().orEmpty()
-        when {
-            currentValue.isBlank() -> score += 120
-            isLikelyPromptText(currentValue) -> score -= 180
-            currentValue.length <= 24 -> score += 30
-            else -> score -= 45
-        }
+        if (runCatching { node.isFocused }.getOrDefault(false)) score += 90
+        if (runCatching { node.isFocusable }.getOrDefault(false)) score += 70
+        if (runCatching { node.isClickable }.getOrDefault(false)) score += 40
+        val current = readFieldText(node)?.trim().orEmpty()
+        if (current.isBlank()) score += 120
+        else if (isLikelyPromptText(current)) score -= 180
+        else if (current.length <= 24) score += 30
+        else score -= 45
         if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS) score -= 280
         if (label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS) score -= 280
-        if (bounds.right > 0 || bounds.bottom > 0) {
-            score += bounds.bottom / 24
-            score += bounds.right / 36
-        }
+        if (bounds.right > 0 || bounds.bottom > 0) { score += bounds.bottom / 24; score += bounds.right / 36 }
         return score
     }
 
-    private fun scoreTextEntryCandidateForStep(
-        node: AccessibilityNodeInfo,
-        step: String,
-        dialogText: String
-    ): Int {
+    private fun scoreDirectInputTarget(node: AccessibilityNodeInfo): Int {
+        var score = scoreTextEntryCandidate(node)
+        if (runCatching { node.isEditable }.getOrDefault(false)) score += 320
+        if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) score += 260
+        if (supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)) score += 140
+        if (runCatching { node.isFocused }.getOrDefault(false)) score += 90
+        if (runCatching { node.isFocusable }.getOrDefault(false)) score += 60
+        return score
+    }
+
+    private fun buildInputTargetKey(node: AccessibilityNodeInfo): String {
+        val sig = buildInputNodeSignature(node)
+        if (sig.isNotBlank()) return sig
+        val bounds = Rect().also { runCatching { node.getBoundsInScreen(it) } }
+        val cls = node.className?.toString().orEmpty()
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        return "$cls|$viewId|${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}"
+    }
+
+    private fun readFieldText(node: AccessibilityNodeInfo): String? {
+        val text = runCatching { node.text?.toString() }.getOrNull()
+        if (!text.isNullOrBlank()) return text
+        val desc = runCatching { node.contentDescription?.toString() }.getOrNull()
+        if (!desc.isNullOrBlank()) return desc
+        val tokens = mutableListOf<String>()
+        extractTextTokens(node, tokens)
+        return tokens.filterNot { isLikelyPromptText(it) }.minByOrNull { it.length }
+            ?.takeIf { normalizeActionLabel(it).isNotBlank() && INPUT_FIELD_HINTS.none { normalizeActionLabel(it).contains(it) } }
+    }
+
+    private fun extractTextTokens(node: AccessibilityNodeInfo, into: MutableList<String>) {
+        try {
+            node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { into += it }
+            node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { into += it }
+            for (i in 0 until node.childCount) {
+                val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+                extractTextTokens(child, into)
+                child.recycle()
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun findFieldForExpectedValue(root: AccessibilityNodeInfo, expected: String): AccessibilityNodeInfo? {
+        val candidates = mutableListOf<AccessibilityNodeInfo>()
+        collectTextEntryCandidates(root, candidates)
+        if (candidates.isEmpty()) collectAggressiveTextEntryCandidates(root, candidates)
+        val match = candidates.firstOrNull { matchesExpectedInput(readFieldText(it), expected) }
+        val result = match ?: candidates.maxByOrNull { scoreTextEntryCandidate(it) + if (matchesExpectedInput(readFieldText(it), expected)) 700 else 0 }
+        return result?.let { AccessibilityNodeInfo.obtain(it) }
+    }
+
+    private fun findEditableFieldForStep(root: AccessibilityNodeInfo, step: String, dialogText: String): AccessibilityNodeInfo? {
+        val candidates = mutableListOf<AccessibilityNodeInfo>()
+        collectTextEntryCandidates(root, candidates)
+        if (candidates.isEmpty()) collectAggressiveTextEntryCandidates(root, candidates)
+        return candidates.maxByOrNull { scoreTextEntryCandidateForStep(it, step, dialogText) }?.let { AccessibilityNodeInfo.obtain(it) }
+    }
+
+    private fun scoreTextEntryCandidateForStep(node: AccessibilityNodeInfo, step: String, dialogText: String): Int {
         var score = scoreTextEntryCandidate(node)
         if (step != "INPUT_PHONE") return score
-
-        val lowerDialog = dialogText.lowercase()
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
         val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
-        } else {
-            ""
-        }
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) normalizeActionLabel(runCatching { node.hintText?.toString() }.getOrNull()) else ""
         val combined = listOf(viewId, label, desc, hint).joinToString(" ")
         if (PHONE_INPUT_HINTS.any { combined.contains(it) }) score += 260
         if (combined.contains("phone") || combined.contains("mobile") || combined.contains("msisdn")) score += 180
         if (combined.contains("recipient") || combined.contains("customer") || combined.contains("subscriber")) score += 140
-        if (dialogSuggestsPhoneInput(lowerDialog) && INPUT_VIEW_ID_HINTS.any { viewId.contains(it) }) score += 90
+        if (dialogSuggestsPhoneInput(dialogText.lowercase()) && INPUT_VIEW_ID_HINTS.any { viewId.contains(it) }) score += 90
         return score
     }
 
-    private fun scoreAggressiveTextEntryCandidate(node: AccessibilityNodeInfo): Int {
-        val className = node.className?.toString().orEmpty()
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        val label = normalizeActionLabel(node.text?.toString())
-        val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
-        } else {
-            ""
-        }
-        val writable = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
-            supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
-        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            try { node.isVisibleToUser } catch (_: Exception) { true }
-        } else {
-            true
-        }
-        var score = 0
-        if (writable) score += 260
-        if (!visible) score += 180
-        if (className.contains("Edit", ignoreCase = true) || className.contains("TextInput", ignoreCase = true)) score += 200
-        if (className.contains("AutoComplete", ignoreCase = true) || className.contains("Search", ignoreCase = true)) score += 140
-        if (INPUT_VIEW_ID_HINTS.any { viewId.contains(it) }) score += 200
-        if (INPUT_FIELD_HINTS.any { label.contains(it) || desc.contains(it) || hint.contains(it) }) score += 160
-        if (try { node.isFocused } catch (_: Exception) { false }) score += 70
-        if (try { node.isFocusable || node.isClickable || node.isLongClickable } catch (_: Exception) { false }) score += 60
-        if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS) score -= 360
-        if (label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS) score -= 360
-        return score
+    private fun obtainInteractionRoot(root: AccessibilityNodeInfo, requireStrict: Boolean): AccessibilityNodeInfo? {
+        val captureRoot = findDialogCaptureRoot(root)
+        if (captureRoot != null) return captureRoot
+        if (requireStrict && !shouldAllowRelaxedFallback(root)) return null
+        return AccessibilityNodeInfo.obtain(root)
     }
 
-    private fun findButtonExact(node: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
+    private fun verifyExpectedInput(root: AccessibilityNodeInfo?, expected: String, existingField: AccessibilityNodeInfo? = null): Boolean {
+        if (existingField != null && matchesExpectedInput(readFieldText(existingField), expected)) {
+            rememberVerifiedInput(expected); return true
+        }
+        val rootNode = root ?: getUssdRoot() ?: return false
         try {
-            val t = normalizeActionLabel(node.text?.toString())
-            val d = normalizeActionLabel(node.contentDescription?.toString())
-            if (t == normalizeActionLabel(text) || d == normalizeActionLabel(text))
-                return obtainActionTarget(node)
-        } catch (_: Exception) { return null }
-        for (i in 0 until node.childCount) {
-            val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-            val r = findButtonExact(child, text); child.recycle()
-            if (r != null) return r
-        }
-        return null
-    }
-
-    private fun findButtonContaining(node: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
-        try {
-            val normalizedText = normalizeActionLabel(text)
-            val t = normalizeActionLabel(node.text?.toString())
-            val d = normalizeActionLabel(node.contentDescription?.toString())
-            if ((t.contains(normalizedText) || d.contains(normalizedText)) && normalizedText.length > 2)
-                return obtainActionTarget(node)
-        } catch (_: Exception) { return null }
-        for (i in 0 until node.childCount) {
-            val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-            val r = findButtonContaining(child, text); child.recycle()
-            if (r != null) return r
-        }
-        return null
-    }
-
-    private fun findButtonStartingWith(node: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
-        try {
-            val normalizedText = normalizeActionLabel(text)
-            val t = normalizeActionLabel(node.text?.toString())
-            val d = normalizeActionLabel(node.contentDescription?.toString())
-            if (t.startsWith(normalizedText) || d.startsWith(normalizedText))
-                return obtainActionTarget(node)
-        } catch (_: Exception) { return null }
-        for (i in 0 until node.childCount) {
-            val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-            val r = findButtonStartingWith(child, text); child.recycle()
-            if (r != null) return r
-        }
-        return null
-    }
-
-    private fun findButtonByDescription(node: AccessibilityNodeInfo, desc: String): AccessibilityNodeInfo? {
-        try {
-            val d = normalizeActionLabel(node.contentDescription?.toString())
-            if (d == normalizeActionLabel(desc)) return obtainActionTarget(node)
-        } catch (_: Exception) { return null }
-        for (i in 0 until node.childCount) {
-            val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-            val r = findButtonByDescription(child, desc); child.recycle()
-            if (r != null) return r
-        }
-        return null
-    }
-
-    private fun extractAllText(node: AccessibilityNodeInfo): String =
-        StringBuilder().also { appendAllText(node, it) }.toString()
-
-    private fun appendAllText(node: AccessibilityNodeInfo, into: StringBuilder) {
-        try {
-            node.text?.let { into.append(it).append(' ') }
-            node.contentDescription?.let { into.append(it).append(' ') }
-            for (i in 0 until node.childCount) {
-                val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-                try {
-                    appendAllText(child, into)
-                } finally {
-                    child.recycle()
-                }
-            }
-        } catch (_: Exception) {}
-    }
-
-    private class TreeScanAccumulator {
-        val textTokens = mutableListOf<String>()
-        var hasEditableField = false
-        var hasSendButton = false
-        var hasDismissButton = false
-        var bestInputSignature = ""
-        var bestInputScore = Int.MIN_VALUE
-    }
-
-    private fun scanNodeSummary(node: AccessibilityNodeInfo): TreeScanAccumulator =
-        TreeScanAccumulator().also { collectTreeSnapshot(node, it) }
-
-    private fun captureTreeSnapshot(root: AccessibilityNodeInfo): UssdTreeSnapshot {
-        val captureRoot = findDialogCaptureRoot(root) ?: AccessibilityNodeInfo.obtain(root)
-        val accumulator = scanNodeSummary(captureRoot)
-        return try {
-            val dialogText = normalizeCollapsedText(accumulator.textTokens.joinToString(" "))
-            UssdTreeSnapshot(
-                dialogText = dialogText,
-                normalizedDialogText = dialogText,
-                textTokens = accumulator.textTokens.toList(),
-                hasEditableField = accumulator.hasEditableField,
-                hasSendButton = accumulator.hasSendButton,
-                hasDismissButton = accumulator.hasDismissButton,
-                inputStateSignature = accumulator.bestInputSignature
-            )
+            val candidates = mutableListOf<AccessibilityNodeInfo>()
+            collectTextEntryCandidates(rootNode, candidates)
+            val verified = candidates.any { matchesExpectedInput(readFieldText(it), expected) }
+            if (verified) rememberVerifiedInput(expected)
+            return verified
         } finally {
-            captureRoot.recycle()
+            if (root == null) rootNode.recycle()
         }
     }
 
-    /**
-     * Signature learning must only record text that belongs to the visible USSD dialog itself.
-     * Some devices expose the full underlying window tree; in that case we require a dialog-sized
-     * capture root (found by [findDialogCaptureRoot]) and skip learning captures if we can't find it.
-     */
-    private fun captureTreeSnapshotStrictDialog(root: AccessibilityNodeInfo): UssdTreeSnapshot? {
-        val captureRoot = findDialogCaptureRoot(root) ?: return null
-        val accumulator = scanNodeSummary(captureRoot)
-        return try {
-            val dialogText = normalizeCollapsedText(accumulator.textTokens.joinToString(" "))
-            if (dialogText.isBlank()) return null
-            UssdTreeSnapshot(
-                dialogText = dialogText,
-                normalizedDialogText = dialogText,
-                textTokens = accumulator.textTokens.toList(),
-                hasEditableField = accumulator.hasEditableField,
-                hasSendButton = accumulator.hasSendButton,
-                hasDismissButton = accumulator.hasDismissButton,
-                inputStateSignature = accumulator.bestInputSignature
-            )
-        } finally {
-            captureRoot.recycle()
-        }
+    private fun matchesExpectedInput(actual: String?, expected: String): Boolean {
+        val a = normalizeInputValue(actual)
+        val e = normalizeInputValue(expected)
+        if (a.isBlank() || e.isBlank()) return false
+        if (a == e || a.endsWith(e) || e.endsWith(a)) return true
+        val aPhone = normalizePhoneComparable(actual)
+        val ePhone = normalizePhoneComparable(expected)
+        return aPhone.isNotBlank() && ePhone.isNotBlank() && (aPhone == ePhone || aPhone.endsWith(ePhone) || ePhone.endsWith(aPhone))
     }
 
-    private fun findDialogCaptureRoot(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        val rootBounds = Rect()
-        runCatching { root.getBoundsInScreen(rootBounds) }
-        val candidates = mutableListOf<DialogCaptureCandidate>()
-        collectDialogCaptureCandidates(root, rootBounds, candidates, depth = 0)
-        return try {
-            candidates
-                .maxByOrNull { it.score }
-                ?.let { AccessibilityNodeInfo.obtain(it.node) }
-        } finally {
-            candidates.forEach { candidate ->
-                runCatching { candidate.node.recycle() }
-            }
-        }
+    private fun normalizePhoneComparable(value: String?): String {
+        val digits = value.orEmpty().replace(Regex("\\D+"), "")
+        return if (digits.length < 9) "" else UssdHelper.normalizeRecipientForUssdInput(digits).replace(Regex("\\D+"), "")
     }
 
-    private fun collectDialogCaptureCandidates(
-        node: AccessibilityNodeInfo,
-        rootBounds: Rect,
-        into: MutableList<DialogCaptureCandidate>,
-        depth: Int
-    ) {
-        val score = scoreDialogCaptureCandidate(node, rootBounds, depth)
-        if (score > 0) {
-            into += DialogCaptureCandidate(
-                node = AccessibilityNodeInfo.obtain(node),
-                score = score
-            )
-        }
-        for (i in 0 until node.childCount) {
-            val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-            try {
-                collectDialogCaptureCandidates(child, rootBounds, into, depth + 1)
-            } finally {
-                child.recycle()
-            }
-        }
-    }
+    private fun normalizeInputValue(value: String?) = value.orEmpty().replace(Regex("\\s+"), "").trim()
+    // endregion
 
-    private fun scoreDialogCaptureCandidate(
-        node: AccessibilityNodeInfo,
-        rootBounds: Rect,
-        depth: Int
-    ): Int {
-        val childCount = try { node.childCount } catch (_: Exception) { 0 }
-        if (childCount == 0) return 0
-
-        val bounds = Rect()
-        runCatching { node.getBoundsInScreen(bounds) }
-        val nodeArea = bounds.width().toLong() * bounds.height().toLong()
-        val rootArea = rootBounds.width().toLong() * rootBounds.height().toLong()
-        val areaRatio = if (nodeArea > 0L && rootArea > 0L) nodeArea.toFloat() / rootArea.toFloat() else 1f
-        if (nodeArea <= 0L || areaRatio < 0.03f) return 0
-
-        val summary = scanNodeSummary(node)
-        val textTokens = summary.textTokens
-            .map(::normalizeCollapsedText)
-            .filter { it.isNotBlank() }
-            .distinct()
-        if (textTokens.isEmpty()) return 0
-
-        val combinedText = textTokens.joinToString(" ").lowercase()
-        if (NON_USSD_DIALOG_HINTS.any { combinedText.contains(it) }) return 0
-
-        val hasAction = summary.hasSendButton || summary.hasDismissButton || summary.hasEditableField
-        val structuredMenu = extractStructuredMenuBlock(textTokens)
-        val hasMenuOptions = structuredMenu != null
-        val structuredMenuOptionCount = structuredMenu?.options?.size ?: 0
-        val className = node.className?.toString().orEmpty()
-        val hasDialogClass = className.contains("Dialog", ignoreCase = true) ||
-            className.contains("AlertDialog", ignoreCase = true) ||
-            className.contains("BottomSheet", ignoreCase = true)
-        val compactContainer = childCount in 1..8
-        val moderatelyCompactContainer = childCount in 1..14
-        val hasUssdLanguage = USSD_HINTS.any { combinedText.contains(it) } || errorKeywords.any { combinedText.contains(it) }
-        if (!hasAction && !hasMenuOptions) return 0
-        if (!(hasUssdLanguage || hasMenuOptions || signatureLearningMode || advancedActive || isForegroundUiActive())) return 0
-
-        val horizontalInset = maxOf(0, bounds.left - rootBounds.left) + maxOf(0, rootBounds.right - bounds.right)
-        val verticalInset = maxOf(0, bounds.top - rootBounds.top) + maxOf(0, rootBounds.bottom - bounds.bottom)
-        val hasInset = horizontalInset > 0 || verticalInset > 0
-        val centerDx = kotlin.math.abs(bounds.centerX() - rootBounds.centerX())
-        val centerDy = kotlin.math.abs(bounds.centerY() - rootBounds.centerY())
-        val centered = centerDx <= (rootBounds.width() * 0.18f) && centerDy <= (rootBounds.height() * 0.18f)
-        val fullScreenDialogLike = areaRatio > 0.96f &&
-            (hasDialogClass || (centered && childCount <= 10 && (hasAction || hasMenuOptions)))
-        if (areaRatio > 0.995f && !fullScreenDialogLike) return 0
-
-        var score = 0
-        if (summary.hasEditableField) score += 380
-        if (summary.hasSendButton) score += 260
-        if (summary.hasDismissButton) score += 120
-        if (hasMenuOptions) score += 260 + (structuredMenuOptionCount * 45)
-        if (hasUssdLanguage) score += 220
-        if (hasDialogClass) score += 180
-        if (compactContainer) score += 140
-        else if (moderatelyCompactContainer) score += 70
-        else score -= minOf(childCount, 32) * 18
-        if (areaRatio in 0.08f..0.86f) score += 180
-        else if (fullScreenDialogLike) score += 110
-        else if (areaRatio > 0.96f) score -= 220
-        if (hasInset) score += 80
-        if (centered) score += 70
-        score += maxOf(0, 42 - (depth * 4))
-        score -= maxOf(0, textTokens.size - 12) * 10
-        if (hasMenuOptions) {
-            val blockLineCount = structuredMenuOptionCount + (structuredMenu?.titleLines?.size ?: 0)
-            score -= maxOf(0, textTokens.size - blockLineCount - 4) * 18
-        }
-        return score.takeIf { it > 0 } ?: 0
-    }
-
-    private fun collectTreeSnapshot(node: AccessibilityNodeInfo, accumulator: TreeScanAccumulator) {
-        try {
-            node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { accumulator.textTokens += it }
-            node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { accumulator.textTokens += it }
-            val isEditableField = isTextEntryNode(node)
-            if (!accumulator.hasEditableField && isEditableField) accumulator.hasEditableField = true
-            if (!accumulator.hasSendButton && isSendActionNode(node)) accumulator.hasSendButton = true
-            if (!accumulator.hasDismissButton && isDismissActionNode(node)) accumulator.hasDismissButton = true
-            if (isEditableField || isLooseInputCandidate(node)) {
-                val candidateScore = scoreTextEntryCandidate(node)
-                if (candidateScore >= accumulator.bestInputScore) {
-                    accumulator.bestInputScore = candidateScore
-                    accumulator.bestInputSignature = buildInputNodeSignature(node)
-                }
-            }
-            for (i in 0 until node.childCount) {
-                val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-                collectTreeSnapshot(child, accumulator)
-                child.recycle()
-            }
-        } catch (_: Exception) {}
-    }
-
-    private fun buildDialogStateKey(dialogText: String, inputStateSignature: String): String {
-        val normalizedDialog = normalizeMenuText(dialogText)
-        if (normalizedDialog.isBlank()) return ""
-        val normalizedInput = normalizeCollapsedText(inputStateSignature)
-        return if (normalizedInput.isBlank()) normalizedDialog else "$normalizedDialog|$normalizedInput"
-    }
-
-    private fun captureInputStateSignature(root: AccessibilityNodeInfo): String {
-        val field = findEditableField(root) ?: return ""
-        return try {
-            buildInputNodeSignature(field)
-        } finally {
-            field.recycle()
-        }
-    }
-
-    private fun buildInputNodeSignature(node: AccessibilityNodeInfo): String {
-        val className = node.className?.toString().orEmpty().substringAfterLast('.')
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
-        } else {
-            ""
-        }
-        val fieldText = normalizeCollapsedText(readFieldText(node))
-        val valueSignature = when {
-            fieldText.isBlank() -> "_"
-            isLikelyPromptText(fieldText) -> "prompt:${normalizeActionLabel(fieldText).take(24)}"
-            else -> "value:${normalizeInputValue(fieldText).takeLast(20)}"
-        }
-        val bounds = Rect()
-        runCatching { node.getBoundsInScreen(bounds) }
-        val role = when {
-            try { node.isEditable } catch (_: Exception) { false } -> "editable"
-            supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) -> "settext"
-            else -> "candidate"
-        }
-        return listOf(
-            className,
-            viewId.takeLast(24),
-            hint.take(24),
-            valueSignature,
-            "${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}",
-            role
-        ).joinToString("|")
-    }
-
-    private fun findActionButton(root: AccessibilityNodeInfo, labels: List<String>): AccessibilityNodeInfo? {
-        labels.forEach { label ->
-            safeFind(root) { findButtonExact(it, label) }?.let { return it }
-        }
-        labels.forEach { label ->
-            safeFind(root) { findButtonStartingWith(it, label) }?.let { return it }
-        }
-        labels.filter { it.length > 2 }.forEach { label ->
-            safeFind(root) { findButtonContaining(it, label) }?.let { return it }
-        }
-        labels.forEach { label ->
-            safeFind(root) { findButtonByDescription(it, label) }?.let { return it }
-        }
-        return null
-    }
-
-    private fun locateMenuButton(
-        root: AccessibilityNodeInfo,
-        valueToEnter: String,
-        selectedMenuLabel: String?
-    ): AccessibilityNodeInfo? =
-        safeFind(root) { findButtonExact(it, valueToEnter) }
-            ?: safeFind(root) { findButtonContaining(it, valueToEnter) }
-            ?: safeFind(root) { findButtonStartingWith(it, valueToEnter) }
-            ?: selectedMenuLabel?.let { label ->
-                safeFind(root) { findButtonExact(it, label) }
-                    ?: safeFind(root) { findButtonContaining(it, label) }
-                    ?: safeFind(root) { findButtonStartingWith(it, label) }
-            }
-            ?: findActionButtonByViewIdHints(root, SEND_VIEW_ID_HINTS, DISMISS_VIEW_ID_HINTS)
-
-    private fun findBestSendActionButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+    // region Button Finding (official view id and text search)
+    private fun findMenuButton(root: AccessibilityNodeInfo, value: String, selectedLabel: String?): AccessibilityNodeInfo? {
         val candidates = mutableListOf<AccessibilityNodeInfo>()
         collectActionCandidates(root, candidates)
-        val best = candidates
-            .maxByOrNull { scoreSendActionCandidate(it) }
-            ?.takeIf { scoreSendActionCandidate(it) > 0 }
-            ?.let { AccessibilityNodeInfo.obtain(it) }
-        candidates.forEach { it.recycle() }
-        if (best != null) return best
-        return findAggressiveSendActionButton(root)
+        // exact match by text/contentDescription
+        val exact = candidates.firstOrNull { normalizeActionLabel(it.text?.toString()) == normalizeActionLabel(value) ||
+                normalizeActionLabel(it.contentDescription?.toString()) == normalizeActionLabel(value) }
+        if (exact != null) return AccessibilityNodeInfo.obtain(exact)
+        // contains match
+        val contains = candidates.firstOrNull { normalizeActionLabel(it.text?.toString()).contains(normalizeActionLabel(value)) ||
+                normalizeActionLabel(it.contentDescription?.toString()).contains(normalizeActionLabel(value)) }
+        if (contains != null) return AccessibilityNodeInfo.obtain(contains)
+        // by selected label
+        if (!selectedLabel.isNullOrBlank()) {
+            val labelMatch = candidates.firstOrNull { normalizeActionLabel(it.text?.toString()) == normalizeActionLabel(selectedLabel) ||
+                    normalizeActionLabel(it.contentDescription?.toString()) == normalizeActionLabel(selectedLabel) }
+            if (labelMatch != null) return AccessibilityNodeInfo.obtain(labelMatch)
+        }
+        // fallback to send button hints
+        return findBestSendButton(root)
     }
 
-    private fun findActionButtonByViewIdHints(
-        root: AccessibilityNodeInfo,
-        hints: List<String>,
-        blockedHints: List<String> = emptyList()
-    ): AccessibilityNodeInfo? {
+    private fun findBestSendButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         val candidates = mutableListOf<AccessibilityNodeInfo>()
         collectActionCandidates(root, candidates)
-        return candidates
-            .asSequence()
-            .filter { node ->
-                val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-                viewId.isNotBlank() &&
-                    hints.any { viewId.contains(it) } &&
-                    blockedHints.none { viewId.contains(it) }
-            }
-            .maxByOrNull { scoreActionCandidate(it) }
-            ?.let { AccessibilityNodeInfo.obtain(it) }
-            .also { candidates.forEach { it.recycle() } }
+        return candidates.maxByOrNull { scoreSendActionCandidate(it) }?.let { AccessibilityNodeInfo.obtain(it) }
+            ?: findAggressiveSendActionButton(root)
     }
 
     private fun findPositiveDialogButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         val candidates = mutableListOf<AccessibilityNodeInfo>()
         collectActionCandidates(root, candidates)
-        return candidates
-            .asSequence()
-            .filterNot { node ->
-                val label = normalizeActionLabel(node.text?.toString())
-                val desc = normalizeActionLabel(node.contentDescription?.toString())
-                label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS
-            }
-            .maxByOrNull { scoreActionCandidate(it) }
-            ?.let { AccessibilityNodeInfo.obtain(it) }
-            .also { candidates.forEach { it.recycle() } }
+        return candidates.filterNot { node ->
+            normalizeActionLabel(node.text?.toString()) in DISMISS_BUTTON_LABELS ||
+                    normalizeActionLabel(node.contentDescription?.toString()) in DISMISS_BUTTON_LABELS
+        }.maxByOrNull { scoreActionCandidate(it) }?.let { AccessibilityNodeInfo.obtain(it) }
+    }
+
+    private fun findBottomRightActionButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val candidates = mutableListOf<AccessibilityNodeInfo>()
+        collectActionCandidates(root, candidates)
+        return candidates.filterNot { node ->
+            normalizeActionLabel(node.text?.toString()) in DISMISS_BUTTON_LABELS ||
+                    normalizeActionLabel(node.contentDescription?.toString()) in DISMISS_BUTTON_LABELS
+        }.maxByOrNull { scoreActionCandidate(it) + 120 }?.let { AccessibilityNodeInfo.obtain(it) }
     }
 
     private fun collectActionCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>) {
@@ -4105,6 +1673,13 @@ class UssdNavigationService : AccessibilityService() {
                 child.recycle()
             }
         } catch (_: Exception) {}
+    }
+
+    private fun findAggressiveSendActionButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val candidates = mutableListOf<AccessibilityNodeInfo>()
+        collectAggressiveActionCandidates(root, candidates)
+        return candidates.maxByOrNull { scoreSendActionCandidate(it) + scoreAggressiveActionCandidate(it) }
+            ?.let { AccessibilityNodeInfo.obtain(it) }
     }
 
     private fun collectAggressiveActionCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>) {
@@ -4119,38 +1694,28 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun isActionCandidate(node: AccessibilityNodeInfo): Boolean {
-        val className = node.className?.toString().orEmpty()
-        val isButtonLike = className.contains("Button", ignoreCase = true) ||
-            className.contains("TextView", ignoreCase = true) ||
-            className.contains("ImageView", ignoreCase = true) ||
-            className.contains("ImageButton", ignoreCase = true) ||
-            className.contains("View", ignoreCase = true)
-        val actionable = try { node.isClickable || node.isFocusable } catch (_: Exception) { false }
-        val enabled = try { node.isEnabled } catch (_: Exception) { true }
-        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            try { node.isVisibleToUser } catch (_: Exception) { true }
-        } else {
-            true
-        }
-        val editable = try { node.isEditable } catch (_: Exception) { false }
+        val cls = node.className?.toString().orEmpty()
+        val actionable = runCatching { node.isClickable || node.isFocusable }.getOrDefault(false)
+        val enabled = runCatching { node.isEnabled }.getOrDefault(true)
+        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) runCatching { node.isVisibleToUser }.getOrDefault(true) else true
+        val editable = runCatching { node.isEditable }.getOrDefault(false)
+        if (!enabled || !visible || editable) return false
         val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        val hasActionHints = SEND_VIEW_ID_HINTS.any { viewId.contains(it) } ||
-            DISMISS_VIEW_ID_HINTS.any { viewId.contains(it) }
-        val hasUsefulLabel = label.isNotBlank() || desc.isNotBlank()
-        return !editable && enabled && visible && actionable && (isButtonLike || hasActionHints || hasUsefulLabel)
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        val isButtonLike = cls.contains("Button", ignoreCase = true) || cls.contains("TextView", ignoreCase = true) ||
+                cls.contains("ImageView", ignoreCase = true) || cls.contains("ImageButton", ignoreCase = true) ||
+                cls.contains("View", ignoreCase = true)
+        val hasHints = SEND_VIEW_ID_HINTS.any { viewId.contains(it) } || DISMISS_VIEW_ID_HINTS.any { viewId.contains(it) }
+        return actionable && (isButtonLike || hasHints || label.isNotBlank() || desc.isNotBlank())
     }
 
     private fun scoreActionCandidate(node: AccessibilityNodeInfo): Int {
         val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        val bounds = Rect()
-        runCatching { node.getBoundsInScreen(bounds) }
-        val childCount = try { node.childCount } catch (_: Exception) { 0 }
-        val shortText = (label.ifBlank { desc }).length
-
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        val bounds = Rect().also { runCatching { node.getBoundsInScreen(it) } }
+        val childCount = runCatching { node.childCount }.getOrDefault(0)
         var score = 0
         if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS) score += 500
         if (SEND_BUTTON_LABELS.any { label.startsWith(it) || desc.startsWith(it) }) score += 300
@@ -4160,20 +1725,18 @@ class UssdNavigationService : AccessibilityService() {
         if (label.isNotBlank() || desc.isNotBlank()) score += 80
         if (childCount == 0) score += 70
         if (childCount > 2) score -= childCount * 40
-        if (shortText in 1..18) score += 60
-        if (shortText > 28) score -= 180
-        if (bounds.right > 0 || bounds.bottom > 0) {
-            score += bounds.right / 10
-            score += bounds.bottom / 20
-        }
+        val len = (label.ifBlank { desc }).length
+        if (len in 1..18) score += 60
+        if (len > 28) score -= 180
+        if (bounds.right > 0 || bounds.bottom > 0) { score += bounds.right / 10; score += bounds.bottom / 20 }
         return score
     }
 
     private fun scoreSendActionCandidate(node: AccessibilityNodeInfo): Int {
+        var score = scoreActionCandidate(node)
         val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        var score = scoreActionCandidate(node)
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
         if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS) score += 420
         if (SEND_BUTTON_LABELS.any { label.startsWith(it) || desc.startsWith(it) }) score += 240
         if (SEND_BUTTON_LABELS.any { label.contains(it) || desc.contains(it) }) score += 140
@@ -4183,25 +1746,11 @@ class UssdNavigationService : AccessibilityService() {
         return score
     }
 
-    private fun findAggressiveSendActionButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        val candidates = mutableListOf<AccessibilityNodeInfo>()
-        collectAggressiveActionCandidates(root, candidates)
-        return candidates
-            .maxByOrNull { scoreSendActionCandidate(it) + scoreAggressiveActionCandidate(it) }
-            ?.takeIf { scoreSendActionCandidate(it) + scoreAggressiveActionCandidate(it) > 0 }
-            ?.let { AccessibilityNodeInfo.obtain(it) }
-            .also { candidates.forEach { it.recycle() } }
-    }
-
     private fun scoreAggressiveActionCandidate(node: AccessibilityNodeInfo): Int {
         val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            try { node.isVisibleToUser } catch (_: Exception) { true }
-        } else {
-            true
-        }
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) runCatching { node.isVisibleToUser }.getOrDefault(true) else true
         var score = 0
         if (!visible) score += 120
         if (SEND_BUTTON_LABELS.any { label.contains(it) || desc.contains(it) }) score += 240
@@ -4211,77 +1760,66 @@ class UssdNavigationService : AccessibilityService() {
         return score
     }
 
-    private fun findBottomRightActionButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        val candidates = mutableListOf<AccessibilityNodeInfo>()
-        collectActionCandidates(root, candidates)
-        return candidates
-            .asSequence()
-            .filterNot { node ->
-                val label = normalizeActionLabel(node.text?.toString())
-                val desc = normalizeActionLabel(node.contentDescription?.toString())
-                label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS
-            }
-            .maxByOrNull { scoreActionCandidate(it) + 120 }
-            ?.let { AccessibilityNodeInfo.obtain(it) }
-            .also { candidates.forEach { it.recycle() } }
+    private fun isAggressiveActionCandidate(node: AccessibilityNodeInfo): Boolean {
+        val enabled = runCatching { node.isEnabled }.getOrDefault(true)
+        if (!enabled) return false
+        val editable = runCatching { node.isEditable }.getOrDefault(false)
+        if (editable) return false
+        val actionable = runCatching { node.isClickable || node.isFocusable || node.isLongClickable }.getOrDefault(false)
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        return actionable && (SEND_VIEW_ID_HINTS.any { viewId.contains(it) } ||
+                SEND_BUTTON_LABELS.any { label.contains(it) || desc.contains(it) } ||
+                label.isNotBlank() || desc.isNotBlank())
     }
 
-    private fun triggerInputSubmit(root: AccessibilityNodeInfo, expectedValue: String): Boolean =
-        triggerInputSubmit(root, expectedValue, null)
-
-    private fun triggerInputSubmit(
-        root: AccessibilityNodeInfo,
-        expectedValue: String,
-        existingField: AccessibilityNodeInfo?
-    ): Boolean {
-        val field = existingField ?: findEditableFieldMatchingExpectedInput(root, expectedValue) ?: return false
-        return try {
-            val currentValue = readFieldText(field)?.trim().orEmpty()
-            val verified = isVerifiedFieldValue(currentValue, expectedValue)
-            if (currentValue.isNotEmpty() && !verified) return false
-            if (currentValue.isBlank() && !hasRecentVerifiedInput(expectedValue)) return false
-            if (verified) {
-                rememberVerifiedInput(expectedValue)
-            }
-            performImeAction(field)
-        } finally {
-            if (existingField == null) field.recycle()
-        }
+    private fun performClick(node: AccessibilityNodeInfo): Boolean {
+        if (runCatching { node.performAction(AccessibilityNodeInfo.ACTION_CLICK) }.getOrDefault(false)) return true
+        return performTapGesture(node)
     }
 
-    private fun tryImmediateVerifiedSend(
-        root: AccessibilityNodeInfo,
-        field: AccessibilityNodeInfo?,
-        expectedValue: String,
-        alreadyVerified: Boolean = false
-    ): Boolean {
-        val fieldText = field?.let(::readFieldText)
-        val verified = when {
-            alreadyVerified -> true
-            fieldText != null && isVerifiedFieldValue(fieldText, expectedValue) -> {
-                rememberVerifiedInput(expectedValue)
-                true
-            }
-            field == null && hasRecentVerifiedInput(expectedValue) -> true
-            else -> verifyExpectedInputFromRoot(
-                root = root,
-                expectedValue = expectedValue,
-                existingField = field
-            )
-        }
+    private fun performTapGesture(node: AccessibilityNodeInfo): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        val bounds = Rect().also { runCatching { node.getBoundsInScreen(it) } }
+        if (bounds.width() <= 0 || bounds.height() <= 0) return false
+        val x = bounds.exactCenterX()
+        val y = bounds.exactCenterY()
+        if (x <= 0f || y <= 0f) return false
+        val path = Path().apply { moveTo(x, y); lineTo(x + 1f, y + 1f) }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, TAP_GESTURE_DURATION_MS))
+            .build()
+        return runCatching { dispatchGesture(gesture, null, null) }.getOrDefault(false)
+    }
+    // endregion
+
+    // region Send / Verify helpers
+    private fun tryImmediateVerifiedSend(root: AccessibilityNodeInfo, field: AccessibilityNodeInfo?, expected: String, alreadyVerified: Boolean = false): Boolean {
+        val verified = alreadyVerified || verifyExpectedInput(root, expected, field) || hasRecentVerifiedInput(expected)
         if (!verified) return false
-        val sendBtn = findBestSendActionButton(root)
-            ?: findPositiveDialogButton(root)
-            ?: findBottomRightActionButton(root)
-        try {
-            if (sendBtn != null && performClick(sendBtn)) {
-                return true
-            }
+        val btn = findBestSendButton(root) ?: findPositiveDialogButton(root) ?: findBottomRightActionButton(root)
+        if (btn != null && performClick(btn)) return true
+        return triggerInputSubmit(root, expected, field)
+    }
+
+    private fun tryAggressiveImmediateSubmit(root: AccessibilityNodeInfo, field: AccessibilityNodeInfo?, expected: String): Boolean {
+        if (!hasRecentVerifiedInput(expected)) return false
+        val btn = findBestSendButton(root) ?: findPositiveDialogButton(root) ?: findBottomRightActionButton(root)
+        if (btn != null && performClick(btn)) return true
+        return triggerInputSubmit(root, expected, field)
+    }
+
+    private fun triggerInputSubmit(root: AccessibilityNodeInfo, expected: String, field: AccessibilityNodeInfo?): Boolean {
+        val f = field ?: findFieldForExpectedValue(root, expected) ?: return false
+        return try {
+            val text = readFieldText(f)?.trim().orEmpty()
+            if (text.isNotEmpty() && !matchesExpectedInput(text, expected)) return false
+            if (text.isBlank() && !hasRecentVerifiedInput(expected)) return false
+            performImeAction(f)
         } finally {
-            sendBtn?.recycle()
+            if (field == null) f.recycle()
         }
-        val canSubmitFromField = fieldText != null || hasRecentVerifiedInput(expectedValue)
-        return canSubmitFromField && triggerInputSubmit(root, expectedValue, field)
     }
 
     private fun performImeAction(node: AccessibilityNodeInfo): Boolean {
@@ -4291,990 +1829,449 @@ class UssdNavigationService : AccessibilityService() {
                 focusInputTarget(target)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     val imeEnter = AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id
-                    if (supportsAction(target, imeEnter) && runCatching {
-                            target.performAction(imeEnter)
-                        }.getOrDefault(false)
-                    ) {
-                        return true
-                    }
+                    if (supportsAction(target, imeEnter) && runCatching { target.performAction(imeEnter) }.getOrDefault(false)) return true
                 }
-                val actionMatch = try {
-                    target.actionList?.firstOrNull { action ->
-                        val label = normalizeActionLabel(action.label?.toString())
-                        label in SEND_BUTTON_LABELS || label in listOf("go", "done", "enter", "search", "next")
-                    }?.id
-                } catch (_: Exception) {
-                    null
-                }
-                if (actionMatch != null && runCatching { target.performAction(actionMatch) }.getOrDefault(false)) {
-                    return true
-                }
+                val actionMatch = runCatching {
+                    target.actionList?.firstOrNull { normalizeActionLabel(it.label?.toString()) in SEND_BUTTON_LABELS }?.id
+                }.getOrNull()
+                if (actionMatch != null && runCatching { target.performAction(actionMatch) }.getOrDefault(false)) return true
             }
-            return false
         } finally {
             targets.forEach { it.recycle() }
         }
+        return false
     }
 
-    private fun normalizeActionLabel(value: String?): String =
-        value.orEmpty()
-            .trim()
-            .lowercase()
-            .replace(MULTI_SPACE_REGEX, " ")
+    private fun focusInputTarget(node: AccessibilityNodeInfo) {
+        if (runCatching { node.isFocused }.getOrDefault(false)) return
+        refocusInputTarget(node) || activateInputTarget(node)
+    }
 
     private fun isSendActionNode(node: AccessibilityNodeInfo): Boolean {
-        val text = normalizeActionLabel(node.text?.toString())
+        val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        return text in SEND_BUTTON_LABELS ||
-            desc in SEND_BUTTON_LABELS ||
-            SEND_VIEW_ID_HINTS.any { viewId.contains(it) }
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        return label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS || SEND_VIEW_ID_HINTS.any { viewId.contains(it) }
     }
 
     private fun isDismissActionNode(node: AccessibilityNodeInfo): Boolean {
-        val text = normalizeActionLabel(node.text?.toString())
-        val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        return text in DISMISS_BUTTON_LABELS ||
-            desc in DISMISS_BUTTON_LABELS ||
-            DISMISS_VIEW_ID_HINTS.any { viewId.contains(it) }
-    }
-
-    private fun shouldTreatStepAsTextInput(step: String, valueToEnter: String, selectedMenuLabel: String?): Boolean {
-        if (step == "INPUT_PHONE") return true
-        if (valueToEnter.isBlank()) return false
-        if (!valueToEnter.all(Char::isDigit)) return true
-        if (valueToEnter.length >= 4) return true
-        return selectedMenuLabel == null && valueToEnter.length > 1
-    }
-
-    private fun shouldTreatNumericReplyAsTextInput(
-        step: String,
-        valueToEnter: String,
-        snapshot: UssdTreeSnapshot,
-        dialogTextLower: String,
-        menuSignature: ParsedMenuSignature?
-    ): Boolean {
-        if (step == "INPUT_PHONE") return true
-        if (!valueToEnter.all(Char::isDigit) || valueToEnter.isBlank()) return false
-        if (!snapshot.hasSendButton) return false
-        if (snapshot.hasEditableField) return true
-        if (menuSignature?.options?.isNotEmpty() == true) return true
-        return dialogSuggestsTypedReplyPrompt(dialogTextLower)
-    }
-
-    private fun dialogSuggestsTextInput(allTextLower: String): Boolean =
-        allTextLower.contains("enter") ||
-            allTextLower.contains("input") ||
-            allTextLower.contains("reply") ||
-            allTextLower.contains("amount") ||
-            allTextLower.contains("pin") ||
-            allTextLower.contains("phone") ||
-            allTextLower.contains("number") ||
-            allTextLower.contains("code")
-
-    private fun dialogSuggestsTypedReplyPrompt(allTextLower: String): Boolean =
-        dialogSuggestsTextInput(allTextLower) ||
-            allTextLower.contains("select") ||
-            allTextLower.contains("choose") ||
-            allTextLower.contains("option") ||
-            allTextLower.contains("press") ||
-            allTextLower.contains("respond") ||
-            allTextLower.contains("response") ||
-            allTextLower.contains("continue")
-
-    private fun dialogSuggestsPhoneInput(allTextLower: String): Boolean =
-        PHONE_INPUT_HINTS.any { allTextLower.contains(it) } ||
-            (allTextLower.contains("254") && (allTextLower.contains("phone") || allTextLower.contains("mobile"))) ||
-            (allTextLower.contains("07") && (allTextLower.contains("phone") || allTextLower.contains("number")))
-
-    private fun hasInputViewHint(viewId: String, hint: String): Boolean =
-        INPUT_VIEW_ID_HINTS.any { viewId.contains(it) } ||
-            INPUT_FIELD_HINTS.any { hint.contains(it) }
-
-    private fun hasInputLabelHint(label: String, desc: String): Boolean =
-        INPUT_FIELD_HINTS.any { label.contains(it) || desc.contains(it) }
-
-    private fun isTextEntryNode(node: AccessibilityNodeInfo): Boolean {
-        val className = node.className?.toString().orEmpty()
         val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
-        } else {
-            ""
-        }
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        val editable = try { node.isEditable } catch (_: Exception) { false }
-        val enabled = try { node.isEnabled } catch (_: Exception) { true }
-        val focusable = try { node.isFocusable || node.isFocused } catch (_: Exception) { false }
-        val clickable = try { node.isClickable } catch (_: Exception) { false }
-        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            try { node.isVisibleToUser } catch (_: Exception) { true }
-        } else {
-            true
-        }
-        val looksLikeInputClass = EDITABLE_CLASS_HINTS.any { className.contains(it, ignoreCase = true) } ||
-            className.contains("TextInput", ignoreCase = true) ||
-            (className.contains("Text", ignoreCase = true) &&
-                (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) || supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)))
-        val looksLikeButton = className.contains("Button", ignoreCase = true) ||
-            className.contains("ImageButton", ignoreCase = true)
-        val hasViewHint = hasInputViewHint(viewId, hint)
-        val hasLabelHint = hasInputLabelHint(label, desc)
-        val hasSetTextAction = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)
-        val hasPasteAction = supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
-        val sendOrDismissLabel = label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS ||
-            label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS
-        return enabled && visible && !looksLikeButton && !sendOrDismissLabel && (
-            editable ||
-                looksLikeInputClass ||
-                hasSetTextAction ||
-                (hasPasteAction && (looksLikeInputClass || hasViewHint)) ||
-                (hasViewHint && (focusable || clickable)) ||
-                (hasLabelHint && (editable || hasSetTextAction))
-            )
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        return label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS || DISMISS_VIEW_ID_HINTS.any { viewId.contains(it) }
     }
 
-    private fun looksLikeStructuredUssdMenu(options: LinkedHashMap<String, String>): Boolean {
-        if (options.size < 2) return false
-        val numericKeys = options.keys.mapNotNull { it.toIntOrNull() }
-        if (numericKeys.size != options.size) return false
-        val firstKey = numericKeys.firstOrNull() ?: return false
-        if (firstKey != 0 && firstKey != 1) return false
-
-        val sequentialPrefixCount = numericKeys
-            .zipWithNext()
-            .takeWhile { (left, right) -> right == left + 1 }
-            .size + 1
-        if (sequentialPrefixCount < 2) return false
-
-        val meaningfulLabels = options.values.count { label ->
-            val normalized = normalizeActionLabel(label)
-            normalized.isNotBlank() &&
-                normalized !in SEND_BUTTON_LABELS &&
-                normalized !in DISMISS_BUTTON_LABELS &&
-                normalized.any(Char::isLetterOrDigit)
-        }
-        return meaningfulLabels >= 2
-    }
-
-    private fun isLooseInputCandidate(node: AccessibilityNodeInfo): Boolean {
-        val className = node.className?.toString().orEmpty()
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
+    private fun hasSendOrOkButton(node: AccessibilityNodeInfo): Boolean {
         val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
-        } else {
-            ""
-        }
-        val enabled = try { node.isEnabled } catch (_: Exception) { true }
-        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            try { node.isVisibleToUser } catch (_: Exception) { true }
-        } else {
-            true
-        }
-        val focusable = try { node.isFocusable || node.isFocused } catch (_: Exception) { false }
-        val clickable = try { node.isClickable || node.isLongClickable } catch (_: Exception) { false }
-        val editable = try { node.isEditable } catch (_: Exception) { false }
-        val looksLikeButton = className.contains("Button", ignoreCase = true) ||
-            className.contains("ImageButton", ignoreCase = true)
-        val looksLikeInputClass = EDITABLE_CLASS_HINTS.any { className.contains(it, ignoreCase = true) } ||
-            className.contains("TextInput", ignoreCase = true) ||
-            className.contains("Edit", ignoreCase = true)
-        val hasWritableAction = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
-            supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
-        val hasViewHint = hasInputViewHint(viewId, hint)
-        val sendOrDismissLabel = label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS ||
-            label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS
-        val hasShortText = label.isBlank() || label.length <= 24
-        return enabled &&
-            visible &&
-            !editable &&
-            !looksLikeButton &&
-            !sendOrDismissLabel &&
-            hasShortText &&
-            ((hasWritableAction && (looksLikeInputClass || hasViewHint || focusable)) ||
-                (hasViewHint && (focusable || clickable)))
-    }
-
-    private fun isHiddenInputProxyCandidate(node: AccessibilityNodeInfo): Boolean {
-        val className = node.className?.toString().orEmpty()
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        val label = normalizeActionLabel(node.text?.toString())
-        val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
-        } else {
-            ""
-        }
-        val enabled = try { node.isEnabled } catch (_: Exception) { true }
-        val editable = try { node.isEditable } catch (_: Exception) { false }
-        val focusable = try { node.isFocusable || node.isFocused } catch (_: Exception) { false }
-        val clickable = try { node.isClickable || node.isLongClickable } catch (_: Exception) { false }
-        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            try { node.isVisibleToUser } catch (_: Exception) { true }
-        } else {
-            true
-        }
-        val hasSetTextAction = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)
-        val hasPasteAction = supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
-        val hasWritableAction = hasSetTextAction || hasPasteAction
-        val looksLikeButton = className.contains("Button", ignoreCase = true) ||
-            className.contains("ImageButton", ignoreCase = true)
-        val looksLikeInputClass = EDITABLE_CLASS_HINTS.any { className.contains(it, ignoreCase = true) } ||
-            className.contains("TextInput", ignoreCase = true) ||
-            className.contains("Edit", ignoreCase = true) ||
-            className.contains("AutoComplete", ignoreCase = true) ||
-            className.contains("Search", ignoreCase = true)
-        val hasViewHint = hasInputViewHint(viewId, hint)
-        val hasLabelHint = hasInputLabelHint(label, desc)
-        val hasShortOrBlankText = label.isBlank() || label.length <= 18
-        val isActionLabel = label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS ||
-            label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS
-        if (!enabled || editable || looksLikeButton || isActionLabel) return false
-        if (!visible && !hasWritableAction) return false
-        if (hasWritableAction && (looksLikeInputClass || hasViewHint || hasLabelHint || focusable || clickable)) {
-            return true
-        }
-        return hasShortOrBlankText &&
-            (focusable || clickable) &&
-            (looksLikeInputClass || hasViewHint || hasLabelHint)
-    }
-
-    private fun isAggressiveTextEntryCandidate(node: AccessibilityNodeInfo): Boolean {
-        val className = node.className?.toString().orEmpty()
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        val label = normalizeActionLabel(node.text?.toString())
-        val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
-        } else {
-            ""
-        }
-        val enabled = try { node.isEnabled } catch (_: Exception) { true }
-        val editable = try { node.isEditable } catch (_: Exception) { false }
-        val writable = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
-            supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
-        val focusable = try {
-            node.isFocusable || node.isFocused || node.isClickable || node.isLongClickable
-        } catch (_: Exception) {
-            false
-        }
-        val looksLikeButton = className.contains("Button", ignoreCase = true) ||
-            className.contains("ImageButton", ignoreCase = true)
-        val looksLikeInputClass = EDITABLE_CLASS_HINTS.any { className.contains(it, ignoreCase = true) } ||
-            className.contains("TextInput", ignoreCase = true) ||
-            className.contains("Edit", ignoreCase = true) ||
-            className.contains("AutoComplete", ignoreCase = true) ||
-            className.contains("Search", ignoreCase = true)
-        val hasHints = hasInputViewHint(viewId, hint) || hasInputLabelHint(label, desc)
-        val isActionLabel = label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS ||
-            label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS
-        return enabled &&
-            !looksLikeButton &&
-            !isActionLabel && (
-                editable ||
-                    isHiddenInputProxyCandidate(node) ||
-                    isLooseInputCandidate(node) ||
-                    (writable && (looksLikeInputClass || hasHints || focusable)) ||
-                    (focusable && hasHints)
-                )
-    }
-
-    private fun supportsAction(node: AccessibilityNodeInfo, actionId: Int): Boolean =
-        try {
-            node.actionList?.any { it.id == actionId } == true
-        } catch (_: Exception) {
-            false
-        }
-
-    private fun normalizeInputValue(value: String?): String =
-        value.orEmpty()
-            .replace(MULTI_SPACE_REGEX, "")
-            .trim()
-
-    private fun normalizePhoneComparable(value: String?): String {
-        val digits = value.orEmpty().replace(Regex("\\D+"), "")
-        if (digits.length < 9) return ""
-        return UssdHelper.normalizeRecipientForUssdInput(digits).replace(Regex("\\D+"), "")
-    }
-
-    private fun normalizeCollapsedText(value: String?): String =
-        value.orEmpty()
-            .replace(MULTI_SPACE_REGEX, " ")
-            .trim()
-
-    private fun matchesExpectedInput(actualValue: String?, expectedValue: String): Boolean {
-        val actual = normalizeInputValue(actualValue)
-        val expected = normalizeInputValue(expectedValue)
-        if (actual.isBlank() || expected.isBlank()) return false
-        if (actual == expected || actual.endsWith(expected) || expected.endsWith(actual)) return true
-
-        val actualPhone = normalizePhoneComparable(actualValue)
-        val expectedPhone = normalizePhoneComparable(expectedValue)
-        if (actualPhone.isNotBlank() && expectedPhone.isNotBlank()) {
-            return actualPhone == expectedPhone ||
-                actualPhone.endsWith(expectedPhone) ||
-                expectedPhone.endsWith(actualPhone)
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS || SEND_VIEW_ID_HINTS.any { viewId.contains(it) }) return true
+        for (i in 0 until node.childCount) {
+            val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+            if (hasSendOrOkButton(child)) { child.recycle(); return true }
+            child.recycle()
         }
         return false
     }
 
-    private fun isLikelyPromptText(value: String): Boolean {
-        val normalized = normalizeActionLabel(value)
-        if (normalized.isBlank()) return false
-        if (value.contains('\n')) return true
-        if (Regex("""\b\d+\s*[\)\].:\-]\s+\S+""").containsMatchIn(value)) return true
-        if (normalized.length > 18 && USSD_HINTS.any { normalized.contains(it) }) return true
+    private fun hasDismissButton(node: AccessibilityNodeInfo): Boolean {
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        if (label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS || DISMISS_VIEW_ID_HINTS.any { viewId.contains(it) }) return true
+        for (i in 0 until node.childCount) {
+            val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+            if (hasDismissButton(child)) { child.recycle(); return true }
+            child.recycle()
+        }
         return false
     }
 
-    private fun rememberInputWrite(value: String) {
-        lastInputWriteValue = normalizeInputValue(value)
-        lastInputWriteElapsed = SystemClock.elapsedRealtime()
-    }
-
-    private fun clearInputWriteMarker() {
-        lastInputWriteValue = ""
-        lastInputWriteElapsed = 0L
-        lastVerifiedInputValue = ""
-        lastVerifiedInputElapsed = 0L
-    }
-
-    private fun hasRecentExpectedInput(expectedValue: String): Boolean {
-        val expected = normalizeInputValue(expectedValue)
-        if (expected.isBlank()) return false
-        if (lastInputWriteValue != expected) return false
-        return SystemClock.elapsedRealtime() - lastInputWriteElapsed <= RECENT_INPUT_GRACE_MS
-    }
-
-    private fun rememberVerifiedInput(value: String) {
-        val normalized = normalizeInputValue(value)
-        if (normalized.isBlank()) return
-        lastVerifiedInputValue = normalized
-        lastVerifiedInputElapsed = SystemClock.elapsedRealtime()
-    }
-
-    private fun hasRecentVerifiedInput(expectedValue: String): Boolean {
-        val expected = normalizeInputValue(expectedValue)
-        if (expected.isBlank()) return false
-        if (lastVerifiedInputValue != expected) return false
-        return SystemClock.elapsedRealtime() - lastVerifiedInputElapsed <= RECENT_VERIFIED_INPUT_GRACE_MS
-    }
-
-    private fun shouldTrustFreshInputWrite(
-        wroteValue: Boolean,
-        expectedValue: String,
-        existingField: AccessibilityNodeInfo?,
-        snapshot: UssdTreeSnapshot,
-        dialogTextLower: String
-    ): Boolean {
-        if (!wroteValue || !hasRecentVerifiedInput(expectedValue)) return false
-        if (existingField != null) return true
-        return snapshot.hasSendButton && (
-            snapshot.hasEditableField ||
-                snapshot.inputStateSignature.isNotBlank() ||
-                dialogSuggestsTypedReplyPrompt(dialogTextLower)
-            )
-    }
-
-    private fun shouldAttemptAggressiveImmediateSubmit(
-        snapshot: UssdTreeSnapshot,
-        dialogTextLower: String,
-        step: String,
-        expectedValue: String,
-        field: AccessibilityNodeInfo?
-    ): Boolean {
-        if (!hasRecentVerifiedInput(expectedValue)) return false
-        if (field == null && !snapshot.hasEditableField && snapshot.inputStateSignature.isBlank()) return false
-        return snapshot.hasSendButton ||
-            (field != null && (
-                step == "INPUT_PHONE" ||
-                    dialogSuggestsTypedReplyPrompt(dialogTextLower)
-                ))
-    }
-
-    private fun tryAggressiveImmediateSubmitAfterWrite(
-        root: AccessibilityNodeInfo,
-        field: AccessibilityNodeInfo?,
-        expectedValue: String
-    ): Boolean {
-        if (!hasRecentVerifiedInput(expectedValue)) return false
-        val sendBtn = findBestSendActionButton(root)
-            ?: findPositiveDialogButton(root)
-            ?: findBottomRightActionButton(root)
-        try {
-            if (sendBtn != null && performClick(sendBtn)) {
-                return true
-            }
-        } finally {
-            sendBtn?.recycle()
+    private fun hasEditableField(node: AccessibilityNodeInfo): Boolean {
+        if (isTextEntryNode(node)) return true
+        for (i in 0 until node.childCount) {
+            val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+            if (hasEditableField(child)) { child.recycle(); return true }
+            child.recycle()
         }
-        return triggerInputSubmit(root, expectedValue, field)
+        return false
     }
+    // endregion
 
-    private fun shouldTrustRecentWrite(fieldText: String?, expectedValue: String): Boolean {
-        val actual = fieldText?.trim().orEmpty()
-        if (actual.isBlank()) return false
-        return hasRecentVerifiedInput(expectedValue) && isLikelyPromptText(actual)
-    }
-
-    private fun isVerifiedFieldValue(fieldText: String?, expectedValue: String): Boolean {
-        val actual = fieldText?.trim().orEmpty()
-        return when {
-            matchesExpectedInput(actual, expectedValue) -> true
-            shouldTrustRecentWrite(actual, expectedValue) -> true
-            else -> false
-        }
-    }
-
-    private fun verifyExpectedInputFromRoot(
-        root: AccessibilityNodeInfo,
-        expectedValue: String,
-        existingField: AccessibilityNodeInfo? = null
-    ): Boolean {
-        if (existingField != null && isVerifiedFieldValue(readFieldText(existingField), expectedValue)) {
-            rememberVerifiedInput(expectedValue)
-            return true
-        }
-        val candidates = mutableListOf<AccessibilityNodeInfo>()
-        return try {
-            collectTextEntryCandidates(root, candidates)
-            val verified = candidates.any { candidate ->
-                isVerifiedFieldValue(readFieldText(candidate), expectedValue)
-            }
-            val aggressiveVerified = if (verified) {
-                false
-            } else {
-                val aggressiveCandidates = mutableListOf<AccessibilityNodeInfo>()
-                try {
-                    collectAggressiveTextEntryCandidates(root, aggressiveCandidates)
-                    aggressiveCandidates.any { candidate ->
-                        isVerifiedFieldValue(readFieldText(candidate), expectedValue)
-                    }
-                } finally {
-                    aggressiveCandidates.forEach { candidate ->
-                        if (candidate !== existingField) {
-                            runCatching { candidate.recycle() }
-                        }
-                    }
-                }
-            }
-            if (verified || aggressiveVerified) rememberVerifiedInput(expectedValue)
-            verified || aggressiveVerified
-        } finally {
-            candidates.forEach { candidate ->
-                if (candidate !== existingField) {
-                    runCatching { candidate.recycle() }
-                }
-            }
-        }
-    }
-
-    private fun readFieldText(node: AccessibilityNodeInfo): String? {
-        val directText = try { node.text?.toString() } catch (_: Exception) { null }
-        if (!directText.isNullOrBlank()) return directText
-        val descText = try { node.contentDescription?.toString() } catch (_: Exception) { null }
-        if (!descText.isNullOrBlank()) return descText
-        val nestedText = extractTextTokens(node)
-            .filterNot { token -> isLikelyPromptText(token) }
-            .minByOrNull { token -> token.length }
-            ?.takeIf { token ->
-                val normalized = normalizeActionLabel(token)
-                normalized.isNotBlank() && INPUT_FIELD_HINTS.none { normalized.contains(it) }
-            }
-        if (!nestedText.isNullOrBlank()) return nestedText
-        return null
-    }
-
-    private fun tryWriteValueToField(
-        field: AccessibilityNodeInfo,
-        value: String,
-        verificationRoot: AccessibilityNodeInfo? = null
-    ): Boolean {
-        var wroteValue = false
-        for (pass in 0 until FORCEFUL_WRITE_PASSES) {
-            val targets = obtainInputTargets(field)
-            try {
-                targets.forEach { target ->
-                    val result = writeValueUsingStrategies(target, value)
-                    if (result.wroteValue) {
-                        wroteValue = true
-                        rememberInputWrite(value)
-                        val verified = result.likelyVerified ||
-                            verifyWrittenValueWithRetries(verificationRoot, target, value)
-                        if (verified) {
-                            rememberVerifiedInput(value)
-                            return true
-                        }
-                    }
-                }
-                if (wroteValue && verifyWrittenValueWithRetries(verificationRoot, field, value)) {
-                    rememberVerifiedInput(value)
-                    return true
-                }
-            } finally {
-                targets.forEach { it.recycle() }
-            }
-            primeInputTarget(field, aggressive = true)
-            refreshInputTarget(field)
-            if (verificationRoot != null) {
-                runCatching { verificationRoot.refresh() }
-            }
-        }
-        return wroteValue && verifyWrittenValueWithRetries(verificationRoot, field, value)
-    }
-
-    private fun verifyWrittenValue(
-        verificationRoot: AccessibilityNodeInfo?,
-        field: AccessibilityNodeInfo,
-        expectedValue: String
-    ): Boolean {
-        if (isLikelyDirectWriteVerified(field, expectedValue)) return true
-        val root = verificationRoot ?: return false
-        runCatching { root.refresh() }
-        return verifyExpectedInputFromRoot(
-            root = root,
-            expectedValue = expectedValue,
-            existingField = field
+    // region Signature Learning
+    private fun captureSignatureStepIfNeeded(stepIndex: Int, rawStep: String, menu: LinkedHashMap<String, String>?, snapshot: UssdTreeSnapshot, dialogText: String) {
+        if (!signatureLearningMode || !rawStep.all(Char::isDigit) || menu == null) return
+        val optionLabel = menu[rawStep] ?: return
+        val captured = UssdSignatureStep(
+            stepIndex = stepIndex,
+            expectedInput = rawStep,
+            menuTitle = extractMenuTitle(snapshot.textTokens),
+            menuText = formatRecordedDialogText(snapshot.textTokens, dialogText),
+            selectedOptionLabel = optionLabel,
+            menuOptionsSnapshot = menu.values.map { normalizeCollapsedText(it) }.filter { it.isNotBlank() }
         )
+        val existing = learnedSignatureSteps.indexOfFirst { it.stepIndex == stepIndex }
+        if (existing >= 0) learnedSignatureSteps[existing] = captured else learnedSignatureSteps.add(captured)
     }
 
-    private fun verifyWrittenValueWithRetries(
-        verificationRoot: AccessibilityNodeInfo?,
-        field: AccessibilityNodeInfo,
-        expectedValue: String
-    ): Boolean {
-        repeat(WRITE_VERIFICATION_PASSES) { attempt ->
-            if (attempt > 0) {
-                runCatching { field.refresh() }
-                verificationRoot?.let { root ->
-                    runCatching { root.refresh() }
-                }
-                if (attempt >= 2) {
-                    SystemClock.sleep(writeVerificationSettleMs)
-                }
-            }
-            if (verifyWrittenValue(verificationRoot, field, expectedValue)) {
-                return true
-            }
-        }
-        return false
+    private fun captureLearningDialogIfNeeded(snapshot: UssdTreeSnapshot?, root: AccessibilityNodeInfo, pkg: String) {
+        if (snapshot == null) return
+        val menu = parseMenuFromSnapshot(snapshot) ?: return
+        val recordedText = formatLearningRecordedDialogText(snapshot, menu)
+        if (recordedText.isBlank()) return
+        val captureIndex = if (currentStep >= advancedSteps.size) advancedSteps.lastIndex else currentStep
+        val rawStep = advancedSteps.getOrNull(captureIndex).orEmpty()
+        val (entered, selectedLabel) = resolveStepInput(captureIndex, rawStep, menu)
+        val capture = UssdLearningCapture(captureIndex, entered, selectedLabel, recordedText)
+        val existing = learningCaptures.indexOfFirst { it.stepIndex == capture.stepIndex && normalizeMenuText(it.popupText) == normalizeMenuText(capture.popupText) }
+        if (existing >= 0) learningCaptures[existing] = capture else learningCaptures += capture
     }
 
-    private fun writeValueUsingStrategies(node: AccessibilityNodeInfo, value: String): InputWriteResult {
-        primeInputTarget(node)
-        attemptSetTextBurst(node, value)?.let { return it }
-        primeInputTarget(node, aggressive = true)
-        attemptSetTextBurst(node, value, aggressive = true)?.let { return it }
-        if (supportsSilentSetText(node) && primeInputTarget(node, aggressive = true)) {
-            refreshInputTarget(node)
-            attemptSetTextBurst(node, value, aggressive = true)?.let { return it }
+    private fun extractMenuTitle(tokens: List<String>): String {
+        val lines = tokens.map { normalizeCollapsedText(it) }.filter { it.isNotBlank() }
+        val menu = parseMenuOptions(lines)
+        if (menu != null) {
+            val idx = lines.indexOfFirst { Regex("""^\d+\s*[\)\].:\-]""").containsMatchIn(it) }
+            if (idx > 0) return lines.take(idx).joinToString(" / ")
         }
-        primeInputTarget(node, aggressive = true)
-        attemptPasteBurst(node, value)?.let { return it }
-        if (primeInputTarget(node, aggressive = true)) {
-            refreshInputTarget(node)
-            attemptPasteBurst(node, value, aggressive = true)?.let { return it }
-        }
-        return InputWriteResult(wroteValue = false, likelyVerified = false)
+        return lines.take(2).joinToString(" / ")
     }
 
-    private fun attemptSetTextBurst(
-        node: AccessibilityNodeInfo,
-        value: String,
-        aggressive: Boolean = false
-    ): InputWriteResult? {
-        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) return null
-        repeat(SET_TEXT_BURST_ATTEMPTS) { attempt ->
-            if (attempt > 0) {
-                if (aggressive) {
-                    primeInputTarget(node, aggressive = true)
-                } else {
-                    refreshInputTarget(node)
-                }
+    private fun resolveStepInput(stepIndex: Int, rawStep: String, menu: LinkedHashMap<String, String>?): Pair<String, String> {
+        if (rawStep == "INPUT_PHONE") {
+            adjustedStepInputs[stepIndex] = rawStep
+            return UssdHelper.normalizeRecipientForUssdInput(advancedPhoneNumber) to "Enter phone number"
+        }
+        if (!rawStep.all(Char::isDigit) || !signatureGuardEnabled) {
+            adjustedStepInputs[stepIndex] = rawStep
+            return rawStep to (menu?.get(rawStep) ?: "")
+        }
+        val learned = getLoadedSignatureContext(stepIndex)
+        if (learned == null || menu == null || menu.isEmpty()) {
+            adjustedStepInputs[stepIndex] = rawStep
+            return rawStep to (menu?.get(rawStep) ?: "")
+        }
+        val match = findBestMenuOptionMatch(menu, learned)
+        if (match == null) {
+            val msg = buildChangeMessage(learned.step, null, null)
+            signatureChangeDetected = true
+            detectedChangeNotes += msg
+            failForSignatureChange(msg)
+            return rawStep to ""
+        }
+        if (match.first != rawStep) {
+            val msg = buildChangeMessage(learned.step, match.first, match.second)
+            signatureChangeDetected = true
+            detectedChangeNotes += msg
+            if (signatureAction != "ADJUST" || !isAutoAdjustSafe(match, menu, learned)) {
+                failForSignatureChange(msg)
+                return rawStep to ""
             }
-            if (setTextOnNode(node, value)) {
-                val likelyVerified = verifyDirectWriteBurst(node, value)
-                if (likelyVerified || attempt == SET_TEXT_BURST_ATTEMPTS - 1) {
-                    return InputWriteResult(
-                        wroteValue = true,
-                        likelyVerified = likelyVerified
-                    )
-                }
+            signatureAutoAdjusted = true
+            adjustedStepInputs[stepIndex] = match.first
+            return match.first to match.second
+        }
+        adjustedStepInputs[stepIndex] = rawStep
+        return rawStep to match.second
+    }
+
+    private fun findBestMenuOptionMatch(menu: LinkedHashMap<String, String>, learned: LearnedSignatureContext): Pair<String, String>? {
+        val expectedTokens = learned.selectedLabelTokens
+        val menuOptions = menu.entries.map { (key, label) ->
+            val normalized = normalizeMenuText(label)
+            MenuOptionDescriptor(key, label, normalized, tokenizeMenuLabel(normalized))
+        }
+        val best = menuOptions.maxByOrNull { desc ->
+            val shared = expectedTokens.intersect(desc.tokens).size
+            val score = if (shared > 0) (2 * shared.toDouble()) / (expectedTokens.size + desc.tokens.size) else 0.0
+            score
+        }
+        return if (best != null && best.tokens.intersect(expectedTokens).isNotEmpty()) best.key to best.label else null
+    }
+
+    private fun getLoadedSignatureContext(stepIndex: Int): LearnedSignatureContext? {
+        if (loadedSignatureLookupSource !== loadedSignatureSteps) {
+            loadedSignatureLookupSource = loadedSignatureSteps
+            loadedSignatureLookup = loadedSignatureSteps.associateBy { it.stepIndex }.mapValues { (_, step) ->
+                val normLabel = normalizeMenuText(step.selectedOptionLabel)
+                val normTitle = normalizeMenuText(step.menuTitle)
+                LearnedSignatureContext(
+                    step = step,
+                    normalizedSelectedLabel = normLabel,
+                    selectedLabelTokens = tokenizeMenuLabel(normLabel),
+                    normalizedMenuTitle = normTitle,
+                    menuTitleTokens = tokenizeMenuLabel(normTitle),
+                    normalizedOptionSnapshot = step.menuOptionsSnapshot.map { normalizeMenuText(it) }.filter { it.isNotBlank() }.toSet()
+                )
             }
+        }
+        return loadedSignatureLookup[stepIndex]
+    }
+
+    private fun isAutoAdjustSafe(match: Pair<String, String>, menu: LinkedHashMap<String, String>, learned: LearnedSignatureContext): Boolean {
+        // simple heuristic: label similarity must be high
+        val label = normalizeMenuText(match.second)
+        val learnedLabel = learned.normalizedSelectedLabel
+        val tokens = tokenizeMenuLabel(label)
+        val learnedTokens = learned.selectedLabelTokens
+        val shared = tokens.intersect(learnedTokens).size
+        return shared >= minOf(2, learnedTokens.size, tokens.size)
+    }
+
+    private fun buildChangeMessage(learned: UssdSignatureStep, actualKey: String?, actualLabel: String?): String {
+        val menuLabel = learned.menuTitle.ifBlank { advancedOfferName.ifBlank { "the USSD menu" } }
+        return if (actualKey == null) {
+            "Detected a menu change in $menuLabel. The learned option '${learned.selectedOptionLabel}' is no longer available as selection ${learned.expectedInput}"
+        } else {
+            "Detected a menu change in $menuLabel. '${learned.selectedOptionLabel}' moved from option ${learned.expectedInput} to option $actualKey"
+        }
+    }
+
+    private fun failForSignatureChange(message: String) {
+        lastFinalResponse = message
+        onDispatchComplete?.invoke(buildDispatchResult(message))
+        tokenPurchaseCallback?.invoke(false)
+        closeCurrentUssdUi()
+        advancedInProgress = false
+        updateOverlay()
+        cleanupAdvanced()
+    }
+
+    private fun isFinalLearningStep(stepIndex: Int) = signatureLearningMode && stepIndex == advancedSteps.lastIndex
+
+    private fun verifyLearningFinalInputThenDismiss(expected: String, attempt: Int) {
+        if (attempt >= MAX_VERIFY_ATTEMPTS) {
+            if (hasRecentExpectedInput(expected)) finishLearningWithoutFinalSubmission()
+            else dismissErrorAndRestart()
+            return
+        }
+        val root = getUssdRoot() ?: run {
+            handler.postDelayed({ verifyLearningFinalInputThenDismiss(expected, attempt + 1) }, verificationPollDelay(expected))
+            return
+        }
+        try {
+            if (verifyExpectedInput(root, expected)) {
+                rememberVerifiedInput(expected)
+                finishLearningWithoutFinalSubmission()
+            } else {
+                if (!hasRecentExpectedInput(expected)) writeValueToField(root, expected)
+                handler.postDelayed({ verifyLearningFinalInputThenDismiss(expected, attempt + 1) }, verificationPollDelay(expected))
+            }
+        } finally {
+            root.recycle()
+        }
+    }
+
+    private fun finishLearningWithoutFinalSubmission() {
+        val finalText = lastFinalResponse.ifBlank { "Signature learning captured without submitting final step" }
+        currentStep = advancedSteps.size
+        isProcessing = false
+        clearInputWriteMarkers()
+        closeCurrentUssdUi()
+        onDispatchComplete?.invoke(buildDispatchResult(finalText))
+        advancedInProgress = false
+        updateOverlay()
+        cleanupAdvanced()
+    }
+
+    private fun formatRecordedDialogText(tokens: List<String>, fallback: String): String {
+        val lines = tokens.map { normalizeCollapsedText(it) }.filter { it.isNotBlank() }
+        val menu = parseMenuOptions(lines)
+        return if (menu != null) {
+            lines.takeWhile { !Regex("""^\d+\s*[\)\].:\-]""").containsMatchIn(it) }.let { title ->
+                (title + menu.entries.map { "${it.key}. ${normalizeCollapsedText(it.value)}" })
+            }.joinToString("\n")
+        } else fallback
+    }
+
+    private fun formatLearningRecordedDialogText(snapshot: UssdTreeSnapshot, menu: LinkedHashMap<String, String>): String {
+        return snapshot.textTokens.joinToString("\n") // simplified
+    }
+    // endregion
+
+    // region Timeout & Retry
+    private fun startStepTimeout() {
+        cancelStepTimeout()
+        val timeout = Runnable {
+            if (shouldExtendStepTimeout()) { startStepTimeout(); return@Runnable }
+            val dismissed = closeCurrentUssdUi()
+            handler.postDelayed({ restartFromBeginning() }, if (dismissed) DIALOG_DISMISS_SETTLE_MS else 0L)
+        }
+        stepTimeoutRunnable = timeout
+        handler.postDelayed(timeout, currentStepTimeoutMs())
+    }
+
+    private fun cancelStepTimeout() {
+        stepTimeoutRunnable?.let { handler.removeCallbacks(it) }
+        stepTimeoutRunnable = null
+    }
+
+    private fun currentStepTimeoutMs(): Long {
+        return when {
+            pendingPhase != PendingPhase.NONE || pendingStepAdvanceFromKey.isNotBlank() ->
+                if (shouldUseExtendedTimeout()) NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS else PENDING_STEP_TIMEOUT_MS
+            currentStep >= advancedSteps.size ->
+                if (isWaitingOnTransientResponse()) NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS else FINAL_RESPONSE_TIMEOUT_MS
+            !hasSeenAdvancedPopup -> STARTUP_STEP_TIMEOUT_MS
+            hasRecentUssdUiEvent() -> FINAL_RESPONSE_TIMEOUT_MS
+            shouldUseExtendedTimeout() -> NETWORK_DELAY_STEP_TIMEOUT_MS
+            else -> STEP_TIMEOUT_MS
+        }
+    }
+
+    private fun shouldExtendStepTimeout(): Boolean {
+        if (!advancedActive) return false
+        if (pendingPhase != PendingPhase.NONE || pendingStepAdvanceFromKey.isNotBlank()) return true
+        if (!hasSeenAdvancedPopup) {
+            return retryWindowStartedAt <= 0L || (SystemClock.elapsedRealtime() - retryWindowStartedAt) <= STARTUP_UI_KEEP_VISIBLE_MS
+        }
+        if (currentStep >= advancedSteps.size) {
+            val norm = normalizeMenuText(lastFinalResponse)
+            return norm.isBlank() || isTransientResponse(norm) || hasRecentUssdUiEvent()
+        }
+        return hasRecentUssdUiEvent() || shouldUseExtendedTimeout()
+    }
+
+    private fun shouldUseExtendedTimeout(): Boolean = isWaitingOnTransientResponse() || hasRecentStepAction()
+    private fun hasRecentStepAction() = lastStepActionKey.isNotBlank() && SystemClock.elapsedRealtime() - lastStepActionElapsed <= NETWORK_DELAY_ACTION_GRACE_MS
+    private fun isWaitingOnTransientResponse() = normalizeMenuText(lastFinalResponse).isNotBlank() && isTransientResponse(normalizeMenuText(lastFinalResponse))
+    private fun isTransientResponse(text: String) = TRANSIENT_RESPONSE_HINTS.any { text.contains(it) }
+
+    private fun verificationPollDelay(expected: String): Long {
+        return when {
+            hasRecentExpectedInput(expected) && hasRecentUssdUiEvent() -> POST_WRITE_VERIFY_POLL_MS
+            hasRecentExpectedInput(expected) -> POST_WRITE_VERIFY_POLL_MS
+            hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> RAPID_POST_POPUP_VERIFY_MS
+            hasRecentUssdUiEvent() -> FAST_VERIFY_POLL_MS
+            else -> VERIFY_POLL_MS
+        }
+    }
+
+    private fun dismissErrorAndRestart() {
+        clearPendingStepAdvance()
+        val dismissed = closeCurrentUssdUi()
+        handler.postDelayed({ restartFromBeginning() }, if (dismissed) DIALOG_DISMISS_SETTLE_MS else 0L)
+    }
+
+    private fun restartFromBeginning() {
+        val now = SystemClock.elapsedRealtime()
+        if (retryWindowStartedAt <= 0) retryWindowStartedAt = now
+        if (now - retryWindowStartedAt >= MAX_RETRY_WINDOW_MS) {
+            val failMsg = if (lastFinalResponse.isNotBlank()) lastFinalResponse else "FAILED after 1 minute of retries"
+            onDispatchComplete?.invoke(buildDispatchResult(failMsg))
+            tokenPurchaseCallback?.invoke(false)
+            tokenPurchaseCallback = null
+            cleanupAdvanced()
+            return
+        }
+        retryCount++
+        currentStep = 0
+        isProcessing = false
+        lastDialogText = ""
+        lastScreenSignatureKey = ""
+        lastStepActionKey = ""
+        lastStepActionElapsed = 0L
+        lastUiReturnElapsed = 0L
+        lastWindowId = -1
+        lastWindowPkg = ""
+        pendingProcessToken = 0L
+        clearInputWriteMarkers()
+        clearRecentUssdContext()
+        requestAppUiBehindPopup(force = true)
+        updateOverlay()
+        redialAdvancedIfNeeded()
+        startStepTimeout()
+    }
+
+    private fun redialAdvancedIfNeeded() {
+        val dialCode = advancedDialCode.trim()
+        if (dialCode.isBlank()) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastRedialElapsed < REDIAL_COOLDOWN_MS) return
+        lastRedialElapsed = now
+        runCatching {
+            val intent = UssdHelper.buildCallIntent(this, dialCode)
+            startActivity(intent)
+            if (shouldKeepAppUiVisible()) UssdHelper.relaunchAppUi(this)
+        }
+    }
+
+    private fun closeCurrentUssdUi(): Boolean {
+        if (dismissCurrentDialog()) return true
+        val root = getUssdRoot() ?: return false
+        try {
+            val pkg = root.packageName?.toString().orEmpty()
+            val text = normalizeCollapsedText(extractAllText(root))
+            val lower = text.lowercase()
+            val looksLikeUssd = text.isNotBlank() && !NON_USSD_DIALOG_HINTS.any { lower.contains(it) } &&
+                    (looksLikeUssdDialogFast(lower, pkg) || hasDialogLayout(root))
+            if (!looksLikeUssd) return false
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            return true
+        } finally {
+            root.recycle()
+        }
+    }
+
+    private fun dismissCurrentDialog(): Boolean {
+        val root = getUssdRoot() ?: return false
+        try {
+            val btn = findActionButton(root, DISMISS_BUTTON_LABELS)
+            return if (btn != null) performClick(btn) else false
+        } finally {
+            root.recycle()
+        }
+    }
+
+    private fun findActionButton(root: AccessibilityNodeInfo, labels: List<String>): AccessibilityNodeInfo? {
+        for (label in labels) {
+            val exact = findButtonExact(root, label)
+            if (exact != null) return exact
+        }
+        for (label in labels) {
+            val contains = findButtonContaining(root, label)
+            if (contains != null) return contains
         }
         return null
     }
 
-    private fun attemptPasteBurst(
-        node: AccessibilityNodeInfo,
-        value: String,
-        aggressive: Boolean = false
-    ): InputWriteResult? {
-        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)) return null
-        repeat(PASTE_BURST_ATTEMPTS) { attempt ->
-            if (attempt > 0) {
-                if (aggressive) {
-                    primeInputTarget(node, aggressive = true)
-                } else {
-                    refreshInputTarget(node)
-                }
-            }
-            if (pasteValueOnNode(node, value)) {
-                val likelyVerified = verifyDirectWriteBurst(node, value)
-                if (likelyVerified || attempt == PASTE_BURST_ATTEMPTS - 1) {
-                    return InputWriteResult(
-                        wroteValue = true,
-                        likelyVerified = likelyVerified
-                    )
-                }
-            }
+    private fun findButtonExact(node: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
+        val norm = normalizeActionLabel(text)
+        if (normalizeActionLabel(node.text?.toString()) == norm || normalizeActionLabel(node.contentDescription?.toString()) == norm) {
+            return obtainClickableAncestor(node)
+        }
+        for (i in 0 until node.childCount) {
+            val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+            val res = findButtonExact(child, text)
+            if (res != null) { child.recycle(); return res }
+            child.recycle()
         }
         return null
     }
 
-    private fun verifyDirectWriteBurst(node: AccessibilityNodeInfo, expectedValue: String): Boolean {
-        repeat(DIRECT_WRITE_VERIFY_PASSES) { attempt ->
-            if (attempt > 0) {
-                refreshInputTarget(node)
-            }
-            if (isLikelyDirectWriteVerified(node, expectedValue)) {
-                return true
-            }
-        }
-        return false
-    }
-
-    private fun obtainInputTargets(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
-        val targets = mutableListOf<AccessibilityNodeInfo>()
-        collectPreferredInputTargets(node, targets, 0)
-        collectNearbyInputTargets(node, targets, 0)
-        var current: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
-        var depth = 0
-        while (current != null && depth < INPUT_TARGET_DEPTH) {
-            if (supportsDirectInput(current)) {
-                targets += current
-            } else {
-                current.recycle()
-            }
-            current = try { current.parent?.let { AccessibilityNodeInfo.obtain(it) } } catch (_: Exception) { null }
-            depth++
-        }
-        return rankAndDedupeInputTargets(targets)
-    }
-
-    private fun rankAndDedupeInputTargets(targets: MutableList<AccessibilityNodeInfo>): List<AccessibilityNodeInfo> {
-        if (targets.size <= 1) return targets
-        val ranked = targets.sortedByDescending { scoreDirectInputTarget(it) }
-        val seen = HashSet<String>(ranked.size)
-        val result = mutableListOf<AccessibilityNodeInfo>()
-        ranked.forEach { target ->
-            val key = buildInputTargetKey(target)
-            if (seen.add(key)) {
-                result += target
-            } else {
-                target.recycle()
-            }
-        }
-        return result
-    }
-
-    private fun scoreDirectInputTarget(node: AccessibilityNodeInfo): Int {
-        var score = scoreTextEntryCandidate(node) + scoreAggressiveTextEntryCandidate(node)
-        if (try { node.isEditable } catch (_: Exception) { false }) score += 320
-        if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) score += 260
-        if (supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)) score += 140
-        if (try { node.isFocused } catch (_: Exception) { false }) score += 90
-        if (try { node.isFocusable } catch (_: Exception) { false }) score += 60
-        return score
-    }
-
-    private fun buildInputTargetKey(node: AccessibilityNodeInfo): String {
-        val signature = buildInputNodeSignature(node)
-        if (signature.isNotBlank()) return signature
-        val bounds = Rect()
-        runCatching { node.getBoundsInScreen(bounds) }
-        val className = node.className?.toString().orEmpty()
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        return listOf(
-            className,
-            viewId,
-            "${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}"
-        ).joinToString("|")
-    }
-
-    private fun collectNearbyInputTargets(
-        node: AccessibilityNodeInfo,
-        into: MutableList<AccessibilityNodeInfo>,
-        ancestorDepth: Int
-    ) {
-        if (ancestorDepth >= INPUT_NEARBY_SCOPE_DEPTH) return
-        val parent = try { node.parent } catch (_: Exception) { null } ?: return
-        try {
-            for (i in 0 until parent.childCount) {
-                val sibling = try { parent.getChild(i) } catch (_: Exception) { null } ?: continue
-                collectPreferredInputTargets(sibling, into, 0)
-                sibling.recycle()
-            }
-            collectNearbyInputTargets(parent, into, ancestorDepth + 1)
-        } finally {
-            parent.recycle()
-        }
-    }
-
-    private fun collectPreferredInputTargets(
-        node: AccessibilityNodeInfo,
-        into: MutableList<AccessibilityNodeInfo>,
-        depth: Int
-    ) {
-        if (depth > INPUT_DESCENT_DEPTH) return
-        try {
-            if (supportsDirectInput(node)) into += AccessibilityNodeInfo.obtain(node)
-            for (i in 0 until node.childCount) {
-                val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-                collectPreferredInputTargets(child, into, depth + 1)
-                child.recycle()
-            }
-        } catch (_: Exception) {}
-    }
-
-    private fun supportsDirectInput(node: AccessibilityNodeInfo): Boolean =
-        isTextEntryNode(node) ||
-            supportsSilentSetText(node) ||
-            isHiddenInputProxyCandidate(node)
-
-    private fun focusInputTarget(node: AccessibilityNodeInfo) {
-        val alreadyFocused = try { node.isFocused } catch (_: Exception) { false }
-        if (alreadyFocused) return
-        if (refocusInputTarget(node)) return
-        activateInputTarget(node)
-    }
-
-    private fun refreshInputTarget(node: AccessibilityNodeInfo) {
-        runCatching { node.refresh() }
-    }
-
-    private fun primeInputTarget(node: AccessibilityNodeInfo, aggressive: Boolean = false): Boolean {
-        var changed = false
-        if (refocusInputTarget(node)) {
-            changed = true
-        }
-        if (activateInputTarget(node)) {
-            changed = true
-        }
-        if (aggressive &&
-            supportsAction(node, AccessibilityNodeInfo.ACTION_LONG_CLICK) &&
-            runCatching { node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK) }.getOrDefault(false)
-        ) {
-            changed = true
-        }
-        refreshInputTarget(node)
-        return changed
-    }
-
-    private fun performSetTextAction(node: AccessibilityNodeInfo, value: String): Boolean =
-        runCatching {
-            node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
-            })
-        }.getOrDefault(false)
-
-    private fun clearTextOnNode(node: AccessibilityNodeInfo) {
-        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) return
-        runCatching {
-            node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
-            })
-        }
-    }
-
-    private fun reinforceTextWrite(node: AccessibilityNodeInfo, value: String): Boolean {
-        var wroteValue = false
-        repeat(2) { attempt ->
-            if (attempt > 0) {
-                primeInputTarget(node, aggressive = true)
-                refreshInputTarget(node)
-                clearTextOnNode(node)
-            }
-            if (performSetTextAction(node, value)) {
-                wroteValue = true
-                collapseInputSelection(node, value)
-                if (isLikelyDirectWriteVerified(node, value)) {
-                    return true
-                }
-            }
-        }
-        return wroteValue
-    }
-
-    private fun setTextOnNode(node: AccessibilityNodeInfo, value: String): Boolean {
-        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) return false
-        if (performSetTextAction(node, value)) {
-            collapseInputSelection(node, value)
-            if (isLikelyDirectWriteVerified(node, value)) {
-                return true
-            }
-        }
-        clearTextOnNode(node)
-        return reinforceTextWrite(node, value)
-    }
-
-    private fun pasteValueOnNode(node: AccessibilityNodeInfo, value: String): Boolean {
-        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)) return false
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return false
-        val previousClip = runCatching { clipboard.primaryClip }.getOrNull()
-        val hadClip = runCatching { clipboard.hasPrimaryClip() }.getOrDefault(false)
-        return try {
-            clearTextOnNode(node)
-            clipboard.setPrimaryClip(ClipData.newPlainText("ussd_reply", value))
-            val pasted = runCatching {
-                node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-            }.getOrDefault(false)
-            if (pasted) {
-                collapseInputSelection(node, value)
-                if (isLikelyDirectWriteVerified(node, value)) {
-                    return true
-                }
-                if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) {
-                    return reinforceTextWrite(node, value)
-                }
-            }
-            pasted
-        } finally {
-            runCatching {
-                if (hadClip && previousClip != null) {
-                    clipboard.setPrimaryClip(previousClip)
-                } else {
-                    clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
-                }
-            }
-        }
-    }
-
-    private fun isLikelyDirectWriteVerified(node: AccessibilityNodeInfo, expectedValue: String): Boolean {
-        runCatching { node.refresh() }
-        val readBack = readFieldText(node)
-        return matchesExpectedInput(readBack, expectedValue)
-    }
-
-    private fun refocusInputTarget(node: AccessibilityNodeInfo): Boolean =
-        runCatching { node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) }.getOrDefault(false) ||
-            (Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
-                runCatching {
-                    node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
-                }.getOrDefault(false))
-
-    private fun collapseInputSelection(node: AccessibilityNodeInfo, value: String) {
-        if (!supportsAction(node, AccessibilityNodeInfo.ACTION_SET_SELECTION)) return
-        val cursorPosition = value.length.coerceAtLeast(0)
-        runCatching {
-            node.performAction(
-                AccessibilityNodeInfo.ACTION_SET_SELECTION,
-                Bundle().apply {
-                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, cursorPosition)
-                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, cursorPosition)
-                }
-            )
-        }
-    }
-
-    private fun activateInputTarget(node: AccessibilityNodeInfo): Boolean {
-        if (!isSafeInputActivationCandidate(node)) return false
-        return runCatching { node.performAction(AccessibilityNodeInfo.ACTION_CLICK) }.getOrDefault(false) ||
-            performTapGesture(node)
-    }
-
-    private fun supportsSilentSetText(node: AccessibilityNodeInfo): Boolean =
-        supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)
-
-    private fun isSafeInputActivationCandidate(node: AccessibilityNodeInfo): Boolean {
-        val className = node.className?.toString().orEmpty()
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            normalizeActionLabel(try { node.hintText?.toString() } catch (_: Exception) { null })
-        } else {
-            ""
-        }
-        val editable = try { node.isEditable } catch (_: Exception) { false }
-        val enabled = try { node.isEnabled } catch (_: Exception) { true }
-        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            try { node.isVisibleToUser } catch (_: Exception) { true }
-        } else {
-            true
-        }
-        val looksLikeInputClass = EDITABLE_CLASS_HINTS.any { className.contains(it, ignoreCase = true) } ||
-            className.contains("TextInput", ignoreCase = true) ||
-            className.contains("Edit", ignoreCase = true)
-        return enabled && visible && (
-            editable ||
-                supportsSilentSetText(node) ||
-                looksLikeInputClass ||
-                hasInputViewHint(viewId, hint)
-            )
-    }
-
-    private fun findEditableFieldMatchingExpectedInput(
-        root: AccessibilityNodeInfo,
-        expectedValue: String
-    ): AccessibilityNodeInfo? =
-        mutableListOf<AccessibilityNodeInfo>().let { candidates ->
-            collectTextEntryCandidates(root, candidates)
-            if (candidates.isEmpty()) {
-                collectAggressiveTextEntryCandidates(root, candidates)
-            }
-            val verifiedMatch = candidates.firstOrNull { candidate ->
-                isVerifiedFieldValue(readFieldText(candidate), expectedValue)
-            }
-            val preferred = verifiedMatch
-                ?: candidates.maxByOrNull { candidate ->
-                    scoreTextEntryCandidate(candidate) +
-                        if (matchesExpectedInput(readFieldText(candidate), expectedValue)) 700 else 0
-                }
-            val result = preferred?.let { AccessibilityNodeInfo.obtain(it) }
-            candidates.forEach { it.recycle() }
-            result
-        }
-
-    private fun findFieldForExpectedValue(
-        root: AccessibilityNodeInfo,
-        expectedValue: String
-    ): AccessibilityNodeInfo? =
-        findEditableFieldMatchingExpectedInput(root, expectedValue) ?: findEditableField(root)
-
-    private fun isAggressiveActionCandidate(node: AccessibilityNodeInfo): Boolean {
-        val enabled = try { node.isEnabled } catch (_: Exception) { true }
-        if (!enabled) return false
-        val editable = try { node.isEditable } catch (_: Exception) { false }
-        if (editable) return false
-        val actionable = try {
-            node.isClickable || node.isFocusable || node.isLongClickable
-        } catch (_: Exception) {
-            false
-        }
+    private fun findButtonContaining(node: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
+        val norm = normalizeActionLabel(text)
         val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val viewId = normalizeActionLabel(try { node.viewIdResourceName } catch (_: Exception) { null })
-        return actionable && (
-            SEND_VIEW_ID_HINTS.any { viewId.contains(it) } ||
-                SEND_BUTTON_LABELS.any { label.contains(it) || desc.contains(it) } ||
-                label.isNotBlank() ||
-                desc.isNotBlank()
-            )
+        if ((label.contains(norm) || desc.contains(norm)) && norm.length > 2) {
+            return obtainClickableAncestor(node)
+        }
+        for (i in 0 until node.childCount) {
+            val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+            val res = findButtonContaining(child, text)
+            if (res != null) { child.recycle(); return res }
+            child.recycle()
+        }
+        return null
     }
 
-    private fun obtainActionTarget(node: AccessibilityNodeInfo): AccessibilityNodeInfo {
+    private fun obtainClickableAncestor(node: AccessibilityNodeInfo): AccessibilityNodeInfo {
         var current: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
         var depth = 0
         while (current != null && depth < 6) {
-            val clickable = try {
-                current.isClickable || current.isFocusable
-            } catch (_: Exception) {
-                false
+            if (runCatching { current.isClickable || current.isFocusable }.getOrDefault(false)) {
+                return current
             }
-            if (clickable) return current
             val parent = try { current.parent } catch (_: Exception) { null }
             current.recycle()
             current = parent
@@ -5283,69 +2280,458 @@ class UssdNavigationService : AccessibilityService() {
         current?.recycle()
         return AccessibilityNodeInfo.obtain(node)
     }
+    // endregion
 
-    private fun performClick(node: AccessibilityNodeInfo): Boolean {
-        var current: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
-        var depth = 0
-        while (current != null && depth < 6) {
-            val activeNode = current
-            val clicked = try {
-                activeNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            } catch (_: Exception) {
-                false
-            }
-            if (clicked) {
-                activeNode.recycle()
-                return true
-            }
-            if (performTapGesture(activeNode)) {
-                activeNode.recycle()
-                return true
-            }
-            val parent = try { activeNode.parent } catch (_: Exception) { null }
-            activeNode.recycle()
-            current = parent
-            depth++
-        }
-        current?.recycle()
-        return false
+    // region Cleanup
+    private fun cleanupAdvanced() {
+        stopKeepingAppUiVisible()
+        cancelStepTimeout()
+        processStepRunnable?.let { handler.removeCallbacks(it) }
+        processStepRunnable = null
+        handler.removeCallbacksAndMessages(null)
+        currentStep = 0
+        advancedSteps = emptyList()
+        advancedPhoneNumber = ""
+        advancedDialCode = ""
+        advancedOfferId = -1
+        advancedOfferName = ""
+        retryWindowStartedAt = 0L
+        advancedActive = false
+        advancedInProgress = false
+        isProcessing = false
+        retryCount = 0
+        lastRedialElapsed = 0L
+        signatureGuardEnabled = false
+        signatureAction = "STOP"
+        signatureLearningMode = false
+        loadedSignatureSteps = emptyList()
+        lastDialogText = ""
+        lastFinalResponse = ""
+        pendingProcessToken = 0L
+        lastWindowPkg = ""
+        lastWindowId = -1
+        lastRelevantEventElapsed = 0L
+        lastStepActionKey = ""
+        lastStepActionElapsed = 0L
+        lastUiReturnElapsed = 0L
+        clearPendingAdvance()
+        clearPendingStepAdvance()
+        clearInputWriteMarkers()
+        clearRecentUssdContext()
+        hideOverlay()
+        onDispatchComplete = null
+        tokenPurchaseCallback = null
+        adjustedStepInputs.clear()
+        learnedSignatureSteps.clear()
+        learningCaptures.clear()
+        popupTranscript.clear()
+        detectedChangeNotes.clear()
+        signatureChangeDetected = false
+        signatureAutoAdjusted = false
+        foregroundUiActive = false
+        foregroundUiUntilElapsed = 0L
+        hasSeenAdvancedPopup = false
+        hasSeenForegroundPopup = false
+        uiReturnSuppressed = false
     }
 
-    private fun performTapGesture(node: AccessibilityNodeInfo): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
-        val bounds = Rect()
-        if (!runCatching { node.getBoundsInScreen(bounds) }.isSuccess) return false
-        if (bounds.width() <= 0 || bounds.height() <= 0) return false
-
-        val x = bounds.exactCenterX()
-        val y = bounds.exactCenterY()
-        if (x <= 0f || y <= 0f) return false
-
-        val path = Path().apply {
-            moveTo(x, y)
-            lineTo(x + 1f, y + 1f)
-        }
-        val stroke = GestureDescription.StrokeDescription(path, 0, TAP_GESTURE_DURATION_MS)
-        val gesture = GestureDescription.Builder().addStroke(stroke).build()
-        val dispatched = runCatching { dispatchGesture(gesture, null, null) }.getOrDefault(false)
-        return dispatched
+    private fun clearCallbacks() {
+        balanceCallback = null
+        tokenPurchaseCallback = null
+        onDispatchComplete = null
     }
 
+    private fun buildDispatchResult(finalResponse: String): AdvancedDispatchResult {
+        return AdvancedDispatchResult(
+            finalResponse = finalResponse,
+            changeDetected = signatureChangeDetected,
+            autoAdjusted = signatureAutoAdjusted,
+            learningCompleted = signatureLearningMode && learnedSignatureSteps.isNotEmpty(),
+            suggestedCode = if (signatureChangeDetected) buildSuggestedCode() else "",
+            changeSummary = detectedChangeNotes.joinToString(". "),
+            learnedSignature = learnedSignatureSteps.toList(),
+            learningCaptures = learningCaptures.toList(),
+            popupTranscript = popupTranscript.toList()
+        )
+    }
+
+    private fun buildSuggestedCode(): String {
+        val dialBase = advancedDialCode.trim().replace("%23", "").trimEnd('#')
+        val steps = advancedSteps.mapIndexed { idx, step ->
+            when {
+                step == "INPUT_PHONE" -> "pn"
+                adjustedStepInputs[idx].isNullOrBlank() -> step
+                else -> adjustedStepInputs[idx] ?: step
+            }
+        }
+        return if (steps.isEmpty()) "$dialBase#" else "$dialBase*${steps.joinToString("*")}#"
+    }
+    // endregion
+
+    // region Context / Root helpers
+    private fun shouldRequireStrictPopupScope(): Boolean {
+        if (signatureLearningMode) return true
+        if (!advancedActive) return false
+        if (pendingPhase != PendingPhase.NONE || !pendingExpectedValue.isNullOrBlank()) return true
+        val step = advancedSteps.getOrNull(currentStep).orEmpty()
+        return step == "INPUT_PHONE" || (step.isNotBlank() && !step.all(Char::isDigit))
+    }
+
+    private fun rememberRecentUssdContext(root: AccessibilityNodeInfo, snapshot: UssdTreeSnapshot?, windowId: Int, pkg: String, text: String, strict: Boolean) {
+        recentUssdRoot?.let { runCatching { it.recycle() } }
+        recentUssdRoot = AccessibilityNodeInfo.obtain(root)
+        recentUssdSnapshot = snapshot
+        recentUssdWindowId = windowId
+        recentUssdWindowPkg = pkg
+        recentUssdDialogText = text
+        recentUssdStrictDialog = strict
+        recentUssdCapturedElapsed = SystemClock.elapsedRealtime()
+    }
+
+    private fun obtainRecentUssdContext(requireStrict: Boolean = false): RecentUssdContext? {
+        if (!hasFreshRecentUssdContext(requireStrict)) return null
+        val root = recentUssdRoot ?: return null
+        return RecentUssdContext(
+            root = AccessibilityNodeInfo.obtain(root),
+            snapshot = recentUssdSnapshot,
+            windowId = recentUssdWindowId,
+            windowPkg = recentUssdWindowPkg,
+            dialogText = recentUssdDialogText,
+            strictDialog = recentUssdStrictDialog
+        )
+    }
+
+    private fun hasFreshRecentUssdContext(requireStrict: Boolean = false): Boolean {
+        if (recentUssdCapturedElapsed <= 0) return false
+        if (SystemClock.elapsedRealtime() - recentUssdCapturedElapsed > RECENT_USSD_CONTEXT_WINDOW_MS) return false
+        if (requireStrict && !recentUssdStrictDialog) return false
+        return recentUssdRoot != null
+    }
+
+    private fun clearRecentUssdContext() {
+        recentUssdRoot?.let { runCatching { it.recycle() } }
+        recentUssdRoot = null
+        recentUssdSnapshot = null
+        recentUssdWindowId = -1
+        recentUssdWindowPkg = ""
+        recentUssdDialogText = ""
+        recentUssdStrictDialog = false
+        recentUssdCapturedElapsed = 0L
+    }
+
+    private fun shouldWaitForRootRecovery(): Boolean {
+        return advancedActive && (hasSeenAdvancedPopup || pendingPhase != PendingPhase.NONE || pendingStepAdvanceFromKey.isNotBlank() || hasRecentUssdUiEvent())
+    }
+
+    private fun waitForRootRecovery() {
+        if (waitingForRootSinceElapsed == 0L) waitingForRootSinceElapsed = SystemClock.elapsedRealtime()
+        if (SystemClock.elapsedRealtime() - waitingForRootSinceElapsed > rootReacquireTimeout()) {
+            clearRootRecoveryState()
+            handler.post { dismissErrorAndRestart() }
+            return
+        }
+        pendingProcessToken = SystemClock.elapsedRealtime()
+        scheduleProcessStep(false, ROOT_REACQUIRE_RETRY_DELAY_MS)
+    }
+
+    private fun clearRootRecoveryState() { waitingForRootSinceElapsed = 0L }
+    private fun rootReacquireTimeout(): Long = if (shouldUseExtendedTimeout()) NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS else ROOT_REACQUIRE_TIMEOUT_MS
+
+    private fun hasRecentUssdUiEvent(): Boolean = SystemClock.elapsedRealtime() - lastRelevantEventElapsed <= RECENT_UI_EVENT_GRACE_MS
+
+    private fun hasRecentExpectedInput(value: String): Boolean {
+        val norm = normalizeInputValue(value)
+        return lastInputWriteValue == norm && SystemClock.elapsedRealtime() - lastInputWriteElapsed <= RECENT_INPUT_GRACE_MS
+    }
+
+    private fun hasRecentVerifiedInput(value: String): Boolean {
+        val norm = normalizeInputValue(value)
+        return lastVerifiedInputValue == norm && SystemClock.elapsedRealtime() - lastVerifiedInputElapsed <= RECENT_VERIFIED_INPUT_GRACE_MS
+    }
+
+    private fun rememberInputWrite(value: String) {
+        lastInputWriteValue = normalizeInputValue(value)
+        lastInputWriteElapsed = SystemClock.elapsedRealtime()
+    }
+
+    private fun rememberVerifiedInput(value: String) {
+        val norm = normalizeInputValue(value)
+        if (norm.isNotBlank()) {
+            lastVerifiedInputValue = norm
+            lastVerifiedInputElapsed = SystemClock.elapsedRealtime()
+        }
+    }
+
+    private fun clearInputWriteMarkers() {
+        lastInputWriteValue = ""
+        lastInputWriteElapsed = 0L
+        lastVerifiedInputValue = ""
+        lastVerifiedInputElapsed = 0L
+    }
+
+    private fun shouldForcePendingFieldRewrite(expected: String, fieldPresent: Boolean): Boolean {
+        if (fieldPresent) return true
+        if (!hasRecentExpectedInput(expected)) return true
+        return shouldUseExtendedTimeout() && !hasRecentVerifiedInput(expected)
+    }
+
+    private fun shouldTrustFreshWrite(wrote: Boolean, expected: String, field: AccessibilityNodeInfo?, snapshot: UssdTreeSnapshot, lower: String): Boolean {
+        return wrote && hasRecentVerifiedInput(expected) && (field != null || snapshot.hasSendButton)
+    }
+
+    private fun shouldAttemptAggressiveImmediateSubmit(snapshot: UssdTreeSnapshot, lower: String, step: String, expected: String, field: AccessibilityNodeInfo?): Boolean {
+        return hasRecentVerifiedInput(expected) && snapshot.hasSendButton && (field != null || dialogSuggestsTypedReplyPrompt(lower))
+    }
+
+    private fun shouldTreatAsTextInput(step: String, value: String, selectedLabel: String?): Boolean {
+        return step == "INPUT_PHONE" || (value.isNotBlank() && (!value.all(Char::isDigit) || value.length >= 4 || (selectedLabel == null && value.length > 1)))
+    }
+
+    private fun shouldTreatNumericReplyAsTextInput(step: String, value: String, snapshot: UssdTreeSnapshot, lower: String, menu: LinkedHashMap<String, String>?): Boolean {
+        if (step == "INPUT_PHONE") return true
+        if (value.isBlank() || !value.all(Char::isDigit)) return false
+        if (!snapshot.hasSendButton) return false
+        if (snapshot.hasEditableField) return true
+        if (menu != null && menu.isNotEmpty()) return true
+        return dialogSuggestsTypedReplyPrompt(lower)
+    }
+
+    private fun dialogSuggestsTextInput(lower: String) =
+        lower.contains("enter") || lower.contains("input") || lower.contains("reply") ||
+                lower.contains("amount") || lower.contains("pin") || lower.contains("phone") ||
+                lower.contains("number") || lower.contains("code")
+
+    private fun dialogSuggestsTypedReplyPrompt(lower: String) =
+        dialogSuggestsTextInput(lower) || lower.contains("select") || lower.contains("choose") ||
+                lower.contains("option") || lower.contains("press") || lower.contains("respond") ||
+                lower.contains("response") || lower.contains("continue")
+
+    private fun dialogSuggestsPhoneInput(lower: String) =
+        PHONE_INPUT_HINTS.any { lower.contains(it) } ||
+                (lower.contains("254") && (lower.contains("phone") || lower.contains("mobile"))) ||
+                (lower.contains("07") && (lower.contains("phone") || lower.contains("number")))
+
+    private fun markStepAction(dialogText: String, root: AccessibilityNodeInfo?, snapshot: UssdTreeSnapshot?) {
+        val sig = snapshot?.inputStateSignature ?: root?.let { captureInputStateSignature(it) }.orEmpty()
+        lastStepActionKey = buildDialogStateKey(dialogText, sig)
+        lastStepActionElapsed = SystemClock.elapsedRealtime()
+    }
+
+    private fun captureInputStateSignature(root: AccessibilityNodeInfo): String {
+        val field = findEditableField(root) ?: return ""
+        return try { buildInputNodeSignature(field) } finally { field.recycle() }
+    }
+
+    private fun findEditableField(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val candidates = mutableListOf<AccessibilityNodeInfo>()
+        collectTextEntryCandidates(root, candidates)
+        return candidates.maxByOrNull { scoreTextEntryCandidate(it) }?.let { AccessibilityNodeInfo.obtain(it) }
+    }
+
+    private fun buildInputNodeSignature(node: AccessibilityNodeInfo): String {
+        val cls = node.className?.toString().orEmpty().substringAfterLast('.')
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) normalizeActionLabel(runCatching { node.hintText?.toString() }.getOrNull()) else ""
+        val text = normalizeCollapsedText(readFieldText(node))
+        val valueSig = if (text.isBlank()) "_" else if (isLikelyPromptText(text)) "prompt:${normalizeActionLabel(text).take(24)}" else "value:${normalizeInputValue(text).takeLast(20)}"
+        val bounds = Rect().also { runCatching { node.getBoundsInScreen(it) } }
+        val role = if (runCatching { node.isEditable }.getOrDefault(false)) "editable" else if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) "settext" else "candidate"
+        return "$cls|$viewId|$hint|$valueSig|${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}|$role"
+    }
+
+    private fun buildScreenSignatureKey(step: Int, windowId: Int, pkg: String, root: AccessibilityNodeInfo, snapshot: UssdTreeSnapshot?, text: String): String {
+        val cls = root.className?.toString().orEmpty()
+        val flags = snapshot?.let { "${it.hasEditableField}|${it.hasSendButton}|${it.hasDismissButton}|${it.inputStateSignature}" }.orEmpty()
+        return "$step|$windowId|$pkg|$cls|$flags|${normalizeCollapsedText(text)}"
+    }
+
+    private fun buildTransitionSignatureKey(root: AccessibilityNodeInfo, text: String, snapshot: UssdTreeSnapshot?): String {
+        val cls = root.className?.toString().orEmpty()
+        val flags = snapshot?.let { "${it.hasEditableField}|${it.hasSendButton}|${it.hasDismissButton}|${it.inputStateSignature}" }.orEmpty()
+        return "${root.windowId}|${root.packageName?.toString().orEmpty()}|$cls|$flags|${normalizeCollapsedText(text)}"
+    }
+
+    private fun buildStepAdvanceSignatureKey(root: AccessibilityNodeInfo, text: String, snapshot: UssdTreeSnapshot?): String {
+        val cls = root.className?.toString().orEmpty()
+        val flags = snapshot?.let { "${it.hasEditableField}|${it.hasSendButton}|${it.hasDismissButton}" }.orEmpty()
+        val menuFingerprint = snapshot?.let { parseMenuFromSnapshot(it) }?.entries?.joinToString(";") { "${it.key}:${normalizeMenuText(it.value)}" }.orEmpty()
+        return "${root.windowId}|${root.packageName?.toString().orEmpty()}|$cls|$flags|${normalizeCollapsedText(text)}|$menuFingerprint"
+    }
+
+    private fun extractAllText(root: AccessibilityNodeInfo): String {
+        val sb = StringBuilder()
+        fun dfs(node: AccessibilityNodeInfo) {
+            node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { sb.append(it).append(' ') }
+            node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { sb.append(it).append(' ') }
+            for (i in 0 until node.childCount) {
+                val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
+                dfs(child)
+                child.recycle()
+            }
+        }
+        dfs(root)
+        return sb.toString()
+    }
+
+    private fun handleCallbackDialogs(lower: String, dialogText: String) {
+        tokenPurchaseCallback?.let { cb ->
+            when {
+                lower.contains("you have transferred") || (lower.contains("transfer") && lower.contains("successful")) -> {
+                    cb(true); closeCurrentUssdUi(); clearCallbacks()
+                }
+                lower.contains("insufficient") || lower.contains("failed") || lower.contains("cancelled") -> {
+                    cb(false); closeCurrentUssdUi(); clearCallbacks()
+                }
+                else -> Unit
+            }
+        }
+
+        balanceCallback?.let { cb ->
+            if (lower.contains("balance") || lower.contains("airtime") || lower.contains("ksh") || lower.contains("kes") ||
+                dialogText.matches(Regex(".*\\d[\\d,]*\\.?\\d*.*", RegexOption.DOT_MATCHES_ALL))) {
+                airtimeBalance = dialogText
+                val display = BalanceChecker.parseBalanceDisplay(dialogText)
+                BalanceChecker.currentBalance = BalanceChecker.parseBalanceInt(dialogText)
+                BalanceChecker.persistLastKnownBalance(applicationContext, display)
+                cb(display)
+                closeCurrentUssdUi()
+                clearCallbacks()
+            }
+        }
+    }
+    // endregion
+
+    // region Foreground UI & Overlay
+    private fun isForegroundUiActive(): Boolean = foregroundUiActive && SystemClock.elapsedRealtime() < foregroundUiUntilElapsed
+    private fun refreshForegroundUi() { if (foregroundUiActive) foregroundUiUntilElapsed = SystemClock.elapsedRealtime() + 35000L }
+    private fun disarmForegroundUi() { foregroundUiActive = false; foregroundUiUntilElapsed = 0L }
+    private fun shouldKeepAppUiVisible(): Boolean = keepAppUiVisibleEnabled && !uiReturnSuppressed && (advancedActive || isForegroundUiActive())
+
+    private fun requestAppUiBehindPopup(force: Boolean = false) {
+        if (!shouldKeepAppUiVisible()) return
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastUiReturnElapsed < 900L) return
+        lastUiReturnElapsed = now
+        UssdHelper.relaunchAppUi(this, delayMs = if (force) 60L else 120L)
+    }
+
+    private fun startKeepingAppUiVisible() {
+        uiKeepVisibleRunnable?.let { handler.removeCallbacks(it) }
+        val task = object : Runnable {
+            override fun run() {
+                if (foregroundUiActive && !isForegroundUiActive()) {
+                    disarmForegroundUi()
+                    hasSeenForegroundPopup = false
+                    updateOverlay()
+                }
+                val startupWindow = advancedActive && !hasSeenAdvancedPopup &&
+                        (SystemClock.elapsedRealtime() - lastRelevantEventElapsed) <= STARTUP_UI_KEEP_VISIBLE_MS
+                val canKeep = shouldKeepAppUiVisible() && (startupWindow || (hasSeenAdvancedPopup && hasRecentUssdUiEvent()))
+                if (!canKeep) { uiKeepVisibleRunnable = null; return }
+                requestAppUiBehindPopup(force = true)
+                handler.postDelayed(this, UI_KEEP_VISIBLE_INTERVAL_MS)
+            }
+        }
+        uiKeepVisibleRunnable = task
+        handler.postDelayed(task, UI_KEEP_VISIBLE_INTERVAL_MS)
+    }
+
+    private fun stopKeepingAppUiVisible() {
+        uiKeepVisibleRunnable?.let { handler.removeCallbacks(it) }
+        uiKeepVisibleRunnable = null
+    }
+
+    private fun updateOverlay() {
+        if (!SHOW_RUNNING_OVERLAY) { hideOverlay(); return }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return
+        val wm = windowManager ?: return
+        if (overlayView == null) {
+            val view = buildOverlayView()
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT
+            ).apply { gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; y = dp(18) }
+            runCatching { wm.addView(view, params) }.onFailure { Log.w(TAG, "Overlay add failed", it) }
+            overlayView = view
+        }
+        overlayStatusText?.text = buildOverlayStatus()
+        overlayDetailText?.text = buildOverlayDetail()
+        overlayView?.visibility = View.VISIBLE
+    }
+
+    private fun hideOverlay() {
+        val wm = windowManager ?: return
+        overlayView?.let { runCatching { wm.removeView(it) } }
+        overlayView = null
+        overlayStatusText = null
+        overlayDetailText = null
+    }
+
+    private fun buildOverlayView(): View {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val pad = dp(14); val padV = dp(10)
+            setPadding(pad, padV, pad, padV)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(16).toFloat()
+                setColor(Color.parseColor("#E61A1A1A"))
+                setStroke(dp(1), Color.parseColor("#3329B6F6"))
+            }
+            elevation = dp(8).toFloat()
+        }
+        val status = TextView(this).apply {
+            setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD; setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+        }
+        val detail = TextView(this).apply {
+            setTextColor(Color.parseColor("#FFD7E3F4")); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        }
+        val progress = ProgressBar(this).apply { isIndeterminate = true; alpha = 0.9f }
+        container.addView(status, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+        container.addView(detail, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = dp(4) })
+        container.addView(progress, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { gravity = Gravity.END; topMargin = dp(6) })
+        overlayStatusText = status
+        overlayDetailText = detail
+        return container
+    }
+
+    private fun buildOverlayStatus(): String = when {
+        retryCount > 0 -> "Bingwa USSD retrying"
+        !hasSeenAdvancedPopup -> "Opening USSD"
+        currentStep >= advancedSteps.size -> "Finishing USSD"
+        else -> "USSD running"
+    }
+
+    private fun buildOverlayDetail(): String {
+        val parts = mutableListOf<String>()
+        advancedOfferName.takeIf { it.isNotBlank() }?.let { parts += it }
+        when {
+            advancedSteps.isEmpty() -> parts += "Waiting for network menu"
+            currentStep >= advancedSteps.size -> parts += "Finalizing response"
+            advancedSteps.getOrNull(currentStep) == "INPUT_PHONE" -> parts += "Step ${currentStep+1}/${advancedSteps.size}, entering phone"
+            else -> parts += "Step ${currentStep+1}/${advancedSteps.size}"
+        }
+        if (retryCount > 0) parts += "Retry $retryCount"
+        return parts.joinToString("  |  ").ifBlank { "USSD session active" }
+    }
+
+    private fun dp(value: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value.toFloat(), resources.displayMetrics).toInt()
+    // endregion
+
+    // region Notification & Foreground Service
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "USSD Automation", NotificationManager.IMPORTANCE_LOW)
-                .apply { setShowBadge(false) }
+            val channel = NotificationChannel(CHANNEL_ID, "USSD Automation", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
     private fun buildNotification(): Notification {
-        val piFlags = PendingIntent.FLAG_UPDATE_CURRENT or
-            (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
-        val pi = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
-            piFlags
-        )
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        val pi = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), flags)
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Bingwa Mobile")
             .setContentText("USSD automation active")
@@ -5355,4 +2741,260 @@ class UssdNavigationService : AccessibilityService() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
+
+    @Suppress("DEPRECATION")
+    private fun startForegroundCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification())
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun stopForegroundCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+        else stopForeground(true)
+    }
+    // endregion
+
+    // region Data classes for signature & internal use
+    data class UssdSignatureStep(
+        val stepIndex: Int,
+        val expectedInput: String,
+        val menuTitle: String,
+        val menuText: String,
+        val selectedOptionLabel: String,
+        val menuOptionsSnapshot: List<String>
+    )
+    data class UssdLearningCapture(
+        val stepIndex: Int,
+        val enteredInput: String,
+        val selectedOptionLabel: String,
+        val popupText: String
+    )
+    data class AdvancedDispatchResult(
+        val finalResponse: String,
+        val changeDetected: Boolean,
+        val autoAdjusted: Boolean,
+        val learningCompleted: Boolean,
+        val suggestedCode: String,
+        val changeSummary: String,
+        val learnedSignature: List<UssdSignatureStep>,
+        val learningCaptures: List<UssdLearningCapture>,
+        val popupTranscript: List<String>
+    )
+    private data class UssdTreeSnapshot(
+        val dialogText: String,
+        val normalizedDialogText: String,
+        val textTokens: List<String>,
+        val hasEditableField: Boolean,
+        val hasSendButton: Boolean,
+        val hasDismissButton: Boolean,
+        val inputStateSignature: String
+    )
+    private data class MenuOptionDescriptor(
+        val key: String,
+        val label: String,
+        val normalizedLabel: String,
+        val tokens: Set<String>
+    )
+    private data class LearnedSignatureContext(
+        val step: UssdSignatureStep,
+        val normalizedSelectedLabel: String,
+        val selectedLabelTokens: Set<String>,
+        val normalizedMenuTitle: String,
+        val menuTitleTokens: Set<String>,
+        val normalizedOptionSnapshot: Set<String>
+    )
+    private data class RecentUssdContext(
+        val root: AccessibilityNodeInfo,
+        val snapshot: UssdTreeSnapshot?,
+        val windowId: Int,
+        val windowPkg: String,
+        val dialogText: String,
+        val strictDialog: Boolean
+    )
+    private data class InputWriteResult(val wroteValue: Boolean, val likelyVerified: Boolean)
+    private enum class PendingPhase { NONE, WAIT_VERIFY, WAIT_SEND }
+    // endregion
+
+    // region Constants (kept from original, expanded)
+    private val USSD_PACKAGES = setOf(
+        "com.android.phone", "com.android.server.telecom", "com.google.android.dialer",
+        "com.samsung.android.incallui", "com.samsung.android.app.telephonyui",
+        "com.samsung.android.dialer", "com.android.incallui", "com.android.dialer",
+        "com.mediatek.phone", "com.transsion.phone", "com.infinix.phone",
+        "com.tecno.phone", "com.itel.phone", "com.transsion.incallui",
+        "com.mediatek.incallui", "com.android.contacts", "com.huawei.contacts",
+        "com.huawei.incallui", "com.vivo.contacts", "com.vivo.dialer",
+        "com.hihonor.dialer", "com.heytap.dialer", "com.coloros.dialer",
+        "com.oplus.dialer", "com.oneplus.dialer", "com.realme.dialer",
+        "com.miui.securitycenter", "com.miui.phone", "com.android.mms",
+        "com.google.android.apps.tachyon", "com.sprd.contacts"
+    )
+    private val USSD_PACKAGE_HINTS = listOf(
+        "phone", "dialer", "telecom", "incall", "callui", "telephony", "ussd",
+        "miui", "coloros", "heytap", "oplus", "honor", "transsion", "vivo", "realme",
+        "samsung", "huawei", "infinix", "tecno", "itel", "mediatek", "sprd"
+    )
+    private val BLOCKED_PACKAGES = setOf(
+        "com.bingwa.mobile", "com.android.systemui", "com.android.launcher",
+        "com.google.android.apps.nexuslauncher", "com.miui.home",
+        "com.sec.android.app.launcher", "com.huawei.android.launcher",
+        "com.android.settings", "com.google.android.gms", "com.android.keyguard",
+        "com.android.packageinstaller"
+    )
+    private val LAUNCHER_PACKAGES = setOf(
+        "com.android.launcher", "com.google.android.apps.nexuslauncher",
+        "com.miui.home", "com.sec.android.app.launcher", "com.huawei.android.launcher"
+    )
+    private val USSD_HINTS = listOf(
+        "enter", "ussd", "choose", "select", "option", "menu", "number", "amount",
+        "sambaza", "tuma", "please enter", "enter phone", "enter amount",
+        "safaricom", "airtel", "telkom", "faiba", "reply", "continue", "submit",
+        "balance", "airtime", "ksh", "kes", "bundle", "data", "account", "pin",
+        "send money", "confirm", "retry", "proceed", "voucher", "recipient", "mobile",
+        "entrez", "montant", "numéro", "solde", "continuer", "confirmer",
+        "أدخل", "رصيد", "تأكيد", "press", "dial", "call", "response", "respond", "tap"
+    )
+    private val SEND_BUTTON_LABELS = listOf(
+        "send", "ok", "tuma", "call", "sambaza", "enda", "confirm",
+        "reply", "next", "continue", "submit", "proceed", "accept", "yes", "done",
+        "confirmar", "envoyer", "suivant", "continuer", "oui", "go", "enter", "dial",
+        "execute", "موافق", "إرسال"
+    )
+    private val SEND_VIEW_ID_HINTS = listOf(
+        "send", "submit", "reply", "continue", "next", "confirm", "positive", "ok",
+        "button1", "positivebutton", "positive_button", "dialog_button", "send_button",
+        "action_button", "btn_ok", "btn_confirm", "btn_send", "btn_positive",
+        "alertdialog_button", "right_button", "primary_button"
+    )
+    private val INPUT_VIEW_ID_HINTS = listOf(
+        "input", "reply", "entry", "message", "ussd", "number", "phone", "amount", "pin",
+        "edit", "text", "answer", "field", "value", "data", "query", "response"
+    )
+    private val INPUT_FIELD_HINTS = listOf(
+        "enter", "input", "reply", "phone", "number", "amount", "pin", "account", "mobile", "recipient",
+        "text", "answer", "value", "type here", "write here"
+    )
+    private val PHONE_INPUT_HINTS = listOf(
+        "phone", "phone number", "number", "mobile", "mobile number", "recipient", "recipient number",
+        "customer", "customer number", "subscriber", "subscriber number", "beneficiary",
+        "beneficiary number", "msisdn", "tel", "telephone", "contact", "line number",
+        "enter phone", "enter number", "enter mobile", "enter recipient", "enter customer"
+    )
+    private val DISMISS_BUTTON_LABELS = listOf(
+        "ok", "cancel", "close", "dismiss", "back", "no", "exit", "annuler", "fermer",
+        "non", "إلغاء", "خروج"
+    )
+    private val DISMISS_VIEW_ID_HINTS = listOf(
+        "cancel", "dismiss", "close", "negative", "back", "no", "exit",
+        "button2", "negativebutton", "negative_button", "btn_cancel", "btn_dismiss",
+        "btn_negative", "left_button"
+    )
+    private val NON_USSD_DIALOG_HINTS = listOf(
+        "choose sim", "select sim", "sim 1", "sim 2", "sim1", "sim2", "default sim",
+        "complete action", "use by default", "just once", "always",
+        "allow", "deny", "permission", "grant", "not now",
+        "isn't responding", "is not responding", "stopped", "keeps stopping", "close app"
+    )
+    private val TRANSIENT_RESPONSE_HINTS = listOf(
+        "ussd running", "running", "processing", "please wait", "wait", "loading",
+        "requesting", "sending", "fetching", "working", "in progress"
+    )
+    private val EDITABLE_CLASS_HINTS = listOf(
+        "EditText", "TextInputEditText", "AutoCompleteTextView",
+        "MultiAutoCompleteTextView", "ExtractEditText",
+        "com.samsung.android.widget.SamsungEditText", "android.widget.EditText"
+    )
+    private val errorKeywords = listOf(
+        "connection problem", "invalid mmi", "mmi code", "network error", "invalid", "failed",
+        "cancelled", "try again", "unavailable", "problem", "request timeout",
+        "busy", "sim error", "not available", "service unavailable", "temporary error",
+        "session expired", "not registered", "maintenance", "maintainance"
+    )
+
+    // Timeouts (ms)
+    private val STEP_DELAY_MS = 30L
+    private val EVENT_HOT_POLL_MS = 8L
+    private val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 32L
+    private val DUPLICATE_EVENT_WINDOW_MS = 32L
+    private val FAST_VERIFY_POLL_MS = 8L
+    private val HOT_SEND_RETRY_DELAY_MS = 10L
+    private val SEND_RETRY_DELAY_MS = 14L
+    private val POST_WRITE_VERIFY_POLL_MS = 6L
+    private val POST_WRITE_SEND_RETRY_MS = 10L
+    private val STEP_TIMEOUT_MS = 4500L
+    private val STARTUP_STEP_TIMEOUT_MS = 7000L
+    private val FINAL_RESPONSE_TIMEOUT_MS = 6500L
+    private val PENDING_STEP_TIMEOUT_MS = 6000L
+    private val PENDING_ADVANCE_TIMEOUT_MS = 6000L
+    private val ROOT_REACQUIRE_TIMEOUT_MS = 5000L
+    private val PENDING_STEP_ADVANCE_TIMEOUT_MS = 6000L
+    private val NETWORK_DELAY_STEP_TIMEOUT_MS = 16000L
+    private val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 18000L
+    private val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 16000L
+    private val NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS = 15000L
+    private val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 15000L
+    private val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 15000L
+    private val NETWORK_DELAY_ACTION_GRACE_MS = 18000L
+    private val PENDING_STEP_ADVANCE_KICK_MS = 140L
+    private val VERIFY_POLL_MS = 16L
+    private val RAPID_POST_POPUP_POLL_MS = 8L
+    private val RAPID_POST_POPUP_VERIFY_MS = 6L
+    private val RAPID_POST_POPUP_SEND_RETRY_MS = 8L
+    private val MAX_VERIFY_ATTEMPTS = 10
+    private val MAX_SEND_ATTEMPTS = 5
+    private val FORCEFUL_WRITE_PASSES = 6
+    private val WRITE_VERIFICATION_PASSES = 5
+    private val WRITE_VERIFICATION_SETTLE_MS = 16L
+    private val DIRECT_WRITE_VERIFY_PASSES = 3
+    private val SET_TEXT_BURST_ATTEMPTS = 3
+    private val PASTE_BURST_ATTEMPTS = 3
+    private val NO_FIELD_PATIENCE = 4
+    private val INPUT_TARGET_DEPTH = 8
+    private val INPUT_DESCENT_DEPTH = 4
+    private val INPUT_NEARBY_SCOPE_DEPTH = 2
+    private val RECENT_INPUT_GRACE_MS = 4000L
+    private val RECENT_VERIFIED_INPUT_GRACE_MS = 6500L
+    private val RECENT_UI_EVENT_GRACE_MS = 1200L
+    private val RECENT_USSD_CONTEXT_WINDOW_MS = 420L
+    private val GESTURE_SETTLE_MS = 12L
+    private val POST_GESTURE_WAIT_MS = 10L
+    private val POPUP_STABILITY_DELAY_MS = 14L
+    private val TAP_GESTURE_DURATION_MS = 24L
+    private val REDIAL_COOLDOWN_MS = 300L
+    private val PENDING_ADVANCE_KICK_MS = 16L
+    private val ROOT_REACQUIRE_RETRY_DELAY_MS = 18L
+    private val DIALOG_DISMISS_SETTLE_MS = 20L
+    private val UI_KEEP_VISIBLE_INTERVAL_MS = 500L
+    private val STARTUP_UI_KEEP_VISIBLE_MS = 8000L
+    private val STEP_TRANSITION_GUARD_MS = 240L
+    private val MAX_RETRY_WINDOW_MS = 60000L
+
+    private val CHANNEL_ID = "bingwa_ussd"
+    private val NOTIFICATION_ID = 2001
+    private val SHOW_RUNNING_OVERLAY = false
+    // endregion
+
+    // region UssdHelper stub (should exist in your project)
+    object UssdHelper {
+        fun buildCallIntent(ctx: Context, dialCode: String): Intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$dialCode"))
+        fun relaunchAppUi(ctx: Context, delayMs: Long = 0L) {
+            if (delayMs > 0) Handler(Looper.getMainLooper()).postDelayed({
+                ctx.startActivity(Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }, delayMs) else ctx.startActivity(Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+        fun normalizeRecipientForUssdInput(number: String): String = number.replace(Regex("[^0-9+]"), "")
+    }
+
+    object BalanceChecker {
+        var currentBalance = 0.0
+        fun parseBalanceDisplay(text: String): String { /* parse */ return text }
+        fun parseBalanceInt(text: String): Double { /* parse */ return 0.0 }
+        fun persistLastKnownBalance(ctx: Context, display: String) { /* store */ }
+        var balanceCallback: ((String) -> Unit)? = null
+    }
+    // endregion
 }
