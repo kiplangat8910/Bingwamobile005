@@ -8,6 +8,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.*
 import android.graphics.drawable.GradientDrawable
 import android.os.*
@@ -55,13 +56,47 @@ class UssdNavigationService : AccessibilityService() {
 
         private var activeInstance: UssdNavigationService? = null
         private var pendingArm = false
+        private var pendingKeepAppUiVisibleEnabled = true
+        private var pendingForegroundUiUntilElapsed = 0L
 
         fun beginAdvancedSessionMonitoring() {
             activeInstance?.let { it.handler.post { it.handleAdvancedSessionArmed() } }
                 ?: run { pendingArm = true }
         }
 
-        fun resetSignatureTracking() { /* handled internally */ }
+        fun configureUiReturn(enabled: Boolean) {
+            pendingKeepAppUiVisibleEnabled = enabled
+            activeInstance?.handler?.post {
+                it.keepAppUiVisibleEnabled = enabled
+                if (!enabled) it.stopKeepingAppUiVisible()
+                it.updateOverlay()
+            }
+        }
+
+        fun onAppUiForegrounded() {
+            activeInstance?.handler?.post {
+                it.lastUiReturnElapsed = SystemClock.elapsedRealtime()
+                it.uiReturnSuppressed = false
+                if (it.foregroundUiActive) it.refreshForegroundUi()
+            }
+        }
+
+        fun armForegroundUi(durationMs: Long = 35_000L) {
+            val until = SystemClock.elapsedRealtime() + durationMs.coerceAtLeast(5_000L)
+            pendingForegroundUiUntilElapsed = until
+            activeInstance?.handler?.post { it.activateForegroundUi(until) }
+        }
+
+        fun isBusyForBalanceCheck(): Boolean {
+            val instance = activeInstance
+            return advancedActive || advancedInProgress || pendingArm ||
+                (instance != null && (instance.isForegroundUiActive() || instance.pendingPhase != PendingPhase.NONE || instance.pendingStepAdvanceFromKey.isNotBlank()))
+        }
+
+        fun resetSignatureTracking() {
+            activeInstance?.handler?.post { it.resetSignatureTrackingInternal() }
+        }
+
         fun refreshRunningOverlay() { activeInstance?.updateOverlay() }
     }
 
@@ -150,8 +185,12 @@ class UssdNavigationService : AccessibilityService() {
         bgThread = HandlerThread("UssdNavBg").apply { start() }
         bgHandler = Handler(bgThread.looper)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        keepAppUiVisibleEnabled = pendingKeepAppUiVisibleEnabled
         createNotificationChannel()
         startForegroundCompat()
+        if (pendingForegroundUiUntilElapsed > SystemClock.elapsedRealtime()) {
+            activateForegroundUi(pendingForegroundUiUntilElapsed)
+        }
         if (pendingArm) {
             pendingArm = false
             handler.post { handleAdvancedSessionArmed() }
@@ -195,6 +234,70 @@ class UssdNavigationService : AccessibilityService() {
         hideOverlay()
     }
     // endregion
+
+    private fun handleAdvancedSessionArmed() {
+        if (!advancedActive) return
+        keepAppUiVisibleEnabled = pendingKeepAppUiVisibleEnabled
+        uiReturnSuppressed = false
+        hasSeenAdvancedPopup = false
+        hasSeenForegroundPopup = false
+        lastDialogText = ""
+        lastFinalResponse = ""
+        lastScreenSignatureKey = ""
+        lastStepActionKey = ""
+        lastStepActionElapsed = 0L
+        clearPendingAdvance()
+        clearPendingStepAdvance()
+        clearInputWriteMarkers()
+        clearRecentUssdContext()
+        clearRootRecoveryState()
+        resetSignatureTrackingInternal()
+        if (pendingForegroundUiUntilElapsed > SystemClock.elapsedRealtime()) {
+            activateForegroundUi(pendingForegroundUiUntilElapsed)
+        } else {
+            foregroundUiActive = false
+            foregroundUiUntilElapsed = 0L
+        }
+        updateOverlay()
+        if (shouldKeepAppUiVisible()) {
+            requestAppUiBehindPopup(force = true)
+            startKeepingAppUiVisible()
+        }
+        startStepTimeout()
+        pendingProcessToken = SystemClock.elapsedRealtime()
+        scheduleProcessStep(dialogChanged = true, overrideDelay = 0L)
+    }
+
+    private fun activateForegroundUi(untilElapsed: Long) {
+        foregroundUiActive = true
+        foregroundUiUntilElapsed = untilElapsed
+        uiReturnSuppressed = false
+        hasSeenForegroundPopup = false
+        updateOverlay()
+        startKeepingAppUiVisible()
+    }
+
+    private fun resetSignatureTrackingInternal() {
+        adjustedStepInputs.clear()
+        learnedSignatureSteps.clear()
+        learningCaptures.clear()
+        popupTranscript.clear()
+        detectedChangeNotes.clear()
+        signatureChangeDetected = false
+        signatureAutoAdjusted = false
+        loadedSignatureLookupSource = emptyList()
+        loadedSignatureLookup = emptyMap()
+    }
+
+    private fun finishAdvancedDispatch(finalResponse: String) {
+        lastFinalResponse = finalResponse
+        val result = buildDispatchResult(finalResponse)
+        onDispatchComplete?.invoke(result)
+        closeCurrentUssdUi()
+        advancedInProgress = false
+        updateOverlay()
+        cleanupAdvanced()
+    }
 
     // region Accessibility Event Handling (core logic)
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -633,6 +736,43 @@ class UssdNavigationService : AccessibilityService() {
         val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(lower)
         if (pkg == "android" || pkg.isBlank()) return advancedActive || isForegroundUiActive() || (hasUssdLang || menuLike)
         return isPotentialUssdPackage(pkg) && (hasUssdLang || menuLike)
+    }
+
+    private fun normalizeCollapsedText(text: String?): String =
+        text.orEmpty()
+            .replace('\u00A0', ' ')
+            .replace(Regex("""[ \t\r\n]+"""), " ")
+            .trim()
+
+    private fun normalizeActionLabel(text: String?): String =
+        normalizeCollapsedText(text)
+            .lowercase()
+            .replace(Regex("""^[^a-z0-9]+|[^a-z0-9]+$"""), "")
+
+    private fun normalizeMenuText(text: String?): String =
+        normalizeActionLabel(text)
+            .replace(Regex("""\b\d+\s*[\)\].:\-]?\s*"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+
+    private fun tokenizeMenuLabel(text: String?): Set<String> =
+        normalizeMenuText(text)
+            .split(Regex("""\W+"""))
+            .map { it.trim() }
+            .filter { it.length >= 2 }
+            .toSet()
+
+    private fun isLikelyPromptText(text: String?): Boolean {
+        val normalized = normalizeActionLabel(text)
+        if (normalized.isBlank()) return false
+        return INPUT_FIELD_HINTS.any { normalized.contains(it) } ||
+            PHONE_INPUT_HINTS.any { normalized.contains(it) } ||
+            normalized.contains("enter") ||
+            normalized.contains("input") ||
+            normalized.contains("reply") ||
+            normalized.contains("select") ||
+            normalized.contains("choose") ||
+            normalized.contains("option")
     }
     // endregion
 
@@ -2690,9 +2830,30 @@ class UssdNavigationService : AccessibilityService() {
             setTextColor(Color.parseColor("#FFD7E3F4")); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
         }
         val progress = ProgressBar(this).apply { isIndeterminate = true; alpha = 0.9f }
-        container.addView(status, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-        container.addView(detail, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = dp(4) })
-        container.addView(progress, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { gravity = Gravity.END; topMargin = dp(6) })
+        container.addView(
+            status,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+        container.addView(
+            detail,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(4) }
+        )
+        container.addView(
+            progress,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.END
+                topMargin = dp(6)
+            }
+        )
         overlayStatusText = status
         overlayDetailText = detail
         return container
@@ -2758,41 +2919,7 @@ class UssdNavigationService : AccessibilityService() {
     }
     // endregion
 
-    // region Data classes for signature & internal use
-    data class UssdSignatureStep(
-        val stepIndex: Int,
-        val expectedInput: String,
-        val menuTitle: String,
-        val menuText: String,
-        val selectedOptionLabel: String,
-        val menuOptionsSnapshot: List<String>
-    )
-    data class UssdLearningCapture(
-        val stepIndex: Int,
-        val enteredInput: String,
-        val selectedOptionLabel: String,
-        val popupText: String
-    )
-    data class AdvancedDispatchResult(
-        val finalResponse: String,
-        val changeDetected: Boolean,
-        val autoAdjusted: Boolean,
-        val learningCompleted: Boolean,
-        val suggestedCode: String,
-        val changeSummary: String,
-        val learnedSignature: List<UssdSignatureStep>,
-        val learningCaptures: List<UssdLearningCapture>,
-        val popupTranscript: List<String>
-    )
-    private data class UssdTreeSnapshot(
-        val dialogText: String,
-        val normalizedDialogText: String,
-        val textTokens: List<String>,
-        val hasEditableField: Boolean,
-        val hasSendButton: Boolean,
-        val hasDismissButton: Boolean,
-        val inputStateSignature: String
-    )
+    // region Data classes for internal use
     private data class MenuOptionDescriptor(
         val key: String,
         val label: String,
@@ -2976,25 +3103,5 @@ class UssdNavigationService : AccessibilityService() {
     private val CHANNEL_ID = "bingwa_ussd"
     private val NOTIFICATION_ID = 2001
     private val SHOW_RUNNING_OVERLAY = false
-    // endregion
-
-    // region UssdHelper stub (should exist in your project)
-    object UssdHelper {
-        fun buildCallIntent(ctx: Context, dialCode: String): Intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$dialCode"))
-        fun relaunchAppUi(ctx: Context, delayMs: Long = 0L) {
-            if (delayMs > 0) Handler(Looper.getMainLooper()).postDelayed({
-                ctx.startActivity(Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }, delayMs) else ctx.startActivity(Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-        fun normalizeRecipientForUssdInput(number: String): String = number.replace(Regex("[^0-9+]"), "")
-    }
-
-    object BalanceChecker {
-        var currentBalance = 0.0
-        fun parseBalanceDisplay(text: String): String { /* parse */ return text }
-        fun parseBalanceInt(text: String): Double { /* parse */ return 0.0 }
-        fun persistLastKnownBalance(ctx: Context, display: String) { /* store */ }
-        var balanceCallback: ((String) -> Unit)? = null
-    }
     // endregion
 }

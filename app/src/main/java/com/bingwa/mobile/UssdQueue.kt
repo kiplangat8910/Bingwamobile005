@@ -132,6 +132,18 @@ object UssdQueue {
     }
 
     /**
+     * Marks the currently running task as completed so service code can
+     * accurately decide whether more queued work remains.
+     */
+    fun markCompleted() {
+        synchronized(lock) {
+            currentTask = null
+            currentTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+            currentTimeoutRunnable = null
+        }
+    }
+
+    /**
      * Shuts down the worker thread gracefully.
      * Pending tasks will not be executed.
      */
