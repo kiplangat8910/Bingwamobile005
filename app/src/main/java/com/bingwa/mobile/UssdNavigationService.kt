@@ -1152,12 +1152,11 @@ class UssdNavigationService : AccessibilityService() {
                         }
                     }
                     if (inputField != null || shouldPreferTextInput) {
-                        val wroteValue = when {
-                            inputField != null ->
-                                tryWriteValueToField(inputField, valueToEnter, interactionRoot) ||
-                                    writeValueToField(interactionRoot, valueToEnter)
-                            else -> writeValueToField(interactionRoot, valueToEnter)
-                        }
+                        val wroteValue = ensureExpectedValueWritten(
+                            root = interactionRoot,
+                            expectedValue = valueToEnter,
+                            preferredField = inputField
+                        )
                         val inlineVerified = verifyExpectedInputFromRoot(
                             root = interactionRoot,
                             expectedValue = valueToEnter,
@@ -2297,6 +2296,56 @@ class UssdNavigationService : AccessibilityService() {
         }
     }
 
+    private fun ensureExpectedValueWritten(
+        root: AccessibilityNodeInfo,
+        expectedValue: String,
+        preferredField: AccessibilityNodeInfo? = null
+    ): Boolean {
+        if (verifyExpectedInputFromRoot(root, expectedValue, preferredField)) {
+            return true
+        }
+
+        if (preferredField != null && tryWriteValueToField(preferredField, expectedValue, root)) {
+            return true
+        }
+
+        val verifiedField = findEditableFieldMatchingExpectedInput(root, expectedValue)
+        try {
+            if (verifiedField != null && verifiedField !== preferredField) {
+                if (verifyExpectedInputFromRoot(root, expectedValue, verifiedField)) {
+                    return true
+                }
+                if (tryWriteValueToField(verifiedField, expectedValue, root)) {
+                    return true
+                }
+            }
+        } finally {
+            runCatching { verifiedField?.recycle() }
+        }
+
+        val candidates = mutableListOf<AccessibilityNodeInfo>()
+        try {
+            collectTextEntryCandidates(root, candidates)
+            if (candidates.isEmpty()) {
+                collectAggressiveTextEntryCandidates(root, candidates)
+            }
+            candidates.sortByDescending { candidate ->
+                scoreTextEntryCandidate(candidate) +
+                    if (matchesExpectedInput(readFieldText(candidate), expectedValue)) 700 else 0
+            }
+            for (candidate in candidates) {
+                if (tryWriteValueToField(candidate, expectedValue, root)) {
+                    return true
+                }
+            }
+        } finally {
+            candidates.forEach { candidate -> runCatching { candidate.recycle() } }
+        }
+
+        return writeValueToField(root, expectedValue) &&
+            verifyExpectedInputFromRoot(root, expectedValue, preferredField)
+    }
+
     private fun verifyThenSend(expected: String, attempt: Int, noFieldCount: Int = 0) {
         if (!advancedActive) { isProcessing = false; return }
         if (attempt >= MAX_VERIFY_ATTEMPTS) {
@@ -2313,7 +2362,7 @@ class UssdNavigationService : AccessibilityService() {
         var fieldRef  : AccessibilityNodeInfo? = null
         var verified = false
         try {
-            fieldRef  = findEditableField(root)
+            fieldRef  = findFieldForExpectedValue(root, expected)
             if (fieldRef != null) {
                 fieldText = readFieldText(fieldRef)
                 verified = verifyExpectedInputFromRoot(root, expected, fieldRef)
@@ -2370,7 +2419,7 @@ class UssdNavigationService : AccessibilityService() {
         var fieldRef: AccessibilityNodeInfo? = null
         var verified = false
         try {
-            fieldRef = findEditableField(root)
+            fieldRef = findFieldForExpectedValue(root, expected)
             if (fieldRef != null) {
                 fieldText = readFieldText(fieldRef)
                 verified = verifyExpectedInputFromRoot(root, expected, fieldRef)
@@ -2419,7 +2468,7 @@ class UssdNavigationService : AccessibilityService() {
         val root = getUssdRoot()
         if (root != null) {
             try {
-                fieldRef  = findEditableField(root)
+                fieldRef  = findFieldForExpectedValue(root, expected)
                 if (fieldRef != null) {
                     fieldText = readFieldText(fieldRef)
                     verified = verifyExpectedInputFromRoot(root, expected, fieldRef)
@@ -2472,7 +2521,7 @@ class UssdNavigationService : AccessibilityService() {
         var sendBtn  : AccessibilityNodeInfo? = null
         try {
             if (!skipFieldVerification) {
-                fieldRef = findEditableField(root)
+                fieldRef = findFieldForExpectedValue(root, expectedValue)
                 if (fieldRef != null) {
                     fieldText = readFieldText(fieldRef)
                 }
@@ -2941,7 +2990,7 @@ class UssdNavigationService : AccessibilityService() {
             }
             when (pendingPhase) {
                 PendingPhase.WAIT_VERIFY -> {
-                    val field = findEditableField(interactionRoot)
+                    val field = findFieldForExpectedValue(interactionRoot, expected)
                     try {
                         val verified = if (field != null) {
                             verifyExpectedInputFromRoot(
@@ -2963,12 +3012,11 @@ class UssdNavigationService : AccessibilityService() {
                         if (pendingAttempts < 2 && shouldForcePendingFieldRewrite(expected, field != null)) {
                             pendingAttempts++
                             val wroteValue = try {
-                                if (field != null) {
-                                    tryWriteValueToField(field, expected, interactionRoot) ||
-                                        writeValueToField(interactionRoot, expected)
-                                } else {
-                                    writeValueToField(interactionRoot, expected)
-                                }
+                                ensureExpectedValueWritten(
+                                    root = interactionRoot,
+                                    expectedValue = expected,
+                                    preferredField = field
+                                )
                             } catch (_: Exception) {
                                 false
                             }
@@ -5189,6 +5237,12 @@ class UssdNavigationService : AccessibilityService() {
             candidates.forEach { it.recycle() }
             result
         }
+
+    private fun findFieldForExpectedValue(
+        root: AccessibilityNodeInfo,
+        expectedValue: String
+    ): AccessibilityNodeInfo? =
+        findEditableFieldMatchingExpectedInput(root, expectedValue) ?: findEditableField(root)
 
     private fun isAggressiveActionCandidate(node: AccessibilityNodeInfo): Boolean {
         val enabled = try { node.isEnabled } catch (_: Exception) { true }
