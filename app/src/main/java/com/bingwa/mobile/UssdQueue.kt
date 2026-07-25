@@ -11,12 +11,15 @@ object UssdQueue {
     private val normalPriorityPending = ArrayDeque<Runnable>()
     private var processing = false
     private var scheduled = false
+    private var scheduledWithDelay = false
+    private var scheduledTask: Runnable? = null
     private val handler = Handler(Looper.getMainLooper())
 
     fun enqueue(task: Runnable, priority: String = USSD_EXECUTION_PRIORITY_NORMAL) {
         synchronized(this) {
+            val isSpecialPriority = priority.equals(USSD_EXECUTION_PRIORITY_SPECIAL, ignoreCase = true)
             when {
-                priority.equals(USSD_EXECUTION_PRIORITY_SPECIAL, ignoreCase = true) -> {
+                isSpecialPriority -> {
                     specialPriorityPending.addLast(task)
                 }
                 priority.equals(USSD_EXECUTION_PRIORITY_HIGH, ignoreCase = true) -> {
@@ -26,6 +29,12 @@ object UssdQueue {
                     normalPriorityPending.addLast(task)
                 }
             }
+            if (isSpecialPriority && scheduled && scheduledWithDelay) {
+                scheduledTask?.let { handler.removeCallbacks(it) }
+                scheduledTask = null
+                scheduled = false
+                scheduledWithDelay = false
+            }
             scheduleNextIfPossible(useDelay = false)
         }
     }
@@ -33,7 +42,6 @@ object UssdQueue {
     fun markCompleted() {
         synchronized(this) {
             processing = false
-            scheduled = false
             scheduleNextIfPossible(useDelay = !hasSpecialPendingLocked())
         }
     }
@@ -49,9 +57,15 @@ object UssdQueue {
     private fun scheduleNextIfPossible(useDelay: Boolean) {
         if (processing || scheduled || isEmptyLocked()) return
         scheduled = true
-        val task = Runnable {
+        scheduledWithDelay = useDelay
+        lateinit var task: Runnable
+        task = Runnable {
             val nextTask = synchronized(this) {
+                if (scheduledTask === task) {
+                    scheduledTask = null
+                }
                 scheduled = false
+                scheduledWithDelay = false
                 if (processing || isEmptyLocked()) {
                     null
                 } else {
@@ -65,6 +79,7 @@ object UssdQueue {
             }
             nextTask?.run()
         }
+        scheduledTask = task
         if (useDelay) handler.postDelayed(task, NEXT_EXECUTION_DELAY_MS) else handler.post(task)
     }
 

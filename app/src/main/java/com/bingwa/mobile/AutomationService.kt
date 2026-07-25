@@ -410,12 +410,6 @@ class AutomationService : Service() {
         return try {
             Log.d(TAG, "ADVANCED dialing txId=${request.txId} via $slotLabel")
             startActivity(callIntent)
-            if (request.returnToAppAggressively && BingwaMobileApp.wasInForegroundRecently()) {
-                UssdHelper.relaunchAppUi(
-                    context = this,
-                    aggressiveRetries = true
-                )
-            }
             true
         } catch (e: Exception) {
             val nextTarget = simTargets.getOrNull(attemptIndex + 1)
