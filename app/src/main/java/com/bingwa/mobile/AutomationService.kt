@@ -15,44 +15,306 @@ import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.util.Calendar
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
+
+// ============================================================
+// AUTOMATION SERVICE – REFACTORED & POWERFUL
+// ============================================================
 
 class AutomationService : Service() {
+
+    // region Delegates (separate responsibilities)
+    private val dispatcher = UssdDispatcher(this)
+    private val responseAnalyzer = ResponseAnalyzer(this)
+    private val retryManager = RetryManager(this)
+    private val transactionHelper = TransactionHelper(this)
+    private val notificationHelper = NotificationHelper(this)
+    private val foregroundHelper = ForegroundServiceHelper(this)
+
     private var foregroundReady = false
 
-    companion object {
-        private const val TAG = "AutomationService"
-        const val ACTION_RETRY_PENDING = "com.bingwa.mobile.ACTION_RETRY_PENDING"
-        private const val ACTION_RETRY_MAINTENANCE = "com.bingwa.mobile.ACTION_RETRY_MAINTENANCE"
-        private const val ACTION_RETRY_RETRIABLE_RESPONSE = "com.bingwa.mobile.ACTION_RETRY_RETRIABLE_RESPONSE"
-        const val ACTION_RUN_SCHEDULED = "com.bingwa.mobile.ACTION_RUN_SCHEDULED"
-        private const val CHANNEL_ID = "automation_service"
-        private const val NOTIFICATION_ID = 2014
-        private const val RETRIABLE_RESPONSE_PREFS = "retriable_ussd_response_retry"
-        private const val ACTIVE_RETRY_WINDOW_MS = 60_000L
-        private const val ACTIVE_RETRY_INTERVAL_MS = 5_000L
-        private const val FIRST_BACKOFF_MS = 5 * 60_000L
-        private const val REPEATED_BACKOFF_MS = 10 * 60_000L
+    // region Lifecycle
+    override fun onCreate() {
+        super.onCreate()
+        foregroundHelper.createNotificationChannel()
+        foregroundReady = foregroundHelper.startForeground()
+        if (!foregroundReady) stopSelf()
+    }
 
-        fun cancelRetriableResponseRetry(context: Context, txId: Int) {
-            if (txId < 0) return
-            runCatching {
-                val intent = Intent(context, AutomationService::class.java).apply {
-                    action = ACTION_RETRY_RETRIABLE_RESPONSE
-                }
-                val pi = PendingIntent.getService(
-                    context,
-                    txId,
-                    intent,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
-                val alarm = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-                alarm?.cancel(pi)
-                pi.cancel()
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!foregroundReady) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        val request = UssdRequest.fromIntent(intent) ?: run {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        Log.d(TAG, "Received request txId=${request.txId} mode=${request.mode}")
+
+        // Global blacklist check
+        if (request.phoneNumber.isNotBlank() &&
+            BlacklistedContactStore.isBlacklisted(this, request.phoneNumber)
+        ) {
+            transactionHelper.finishWithError(request, "Blocked: blacklisted phone number")
+            return START_NOT_STICKY
+        }
+
+        // Enqueue for background execution
+        UssdQueue.enqueue(
+            Runnable { executeRequest(request) },
+            priority = request.executionPriority
+        )
+
+        return START_REDELIVER_INTENT
+    }
+
+    override fun onDestroy() {
+        foregroundHelper.stopForeground()
+        super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+    // endregion
+
+    // region Request Execution
+    private fun executeRequest(request: UssdRequest) {
+        Log.d(TAG, "Executing txId=${request.txId} mode=${request.mode}")
+
+        // If this is a retry alarm, we arm the active window
+        if (request.action == ACTION_RETRY_RETRIABLE_RESPONSE) {
+            retryManager.armRetryWindow(request.txId)
+        }
+
+        // If this is a scheduled run, mark it as executed
+        if (request.action == ACTION_RUN_SCHEDULED) {
+            ScheduledOfferDispatchStore.markExecuted(this, request.txId)
+            transactionHelper.saveAndBroadcast(
+                request.txId,
+                TransactionStatus.PROCESSING.value,
+                "Scheduled dispatch started."
+            )
+        }
+
+        // Delegate to the appropriate handler
+        if (request.isAdvancedFlow) {
+            dispatcher.startAdvanced(request) { result ->
+                handleAdvancedResult(request, result)
+            }
+        } else {
+            dispatcher.startSimple(request) { response, status ->
+                handleSimpleResponse(request, response, status)
             }
         }
     }
 
-    private data class AutomationRequest(
+    private fun handleSimpleResponse(request: UssdRequest, response: String, status: String) {
+        Log.d(TAG, "Simple response txId=${request.txId} status=$status response='${response.take(80)}'")
+        processFinalResponse(request, response, status, null)
+    }
+
+    private fun handleAdvancedResult(request: UssdRequest, result: AdvancedDispatchResult) {
+        Log.d(TAG, "Advanced result txId=${request.txId} changeDetected=${result.changeDetected}")
+        if (request.signatureLearning) {
+            handleSignatureLearning(request, result)
+            return
+        }
+
+        val finalResponse = if (result.changeDetected) {
+            buildSignatureChangeMessage(request, result)
+        } else {
+            result.finalResponse
+        }
+
+        val status = when {
+            result.changeDetected && !result.autoAdjusted -> TransactionStatus.FAILED.value
+            else -> responseAnalyzer.determineStatus(finalResponse)
+        }
+
+        processFinalResponse(request, finalResponse, status, result.popupTranscript)
+    }
+    // endregion
+
+    // region Response Processing (unified)
+    private fun processFinalResponse(
+        request: UssdRequest,
+        response: String,
+        status: String,
+        transcript: List<String>?
+    ) {
+        // Handle token purchase / balance callbacks first
+        if (handleCallback(request, response)) {
+            finishExecution(scheduleAirtimeRefresh = true)
+            return
+        }
+
+        if (request.txId < 0) {
+            finishExecution(scheduleAirtimeRefresh = true)
+            return
+        }
+
+        // Check if we should retry (retriable final response)
+        if (responseAnalyzer.shouldRetry(status, response)) {
+            retryManager.scheduleRetry(request, response, status, transcript)
+            return
+        }
+
+        // Clear any retry state for this transaction
+        retryManager.clearState(request.txId)
+
+        // Save and broadcast
+        transactionHelper.saveAndBroadcast(request.txId, status, response, transcript)
+
+        // Handle special statuses
+        when (status) {
+            TransactionStatus.PENDING.value -> handlePending(request, response)
+            TransactionStatus.FAILED.value -> handleFailed(request, response)
+        }
+
+        finishExecution(scheduleAirtimeRefresh = true)
+    }
+
+    private fun handleCallback(request: UssdRequest, response: String): Boolean {
+        UssdNavigationService.tokenPurchaseCallback?.let { cb ->
+            val success = responseAnalyzer.isSuccess(response)
+            cb(success)
+            UssdNavigationService.tokenPurchaseCallback = null
+            return true
+        }
+
+        UssdNavigationService.balanceCallback?.let { cb ->
+            cb(response)
+            UssdNavigationService.balanceCallback = null
+            return true
+        }
+
+        return false
+    }
+
+    private fun handlePending(request: UssdRequest, response: String) {
+        val config = DailyLimitPolicy.load(this)
+        if (config.fallbackEnabled &&
+            DailyLimitPolicy.ruleIncludesAlreadyRecommended(config.fallbackRuleMode)
+        ) {
+            // Try fallback
+            val fallbackStarted = dispatcher.startFallback(request, response, "daily limit")
+            if (fallbackStarted) {
+                notificationHelper.notifyFallback(request, response)
+                return
+            }
+        }
+
+        if (config.mode == DailyLimitPolicy.MODE_NOTICE_ONLY) {
+            val note = if (config.repeatNoticeEnabled) {
+                "Reply 1 to send another number today, or reply 2 to confirm tomorrow morning dispatch."
+            } else {
+                "Waiting for an alternative number or a manual retry tomorrow."
+            }
+            val message = "$response\n\n$note"
+            transactionHelper.saveAndBroadcast(request.txId, TransactionStatus.PENDING.value, message)
+            if (config.repeatNoticeEnabled) {
+                request.phoneNumber.takeIf { it.isNotBlank() }?.let {
+                    DailyLimitPolicy.beginReplyMenu(this, it, request.txId)
+                }
+            }
+            notificationHelper.notifyPending(request)
+        } else {
+            retryManager.scheduleRetryTomorrow(request)
+        }
+    }
+
+    private fun handleFailed(request: UssdRequest, response: String) {
+        val config = DailyLimitPolicy.load(this)
+        if (config.fallbackEnabled &&
+            (DailyLimitPolicy.ruleIncludesOfferNotFound(config.fallbackRuleMode) ||
+                    DailyLimitPolicy.ruleIncludesAlreadyRecommended(config.fallbackRuleMode))
+        ) {
+            val fallbackStarted = dispatcher.startFallback(request, response, "failure")
+            if (fallbackStarted) {
+                notificationHelper.notifyFallback(request, response)
+                return
+            }
+        }
+        // Default: just alert
+        MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
+    }
+    // endregion
+
+    // region Signature Learning
+    private fun handleSignatureLearning(request: UssdRequest, result: AdvancedDispatchResult) {
+        if (request.offerId < 0) {
+            notificationHelper.notifyLearningNoOffer(request)
+            finishExecution(scheduleAirtimeRefresh = true)
+            return
+        }
+
+        if (result.learnedSignature.isEmpty() && result.learningCaptures.isEmpty()) {
+            notificationHelper.notifyLearningFailed(request)
+            finishExecution(scheduleAirtimeRefresh = true)
+            return
+        }
+
+        // Save the learned signature for approval
+        OfferRepository.stageSignatureReview(
+            this,
+            request.offerId,
+            result.learnedSignature,
+            result.learningCaptures
+        )
+
+        notificationHelper.notifyLearningSuccess(request, result)
+        sendBroadcast(Intent("com.bingwa.mobile.OFFER_SIGNATURE_LEARNED")
+            .setPackage(packageName)
+            .putExtra("offerId", request.offerId))
+
+        finishExecution(scheduleAirtimeRefresh = true)
+    }
+    // endregion
+
+    // region Helpers
+    private fun buildSignatureChangeMessage(request: UssdRequest, result: AdvancedDispatchResult): String {
+        val offerLabel = request.offerName.ifBlank { "this offer" }
+        val suggestion = result.suggestedCode.takeIf { it.isNotBlank() }?.let {
+            " Suggested updated code: $it."
+        }.orEmpty()
+        return if (result.autoAdjusted) {
+            "The system detected a change in the USSD menu for $offerLabel and automatically matched the correct option.${result.changeSummary.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""} Open the offer, update the saved USSD code, then run Save & Learn again to relearn the signature for future dispatches.$suggestion"
+        } else {
+            "The system detected changes in the USSD menu for $offerLabel and stopped the dispatch to avoid selecting the wrong bundle.${result.changeSummary.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""} Review and update the offer, then run Save & Learn again to relearn the signature before dispatching again.$suggestion"
+        }
+    }
+
+    private fun finishExecution(scheduleAirtimeRefresh: Boolean) {
+        if (scheduleAirtimeRefresh) {
+            BalanceChecker.scheduleAirtimeRefresh(this, "USSD execution")
+        }
+        UssdQueue.markCompleted()
+        if (!UssdQueue.hasWork()) stopSelf()
+    }
+    // endregion
+
+    // region Constants
+    companion object {
+        const val TAG = "AutomationService"
+        const val ACTION_RETRY_PENDING = "com.bingwa.mobile.ACTION_RETRY_PENDING"
+        const val ACTION_RETRY_MAINTENANCE = "com.bingwa.mobile.ACTION_RETRY_MAINTENANCE"
+        const val ACTION_RETRY_RETRIABLE_RESPONSE = "com.bingwa.mobile.ACTION_RETRY_RETRIABLE_RESPONSE"
+        const val ACTION_RUN_SCHEDULED = "com.bingwa.mobile.ACTION_RUN_SCHEDULED"
+        private const val CHANNEL_ID = "automation_service"
+        private const val NOTIFICATION_ID = 2014
+    }
+    // endregion
+
+    // ============================================================
+    // INNER HELPER CLASSES (encapsulated within the service)
+    // ============================================================
+
+    // region UssdRequest – data class for request parameters
+    private data class UssdRequest(
+        val action: String?,
         val code: String,
         val phoneNumber: String,
         val txId: Int,
@@ -65,732 +327,654 @@ class AutomationService : Service() {
         val signatureLearning: Boolean,
         val executionPriority: String,
         val returnToAppAggressively: Boolean
-    )
-
-    private data class RetriableResponseRetryState(
-        val windowStartAtMillis: Long,
-        val completedWindows: Int,
-        val nextAttemptStartsNewWindow: Boolean,
-        val totalAttempts: Int
-    )
-
-    private val patternManager by lazy { UssdResponsePatternManager(this) }
-
-    private fun usesAdvancedFlow(request: AutomationRequest): Boolean {
-        return request.signatureEnabled || request.signatureLearning ||
-            request.mode.equals(OFFER_EXECUTION_MODE_ADVANCED, ignoreCase = true)
-    }
-
-    override fun onCreate() {
-        super.onCreate()
-        createNotificationChannel()
-        foregroundReady = tryStartForegroundCompat(
-            notificationId = NOTIFICATION_ID,
-            notification = buildNotification(),
-            foregroundServiceType = ForegroundServiceTypes.dataSync,
-            serviceLabel = "USSD automation"
-        )
-        if (!foregroundReady) {
-            stopSelf()
-        }
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!foregroundReady) {
-            stopSelf()
-            return START_NOT_STICKY
-        }
-        val request = buildRequest(intent) ?: run {
-            stopSelf()
-            return START_NOT_STICKY
-        }
-        if (intent?.action == ACTION_RETRY_PENDING ||
-            intent?.action == ACTION_RETRY_MAINTENANCE ||
-            intent?.action == ACTION_RETRY_RETRIABLE_RESPONSE
-        ) {
-            Log.d(TAG, "Retry-pending alarm txId=${request.txId}")
-        } else {
-            Log.d(TAG, "onStartCommand mode=${request.mode} code=${request.code} txId=${request.txId}")
-        }
-        if (intent?.action == ACTION_RETRY_RETRIABLE_RESPONSE) {
-            armRetriableResponseWindow(request.txId)
-        }
-        if (intent?.action == ACTION_RUN_SCHEDULED) {
-            ScheduledOfferDispatchStore.markExecuted(this, request.txId)
-            if (request.txId >= 0) {
-                val msg = "Scheduled dispatch started."
-                saveTransactionResponse(request.txId, TransactionStatus.PROCESSING.value, msg)
-                sendBroadcastUpdate(request.txId, TransactionStatus.PROCESSING.value, msg)
-            }
-        }
-
-        // Global safety check: block dispatches to blacklisted numbers (even if scheduled earlier).
-        if (request.phoneNumber.isNotBlank() && BlacklistedContactStore.isBlacklisted(this, request.phoneNumber)) {
-            processResponse(
-                request = request,
-                response = "Blocked: this phone number is blacklisted and cannot receive data bundles.",
-                forcedStatus = TransactionStatus.CANCELLED.value
-            )
-            return START_NOT_STICKY
-        }
-        UssdQueue.enqueue(
-            Runnable {
-                Log.d(
-                    TAG,
-                    "Dequeued USSD request txId=${request.txId} mode=${request.mode} priority=${request.executionPriority}"
-                )
-                when {
-                    usesAdvancedFlow(request) -> startAdvanced(request)
-                    else -> handleSimple(request)
-                }
-            },
-            priority = request.executionPriority
-        )
-        return START_REDELIVER_INTENT
-    }
-
-    private fun buildRequest(intent: Intent?): AutomationRequest? {
-        val safeIntent = intent ?: return null
-        val code = safeIntent.getStringExtra("code") ?: return null
-        val rawPhoneNumber = safeIntent.getStringExtra("phoneNumber") ?: ""
-        val ussdPhoneNumber = rawPhoneNumber.takeIf { it.isBlank() }
-            ?: UssdHelper.normalizeRecipientForUssdInput(rawPhoneNumber)
-        val executionPriority = safeIntent.getStringExtra("executionPriority") ?: when (safeIntent.action) {
-            ACTION_RUN_SCHEDULED,
-            ACTION_RETRY_PENDING,
-            ACTION_RETRY_MAINTENANCE,
-            ACTION_RETRY_RETRIABLE_RESPONSE -> USSD_EXECUTION_PRIORITY_SPECIAL
-            else -> USSD_EXECUTION_PRIORITY_NORMAL
-        }
-        return AutomationRequest(
-            code = code,
-            phoneNumber = ussdPhoneNumber,
-            txId = safeIntent.getIntExtra("txId", -1),
-            mode = safeIntent.getStringExtra("mode") ?: OFFER_EXECUTION_MODE_SIMPLE,
-            offerId = safeIntent.getIntExtra("offerId", -1),
-            offerName = safeIntent.getStringExtra("offerName") ?: "",
-            simSelection = normalizeOfferSimSelection(
-                safeIntent.getIntExtra("simSelection", OFFER_SIM_USE_GENERAL)
-            ),
-            signatureEnabled = safeIntent.getBooleanExtra("signatureEnabled", false),
-            signatureMode = (safeIntent.getStringExtra("signatureMode") ?: "STOP").uppercase(),
-            signatureLearning = safeIntent.getBooleanExtra("signatureLearning", false),
-            executionPriority = executionPriority,
-            returnToAppAggressively = safeIntent.getBooleanExtra("returnToAppAggressively", true)
-        )
-    }
-
-    private fun handleSimple(request: AutomationRequest) {
-        val baseTm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-        if (baseTm == null) {
-            processResponse(request, "Telephony unavailable on this phone", forcedStatus = "Failed")
-            return
-        }
-        val simTargets = resolveUssdSimTargets(
-            context = this,
-            selectionOverride = request.simSelection.takeUnless { it == OFFER_SIM_USE_GENERAL }
-        )
-        if (simTargets.isEmpty()) {
-            processResponse(request, "Selected SIM slot is unavailable", forcedStatus = "Failed")
-            return
-        }
-        attemptSimpleDispatch(
-            request = request,
-            baseTm = baseTm,
-            simTargets = simTargets,
-            attemptIndex = 0
-        )
-    }
-
-    private fun attemptSimpleDispatch(
-        request: AutomationRequest,
-        baseTm: TelephonyManager,
-        simTargets: List<UssdSimTarget>,
-        attemptIndex: Int
     ) {
-        val target = simTargets.getOrNull(attemptIndex)
-        if (target == null) {
-            processResponse(request, "Selected SIM slot is unavailable", forcedStatus = "Failed")
-            return
-        }
-        val tm = if (target != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            baseTm.createForSubscriptionId(target.subId)
-        } else {
-            null
-        }
-        val slotLabel = target?.slotIndex?.let { "slot ${it + 1}" } ?: "default telephony"
-        if (tm == null) {
-            processResponse(request, "Selected SIM slot is unavailable", forcedStatus = "Failed")
-            return
-        }
-        val started = SilentUssdOptimized.execute(
-            telephonyManager = tm,
-            ussdCode = request.code,
-            onSuccess = { response ->
-                Log.d(TAG, "SIMPLE success txId=${request.txId} via $slotLabel response='$response'")
-                processResponse(request, response)
-            },
-            onFailure = { error ->
-                val legacyStarted = SilentUssd.execute(
-                    telephonyManager = tm,
-                    ussdCode = request.code,
-                    onSuccess = { legacyResponse ->
-                        Log.d(TAG, "SIMPLE legacy success txId=${request.txId} via $slotLabel response='$legacyResponse'")
-                        processResponse(request, legacyResponse)
-                    },
-                    onFailure = { legacyError ->
-                        val nextTarget = simTargets.getOrNull(attemptIndex + 1)
-                        if (nextTarget != null) {
-                            Log.w(
-                                TAG,
-                                "SIMPLE failed txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}: '$legacyError'"
-                            )
-                            attemptSimpleDispatch(request, baseTm, simTargets, attemptIndex + 1)
-                        } else {
-                            Log.e(TAG, "SIMPLE failed txId=${request.txId} on $slotLabel error='$legacyError'")
-                            processResponse(request, legacyError)
-                        }
-                    }
-                )
-                if (!legacyStarted) {
-                    val nextTarget = simTargets.getOrNull(attemptIndex + 1)
-                    if (nextTarget != null) {
-                        Log.w(
-                            TAG,
-                            "SIMPLE optimized USSD could not continue txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}: '$error'"
-                        )
-                        attemptSimpleDispatch(request, baseTm, simTargets, attemptIndex + 1)
-                    } else {
-                        Log.e(TAG, "SIMPLE optimized USSD could not continue txId=${request.txId} on $slotLabel error='$error'")
-                        processResponse(request, error)
-                    }
+        val isAdvancedFlow: Boolean
+            get() = signatureEnabled || signatureLearning ||
+                    mode.equals(OFFER_EXECUTION_MODE_ADVANCED, ignoreCase = true)
+
+        companion object {
+            fun fromIntent(intent: Intent?): UssdRequest? {
+                intent ?: return null
+                val code = intent.getStringExtra("code") ?: return null
+                val rawPhone = intent.getStringExtra("phoneNumber") ?: ""
+                val phone = rawPhone.takeIf { it.isBlank() }
+                    ?: UssdHelper.normalizeRecipientForUssdInput(rawPhone)
+                val priority = intent.getStringExtra("executionPriority") ?: when (intent.action) {
+                    ACTION_RUN_SCHEDULED, ACTION_RETRY_PENDING,
+                    ACTION_RETRY_MAINTENANCE, ACTION_RETRY_RETRIABLE_RESPONSE ->
+                        USSD_EXECUTION_PRIORITY_SPECIAL
+                    else -> USSD_EXECUTION_PRIORITY_NORMAL
                 }
+                return UssdRequest(
+                    action = intent.action,
+                    code = code,
+                    phoneNumber = phone,
+                    txId = intent.getIntExtra("txId", -1),
+                    mode = intent.getStringExtra("mode") ?: OFFER_EXECUTION_MODE_SIMPLE,
+                    offerId = intent.getIntExtra("offerId", -1),
+                    offerName = intent.getStringExtra("offerName") ?: "",
+                    simSelection = normalizeOfferSimSelection(
+                        intent.getIntExtra("simSelection", OFFER_SIM_USE_GENERAL)
+                    ),
+                    signatureEnabled = intent.getBooleanExtra("signatureEnabled", false),
+                    signatureMode = (intent.getStringExtra("signatureMode") ?: "STOP").uppercase(),
+                    signatureLearning = intent.getBooleanExtra("signatureLearning", false),
+                    executionPriority = priority,
+                    returnToAppAggressively = intent.getBooleanExtra("returnToAppAggressively", true)
+                )
             }
-        )
-        if (!started) {
-            val legacyStarted = SilentUssd.execute(
+        }
+    }
+    // endregion
+
+    // region UssdDispatcher – handles USSD execution (simple & advanced)
+    private inner class UssdDispatcher(private val context: Context) {
+        private val simResolver = SimResolver(context)
+
+        fun startSimple(request: UssdRequest, onComplete: (String, String) -> Unit) {
+            val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+            if (tm == null) {
+                onComplete("Telephony unavailable", TransactionStatus.FAILED.value)
+                return
+            }
+
+            val targets = simResolver.getTargets(request.simSelection)
+            if (targets.isEmpty()) {
+                onComplete("No available SIM", TransactionStatus.FAILED.value)
+                return
+            }
+
+            // Try each SIM in order
+            trySimSimple(request, tm, targets, 0, onComplete)
+        }
+
+        private fun trySimSimple(
+            request: UssdRequest,
+            baseTm: TelephonyManager,
+            targets: List<UssdSimTarget>,
+            index: Int,
+            onComplete: (String, String) -> Unit
+        ) {
+            if (index >= targets.size) {
+                onComplete("All SIMs failed", TransactionStatus.FAILED.value)
+                return
+            }
+
+            val target = targets[index]
+            val tm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                baseTm.createForSubscriptionId(target.subId)
+            } else baseTm
+
+            val slotLabel = "slot ${target.slotIndex + 1}"
+            Log.d(TAG, "Trying simple USSD on $slotLabel for txId=${request.txId}")
+
+            // Try optimized first, fallback to legacy
+            val started = SilentUssdOptimized.execute(
                 telephonyManager = tm,
                 ussdCode = request.code,
                 onSuccess = { response ->
-                    Log.d(TAG, "SIMPLE legacy success txId=${request.txId} via $slotLabel response='$response'")
-                    processResponse(request, response)
+                    Log.d(TAG, "Simple success on $slotLabel")
+                    onComplete(response, responseAnalyzer.determineStatus(response))
                 },
                 onFailure = { error ->
-                    val nextTarget = simTargets.getOrNull(attemptIndex + 1)
-                    if (nextTarget != null) {
-                        Log.w(
-                            TAG,
-                            "SIMPLE legacy failed txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}: '$error'"
+                    Log.w(TAG, "Optimized USSD failed on $slotLabel: $error")
+                    // Try legacy
+                    if (!SilentUssd.execute(tm, request.code,
+                            onSuccess = { response ->
+                                Log.d(TAG, "Legacy success on $slotLabel")
+                                onComplete(response, responseAnalyzer.determineStatus(response))
+                            },
+                            onFailure = { legacyError ->
+                                Log.w(TAG, "Legacy USSD failed on $slotLabel: $legacyError")
+                                trySimSimple(request, baseTm, targets, index + 1, onComplete)
+                            }
                         )
-                        attemptSimpleDispatch(request, baseTm, simTargets, attemptIndex + 1)
-                    } else {
-                        Log.e(TAG, "SIMPLE legacy failed txId=${request.txId} on $slotLabel error='$error'")
-                        processResponse(request, error)
+                    ) {
+                        trySimSimple(request, baseTm, targets, index + 1, onComplete)
                     }
                 }
             )
-            if (!legacyStarted) {
-                val nextTarget = simTargets.getOrNull(attemptIndex + 1)
-                if (nextTarget != null) {
-                    Log.w(
-                        TAG,
-                        "SIMPLE could not start txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}"
-                    )
-                    attemptSimpleDispatch(request, baseTm, simTargets, attemptIndex + 1)
-                } else {
-                    processResponse(request, "Silent USSD is not supported on this phone", forcedStatus = "Failed")
-                }
-            }
-        }
-    }
 
-    private fun startAdvanced(request: AutomationRequest) {
-        val offer = request.offerId.takeIf { it >= 0 }?.let { OfferRepository.findById(this, it) }
-        val automationCode = when {
-            request.code.contains("pn", ignoreCase = true) -> request.code
-            offer?.ussdCode?.contains("pn", ignoreCase = true) == true -> offer.ussdCode
-            else -> request.code
-        }
-        val clean = automationCode.trim().replace("%23", "#").trimEnd('#')
-        val parts = clean.split("*").filter { it.isNotEmpty() }
-        if (parts.isEmpty()) {
-            processResponse(request, "Invalid USSD code", forcedStatus = "Failed")
-            return
-        }
-        val dialCode = "*${parts[0]}#"
-        val steps = (1 until parts.size).map {
-            if (parts[it].equals("pn", true)) "INPUT_PHONE" else parts[it]
-        }
-        Log.d(TAG, "startAdvanced: dial=$dialCode steps=$steps txId=${request.txId}")
-
-        val keepAppUiVisible = request.returnToAppAggressively && BingwaMobileApp.wasInForegroundRecently()
-        UssdNavigationService.configureUiReturn(keepAppUiVisible)
-
-        UssdNavigationService.onDispatchComplete = { result ->
-            Log.d(TAG, "ADVANCED COMPLETE txId=${request.txId} response='${result.finalResponse}'")
-            handleAdvancedResult(request, result)
-            UssdNavigationService.onDispatchComplete = null
-        }
-
-        // Arm the accessibility session before dialing so fast USSD popups are not missed.
-        UssdNavigationService.advancedSteps = steps
-        UssdNavigationService.advancedPhoneNumber = request.phoneNumber
-        UssdNavigationService.advancedDialCode = dialCode
-        UssdNavigationService.retryCount = 0
-        UssdNavigationService.retryWindowStartedAt = 0L
-        UssdNavigationService.advancedActive = true
-        UssdNavigationService.advancedInProgress = true
-        UssdNavigationService.currentStep = 0
-        UssdNavigationService.advancedOfferId = request.offerId
-        UssdNavigationService.advancedOfferName = offer?.name ?: request.offerName
-        UssdNavigationService.signatureGuardEnabled = request.signatureEnabled && !request.signatureLearning
-        UssdNavigationService.signatureAction = request.signatureMode
-        UssdNavigationService.signatureLearningMode = request.signatureLearning
-        UssdNavigationService.loadedSignatureSteps = offer?.learnedSignature ?: emptyList()
-        UssdNavigationService.resetSignatureTracking()
-        UssdNavigationService.beginAdvancedSessionMonitoring()
-        UssdNavigationService.refreshRunningOverlay()
-
-        try {
-            val simTargets = resolveUssdSimTargets(
-                context = this,
-                selectionOverride = request.simSelection.takeUnless { it == OFFER_SIM_USE_GENERAL }
-            )
-            if (simTargets.isEmpty()) {
-                UssdNavigationService.advancedSteps = emptyList()
-                UssdNavigationService.advancedActive = false
-                UssdNavigationService.advancedInProgress = false
-                UssdNavigationService.onDispatchComplete = null
-                processResponse(request, "Selected SIM slot is unavailable", forcedStatus = "Failed")
-                return
-            }
-            val started = startAdvancedDialAttempt(
-                request = request,
-                dialCode = dialCode,
-                simTargets = simTargets,
-                attemptIndex = 0
-            )
             if (!started) {
-                UssdNavigationService.advancedSteps = emptyList()
+                // Fallback to legacy
+                if (!SilentUssd.execute(tm, request.code,
+                        onSuccess = { response ->
+                            Log.d(TAG, "Legacy success on $slotLabel")
+                            onComplete(response, responseAnalyzer.determineStatus(response))
+                        },
+                        onFailure = { error ->
+                            Log.w(TAG, "Legacy USSD failed on $slotLabel: $error")
+                            trySimSimple(request, baseTm, targets, index + 1, onComplete)
+                        }
+                    )
+                ) {
+                    trySimSimple(request, baseTm, targets, index + 1, onComplete)
+                }
+            }
+        }
+
+        fun startAdvanced(request: UssdRequest, onComplete: (AdvancedDispatchResult) -> Unit) {
+            // Prepare the navigation service
+            val steps = extractSteps(request.code)
+            val dialCode = extractDialCode(request.code)
+            if (steps.isEmpty() || dialCode.isBlank()) {
+                onComplete(AdvancedDispatchResult(
+                    finalResponse = "Invalid USSD code",
+                    changeDetected = false,
+                    autoAdjusted = false,
+                    learningCompleted = false,
+                    suggestedCode = "",
+                    changeSummary = "",
+                    learnedSignature = emptyList(),
+                    learningCaptures = emptyList(),
+                    popupTranscript = emptyList()
+                ))
+                return
+            }
+
+            // Set up navigation service
+            val keepVisible = request.returnToAppAggressively && BingwaMobileApp.wasInForegroundRecently()
+            UssdNavigationService.configureUiReturn(keepVisible)
+            UssdNavigationService.onDispatchComplete = { result ->
+                onComplete(result)
+                UssdNavigationService.onDispatchComplete = null
+            }
+
+            UssdNavigationService.advancedSteps = steps
+            UssdNavigationService.advancedPhoneNumber = request.phoneNumber
+            UssdNavigationService.advancedDialCode = dialCode
+            UssdNavigationService.retryCount = 0
+            UssdNavigationService.retryWindowStartedAt = 0L
+            UssdNavigationService.advancedActive = true
+            UssdNavigationService.advancedInProgress = true
+            UssdNavigationService.currentStep = 0
+            UssdNavigationService.advancedOfferId = request.offerId
+            UssdNavigationService.advancedOfferName = request.offerName.takeIf { it.isNotBlank() } ?: "Offer #${request.offerId}"
+            UssdNavigationService.signatureGuardEnabled = request.signatureEnabled && !request.signatureLearning
+            UssdNavigationService.signatureAction = request.signatureMode
+            UssdNavigationService.signatureLearningMode = request.signatureLearning
+            UssdNavigationService.loadedSignatureSteps = request.offerId.takeIf { it >= 0 }
+                ?.let { OfferRepository.findById(context, it)?.learnedSignature }
+                .orEmpty()
+            UssdNavigationService.resetSignatureTracking()
+            UssdNavigationService.beginAdvancedSessionMonitoring()
+            UssdNavigationService.refreshRunningOverlay()
+
+            // Initiate dialing
+            val targets = simResolver.getTargets(request.simSelection)
+            if (targets.isEmpty()) {
                 UssdNavigationService.advancedActive = false
                 UssdNavigationService.advancedInProgress = false
                 UssdNavigationService.onDispatchComplete = null
-                processResponse(request, "No dialer available", forcedStatus = "Failed")
+                onComplete(AdvancedDispatchResult(
+                    finalResponse = "No available SIM",
+                    changeDetected = false,
+                    autoAdjusted = false,
+                    learningCompleted = false,
+                    suggestedCode = "",
+                    changeSummary = "",
+                    learnedSignature = emptyList(),
+                    learningCaptures = emptyList(),
+                    popupTranscript = emptyList()
+                ))
                 return
             }
-        } catch (e: Exception) {
-            UssdNavigationService.advancedSteps = emptyList()
-            UssdNavigationService.advancedActive = false
-            UssdNavigationService.advancedInProgress = false
-            UssdNavigationService.onDispatchComplete = null
-            processResponse(request, "Dial error: ${e.message}", forcedStatus = "Failed")
-            return
-        }
-    }
 
-    private fun startAdvancedDialAttempt(
-        request: AutomationRequest,
-        dialCode: String,
-        simTargets: List<UssdSimTarget>,
-        attemptIndex: Int
-    ): Boolean {
-        val target = simTargets.getOrNull(attemptIndex)
-        if (target == null) return false
-        val slotLabel = target?.slotIndex?.let { "slot ${it + 1}" } ?: "default telephony"
-        val callIntent = UssdHelper.buildCallIntent(this, dialCode, target?.subId)
-        if (callIntent.resolveActivity(packageManager) == null) {
-            val nextTarget = simTargets.getOrNull(attemptIndex + 1)
-            if (nextTarget != null) {
-                Log.w(TAG, "ADVANCED could not resolve dialer on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}")
-                return startAdvancedDialAttempt(request, dialCode, simTargets, attemptIndex + 1)
-            }
-            return false
-        }
-
-        return try {
-            Log.d(TAG, "ADVANCED dialing txId=${request.txId} via $slotLabel")
-            startActivity(callIntent)
-            true
-        } catch (e: Exception) {
-            val nextTarget = simTargets.getOrNull(attemptIndex + 1)
-            if (nextTarget != null) {
-                Log.w(
-                    TAG,
-                    "ADVANCED dial launch failed txId=${request.txId} on $slotLabel; retrying slot ${nextTarget.slotIndex + 1}",
-                    e
-                )
-                startAdvancedDialAttempt(request, dialCode, simTargets, attemptIndex + 1)
-            } else {
-                throw e
+            if (!dialAdvanced(request, dialCode, targets, 0)) {
+                UssdNavigationService.advancedActive = false
+                UssdNavigationService.advancedInProgress = false
+                UssdNavigationService.onDispatchComplete = null
+                onComplete(AdvancedDispatchResult(
+                    finalResponse = "No dialer available",
+                    changeDetected = false,
+                    autoAdjusted = false,
+                    learningCompleted = false,
+                    suggestedCode = "",
+                    changeSummary = "",
+                    learnedSignature = emptyList(),
+                    learningCaptures = emptyList(),
+                    popupTranscript = emptyList()
+                ))
             }
         }
-    }
 
-    private fun handleAdvancedResult(request: AutomationRequest, result: AdvancedDispatchResult) {
-        if (request.signatureLearning) {
-            handleSignatureLearningResult(request, result)
-            return
-        }
-
-        if (result.changeDetected) {
-            val title = if (result.autoAdjusted) "USSD Code Auto-Adjusted" else "USSD Code Change Detected"
-            val message = buildSignatureSummary(request, result)
-            OfferNotifications.notify(this, title, message)
-        }
-
-        val finalResponse = mergeSignatureResponse(request, result)
-        val forcedStatus = if (result.changeDetected && !result.autoAdjusted) "Failed" else null
-        processResponse(request, finalResponse, forcedStatus, buildPopupTranscript(result))
-    }
-
-    private fun handleSignatureLearningResult(request: AutomationRequest, result: AdvancedDispatchResult) {
-        val offerLabel = request.offerName.ifBlank { "offer #${request.offerId}" }
-        if (request.offerId < 0) {
-            OfferNotifications.notify(
-                this,
-                "USSD Signature Learning",
-                "USSD signature learning finished, but the offer could not be identified for saving."
-            )
-            schedulePostExecutionAirtimeRefresh()
-            stopSelf()
-            return
-        }
-        if (result.learnedSignature.isEmpty() && result.learningCaptures.isEmpty()) {
-            OfferNotifications.notify(
-                this,
-                "USSD Signature Learning",
-                "The system could not learn a signature for $offerLabel. Open the offer and run Save & Learn again while the USSD menu is available."
-            )
-            schedulePostExecutionAirtimeRefresh()
-            stopSelf()
-            return
-        }
-        val updated = OfferRepository.stageSignatureReview(
-            this,
-            request.offerId,
-            result.learnedSignature,
-            result.learningCaptures
-        )
-        val learnedLabel = updated?.name ?: offerLabel
-        val learningPhone = request.phoneNumber.ifBlank { "the provided test number" }
-        val captureSummary = when {
-            result.learningCaptures.isEmpty() -> ""
-            else -> " Captured ${result.learningCaptures.size} USSD popup(s), the selected option, and the recorded text for each step."
-        }
-        val finalPopup = result.learningCaptures.lastOrNull()?.popupText
-            ?.replace(Regex("\\s+"), " ")
-            ?.trim()
-            ?.take(120)
-            ?.takeIf { it.isNotBlank() }
-            ?.let { " Last popup: $it" }
-            .orEmpty()
-        val learnedSummary = when {
-            result.learnedSignature.isNotEmpty() ->
-                "The system learned ${result.learnedSignature.size} USSD menu step(s) for $learnedLabel using $learningPhone."
-            else ->
-                "The system recorded the USSD learning transcript for $learnedLabel using $learningPhone."
-        }
-        OfferNotifications.notify(
-            this,
-            "USSD Signature Ready For Approval",
-            "$learnedSummary$captureSummary$finalPopup Review the learned steps in Bingwa Mobile, then approve or relearn before this signature replaces the saved one."
-        )
-        sendBroadcast(
-            Intent("com.bingwa.mobile.OFFER_SIGNATURE_LEARNED")
-                .setPackage(packageName)
-                .putExtra("offerId", request.offerId)
-        )
-        schedulePostExecutionAirtimeRefresh()
-        stopSelf()
-    }
-
-    private fun mergeSignatureResponse(request: AutomationRequest, result: AdvancedDispatchResult): String {
-        if (!result.changeDetected) return result.finalResponse
-        val prefix = buildSignatureSummary(request, result)
-        return if (result.finalResponse.isBlank()) prefix else "$prefix\n\nNetwork response:\n${result.finalResponse}"
-    }
-
-    private fun buildPopupTranscript(result: AdvancedDispatchResult): String {
-        val entries = result.popupTranscript.toMutableList()
-        val normalizedFinal = result.finalResponse.replace(Regex("\\s+"), " ").trim()
-        if (normalizedFinal.isNotBlank() && entries.lastOrNull() != normalizedFinal) {
-            entries += normalizedFinal
-        }
-        return entries.mapIndexed { index, text -> "${index + 1}. $text" }.joinToString("\n\n")
-    }
-
-    private fun buildSignatureSummary(request: AutomationRequest, result: AdvancedDispatchResult): String {
-        val offerLabel = request.offerName.ifBlank { "this offer" }
-        val suggestion = result.suggestedCode.takeIf { it.isNotBlank() }?.let {
-            " Suggested updated code: $it."
-        }.orEmpty()
-        return if (result.autoAdjusted) {
-            "The system detected a change in the USSD menu for $offerLabel and automatically matched the correct option.${if (result.changeSummary.isNotBlank()) " ${result.changeSummary}." else ""} Open the offer, update the saved USSD code, then run Save & Learn again to relearn the signature for future dispatches.$suggestion"
-        } else {
-            "The system detected changes in the USSD menu for $offerLabel and stopped the dispatch to avoid selecting the wrong bundle.${if (result.changeSummary.isNotBlank()) " ${result.changeSummary}." else ""} Review and update the offer, then run Save & Learn again to relearn the signature before dispatching again.$suggestion"
-        }
-    }
-
-    private fun schedulePostExecutionAirtimeRefresh() {
-        BalanceChecker.scheduleAirtimeRefresh(
-            context = this,
-            reason = "USSD execution"
-        )
-    }
-
-    private fun processResponse(
-        request: AutomationRequest,
-        response: String,
-        forcedStatus: String? = null,
-        transcript: String? = null
-    ) {
-        Log.d(TAG, "processResponse txId=${request.txId} mode=${request.mode} response='${response.take(150)}'")
-
-        // Handle token purchase callback
-        UssdNavigationService.tokenPurchaseCallback?.let { cb ->
-            val success = patternManager.matchesSuccessPattern(response) ||
-                    response.contains("you have transferred", ignoreCase = true) ||
-                    response.contains("transferred successfully", ignoreCase = true)
-            Log.d(TAG, "Token purchase callback: success=$success")
-            cb(success)
-            UssdNavigationService.tokenPurchaseCallback = null
-            finishQueuedExecution(scheduleAirtimeRefresh = true)
-            return
-        }
-
-        // Handle balance callback
-        UssdNavigationService.balanceCallback?.let { cb ->
-            Log.d(TAG, "Balance callback invoked")
-            cb(response)
-            finishQueuedExecution(scheduleAirtimeRefresh = false)
-            return
-        }
-
-        // Save transaction with response
-        if (request.txId < 0) {
-            finishQueuedExecution(scheduleAirtimeRefresh = true)
-            return
-        }
-
-        val status = forcedStatus ?: patternManager.determineResponseStatus(response)
-        Log.d(TAG, "Status='$status' for txId=${request.txId}")
-
-        if (shouldRetryRetriableFinalResponse(status, response)) {
-            handleRetriableFinalResponse(request, response, status, transcript)
-            finishQueuedExecution(scheduleAirtimeRefresh = true)
-            return
-        }
-
-        clearRetriableResponseRetryState(request.txId)
-
-        // Save to storage
-        saveTransactionResponse(request.txId, status, response, transcript)
-        // Broadcast update to UI
-        sendBroadcastUpdate(request.txId, status, response)
-
-        when (status) {
-            "Pending" -> handleDailyLimitPending(request, response)
-            "Failed" -> handleFailedWithFallback(request, response)
-            else -> Unit
-        }
-        finishQueuedExecution(scheduleAirtimeRefresh = true)
-    }
-
-    private fun finishQueuedExecution(scheduleAirtimeRefresh: Boolean) {
-        if (scheduleAirtimeRefresh) {
-            schedulePostExecutionAirtimeRefresh()
-        }
-        UssdQueue.markCompleted()
-        if (!UssdQueue.hasWork()) {
-            stopSelf()
-        }
-    }
-
-    private fun handleFailedWithFallback(request: AutomationRequest, response: String) {
-        val config = DailyLimitPolicy.load(this)
-        if (!config.fallbackEnabled) {
-            MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
-            return
-        }
-
-        if (DailyLimitPolicy.isAlreadyRecommendedResponse(response)) {
-            if (DailyLimitPolicy.ruleIncludesAlreadyRecommended(config.fallbackRuleMode)) {
-                val started = attemptFallback(
-                    request = request,
-                    originalTx = loadTransactionById(this, request.txId),
-                    response = response,
-                    reasonLabel = "daily limit"
-                )
-                if (!started) MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
-            } else {
-                MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
+        private fun extractSteps(code: String): List<String> {
+            val clean = code.trim().replace("%23", "#").trimEnd('#')
+            val parts = clean.split("*").filter { it.isNotEmpty() }
+            if (parts.isEmpty()) return emptyList()
+            return (1 until parts.size).map {
+                if (parts[it].equals("pn", ignoreCase = true)) "INPUT_PHONE" else parts[it]
             }
-            return
         }
 
-        if (isOfferNotFoundFailure(response)) {
-            if (DailyLimitPolicy.ruleIncludesOfferNotFound(config.fallbackRuleMode)) {
-                val started = attemptFallback(
-                    request = request,
-                    originalTx = loadTransactionById(this, request.txId),
-                    response = response,
-                    reasonLabel = "offer not found"
-                )
-                if (!started) MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
-            } else {
-                MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
+        private fun extractDialCode(code: String): String {
+            val clean = code.trim().replace("%23", "#").trimEnd('#')
+            val parts = clean.split("*").filter { it.isNotEmpty() }
+            return if (parts.isNotEmpty()) "*${parts[0]}#" else ""
+        }
+
+        private fun dialAdvanced(
+            request: UssdRequest,
+            dialCode: String,
+            targets: List<UssdSimTarget>,
+            index: Int
+        ): Boolean {
+            if (index >= targets.size) return false
+            val target = targets[index]
+            val intent = UssdHelper.buildCallIntent(context, dialCode, target.subId)
+            if (intent.resolveActivity(context.packageManager) == null) {
+                return dialAdvanced(request, dialCode, targets, index + 1)
             }
-            return
+            return try {
+                context.startActivity(intent)
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Dial failed on slot ${target.slotIndex + 1}", e)
+                dialAdvanced(request, dialCode, targets, index + 1)
+            }
         }
 
-        MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
-    }
+        fun startFallback(request: UssdRequest, response: String, reason: String): Boolean {
+            val config = DailyLimitPolicy.load(context)
+            if (!config.fallbackEnabled) return false
 
-    private fun isOfferNotFoundFailure(response: String): Boolean {
-        val lower = response.lowercase()
-        return lower.contains("ussd code change detected") ||
-            (lower.contains("detected changes in the ussd menu") && lower.contains("save & learn")) ||
-            (lower.contains("stopped the dispatch") && lower.contains("ussd menu")) ||
-            lower.contains("no dialer available") ||
-            lower.contains("could not be identified for saving")
-    }
-
-    private fun attemptFallback(
-        request: AutomationRequest,
-        originalTx: Transaction?,
-        response: String,
-        reasonLabel: String
-    ): Boolean {
-        val tx = originalTx
-        val fallbackOffers = DailyLimitPolicy.resolveFallbackOffers(
-            context = this,
-            originalOfferId = request.offerId
-        )
-
-        fallbackOffers.forEachIndexed { index, fallbackOffer ->
-            val fallbackStarted = startFallbackDispatch(request, fallbackOffer, tx)
-            if (fallbackStarted) {
-                val note = buildString {
-                    append("Original offer stopped ($reasonLabel). Fallback offer started: ${fallbackOffer.name}.")
-                    if (index > 0) {
-                        append(" It was selected after earlier fallback plan(s) could not be started.")
-                    }
+            val fallbackOffers = DailyLimitPolicy.resolveFallbackOffers(context, request.offerId)
+            for (offer in fallbackOffers) {
+                if (RelayManager.isPrimary(context) && offer.targetDevice.uppercase() == "RELAY") {
+                    return RelayManager.forwardBuyAmount(context, request.phoneNumber, offer.price)
                 }
-                val message = "$response\n\n$note"
-                saveTransactionResponse(request.txId, "Cancelled", message)
-                sendBroadcastUpdate(request.txId, "Cancelled", message)
-                OfferNotifications.notify(
-                    this,
-                    "Fallback Dispatched",
-                    "${request.offerName.ifBlank { "Original offer" }} stopped ($reasonLabel). ${fallbackOffer.name} was started for ${request.phoneNumber}."
+
+                val finalCode = UssdHelper.normalizeUssdCode(offer.ussdCode, request.phoneNumber)
+                if (finalCode.isBlank()) continue
+
+                // Create a new transaction for fallback
+                val txId = transactionHelper.createFallbackTransaction(request, offer, reason)
+                if (txId < 0) continue
+
+                // Start automation for fallback
+                startOfferAutomation(
+                    offer = offer,
+                    phoneNumber = request.phoneNumber,
+                    txId = txId,
+                    finalCode = finalCode,
+                    mode = offer.executionMode
                 )
                 return true
             }
+            return false
         }
-        return false
     }
+    // endregion
 
-    private fun handleDailyLimitPending(request: AutomationRequest, response: String) {
-        val config = DailyLimitPolicy.load(this)
-        val originalTx = loadTransactionById(this, request.txId)
-        if (config.fallbackEnabled && DailyLimitPolicy.ruleIncludesAlreadyRecommended(config.fallbackRuleMode)) {
-            val fallbackOffers = DailyLimitPolicy.resolveFallbackOffers(
-                context = this,
-                originalOfferId = request.offerId
+    // region ResponseAnalyzer – determines status and retry conditions
+    private inner class ResponseAnalyzer(private val context: Context) {
+        private val patternManager = UssdResponsePatternManager(context)
+
+        fun determineStatus(response: String): String {
+            return patternManager.determineResponseStatus(response)
+        }
+
+        fun isSuccess(response: String): Boolean {
+            return patternManager.matchesSuccessPattern(response) ||
+                    response.contains("you have transferred", ignoreCase = true) ||
+                    response.contains("transferred successfully", ignoreCase = true)
+        }
+
+        fun shouldRetry(status: String, response: String): Boolean {
+            if (response.isBlank()) return false
+            if (status in setOf(
+                    TransactionStatus.SUCCESS.value,
+                    TransactionStatus.PENDING.value,
+                    TransactionStatus.CANCELLED.value
+                )
+            ) return false
+            return patternManager.matchesRetriableFinalPattern(response)
+        }
+    }
+    // endregion
+
+    // region RetryManager – handles retry scheduling and state
+    private inner class RetryManager(private val context: Context) {
+        companion object {
+            private const val PREFS_NAME = "retriable_ussd_response_retry"
+            private const val ACTIVE_RETRY_WINDOW_MS = 60_000L
+            private const val ACTIVE_RETRY_INTERVAL_MS = 5_000L
+            private const val FIRST_BACKOFF_MS = 5 * 60_000L
+            private const val REPEATED_BACKOFF_MS = 10 * 60_000L
+        }
+
+        private data class RetryState(
+            val windowStartAtMillis: Long,
+            val completedWindows: Int,
+            val nextAttemptStartsNewWindow: Boolean,
+            val totalAttempts: Int
+        )
+
+        private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
+
+        fun scheduleRetry(request: UssdRequest, response: String, status: String, transcript: List<String>?) {
+            val now = System.currentTimeMillis()
+            val state = loadState(request.txId) ?: RetryState(
+                windowStartAtMillis = now,
+                completedWindows = 0,
+                nextAttemptStartsNewWindow = false,
+                totalAttempts = 0
             )
 
-            fallbackOffers.forEachIndexed { index, fallbackOffer ->
-                val fallbackStarted = startFallbackDispatch(request, fallbackOffer, originalTx)
-                if (fallbackStarted) {
-                    val note = buildString {
-                        append("Original offer stopped because of the daily limit. Fallback offer started: ${fallbackOffer.name}.")
-                        if (index > 0) {
-                            append(" It was selected after earlier fallback plan(s) could not be started.")
-                        }
-                    }
-                    val message = "$response\n\n$note"
-                    saveTransactionResponse(request.txId, "Cancelled", message)
-                    sendBroadcastUpdate(request.txId, "Cancelled", message)
-                    OfferNotifications.notify(
-                        this,
-                        "Fallback Dispatched",
-                        "${request.offerName.ifBlank { "Original offer" }} hit the daily limit. ${fallbackOffer.name} was started for ${request.phoneNumber}."
-                    )
-                    return
-                }
-            }
-        }
+            val elapsedInWindow = (now - state.windowStartAtMillis).coerceAtLeast(0L)
+            val withinActiveWindow = elapsedInWindow < ACTIVE_RETRY_WINDOW_MS
 
-        if (config.mode == DailyLimitPolicy.MODE_NOTICE_ONLY) {
-            val note = if (config.repeatNoticeEnabled) {
-                "Reply 1 to send another number today, or reply 2 to confirm tomorrow morning dispatch."
+            val delayMs = if (withinActiveWindow) {
+                ACTIVE_RETRY_INTERVAL_MS
+            } else if (state.completedWindows == 0) {
+                FIRST_BACKOFF_MS
             } else {
-                "Waiting for an alternative number or a manual retry tomorrow."
+                REPEATED_BACKOFF_MS
             }
-            val message = "$response\n\n$note"
-            saveTransactionResponse(request.txId, "Pending", message)
-            sendBroadcastUpdate(request.txId, "Pending", message)
-            if (config.repeatNoticeEnabled) {
-                originalTx?.phoneNumber?.takeIf { it.isNotBlank() }?.let { customerPhone ->
-                    DailyLimitPolicy.beginReplyMenu(this, customerPhone, request.txId)
-                }
-            }
-            sendCustomerOutcomeSms(this, "limit_notice", originalTx)
-            OfferNotifications.notify(
-                this,
-                "Daily Limit Notice",
-                "${request.phoneNumber} has already received today's offer. A notice was sent instead of auto-queueing."
+
+            val nextState = state.copy(
+                nextAttemptStartsNewWindow = !withinActiveWindow,
+                totalAttempts = state.totalAttempts + 1
             )
-        } else {
-            sendCustomerOutcomeSms(this, "pending", originalTx)
-            scheduleRetryTomorrow(request)
+
+            if (!scheduleAlarm(request, delayMs)) {
+                // Fallback: save as failed
+                clearState(request.txId)
+                transactionHelper.saveAndBroadcast(request.txId, status, response, transcript)
+                return
+            }
+
+            saveState(request.txId, nextState)
+            val message = buildRetryMessage(response, withinActiveWindow, delayMs, nextState, elapsedInWindow)
+            transactionHelper.saveAndBroadcast(request.txId, TransactionStatus.RETRYING.value, message, transcript)
+        }
+
+        fun scheduleRetryTomorrow(request: UssdRequest) {
+            val tomorrow = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, 1)
+                set(Calendar.HOUR_OF_DAY, 7)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            scheduleAlarm(request, tomorrow.timeInMillis - System.currentTimeMillis())
+        }
+
+        fun armRetryWindow(txId: Int) {
+            if (txId < 0) return
+            val state = loadState(txId) ?: return
+            if (state.nextAttemptStartsNewWindow) {
+                saveState(txId, state.copy(
+                    windowStartAtMillis = System.currentTimeMillis(),
+                    nextAttemptStartsNewWindow = false
+                ))
+            }
+        }
+
+        fun clearState(txId: Int) {
+            if (txId < 0) return
+            cancelAlarm(txId)
+            prefs.edit()
+                .remove("tx_${txId}_windowStart")
+                .remove("tx_${txId}_completedWindows")
+                .remove("tx_${txId}_nextWindow")
+                .remove("tx_${txId}_attempts")
+                .apply()
+        }
+
+        private fun loadState(txId: Int): RetryState? {
+            if (txId < 0) return null
+            if (!prefs.contains("tx_${txId}_windowStart")) return null
+            return RetryState(
+                windowStartAtMillis = prefs.getLong("tx_${txId}_windowStart", 0L),
+                completedWindows = prefs.getInt("tx_${txId}_completedWindows", 0),
+                nextAttemptStartsNewWindow = prefs.getBoolean("tx_${txId}_nextWindow", false),
+                totalAttempts = prefs.getInt("tx_${txId}_attempts", 0)
+            )
+        }
+
+        private fun saveState(txId: Int, state: RetryState) {
+            prefs.edit()
+                .putLong("tx_${txId}_windowStart", state.windowStartAtMillis)
+                .putInt("tx_${txId}_completedWindows", state.completedWindows)
+                .putBoolean("tx_${txId}_nextWindow", state.nextAttemptStartsNewWindow)
+                .putInt("tx_${txId}_attempts", state.totalAttempts)
+                .apply()
+        }
+
+        private fun scheduleAlarm(request: UssdRequest, delayMs: Long): Boolean {
+            if (delayMs <= 0) return false
+            val intent = buildAutomationIntent(context, request, ACTION_RETRY_RETRIABLE_RESPONSE)
+            val pi = PendingIntent.getService(
+                context,
+                request.txId,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            return AlarmCompat.scheduleRtcWakeup(
+                context = context,
+                triggerAtMillis = System.currentTimeMillis() + delayMs,
+                pendingIntent = pi,
+                preferExact = false,
+                allowWhileIdle = true
+            )
+        }
+
+        private fun cancelAlarm(txId: Int) {
+            if (txId < 0) return
+            runCatching {
+                val intent = Intent(context, AutomationService::class.java).apply {
+                    action = ACTION_RETRY_RETRIABLE_RESPONSE
+                }
+                val pi = PendingIntent.getService(
+                    context,
+                    txId,
+                    intent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                (context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager)?.cancel(pi)
+                pi.cancel()
+            }
+        }
+
+        private fun buildRetryMessage(
+            response: String,
+            withinActiveWindow: Boolean,
+            delayMs: Long,
+            state: RetryState,
+            elapsedInWindow: Long
+        ): String {
+            val timing = if (withinActiveWindow) {
+                val remaining = ((ACTIVE_RETRY_WINDOW_MS - elapsedInWindow).coerceAtLeast(0L) + 999L) / 1000L
+                "Automatic retry still active. Next retry in ${formatDelay(delayMs)}. Remaining window: ${remaining}s."
+            } else {
+                val backoff = if (state.completedWindows == 1) "5 minutes" else "10 minutes"
+                "Retry window exhausted. Waiting $backoff before starting another 1‑minute retry window."
+            }
+            return "$response\n\n$timing"
+        }
+
+        private fun formatDelay(delayMs: Long): String = when {
+            delayMs % 60_000L == 0L -> {
+                val minutes = delayMs / 60_000L
+                if (minutes == 1L) "1 minute" else "$minutes minutes"
+            }
+            delayMs % 1000L == 0L -> {
+                val seconds = delayMs / 1000L
+                if (seconds == 1L) "1 second" else "$seconds seconds"
+            }
+            else -> "${delayMs}ms"
         }
     }
+    // endregion
 
-    private fun startFallbackDispatch(
-        request: AutomationRequest,
-        fallbackOffer: OfferItem,
-        originalTx: Transaction?
-    ): Boolean {
-        return if (RelayManager.isPrimary(this) && fallbackOffer.targetDevice.uppercase() == "RELAY") {
-            RelayManager.forwardBuyAmount(this, request.phoneNumber, fallbackOffer.price)
-        } else {
-            val finalCode = UssdHelper.normalizeUssdCode(fallbackOffer.ussdCode, request.phoneNumber)
-            if (finalCode.isBlank()) return false
-            val fallbackTxId = createPendingTransaction(
-                this,
-                fallbackOffer.name,
-                "KSh ${fallbackOffer.price}",
+    // region TransactionHelper – saves and broadcasts
+    private inner class TransactionHelper(private val context: Context) {
+        fun saveAndBroadcast(txId: Int, status: String, response: String, transcript: List<String>? = null) {
+            if (txId < 0) return
+            val saved = saveTransactionOutcome(context, txId, status, response, transcript?.joinToString("\n\n"))
+            if (saved) {
+                broadcastUpdate(txId, status, response)
+            } else {
+                Log.w(TAG, "Transaction $txId not found")
+            }
+        }
+
+        fun finishWithError(request: UssdRequest, message: String) {
+            if (request.txId >= 0) {
+                saveAndBroadcast(request.txId, TransactionStatus.FAILED.value, message)
+            }
+            finishExecution(scheduleAirtimeRefresh = true)
+        }
+
+        fun createFallbackTransaction(request: UssdRequest, offer: OfferItem, reason: String): Int {
+            val originalTx = loadTransactionById(context, request.txId)
+            return createPendingTransaction(
+                context,
+                offer.name,
+                "KSh ${offer.price}",
                 request.phoneNumber,
-                finalCode,
+                UssdHelper.normalizeUssdCode(offer.ussdCode, request.phoneNumber),
                 originalTx?.clientName.orEmpty(),
                 status = if (originalTx?.showInRecent == true) TransactionStatus.PROCESSING.value else TransactionStatus.PENDING.value,
                 source = originalTx?.source ?: TX_SOURCE_AUTOMATED,
                 showInRecent = originalTx?.showInRecent ?: true,
-                offerId = fallbackOffer.id
+                offerId = offer.id
             )
-            if (fallbackTxId < 0) return false
-            startOfferAutomation(
-                offer = fallbackOffer,
-                phoneNumber = request.phoneNumber,
-                txId = fallbackTxId,
-                finalCode = finalCode,
-                mode = fallbackOffer.executionMode
-            )
-            true
+        }
+
+        private fun broadcastUpdate(txId: Int, status: String, response: String) {
+            Handler(Looper.getMainLooper()).post {
+                context.sendBroadcast(
+                    Intent("com.bingwa.mobile.TX_UPDATED")
+                        .setPackage(context.packageName)
+                        .putExtra("txId", txId)
+                        .putExtra("status", status)
+                        .putExtra("response", response)
+                )
+            }
         }
     }
+    // endregion
 
-    private fun saveTransactionResponse(txId: Int, status: String, response: String, transcript: String? = null) {
-        val saved = saveTransactionOutcome(this, txId, status, response, transcript)
-        if (saved) {
-            Log.d(TAG, "SAVED txId=$txId status=$status response='${response.take(80)}'")
-        } else {
-            Log.w(TAG, "Transaction $txId not found in list")
+    // region NotificationHelper – builds notifications
+    private inner class NotificationHelper(private val context: Context) {
+        fun notifyFallback(request: UssdRequest, response: String) {
+            val title = "Fallback Dispatched"
+            val message = "${request.offerName.ifBlank { "Original offer" }} stopped. ${request.phoneNumber} will be sent via fallback."
+            OfferNotifications.notify(context, title, message)
+        }
+
+        fun notifyPending(request: UssdRequest) {
+            val title = "Daily Limit Notice"
+            val message = "${request.phoneNumber} has already received today's offer. A notice was sent instead of auto-queueing."
+            OfferNotifications.notify(context, title, message)
+        }
+
+        fun notifyLearningNoOffer(request: UssdRequest) {
+            OfferNotifications.notify(
+                context,
+                "USSD Signature Learning",
+                "USSD signature learning finished, but the offer could not be identified for saving."
+            )
+        }
+
+        fun notifyLearningFailed(request: UssdRequest) {
+            OfferNotifications.notify(
+                context,
+                "USSD Signature Learning",
+                "The system could not learn a signature for ${request.offerName.ifBlank { "offer #${request.offerId}" }}. Open the offer and run Save & Learn again while the USSD menu is available."
+            )
+        }
+
+        fun notifyLearningSuccess(request: UssdRequest, result: AdvancedDispatchResult) {
+            val offerLabel = request.offerName.ifBlank { "offer #${request.offerId}" }
+            val learningPhone = request.phoneNumber.ifBlank { "the provided test number" }
+            val captureSummary = if (result.learningCaptures.isNotEmpty()) {
+                " Captured ${result.learningCaptures.size} USSD popup(s), the selected option, and the recorded text for each step."
+            } else ""
+            val finalPopup = result.learningCaptures.lastOrNull()?.popupText
+                ?.replace(Regex("\\s+"), " ")
+                ?.trim()
+                ?.take(120)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { " Last popup: $it" }
+                .orEmpty()
+            val learnedSummary = if (result.learnedSignature.isNotEmpty()) {
+                "The system learned ${result.learnedSignature.size} USSD menu step(s) for $offerLabel using $learningPhone."
+            } else {
+                "The system recorded the USSD learning transcript for $offerLabel using $learningPhone."
+            }
+            val message = "$learnedSummary$captureSummary$finalPopup Review the learned steps in Bingwa Mobile, then approve or relearn before this signature replaces the saved one."
+            OfferNotifications.notify(context, "USSD Signature Ready For Approval", message)
         }
     }
+    // endregion
 
-    private fun buildAutomationIntent(context: Context, request: AutomationRequest, action: String? = null): Intent =
+    // region ForegroundServiceHelper – manages foreground state
+    private inner class ForegroundServiceHelper(private val service: Service) {
+        private val channelId = "automation_service"
+        private val notificationId = 2014
+
+        fun createNotificationChannel() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val manager = service.getSystemService(NotificationManager::class.java)
+                val channel = NotificationChannel(channelId, "USSD Automation", NotificationManager.IMPORTANCE_LOW)
+                manager.createNotificationChannel(channel)
+            }
+        }
+
+        fun startForeground(): Boolean {
+            val notification = NotificationCompat.Builder(service, channelId)
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setContentTitle("Bingwa Mobile")
+                .setContentText("Running a USSD automation task")
+                .setContentIntent(
+                    PendingIntent.getActivity(
+                        service,
+                        0,
+                        Intent(service, MainActivity::class.java),
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                    )
+                )
+                .setOngoing(true)
+                .build()
+
+            return try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    service.startForeground(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                } else {
+                    service.startForeground(notificationId, notification)
+                }
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start foreground", e)
+                false
+            }
+        }
+
+        @Suppress("DEPRECATION")
+        fun stopForeground() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                service.stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                service.stopForeground(true)
+            }
+        }
+    }
+    // endregion
+
+    // region SimResolver – centralized SIM selection
+    private inner class SimResolver(private val context: Context) {
+        fun getTargets(selectionOverride: Int): List<UssdSimTarget> {
+            val override = selectionOverride.takeUnless { it == OFFER_SIM_USE_GENERAL }
+            return resolveUssdSimTargets(context, override)
+        }
+    }
+    // endregion
+
+    // region Utilities (kept as top-level functions for simplicity)
+    private fun buildAutomationIntent(context: Context, request: UssdRequest, action: String? = null): Intent =
         Intent(context, AutomationService::class.java).apply {
             this.action = action
             putExtra("mode", request.mode)
@@ -807,270 +991,29 @@ class AutomationService : Service() {
             putExtra("returnToAppAggressively", request.returnToAppAggressively)
         }
 
-    private fun scheduleRetriableResponseRetry(request: AutomationRequest, delayMs: Long): Boolean {
-        return runCatching {
-            val triggerAt = System.currentTimeMillis() + delayMs
-            val intent = buildAutomationIntent(this, request, ACTION_RETRY_RETRIABLE_RESPONSE)
-            val pi = PendingIntent.getService(
-                this,
-                request.txId,
-                intent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-            val scheduled = AlarmCompat.scheduleRtcWakeup(
-                context = this,
-                triggerAtMillis = triggerAt,
-                pendingIntent = pi,
-                preferExact = false,
-                allowWhileIdle = true
-            )
-            if (scheduled) {
-                Log.d(
-                    TAG,
-                    "Scheduled retriable-response retry for txId=${request.txId} in ${delayMs}ms"
-                )
-            }
-            scheduled
-        }.getOrElse { error ->
-            Log.e(TAG, "scheduleRetriableResponseRetry failed for txId=${request.txId}", error)
-            false
-        }
-    }
-
-    private fun shouldRetryRetriableFinalResponse(status: String, response: String): Boolean {
-        if (response.isBlank()) return false
-        if (status.equals(TransactionStatus.SUCCESS.value, ignoreCase = true) ||
-            status.equals(TransactionStatus.PENDING.value, ignoreCase = true) ||
-            status.equals(TransactionStatus.CANCELLED.value, ignoreCase = true)
-        ) {
-            return false
-        }
-        return patternManager.matchesRetriableFinalPattern(response)
-    }
-
-    private fun handleRetriableFinalResponse(
-        request: AutomationRequest,
-        response: String,
-        originalStatus: String,
-        transcript: String?
+    private fun startOfferAutomation(
+        offer: OfferItem,
+        phoneNumber: String,
+        txId: Int,
+        finalCode: String,
+        mode: String
     ) {
-        val now = System.currentTimeMillis()
-        val currentState = loadRetriableResponseRetryState(request.txId)
-            ?: RetriableResponseRetryState(
-                windowStartAtMillis = now,
-                completedWindows = 0,
-                nextAttemptStartsNewWindow = false,
-                totalAttempts = 0
-            )
-        val windowStart = currentState.windowStartAtMillis.takeIf { it > 0L } ?: now
-        val elapsedInWindow = (now - windowStart).coerceAtLeast(0L)
-        val withinActiveWindow = elapsedInWindow < ACTIVE_RETRY_WINDOW_MS
-        val delayMs = if (withinActiveWindow) {
-            ACTIVE_RETRY_INTERVAL_MS
-        } else if (currentState.completedWindows == 0) {
-            FIRST_BACKOFF_MS
-        } else {
-            REPEATED_BACKOFF_MS
+        val intent = Intent(this, AutomationService::class.java).apply {
+            putExtra("mode", mode)
+            putExtra("code", finalCode)
+            putExtra("phoneNumber", phoneNumber)
+            putExtra("txId", txId)
+            putExtra("offerId", offer.id)
+            putExtra("offerName", offer.name)
+            putExtra("simSelection", offer.simSelection)
+            putExtra("signatureEnabled", offer.signatureEnabled)
+            putExtra("signatureMode", offer.signatureMode)
+            putExtra("signatureLearning", false)
+            putExtra("executionPriority", USSD_EXECUTION_PRIORITY_NORMAL)
+            putExtra("returnToAppAggressively", true)
         }
-        val nextState = if (withinActiveWindow) {
-            currentState.copy(
-                windowStartAtMillis = windowStart,
-                nextAttemptStartsNewWindow = false,
-                totalAttempts = currentState.totalAttempts + 1
-            )
-        } else {
-            currentState.copy(
-                completedWindows = currentState.completedWindows + 1,
-                nextAttemptStartsNewWindow = true,
-                totalAttempts = currentState.totalAttempts + 1
-            )
-        }
-        if (!scheduleRetriableResponseRetry(request, delayMs)) {
-            clearRetriableResponseRetryState(request.txId)
-            saveTransactionResponse(request.txId, originalStatus, response, transcript)
-            sendBroadcastUpdate(request.txId, originalStatus, response)
-            if (originalStatus == TransactionStatus.FAILED.value) {
-                handleFailedWithFallback(request, response)
-            }
-            return
-        }
-        saveRetriableResponseRetryState(request.txId, nextState)
-        val retryMessage = buildRetriableResponseMessage(
-            response = response,
-            withinActiveWindow = withinActiveWindow,
-            delayMs = delayMs,
-            state = nextState,
-            elapsedInWindow = elapsedInWindow
-        )
-        saveTransactionResponse(request.txId, TransactionStatus.RETRYING.value, retryMessage, transcript)
-        sendBroadcastUpdate(request.txId, TransactionStatus.RETRYING.value, retryMessage)
+        startService(intent)
     }
 
-    private fun buildRetriableResponseMessage(
-        response: String,
-        withinActiveWindow: Boolean,
-        delayMs: Long,
-        state: RetriableResponseRetryState,
-        elapsedInWindow: Long
-    ): String {
-        val timingNote = if (withinActiveWindow) {
-            val remainingSeconds = ((ACTIVE_RETRY_WINDOW_MS - elapsedInWindow).coerceAtLeast(0L) + 999L) / 1_000L
-            "Automatic retry is still active. Next retry in ${formatRetryDelay(delayMs)}. Active retry window remaining: ${remainingSeconds}s."
-        } else {
-            val backoffLabel = if (state.completedWindows == 1) "5 minutes" else "10 minutes"
-            "Automatic retry window was exhausted. Waiting $backoffLabel before starting another 1-minute retry window."
-        }
-        return "$response\n\n$timingNote"
-    }
-
-    private fun formatRetryDelay(delayMs: Long): String = when {
-        delayMs % (60_000L) == 0L -> {
-            val minutes = delayMs / 60_000L
-            if (minutes == 1L) "1 minute" else "$minutes minutes"
-        }
-        delayMs % 1_000L == 0L -> {
-            val seconds = delayMs / 1_000L
-            if (seconds == 1L) "1 second" else "$seconds seconds"
-        }
-        else -> "${delayMs}ms"
-    }
-
-    private fun armRetriableResponseWindow(txId: Int) {
-        if (txId < 0) return
-        val current = loadRetriableResponseRetryState(txId) ?: return
-        if (!current.nextAttemptStartsNewWindow && current.windowStartAtMillis > 0L) return
-        saveRetriableResponseRetryState(
-            txId,
-            current.copy(
-                windowStartAtMillis = System.currentTimeMillis(),
-                nextAttemptStartsNewWindow = false
-            )
-        )
-    }
-
-    private fun retriableResponsePrefs() =
-        getSharedPreferences(RETRIABLE_RESPONSE_PREFS, Context.MODE_PRIVATE)
-
-    private fun loadRetriableResponseRetryState(txId: Int): RetriableResponseRetryState? {
-        if (txId < 0) return null
-        val prefs = retriableResponsePrefs()
-        if (!prefs.contains("tx_${txId}_windowStart")) return null
-        return RetriableResponseRetryState(
-            windowStartAtMillis = prefs.getLong("tx_${txId}_windowStart", 0L),
-            completedWindows = prefs.getInt("tx_${txId}_completedWindows", 0),
-            nextAttemptStartsNewWindow = prefs.getBoolean("tx_${txId}_nextWindow", false),
-            totalAttempts = prefs.getInt("tx_${txId}_attempts", 0)
-        )
-    }
-
-    private fun saveRetriableResponseRetryState(txId: Int, state: RetriableResponseRetryState) {
-        if (txId < 0) return
-        retriableResponsePrefs()
-            .edit()
-            .putLong("tx_${txId}_windowStart", state.windowStartAtMillis)
-            .putInt("tx_${txId}_completedWindows", state.completedWindows)
-            .putBoolean("tx_${txId}_nextWindow", state.nextAttemptStartsNewWindow)
-            .putInt("tx_${txId}_attempts", state.totalAttempts)
-            .apply()
-    }
-
-    private fun clearRetriableResponseRetryState(txId: Int) {
-        if (txId < 0) return
-        cancelRetriableResponseRetryAlarm(txId)
-        retriableResponsePrefs()
-            .edit()
-            .remove("tx_${txId}_windowStart")
-            .remove("tx_${txId}_completedWindows")
-            .remove("tx_${txId}_nextWindow")
-            .remove("tx_${txId}_attempts")
-            .apply()
-    }
-
-    private fun cancelRetriableResponseRetryAlarm(txId: Int) {
-        if (txId < 0) return
-        runCatching {
-            cancelRetriableResponseRetry(this, txId)
-        }.onFailure {
-            Log.w(TAG, "cancelRetriableResponseRetry failed for txId=$txId", it)
-        }
-    }
-
-    private fun scheduleRetryTomorrow(request: AutomationRequest) {
-        try {
-            val tomorrow = Calendar.getInstance().apply {
-                add(Calendar.DAY_OF_YEAR, 1)
-                set(Calendar.HOUR_OF_DAY, 7)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            val intent = buildAutomationIntent(this, request, ACTION_RETRY_PENDING)
-            val pi = PendingIntent.getService(
-                this, request.txId, intent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-            val scheduled = AlarmCompat.scheduleRtcWakeup(
-                context = this,
-                triggerAtMillis = tomorrow.timeInMillis,
-                pendingIntent = pi,
-                preferExact = true,
-                allowWhileIdle = true
-            )
-            Log.d(TAG, "Retry scheduled=$scheduled for ${tomorrow.time}")
-        } catch (e: Exception) {
-            Log.e(TAG, "scheduleRetryTomorrow failed", e)
-        }
-    }
-
-    private fun sendBroadcastUpdate(txId: Int, status: String, response: String) {
-        Handler(Looper.getMainLooper()).post {
-            sendBroadcast(
-                Intent("com.bingwa.mobile.TX_UPDATED")
-                    .setPackage(packageName)
-                    .putExtra("txId", txId)
-                    .putExtra("status", status)
-                    .putExtra("response", response)
-            )
-        }
-    }
-
-    override fun onDestroy() {
-        stopForegroundCompat()
-        super.onDestroy()
-    }
-
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = getSystemService(NotificationManager::class.java)
-            val channel = NotificationChannel(CHANNEL_ID, "USSD Automation", NotificationManager.IMPORTANCE_LOW)
-            manager.createNotificationChannel(channel)
-        }
-    }
-
-    private fun buildNotification() =
-        NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
-            .setContentTitle("Bingwa Mobile")
-            .setContentText("Running a USSD automation task")
-            .setContentIntent(
-                PendingIntent.getActivity(
-                    this,
-                    0,
-                    Intent(this, MainActivity::class.java),
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
-            )
-            .setOngoing(true)
-            .build()
-
-    @Suppress("DEPRECATION")
-    private fun stopForegroundCompat() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            stopForeground(true)
-        }
-    }
+    // endregion
 }
