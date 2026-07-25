@@ -12,14 +12,24 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import java.text.NumberFormat
+import java.util.*
 
 class BalanceChecker : Service() {
     private var foregroundReady = false
 
-    data class BalanceCheckResult(
-        val display: String,
-        val selectionOverride: Int?,
-        val persistResult: Boolean
+    // ─── Public Data Classes ──────────────────────────────────────────────
+    data class BalanceResult(
+        val display: String,               // e.g. "KSh 100.50"
+        val rawAmount: Double,             // 100.50
+        val currency: String,              // "KSh", "KES", etc.
+        val rawText: String,               // full USSD response
+        val timestamp: Long,               // when parsed
+        val sourceSimSlot: Int?,           // which SIM slot (0,1) or null if unknown
+        val success: Boolean,
+        val errorMessage: String? = null,
+        val selectionOverride: Int? = null,
+        val persistResult: Boolean = true
     )
 
     companion object {
@@ -27,44 +37,55 @@ class BalanceChecker : Service() {
         private const val DEFAULT_BALANCE_USSD = "*144#"
         private const val AIRTEL_BALANCE_USSD = "*131#"
         private const val CHECK_INTERVAL = 5 * 60_000L
-        private const val BALANCE_TIMEOUT_MS = 30_000L
-        private const val EVENT_REFRESH_DELAY_MS = 2_000L
+        private const val BALANCE_TIMEOUT_MS = 25_000L
+        private const val EVENT_REFRESH_DELAY_MS = 1_500L
         private const val FOREGROUND_REFRESH_COOLDOWN_MS = 3_000L
+        private const val SUCCESS_COOLDOWN_MS = 30_000L   // don't check again within 30s if success
+        private const val MAX_RETRY_ATTEMPTS = 3
+        private const val RETRY_BACKOFF_MS = 2_000L
         private const val CHANNEL_ID = "balance_checker"
         private const val NOTIFICATION_ID = 2013
         private const val KEY_LAST_AIRTIME_DISPLAY = "last_airtime_display"
+        private const val KEY_LAST_BALANCE_AMOUNT = "last_balance_amount"
+        private const val KEY_LAST_CHECK_TIMESTAMP = "last_check_timestamp"
 
-        @Volatile var balanceCallback: ((String) -> Unit)? = null
-        @Volatile var balanceResultListener: ((BalanceCheckResult) -> Unit)? = null
-        @Volatile var currentBalanceStr: String = ""
-        @Volatile var currentBalance: Int = -1
-        @Volatile var checking = false
-        @Volatile private var lastCheckStartedAt: Long = 0L
+        // Listeners
+        @Volatile var balanceResultListener: ((BalanceResult) -> Unit)? = null
+        @Volatile var balanceCallback: ((String) -> Unit)? = null  // legacy simple callback
+
+        // State
+        @Volatile private var lastKnownDisplay: String = ""
+        @Volatile private var lastKnownAmount: Double = -1.0
+        @Volatile private var lastCheckTimestamp: Long = 0L
+        @Volatile private var checking = false
+        @Volatile private var lastCheckStartedAt = 0L
+        @Volatile private var lastSuccessfulCheckAt = 0L
 
         private val timeoutHandler = Handler(Looper.getMainLooper())
         private var timeoutRunnable: Runnable? = null
         private var pendingRefreshRunnable: Runnable? = null
-        @Volatile private var activeRequestContext: BalanceRequestContext? = null
-        @Volatile private var queuedBusyRetryContext: BalanceRequestContext? = null
+        private var activeRequestContext: BalanceRequestContext? = null
+        private var retryCount = 0
+        private var retryRunnable: Runnable? = null
 
         private data class BalanceRequestContext(
             val selectionOverride: Int? = null,
-            val persistResult: Boolean = true
+            val persistResult: Boolean = true,
+            val isRetry: Boolean = false
         )
 
         private data class BalanceCandidate(
             val amount: Double,
+            val currency: String,
             val score: Int
         )
 
-        internal fun resolveBalanceUssdCode(context: Context, selectionOverride: Int? = null): String {
-            return if (isAirtelBalanceTarget(context, selectionOverride)) {
-                AIRTEL_BALANCE_USSD
-            } else {
-                DEFAULT_BALANCE_USSD
-            }
-        }
+        // ─── Public API ──────────────────────────────────────────────────
 
+        /**
+         * Request a balance check. Returns true if started successfully.
+         * If a check is already in progress and specialHandling is true, it will be queued.
+         */
         fun requestBalanceCheck(
             context: Context,
             selectionOverride: Int? = null,
@@ -74,105 +95,50 @@ class BalanceChecker : Service() {
         ): Boolean {
             val appContext = context.applicationContext
             val now = System.currentTimeMillis()
-            val requestContext = BalanceRequestContext(
-                selectionOverride = selectionOverride,
-                persistResult = persistResult
-            )
-            if (checking) {
-                Log.d(TAG, "check already in flight — ${if (specialHandling) "keeping existing request" else "skipping"}")
-                return specialHandling
-            }
-            if (selectionOverride == null && isUssdSessionBusy()) {
-                if (specialHandling) {
-                    queueBusyRetry(appContext, requestContext)
-                    Log.d(TAG, "another USSD task is active — queued balance check for immediate retry")
-                    return true
-                }
-                Log.d(TAG, "another USSD task is active — skipping balance check")
-                return false
-            }
-            if (
-                !specialHandling &&
-                !ignoreCooldown &&
-                selectionOverride == null &&
-                now - lastCheckStartedAt < FOREGROUND_REFRESH_COOLDOWN_MS
-            ) {
-                Log.d(TAG, "balance check cooldown active — skipping duplicate request")
-                return false
-            }
-            checking = true
-            lastCheckStartedAt = now
-            activeRequestContext = requestContext
-            armTimeout()
-            val balanceUssd = resolveBalanceUssdCode(context, selectionOverride)
-            Log.d(TAG, "Requesting balance via $balanceUssd (SILENT)")
 
-            UssdNavigationService.balanceCallback = { raw ->
-                Log.d(TAG, "balanceCallback raw='$raw'")
-                cancelTimeout()
-                checking = false
-                UssdNavigationService.balanceCallback = null
-                val completedRequest = activeRequestContext ?: requestContext
-                activeRequestContext = null
-
-                val display = parseBalanceDisplay(raw)
-                val intVal = if (display.isNotEmpty()) parseBalanceInt(raw) else -1
-                if (completedRequest.persistResult) {
-                    currentBalance = intVal
-                    currentBalanceStr = display
-                    if (display.isNotEmpty()) {
-                        persistLastKnownBalance(context, display)
-                    }
+            // If we have a recent successful check and cooldown applies, skip
+            if (!ignoreCooldown && selectionOverride == null) {
+                if (now - lastSuccessfulCheckAt < SUCCESS_COOLDOWN_MS && lastKnownAmount > 0) {
+                    Log.d(TAG, "Skipping balance check – successful check within cooldown")
+                    return false
                 }
-                if (completedRequest.persistResult && display.isNotEmpty()) {
-                    RelayManager.syncPrimaryAirtimeBalance(context, display)
-                }
-
-                Handler(Looper.getMainLooper()).post {
-                    balanceCallback?.invoke(display)
-                    balanceResultListener?.invoke(
-                        BalanceCheckResult(
-                            display = display,
-                            selectionOverride = completedRequest.selectionOverride,
-                            persistResult = completedRequest.persistResult
-                        )
-                    )
-                    if (completedRequest.persistResult) {
-                        // Trigger admin alerts after balance update
-                        MpesaReceiver.checkAndSendAlerts(context)
-                    }
-                }
-            }
-
-            // Try UssdHelper first (silent), fallback to AutomationService SIMPLE
-            val helperSuccess = UssdHelper.dialUssd(
-                appContext,
-                balanceUssd,
-                silentOnly = true,
-                subIdOverride = selectionOverride,
-                onSuccess = { response ->
-                    Log.d(TAG, "UssdHelper success: '$response'")
-                    UssdNavigationService.balanceCallback?.invoke(response)
-                },
-                onFailure = { error ->
-                    Log.e(TAG, "UssdHelper failed: $error, trying AutomationService")
-                    if (!startBalanceFallback(appContext, balanceUssd, selectionOverride)) {
-                        Log.w(TAG, "automation fallback skipped while another USSD task is active")
-                        onBalanceCheckFailed()
-                    }
-                }
-            )
-            if (!helperSuccess) {
-                Log.w(TAG, "UssdHelper returned false, using AutomationService")
-                if (!startBalanceFallback(appContext, balanceUssd, selectionOverride)) {
-                    Log.w(TAG, "balance fallback could not start")
-                    onBalanceCheckFailed()
+                if (now - lastCheckStartedAt < FOREGROUND_REFRESH_COOLDOWN_MS) {
+                    Log.d(TAG, "Skipping balance check – cooldown active")
                     return false
                 }
             }
+
+            // If we're already checking, queue if special
+            if (checking) {
+                if (specialHandling) {
+                    queueBalanceCheck(appContext, selectionOverride, persistResult)
+                    Log.d(TAG, "Balance check already in flight, queued for later")
+                    return true
+                }
+                Log.d(TAG, "Balance check already in flight – skipping duplicate")
+                return false
+            }
+
+            // Check if another USSD session is busy
+            if (selectionOverride == null && isUssdSessionBusy()) {
+                if (specialHandling) {
+                    queueBalanceCheck(appContext, selectionOverride, persistResult)
+                    Log.d(TAG, "USSD session busy – balance check queued")
+                    return true
+                }
+                Log.d(TAG, "USSD session busy – skipping balance check")
+                return false
+            }
+
+            // Reset retry counter when starting fresh
+            retryCount = 0
+            startBalanceCheck(appContext, selectionOverride, persistResult)
             return true
         }
 
+        /**
+         * Schedule a balance refresh after a delay. Useful after USSD actions.
+         */
         fun scheduleAirtimeRefresh(
             context: Context,
             reason: String,
@@ -183,115 +149,310 @@ class BalanceChecker : Service() {
                 .getSharedPreferences("app_settings", Context.MODE_PRIVATE)
                 .getBoolean("automation_enabled", true)
             if (!automationEnabled) {
-                Log.d(TAG, "Skipping scheduled airtime refresh for $reason because automation is disabled")
+                Log.d(TAG, "Skipping scheduled refresh for $reason – automation disabled")
                 return false
             }
 
+            // Ensure service is running
             ServiceLauncher.startBalanceChecker(appContext)
 
-            var scheduledRefresh: Runnable? = null
-            scheduledRefresh = Runnable {
-                if (pendingRefreshRunnable === scheduledRefresh) {
-                    pendingRefreshRunnable = null
-                }
+            // Cancel any pending refresh
+            pendingRefreshRunnable?.let { timeoutHandler.removeCallbacks(it) }
+            val runnable = Runnable {
+                pendingRefreshRunnable = null
                 val started = requestBalanceCheck(
                     context = appContext,
                     ignoreCooldown = true
                 )
-                Log.d(TAG, "Scheduled airtime refresh reason=$reason started=$started")
+                Log.d(TAG, "Scheduled refresh reason=$reason started=$started")
             }
-            val refreshRunnable = scheduledRefresh ?: return false
-
-            pendingRefreshRunnable?.let(timeoutHandler::removeCallbacks)
-            pendingRefreshRunnable = refreshRunnable
-            timeoutHandler.postDelayed(refreshRunnable, delayMs.coerceAtLeast(0L))
+            pendingRefreshRunnable = runnable
+            timeoutHandler.postDelayed(runnable, delayMs.coerceAtLeast(0L))
             return true
         }
 
-        fun onBalanceCheckFailed() {
-            Log.w(TAG, "Balance check failed — resetting")
-            cancelTimeout()
-            checking = false
-            UssdNavigationService.balanceCallback = null
-            val failedRequest = activeRequestContext ?: BalanceRequestContext()
-            activeRequestContext = null
-            Handler(Looper.getMainLooper()).post {
-                balanceCallback?.invoke("")
-                balanceResultListener?.invoke(
-                    BalanceCheckResult(
-                        display = "",
-                        selectionOverride = failedRequest.selectionOverride,
-                        persistResult = failedRequest.persistResult
-                    )
-                )
+        /**
+         * Parse balance from raw USSD response (static, for external use).
+         */
+        fun parseBalanceDisplay(raw: String): String =
+            extractBalanceCandidate(raw)?.let { formatAmount(it.amount, it.currency) } ?: ""
+
+        fun parseBalanceInt(raw: String): Int =
+            extractBalanceCandidate(raw)?.amount?.toInt() ?: -1
+
+        /**
+         * Get last known balance display (from cache).
+         */
+        fun getLastKnownBalanceDisplay(context: Context): String {
+            if (lastKnownDisplay.isNotEmpty()) return lastKnownDisplay
+            val prefs = context.applicationContext.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+            return prefs.getString(KEY_LAST_AIRTIME_DISPLAY, "")?.trim().orEmpty()
+                .also { if (it.isNotEmpty()) lastKnownDisplay = it }
+        }
+
+        fun getLastKnownBalanceAmount(): Double = lastKnownAmount
+
+        /**
+         * Persist balance to shared preferences.
+         */
+        fun persistLastKnownBalance(context: Context, display: String) {
+            val clean = display.trim()
+            if (clean.isEmpty()) return
+            lastKnownDisplay = clean
+            val amount = extractBalanceCandidate(clean)?.amount ?: -1.0
+            if (amount > 0) {
+                lastKnownAmount = amount
+                lastSuccessfulCheckAt = System.currentTimeMillis()
+                context.applicationContext
+                    .getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_LAST_AIRTIME_DISPLAY, clean)
+                    .putFloat(KEY_LAST_BALANCE_AMOUNT, amount.toFloat())
+                    .putLong(KEY_LAST_CHECK_TIMESTAMP, System.currentTimeMillis())
+                    .apply()
             }
         }
 
-        fun parseBalanceDisplay(raw: String): String {
-            Log.d(TAG, "parseBalanceDisplay input='$raw'")
-            extractBalanceCandidate(raw)?.let { return formatAmount(it.amount) }
-            Log.w(TAG, "No balance pattern matched for '$raw'")
-            return ""
+        // ─── Internal Core ──────────────────────────────────────────────
+
+        private fun startBalanceCheck(
+            context: Context,
+            selectionOverride: Int?,
+            persistResult: Boolean
+        ) {
+            checking = true
+            lastCheckStartedAt = System.currentTimeMillis()
+            activeRequestContext = BalanceRequestContext(selectionOverride, persistResult)
+            armTimeout()
+
+            val balanceUssd = resolveBalanceUssdCode(context, selectionOverride)
+            Log.d(TAG, "Starting balance check via $balanceUssd (slot=${selectionOverride ?: "default"})")
+
+            // Try UssdHelper (silent) first
+            val helperSuccess = UssdHelper.dialUssd(
+                context,
+                balanceUssd,
+                silentOnly = true,
+                subIdOverride = selectionOverride,
+                onSuccess = { response ->
+                    Log.d(TAG, "UssdHelper success: '$response'")
+                    handleBalanceResponse(context, response, activeRequestContext)
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "UssdHelper failed: $error, trying fallback")
+                    if (!startBalanceFallback(context, balanceUssd, selectionOverride, persistResult)) {
+                        Log.w(TAG, "Fallback unavailable, checking retry")
+                        scheduleRetry(context, selectionOverride, persistResult)
+                    }
+                }
+            )
+            if (!helperSuccess) {
+                if (!startBalanceFallback(context, balanceUssd, selectionOverride, persistResult)) {
+                    scheduleRetry(context, selectionOverride, persistResult)
+                }
+            }
         }
 
-        fun parseBalanceInt(raw: String): Int {
-            extractBalanceCandidate(raw)?.amount?.toInt()?.let { return it }
-            return -1
+        private fun handleBalanceResponse(
+            context: Context,
+            raw: String,
+            requestContext: BalanceRequestContext?
+        ) {
+            cancelTimeout()
+            checking = false
+            val ctx = requestContext ?: BalanceRequestContext()
+            activeRequestContext = null
+            retryCount = 0 // reset on success
+
+            val candidate = extractBalanceCandidate(raw)
+            val display = candidate?.let { formatAmount(it.amount, it.currency) } ?: ""
+            val amount = candidate?.amount ?: -1.0
+
+            // Update cache
+            if (ctx.persistResult && display.isNotEmpty()) {
+                persistLastKnownBalance(context, display)
+                // Sync to relay
+                RelayManager.syncPrimaryAirtimeBalance(context, display)
+                // Trigger alerts
+                MpesaReceiver.checkAndSendAlerts(context)
+            }
+
+            val result = BalanceResult(
+                display = display,
+                rawAmount = amount,
+                currency = candidate?.currency ?: "",
+                rawText = raw,
+                timestamp = System.currentTimeMillis(),
+                sourceSimSlot = ctx.selectionOverride?.let { slotFromOverride(it) },
+                success = display.isNotEmpty(),
+                errorMessage = if (display.isEmpty()) "Could not parse balance" else null,
+                selectionOverride = ctx.selectionOverride,
+                persistResult = ctx.persistResult
+            )
+
+            // Notify listeners on main thread
+            Handler(Looper.getMainLooper()).post {
+                balanceCallback?.invoke(display)
+                balanceResultListener?.invoke(result)
+                // Also broadcast
+                context.sendBroadcast(
+                    Intent("com.bingwa.mobile.BALANCE_UPDATED")
+                        .setPackage(context.packageName)
+                        .putExtra("display", display)
+                        .putExtra("amount", amount)
+                        .putExtra("timestamp", result.timestamp)
+                )
+            }
+
+            // If failed, schedule retry if we have retries left
+            if (display.isEmpty() && retryCount < MAX_RETRY_ATTEMPTS) {
+                scheduleRetry(context, ctx.selectionOverride, ctx.persistResult)
+            }
         }
+
+        private fun scheduleRetry(context: Context, selectionOverride: Int?, persistResult: Boolean) {
+            if (retryCount >= MAX_RETRY_ATTEMPTS) {
+                Log.w(TAG, "Max retries reached, giving up")
+                notifyFailure(context, selectionOverride, persistResult)
+                return
+            }
+            retryCount++
+            val delay = RETRY_BACKOFF_MS * retryCount
+            Log.d(TAG, "Scheduling retry #$retryCount in ${delay}ms")
+            val runnable = Runnable {
+                retryRunnable = null
+                startBalanceCheck(context, selectionOverride, persistResult)
+            }
+            retryRunnable = runnable
+            timeoutHandler.postDelayed(runnable, delay)
+        }
+
+        private fun notifyFailure(context: Context, selectionOverride: Int?, persistResult: Boolean) {
+            checking = false
+            activeRequestContext = null
+            val result = BalanceResult(
+                display = "",
+                rawAmount = -1.0,
+                currency = "",
+                rawText = "",
+                timestamp = System.currentTimeMillis(),
+                sourceSimSlot = selectionOverride?.let { slotFromOverride(it) },
+                success = false,
+                errorMessage = "Balance check failed after $MAX_RETRY_ATTEMPTS attempts",
+                selectionOverride = selectionOverride,
+                persistResult = persistResult
+            )
+            Handler(Looper.getMainLooper()).post {
+                balanceCallback?.invoke("")
+                balanceResultListener?.invoke(result)
+            }
+        }
+
+        private fun startBalanceFallback(
+            context: Context,
+            balanceUssd: String,
+            selectionOverride: Int?,
+            persistResult: Boolean
+        ): Boolean {
+            if (isUssdSessionBusy()) return false
+            val intent = Intent(context, AutomationService::class.java).apply {
+                putExtra("mode", "SIMPLE")
+                putExtra("code", balanceUssd)
+                putExtra("phoneNumber", "")
+                putExtra("simSelection", selectionOverride ?: OFFER_SIM_USE_GENERAL)
+                putExtra("executionPriority", USSD_EXECUTION_PRIORITY_SPECIAL)
+            }
+            return ServiceLauncher.startAutomationService(context, intent)
+        }
+
+        private fun queueBalanceCheck(context: Context, selectionOverride: Int?, persistResult: Boolean) {
+            UssdQueue.enqueue(
+                task = Runnable {
+                    requestBalanceCheck(
+                        context = context,
+                        selectionOverride = selectionOverride,
+                        persistResult = persistResult,
+                        ignoreCooldown = true,
+                        specialHandling = true
+                    )
+                },
+                priority = USSD_EXECUTION_PRIORITY_SPECIAL
+            )
+        }
+
+        // ─── Parsing ──────────────────────────────────────────────────────
 
         private fun extractBalanceCandidate(raw: String): BalanceCandidate? {
             val normalized = normalizeBalanceText(raw)
             val candidates = mutableListOf<BalanceCandidate>()
 
-            fun addMatches(pattern: Regex, score: Int) {
+            // Patterns ordered by priority
+            val patterns = listOf(
+                // "Your balance is KSh 100.50"
+                Regex("""your\s+balance\s+is\s+(ksh[s]?|kes|usd|eur)\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
+                // "Balance: KSh 100.50"
+                Regex("""(?:balance|airtime\s*bal(?:ance)?|salio|umbea|account\s+balance)[:\s-]*(?:is\s*)?(?:ksh[s]?|kes|usd|eur)\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
+                // "KSh 100.50"
+                Regex("""(ksh[s]?|kes|usd|eur)\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
+                // "100.50 KSh"
+                Regex("""([\d,]+(?:\.\d{1,2})?)\s*(ksh[s]?|kes|usd|eur)""", RegexOption.IGNORE_CASE),
+                // "100.50 /="
+                Regex("""([\d,]+(?:\.\d{1,2})?)\s*/="""),
+                // Plain digits with comma
+                Regex("""([\d,]+(?:\.\d{1,2})?)""")
+            )
+
+            patterns.forEachIndexed { idx, pattern ->
                 pattern.findAll(normalized).forEach { match ->
-                    val amount = match.groupValues.getOrNull(1)
-                        ?.replace(",", "")
-                        ?.toDoubleOrNull()
-                        ?: return@forEach
+                    val groups = match.groupValues
+                    var amountStr = ""
+                    var currency = ""
+                    when {
+                        // Pattern with currency first
+                        groups.size == 3 && groups[1].matches(Regex("[a-zA-Z]+")) -> {
+                            currency = groups[1].uppercase()
+                            amountStr = groups[2]
+                        }
+                        // Pattern with currency second
+                        groups.size == 3 && groups[2].matches(Regex("[a-zA-Z]+")) -> {
+                            currency = groups[2].uppercase()
+                            amountStr = groups[1]
+                        }
+                        // Currency only pattern
+                        groups.size == 2 && groups[1].matches(Regex("[a-zA-Z]+")) -> {
+                            // If only currency, look for amount separately
+                            val nextDigit = Regex("""\b([\d,]+(?:\.\d{1,2})?)\b""").find(normalized, match.range.last + 1)
+                            if (nextDigit != null) {
+                                currency = groups[1].uppercase()
+                                amountStr = nextDigit.value
+                            }
+                        }
+                        // Plain number
+                        else -> {
+                            amountStr = groups[1]
+                            currency = "KSh" // default
+                        }
+                    }
+                    val amount = amountStr.replace(",", "").toDoubleOrNull() ?: return@forEach
                     if (amount > 0 && amount < 1_000_000) {
-                        candidates += BalanceCandidate(amount = amount, score = score)
+                        // Score based on pattern index (earlier patterns = higher confidence)
+                        val score = (patterns.size - idx) * 100 + if (currency.isNotBlank()) 20 else 0
+                        candidates += BalanceCandidate(amount, currency, score)
                     }
                 }
             }
 
-            addMatches(
-                Regex(
-                    """your\s+balance\s+is\s+ksh[s]?\.\s*([\d,]+(?:\.\d{1,2})?)""",
-                    RegexOption.IGNORE_CASE
-                ),
-                score = 650
-            )
-            addMatches(
-                Regex(
-                    """(?:airtime\s*bal(?:ance)?|balance|your\s+balance\s+is|salio|umbea|account\s+balance)[:\s-]*(?:is\s*)?(?:(?:ksh[s]?|kes)\.?\s*)?([\d,]+(?:\.\d{1,2})?)""",
-                    RegexOption.IGNORE_CASE
-                ),
-                score = 500
-            )
-            addMatches(
-                Regex("""(?:ksh[s]?|kes)\.?\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
-                score = 420
-            )
-            addMatches(
-                Regex("""([\d,]+(?:\.\d{1,2})?)\s*(?:ksh[s]?|kes)\.?""", RegexOption.IGNORE_CASE),
-                score = 420
-            )
-            addMatches(
-                Regex("""([\d,]+(?:\.\d{1,2})?)\s*/="""),
-                score = 320
-            )
-
+            // If no candidate, try the fallback for M-PESA style messages
             if (candidates.isEmpty() &&
                 Regex("""balance|airtime|salio|umbea|tariff|mpesa""", RegexOption.IGNORE_CASE)
                     .containsMatchIn(normalized)
             ) {
-                Regex("""([\d,]+(?:\.\d{1,2})?)""")
+                Regex("""\b([\d,]+(?:\.\d{1,2})?)\b""")
                     .findAll(normalized)
                     .forEach { match ->
                         val amount = match.groupValues[1].replace(",", "").toDoubleOrNull() ?: return@forEach
                         if (amount > 0 && amount < 1_000_000) {
-                            candidates += BalanceCandidate(amount = amount, score = 120)
+                            candidates += BalanceCandidate(amount, "KSh", 10)
                         }
                     }
             }
@@ -308,7 +469,23 @@ class BalanceChecker : Service() {
                 .replace(Regex("""\s+"""), " ")
                 .trim()
 
-        private fun isAirtelBalanceTarget(context: Context, selectionOverride: Int? = null): Boolean {
+        private fun formatAmount(amount: Double, currency: String = "KSh"): String {
+            val formatted = NumberFormat.getNumberInstance(Locale.getDefault()).apply {
+                minimumFractionDigits = if (amount == kotlin.math.floor(amount)) 0 else 2
+                maximumFractionDigits = 2
+            }.format(amount)
+            return "$currency $formatted"
+        }
+
+        private fun resolveBalanceUssdCode(context: Context, selectionOverride: Int?): String {
+            return if (isAirtelBalanceTarget(context, selectionOverride)) {
+                AIRTEL_BALANCE_USSD
+            } else {
+                DEFAULT_BALANCE_USSD
+            }
+        }
+
+        private fun isAirtelBalanceTarget(context: Context, selectionOverride: Int?): Boolean {
             val targetSubId = resolvePreferredUssdSubId(context, selectionOverride) ?: return false
             val targetSim = getAvailableSims(context).firstOrNull { it.subscriptionId == targetSubId } ?: return false
             val labels = buildList {
@@ -316,24 +493,24 @@ class BalanceChecker : Service() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     add(targetSim.carrierName?.toString().orEmpty())
                 }
-            }
-                .joinToString(" ")
-                .trim()
-
+            }.joinToString(" ").trim()
             return labels.contains("airtel", ignoreCase = true)
         }
 
-        private fun formatAmount(amount: Double): String {
-            return if (amount == kotlin.math.floor(amount)) {
-                "KSh ${amount.toInt()}"
-            } else {
-                "KSh ${"%.2f".format(amount)}"
-            }
+        private fun slotFromOverride(override: Int): Int? = when (override) {
+            USSD_SIM_SELECTION_SLOT_1 -> 0
+            USSD_SIM_SELECTION_SLOT_2 -> 1
+            else -> null
         }
+
+        // ─── Timeout ──────────────────────────────────────────────────────
 
         private fun armTimeout() {
             cancelTimeout()
-            val timeout = Runnable { onBalanceCheckFailed() }
+            val timeout = Runnable {
+                Log.w(TAG, "Balance check timed out")
+                onBalanceCheckFailed()
+            }
             timeoutRunnable = timeout
             timeoutHandler.postDelayed(timeout, BALANCE_TIMEOUT_MS)
         }
@@ -343,85 +520,43 @@ class BalanceChecker : Service() {
             timeoutRunnable = null
         }
 
-        private fun startBalanceFallback(
-            context: Context,
-            balanceUssd: String,
-            selectionOverride: Int?
-        ): Boolean {
-            if (isUssdSessionBusy()) return false
-            return ServiceLauncher.startAutomationService(
-                context,
-                Intent(context, AutomationService::class.java).apply {
-                    putExtra("mode", "SIMPLE")
-                    putExtra("code", balanceUssd)
-                    putExtra("phoneNumber", "")
-                    putExtra("simSelection", selectionOverride ?: OFFER_SIM_USE_GENERAL)
-                    putExtra("executionPriority", USSD_EXECUTION_PRIORITY_SPECIAL)
-                }
-            )
+        private fun onBalanceCheckFailed() {
+            Log.w(TAG, "Balance check failed – resetting")
+            cancelTimeout()
+            checking = false
+            val ctx = activeRequestContext ?: BalanceRequestContext()
+            activeRequestContext = null
+            // If we have retries left, schedule one
+            if (retryCount < MAX_RETRY_ATTEMPTS) {
+                scheduleRetry(applicationContext, ctx.selectionOverride, ctx.persistResult)
+            } else {
+                notifyFailure(applicationContext, ctx.selectionOverride, ctx.persistResult)
+            }
         }
+
+        // ─── Busy detection ──────────────────────────────────────────────
 
         private fun isUssdSessionBusy(): Boolean =
             UssdNavigationService.isBusyForBalanceCheck() ||
                 SilentUssd.isExecutionInProgress() ||
                 SilentUssdOptimized.isExecutionInProgress()
 
-        private fun queueBusyRetry(context: Context, requestContext: BalanceRequestContext) {
-            val shouldQueue = synchronized(this) {
-                if (queuedBusyRetryContext == requestContext) {
-                    false
-                } else {
-                    queuedBusyRetryContext = requestContext
-                    true
-                }
-            }
-            if (!shouldQueue) return
+        // ─── Cache / Persistence ──────────────────────────────────────────
 
-            UssdQueue.enqueue(
-                task = Runnable {
-                    synchronized(this) {
-                        if (queuedBusyRetryContext == requestContext) {
-                            queuedBusyRetryContext = null
-                        }
-                    }
-                    requestBalanceCheck(
-                        context = context,
-                        selectionOverride = requestContext.selectionOverride,
-                        persistResult = requestContext.persistResult,
-                        ignoreCooldown = true,
-                        specialHandling = true
-                    )
-                },
-                priority = USSD_EXECUTION_PRIORITY_SPECIAL
-            )
+        fun getLastKnownBalanceAmount(): Double {
+            if (lastKnownAmount > 0) return lastKnownAmount
+            val prefs = applicationContext.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+            return prefs.getFloat(KEY_LAST_BALANCE_AMOUNT, -1f).toDouble()
         }
 
-        fun getLastKnownBalanceDisplay(context: Context): String {
-            val cached = currentBalanceStr.trim()
-            if (cached.isNotEmpty()) return cached
-            return context.applicationContext
-                .getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-                .getString(KEY_LAST_AIRTIME_DISPLAY, "")
-                ?.trim()
-                .orEmpty()
-                .also { stored ->
-                    if (stored.isNotEmpty()) {
-                        currentBalanceStr = stored
-                    }
-                }
-        }
-
-        fun persistLastKnownBalance(context: Context, display: String) {
-            val clean = display.trim()
-            if (clean.isEmpty()) return
-            currentBalanceStr = clean
-            context.applicationContext
-                .getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-                .edit()
-                .putString(KEY_LAST_AIRTIME_DISPLAY, clean)
-                .apply()
+        fun getLastCheckTimestamp(): Long {
+            if (lastCheckTimestamp > 0) return lastCheckTimestamp
+            val prefs = applicationContext.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+            return prefs.getLong(KEY_LAST_CHECK_TIMESTAMP, 0L)
         }
     }
+
+    // ─── Service Lifecycle ────────────────────────────────────────────────
 
     private val handler = Handler(Looper.getMainLooper())
     private val periodicCheck = object : Runnable {
@@ -432,10 +567,31 @@ class BalanceChecker : Service() {
                 stopSelf()
                 return
             }
-            requestBalanceCheck(applicationContext)
-            // Also check battery alerts (offline)
+            // Check balance only if we have a stale cache or long time since last check
+            val lastCheck = getLastCheckTimestamp()
+            if (System.currentTimeMillis() - lastCheck > CHECK_INTERVAL) {
+                requestBalanceCheck(applicationContext)
+            }
+            // Also check battery alerts
             MpesaReceiver.checkAndSendAlerts(applicationContext)
             handler.postDelayed(this, CHECK_INTERVAL)
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        // Warm up cache
+        getLastKnownBalanceDisplay(applicationContext)
+        getLastKnownBalanceAmount()
+        createNotificationChannel()
+        foregroundReady = tryStartForegroundCompat(
+            notificationId = NOTIFICATION_ID,
+            notification = buildNotification(),
+            foregroundServiceType = ForegroundServiceTypes.dataSync,
+            serviceLabel = "Background balance monitoring"
+        )
+        if (!foregroundReady) {
+            stopSelf()
         }
     }
 
@@ -457,29 +613,20 @@ class BalanceChecker : Service() {
         return START_STICKY
     }
 
-    override fun onCreate() {
-        super.onCreate()
-        getLastKnownBalanceDisplay(applicationContext)
-        createNotificationChannel()
-        foregroundReady = tryStartForegroundCompat(
-            notificationId = NOTIFICATION_ID,
-            notification = buildNotification(),
-            foregroundServiceType = ForegroundServiceTypes.dataSync,
-            serviceLabel = "Background balance monitoring"
-        )
-        if (!foregroundReady) {
-            stopSelf()
-        }
-    }
-
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacks(periodicCheck)
         checking = false
+        cancelTimeout()
+        timeoutRunnable = null
+        pendingRefreshRunnable = null
+        retryRunnable = null
         stopForegroundCompat()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    // ─── Foreground Helpers ──────────────────────────────────────────────
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -493,7 +640,7 @@ class BalanceChecker : Service() {
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentTitle("Bingwa Mobile")
-            .setContentText("Monitoring airtime balance in the background")
+            .setContentText("Monitoring airtime balance")
             .setContentIntent(
                 PendingIntent.getActivity(
                     this,
