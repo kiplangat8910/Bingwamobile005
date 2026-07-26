@@ -171,6 +171,7 @@ class UssdNavigationService : AccessibilityService() {
     private var recentUssdStrictDialog = false
     private var recentUssdCapturedElapsed = 0L
     private var waitingForRootSinceElapsed = 0L
+    private var lastTranscriptEntryKey = ""
 
     // Overlay & foreground state
     private var overlayView: View? = null
@@ -588,7 +589,7 @@ class UssdNavigationService : AccessibilityService() {
         try {
             node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { acc.textTokens += it }
             node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { acc.textTokens += it }
-            if (isTextEntryNode(node)) {
+            if (supportsDirectInput(node) || isLooseInputCandidate(node)) {
                 acc.hasEditableField = true
                 val score = scoreTextEntryCandidate(node)
                 if (score >= acc.bestInputScore) {
@@ -1668,13 +1669,18 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun verifyExpectedInput(root: AccessibilityNodeInfo?, expected: String, existingField: AccessibilityNodeInfo? = null): Boolean {
-        if (existingField != null && matchesExpectedInput(readFieldText(existingField), expected)) {
-            rememberVerifiedInput(expected); return true
+        if (existingField != null) {
+            refreshInputTarget(existingField)
+            if (matchesExpectedInput(readFieldText(existingField), expected)) {
+                rememberVerifiedInput(expected)
+                return true
+            }
         }
         val rootNode = root ?: getUssdRoot() ?: return false
         try {
             val candidates = mutableListOf<AccessibilityNodeInfo>()
             collectTextEntryCandidates(rootNode, candidates)
+            if (candidates.isEmpty()) collectAggressiveTextEntryCandidates(rootNode, candidates)
             val verified = candidates.any { matchesExpectedInput(readFieldText(it), expected) }
             if (verified) rememberVerifiedInput(expected)
             return verified
@@ -1972,7 +1978,7 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun hasEditableField(node: AccessibilityNodeInfo): Boolean {
-        if (isTextEntryNode(node)) return true
+        if (supportsDirectInput(node) || isLooseInputCandidate(node)) return true
         for (i in 0 until node.childCount) {
             val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
             if (hasEditableField(child)) { child.recycle(); return true }
@@ -2436,6 +2442,7 @@ class UssdNavigationService : AccessibilityService() {
         learnedSignatureSteps.clear()
         learningCaptures.clear()
         popupTranscript.clear()
+        lastTranscriptEntryKey = ""
         detectedChangeNotes.clear()
         signatureChangeDetected = false
         signatureAutoAdjusted = false
@@ -2497,6 +2504,7 @@ class UssdNavigationService : AccessibilityService() {
         recentUssdDialogText = text
         recentUssdStrictDialog = strict
         recentUssdCapturedElapsed = SystemClock.elapsedRealtime()
+        recordPopupTranscript(windowId, pkg, snapshot, text)
     }
 
     private fun obtainRecentUssdContext(requireStrict: Boolean = false): RecentUssdContext? {
@@ -2528,6 +2536,37 @@ class UssdNavigationService : AccessibilityService() {
         recentUssdDialogText = ""
         recentUssdStrictDialog = false
         recentUssdCapturedElapsed = 0L
+    }
+
+    private fun recordPopupTranscript(windowId: Int, pkg: String, snapshot: UssdTreeSnapshot?, fallbackText: String) {
+        val entry = buildPopupTranscriptEntry(snapshot, fallbackText) ?: return
+        val key = "$windowId|$pkg|${normalizeMenuText(entry)}"
+        if (key.isBlank() || key == lastTranscriptEntryKey) return
+        lastTranscriptEntryKey = key
+        popupTranscript += entry
+        if (popupTranscript.size > MAX_POPUP_TRANSCRIPT_ENTRIES) {
+            popupTranscript.removeAt(0)
+        }
+    }
+
+    private fun buildPopupTranscriptEntry(snapshot: UssdTreeSnapshot?, fallbackText: String): String? {
+        val entry = snapshot?.let { formatPopupTranscriptEntry(it) }
+            ?.takeIf { it.isNotBlank() }
+            ?: normalizeCollapsedText(fallbackText).takeIf { it.isNotBlank() }
+        return entry?.take(MAX_POPUP_TRANSCRIPT_CHARS)
+    }
+
+    private fun formatPopupTranscriptEntry(snapshot: UssdTreeSnapshot): String {
+        val lines = snapshot.textTokens.map { normalizeCollapsedText(it) }.filter { it.isNotBlank() }
+        if (lines.isEmpty()) return snapshot.dialogText
+        val menu = parseMenuOptions(lines)
+        val recorded = if (menu != null) {
+            val titleLines = lines.takeWhile { !Regex("""^\d+\s*[\)\].:\-]""").containsMatchIn(it) }
+            (titleLines + menu.entries.map { "${it.key}. ${normalizeCollapsedText(it.value)}" }).distinct()
+        } else {
+            lines.distinct()
+        }
+        return recorded.joinToString("\n").ifBlank { snapshot.dialogText }
     }
 
     private fun shouldWaitForRootRecovery(): Boolean {
@@ -3038,7 +3077,7 @@ class UssdNavigationService : AccessibilityService() {
     private val RECENT_INPUT_GRACE_MS = 4000L
     private val RECENT_VERIFIED_INPUT_GRACE_MS = 6500L
     private val RECENT_UI_EVENT_GRACE_MS = 1200L
-    private val RECENT_USSD_CONTEXT_WINDOW_MS = 420L
+    private val RECENT_USSD_CONTEXT_WINDOW_MS = 900L
     private val GESTURE_SETTLE_MS = 12L
     private val POST_GESTURE_WAIT_MS = 10L
     private val POPUP_STABILITY_DELAY_MS = 14L
@@ -3051,6 +3090,8 @@ class UssdNavigationService : AccessibilityService() {
     private val STARTUP_UI_KEEP_VISIBLE_MS = 8000L
     private val STEP_TRANSITION_GUARD_MS = 240L
     private val MAX_RETRY_WINDOW_MS = 60000L
+    private val MAX_POPUP_TRANSCRIPT_ENTRIES = 80
+    private val MAX_POPUP_TRANSCRIPT_CHARS = 1200
 
     private val CHANNEL_ID = "bingwa_ussd"
     private val NOTIFICATION_ID = 2001
