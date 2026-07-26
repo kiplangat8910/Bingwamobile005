@@ -41,6 +41,8 @@ class UssdNavigationService : AccessibilityService() {
         @Volatile var advancedDialCode = ""
         @Volatile var advancedOfferId = -1
         @Volatile var advancedOfferName = ""
+        @Volatile var preferredDialSubId = -1
+        @Volatile var preferredDialSlotIndex = -1
         @Volatile var advancedActive = false
         @Volatile var advancedInProgress = false
         @Volatile var currentStep = 0
@@ -93,6 +95,11 @@ class UssdNavigationService : AccessibilityService() {
                     service.updateOverlay()
                 }
             }
+        }
+
+        fun configureDialPreferences(subId: Int?, slotIndex: Int?) {
+            preferredDialSubId = subId ?: -1
+            preferredDialSlotIndex = slotIndex ?: -1
         }
 
         fun onAppUiForegrounded() {
@@ -269,6 +276,7 @@ class UssdNavigationService : AccessibilityService() {
 
         if (shouldSkipDuplicateEvent(event)) return
         val pkg = event.packageName?.toString() ?: ""
+        val previousWindowId = lastWindowId
 
         // Launcher windows → suppress UI return
         if (pkg in LAUNCHER_PACKAGES && (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || type == AccessibilityEvent.TYPE_WINDOWS_CHANGED)) {
@@ -288,9 +296,6 @@ class UssdNavigationService : AccessibilityService() {
         val root = obtainRootFromEvent(event) ?: return
         try {
             val windowPkg = root.packageName?.toString() ?: ""
-            if (windowPkg in BLOCKED_PACKAGES && !shouldAllowSystemUi(root, windowPkg)) return
-            lastWindowId = windowId
-            lastWindowPkg = windowPkg
 
             val requireStrict = shouldRequireStrictPopupScope()
             val snapshot = if (advancedActive || isForegroundUiActive() || balanceCallback != null || tokenPurchaseCallback != null) {
@@ -300,6 +305,12 @@ class UssdNavigationService : AccessibilityService() {
             if (dialogText.isBlank()) return
 
             val lower = dialogText.lowercase()
+            if (handleIntermediatePopup(root, dialogText, lower, windowPkg)) {
+                lastWindowId = windowId
+                lastWindowPkg = windowPkg
+                return
+            }
+            if (windowPkg in BLOCKED_PACKAGES && !shouldAllowSystemUi(root, windowPkg)) return
             if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return
 
             val looksLikeDialog = if (snapshot != null) {
@@ -309,6 +320,8 @@ class UssdNavigationService : AccessibilityService() {
             }
             if (!looksLikeDialog) return
 
+            lastWindowId = windowId
+            lastWindowPkg = windowPkg
             lastRelevantEventElapsed = SystemClock.elapsedRealtime()
             rememberRecentUssdContext(root, snapshot, windowId, windowPkg, dialogText, requireStrict)
 
@@ -319,7 +332,7 @@ class UssdNavigationService : AccessibilityService() {
                     updateOverlay()
                     requestAppUiBehindPopup(force = true)
                     startKeepingAppUiVisible()
-                } else if (windowId != lastWindowId) {
+                } else if (windowId != previousWindowId) {
                     requestAppUiBehindPopup()
                     startKeepingAppUiVisible()
                 }
@@ -348,7 +361,7 @@ class UssdNavigationService : AccessibilityService() {
                     return
                 }
 
-                val dialogChanged = windowId != lastWindowId || dialogText != lastDialogText
+                val dialogChanged = windowId != previousWindowId || dialogText != lastDialogText
                 lastDialogText = dialogText
 
                 if (!isProcessing) {
@@ -373,7 +386,7 @@ class UssdNavigationService : AccessibilityService() {
                     updateOverlay()
                     requestAppUiBehindPopup(force = true)
                     startKeepingAppUiVisible()
-                } else if (windowId != lastWindowId) {
+                } else if (windowId != previousWindowId) {
                     requestAppUiBehindPopup()
                     startKeepingAppUiVisible()
                 }
@@ -2307,9 +2320,13 @@ class UssdNavigationService : AccessibilityService() {
         if (now - lastRedialElapsed < REDIAL_COOLDOWN_MS) return
         lastRedialElapsed = now
         runCatching {
-            val intent = UssdHelper.buildCallIntent(this, dialCode)
+            val intent = com.bingwa.mobile.UssdHelper.buildCallIntent(
+                this,
+                dialCode,
+                preferredDialSubId.takeIf { it >= 0 }
+            )
             startActivity(intent)
-            if (shouldKeepAppUiVisible()) UssdHelper.relaunchAppUi(this)
+            if (shouldKeepAppUiVisible()) com.bingwa.mobile.UssdHelper.relaunchAppUi(this)
         }
     }
 
@@ -2338,6 +2355,111 @@ class UssdNavigationService : AccessibilityService() {
         } finally {
             root.recycle()
         }
+    }
+
+    private fun handleIntermediatePopup(
+        root: AccessibilityNodeInfo,
+        dialogText: String,
+        lower: String,
+        windowPkg: String
+    ): Boolean {
+        if (!looksLikeSimChooserDialog(lower, windowPkg)) return false
+        val target = findPreferredSimChooserAction(root) ?: return false
+        return try {
+            if (!performClick(target)) return false
+            lastRelevantEventElapsed = SystemClock.elapsedRealtime()
+            lastDialogText = dialogText
+            isProcessing = false
+            if (advancedActive || isForegroundUiActive()) {
+                requestAppUiBehindPopup(force = true)
+                startKeepingAppUiVisible()
+                updateOverlay()
+            }
+            if (advancedActive) {
+                scheduleProcessStep(dialogChanged = true, overrideDelay = SIM_CHOOSER_SETTLE_MS)
+            }
+            true
+        } finally {
+            target.recycle()
+        }
+    }
+
+    private fun looksLikeSimChooserDialog(lower: String, windowPkg: String): Boolean {
+        if (!SIM_CHOOSER_DIALOG_HINTS.any { lower.contains(it) }) return false
+        return windowPkg in BLOCKED_PACKAGES || windowPkg == "android" || windowPkg == "com.android.systemui" ||
+            windowPkg.contains("phone", ignoreCase = true) || windowPkg.contains("telecom", ignoreCase = true)
+    }
+
+    private fun findPreferredSimChooserAction(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val candidates = mutableListOf<AccessibilityNodeInfo>()
+        collectActionCandidates(root, candidates)
+        val filtered = candidates.filterNot { isDismissActionNode(it) || isSimChooserDecisionNode(it) }
+        val preferred = filtered.maxByOrNull { scoreSimChooserCandidate(it) }
+        if (preferred != null && scoreSimChooserCandidate(preferred) >= MIN_SIM_CHOOSER_SCORE) {
+            return AccessibilityNodeInfo.obtain(preferred)
+        }
+
+        val slotIndex = preferredDialSlotIndex
+        if (slotIndex < 0) return null
+        val ordered = filtered.sortedWith(compareBy<AccessibilityNodeInfo> {
+            Rect().also { bounds -> runCatching { it.getBoundsInScreen(bounds) } }.top
+        }.thenBy {
+            Rect().also { bounds -> runCatching { it.getBoundsInScreen(bounds) } }.left
+        })
+        return ordered.getOrNull(slotIndex)?.let { AccessibilityNodeInfo.obtain(it) }
+    }
+
+    private fun scoreSimChooserCandidate(node: AccessibilityNodeInfo): Int {
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
+        val combined = listOf(label, desc).filter { it.isNotBlank() }.joinToString(" ")
+        if (combined.isBlank() && SIM_CHOOSER_VIEW_ID_HINTS.none { viewId.contains(it) }) return Int.MIN_VALUE
+
+        var score = 0
+        if (SIM_CHOOSER_VIEW_ID_HINTS.any { viewId.contains(it) }) score += 180
+        if (SIM_CHOOSER_OPTION_HINTS.any { combined.contains(it) }) score += 220
+        if (combined.length in 3..40) score += 40
+        if (runCatching { node.childCount }.getOrDefault(0) == 0) score += 30
+
+        val preferredSlotNumber = preferredDialSlotIndex + 1
+        if (preferredSlotNumber > 0) {
+            if (simChooserSlotHints(preferredSlotNumber).any { combined.contains(it) }) score += 900
+            if (SIM_CHOOSER_OPTION_HINTS.any { combined.contains(it) } &&
+                Regex("""(^|\D)$preferredSlotNumber($|\D)""").containsMatchIn(combined)
+            ) score += 420
+        }
+        return score
+    }
+
+    private fun simChooserSlotHints(slotNumber: Int): List<String> {
+        val word = when (slotNumber) {
+            1 -> "one"
+            2 -> "two"
+            else -> slotNumber.toString()
+        }
+        return listOf(
+            "sim $slotNumber",
+            "sim$slotNumber",
+            "slot $slotNumber",
+            "slot$slotNumber",
+            "line $slotNumber",
+            "line$slotNumber",
+            "card $slotNumber",
+            "card$slotNumber",
+            "subscription $slotNumber",
+            "subscription$slotNumber",
+            "sim $word",
+            "slot $word",
+            "line $word",
+            "card $word"
+        )
+    }
+
+    private fun isSimChooserDecisionNode(node: AccessibilityNodeInfo): Boolean {
+        val label = normalizeActionLabel(node.text?.toString())
+        val desc = normalizeActionLabel(node.contentDescription?.toString())
+        return SIM_CHOOSER_DECISION_LABELS.any { label.contains(it) || desc.contains(it) }
     }
 
     private fun findActionButton(root: AccessibilityNodeInfo, labels: List<String>): AccessibilityNodeInfo? {
@@ -2412,6 +2534,8 @@ class UssdNavigationService : AccessibilityService() {
         advancedDialCode = ""
         advancedOfferId = -1
         advancedOfferName = ""
+        preferredDialSubId = -1
+        preferredDialSlotIndex = -1
         retryWindowStartedAt = 0L
         advancedActive = false
         advancedInProgress = false
@@ -3017,6 +3141,19 @@ class UssdNavigationService : AccessibilityService() {
         "allow", "deny", "permission", "grant", "not now",
         "isn't responding", "is not responding", "stopped", "keeps stopping", "close app"
     )
+    private val SIM_CHOOSER_DIALOG_HINTS = listOf(
+        "choose sim", "select sim", "select card", "default sim", "pick sim",
+        "sim 1", "sim 2", "sim1", "sim2", "slot 1", "slot 2", "line 1", "line 2"
+    )
+    private val SIM_CHOOSER_OPTION_HINTS = listOf(
+        "sim", "slot", "line", "card", "subscription"
+    )
+    private val SIM_CHOOSER_VIEW_ID_HINTS = listOf(
+        "sim", "slot", "subscription", "account", "phone"
+    )
+    private val SIM_CHOOSER_DECISION_LABELS = listOf(
+        "always", "just once", "once", "use by default"
+    )
     private val TRANSIENT_RESPONSE_HINTS = listOf(
         "ussd running", "running", "processing", "please wait", "wait", "loading",
         "requesting", "sending", "fetching", "working", "in progress"
@@ -3081,6 +3218,7 @@ class UssdNavigationService : AccessibilityService() {
     private val GESTURE_SETTLE_MS = 12L
     private val POST_GESTURE_WAIT_MS = 10L
     private val POPUP_STABILITY_DELAY_MS = 14L
+    private val SIM_CHOOSER_SETTLE_MS = 90L
     private val TAP_GESTURE_DURATION_MS = 24L
     private val REDIAL_COOLDOWN_MS = 300L
     private val PENDING_ADVANCE_KICK_MS = 16L
@@ -3092,6 +3230,7 @@ class UssdNavigationService : AccessibilityService() {
     private val MAX_RETRY_WINDOW_MS = 60000L
     private val MAX_POPUP_TRANSCRIPT_ENTRIES = 80
     private val MAX_POPUP_TRANSCRIPT_CHARS = 1200
+    private val MIN_SIM_CHOOSER_SCORE = 260
 
     private val CHANNEL_ID = "bingwa_ussd"
     private val NOTIFICATION_ID = 2001

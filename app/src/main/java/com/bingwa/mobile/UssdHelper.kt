@@ -177,6 +177,8 @@ object UssdHelper {
         subIdOverride: Int? = null
     ): Boolean {
         try {
+            val preferredTarget = resolveUssdSimTargets(context, selectionOverride = subIdOverride).firstOrNull()
+            UssdNavigationService.configureDialPreferences(preferredTarget?.subId, preferredTarget?.slotIndex)
             val intent = buildCallIntent(context, code, subIdOverride)
             if (intent.resolveActivity(context.packageManager) != null) {
                 val keepAppUiVisible = BingwaMobileApp.wasInForegroundRecently()
@@ -220,8 +222,16 @@ object UssdHelper {
             if (slot != null && slot >= 0) {
                 intent.putExtra("com.android.phone.force.slot", slot)
                 intent.putExtra("com.android.phone.extra.slot", slot)
+                intent.putExtra("com.android.phone.slot", slot)
                 intent.putExtra("slot", slot)
+                intent.putExtra("slotId", slot)
+                intent.putExtra("slot_id", slot)
+                intent.putExtra("slotIdx", slot)
                 intent.putExtra("simSlot", slot)
+                intent.putExtra("sim_slot", slot)
+                intent.putExtra("simSlotIndex", slot)
+                intent.putExtra("phone", slot)
+                intent.putExtra("com.android.phone.SIM_SLOT_INDEX", slot)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val telecom = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager

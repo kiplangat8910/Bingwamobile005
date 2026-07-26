@@ -538,6 +538,7 @@ class AutomationService : Service() {
             // Initiate dialing
             val targets = simResolver.getTargets(request.simSelection)
             if (targets.isEmpty()) {
+                UssdNavigationService.configureDialPreferences(null, null)
                 UssdNavigationService.advancedActive = false
                 UssdNavigationService.advancedInProgress = false
                 UssdNavigationService.onDispatchComplete = null
@@ -596,6 +597,7 @@ class AutomationService : Service() {
         ): Boolean {
             if (index >= targets.size) return false
             val target = targets[index]
+            UssdNavigationService.configureDialPreferences(target.subId, target.slotIndex)
             val intent = UssdHelper.buildCallIntent(context, dialCode, target.subId)
             if (intent.resolveActivity(context.packageManager) == null) {
                 return dialAdvanced(request, dialCode, targets, index + 1)
