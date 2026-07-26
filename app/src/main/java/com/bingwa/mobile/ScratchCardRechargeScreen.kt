@@ -285,9 +285,17 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
 
     fun publishSharedBalance(display: String, simSelection: Int = selectedRechargeSim) {
         if (display.isBlank()) return
+        val parsedAmount = BalanceChecker.parseBalanceInt(display).toDouble()
+        val currency = splitScratchBalance(display).first
         BalanceChecker.balanceResultListener?.invoke(
-            BalanceChecker.BalanceCheckResult(
+            BalanceChecker.BalanceResult(
                 display = display,
+                rawAmount = parsedAmount,
+                currency = currency,
+                rawText = display,
+                timestamp = System.currentTimeMillis(),
+                sourceSimSlot = simSelection,
+                success = true,
                 selectionOverride = simSelection,
                 persistResult = true
             )
@@ -2281,8 +2289,14 @@ private suspend fun startScratchBalanceCheck(
                     }
                     RelayManager.syncPrimaryAirtimeBalance(context, display)
                     BalanceChecker.balanceResultListener?.invoke(
-                        BalanceChecker.BalanceCheckResult(
+                        BalanceChecker.BalanceResult(
                             display = display,
+                            rawAmount = parsedAmount.toDouble(),
+                            currency = splitScratchBalance(display).first,
+                            rawText = response,
+                            timestamp = System.currentTimeMillis(),
+                            sourceSimSlot = simSelection,
+                            success = true,
                             selectionOverride = simSelection,
                             persistResult = true
                         )

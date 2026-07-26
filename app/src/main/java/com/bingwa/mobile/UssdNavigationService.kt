@@ -63,6 +63,56 @@ class UssdNavigationService : AccessibilityService() {
                 ?: run { pendingArm = true }
         }
 
+        fun configureUiReturn(keepVisible: Boolean) {
+            activeInstance?.let { service ->
+                service.handler.post {
+                    service.keepAppUiVisibleEnabled = keepVisible
+                    if (!keepVisible) {
+                        service.uiReturnSuppressed = true
+                        service.stopKeepingAppUiVisible()
+                    } else {
+                        service.uiReturnSuppressed = false
+                        if (advancedActive || service.isForegroundUiActive()) {
+                            service.startKeepingAppUiVisible()
+                        }
+                    }
+                    service.updateOverlay()
+                }
+            } ?: run {
+                pendingArm = true
+            }
+        }
+
+        fun armForegroundUi(durationMs: Long = 35_000L) {
+            activeInstance?.let { service ->
+                service.handler.post {
+                    service.foregroundUiActive = true
+                    service.foregroundUiUntilElapsed = SystemClock.elapsedRealtime() + durationMs.coerceAtLeast(1_000L)
+                    service.uiReturnSuppressed = false
+                    service.startKeepingAppUiVisible()
+                    service.updateOverlay()
+                }
+            }
+        }
+
+        fun onAppUiForegrounded() {
+            activeInstance?.let { service ->
+                service.handler.post {
+                    service.uiReturnSuppressed = false
+                    service.refreshForegroundUi()
+                    if (advancedActive || service.isForegroundUiActive()) {
+                        service.startKeepingAppUiVisible()
+                    }
+                    service.updateOverlay()
+                }
+            }
+        }
+
+        fun isBusyForBalanceCheck(): Boolean {
+            return advancedActive || advancedInProgress || onDispatchComplete != null ||
+                balanceCallback != null || tokenPurchaseCallback != null
+        }
+
         fun resetSignatureTracking() { /* handled internally */ }
         fun refreshRunningOverlay() { activeInstance?.updateOverlay() }
     }
@@ -925,7 +975,7 @@ class UssdNavigationService : AccessibilityService() {
                     if (tryImmediateVerifiedSend(interactionRoot, null, expected)) {
                         clearPendingAdvance()
                         val text = capturePreferredPopupSnapshot(interactionRoot, shouldRequireStrictPopupScope())?.dialogText.orEmpty()
-                        markStepAction(text)
+                        markStepAction(text, interactionRoot, null)
                         startPendingStepAdvance(interactionRoot, text)
                     } else {
                         schedulePendingAdvanceKick()
@@ -1394,7 +1444,7 @@ class UssdNavigationService : AccessibilityService() {
     private fun refreshInputTarget(node: AccessibilityNodeInfo) = runCatching { node.refresh() }
 
     private fun supportsAction(node: AccessibilityNodeInfo, actionId: Int): Boolean =
-        runCatching { node.actionList?.any { it.id == actionId } }.getOrDefault(false)
+        runCatching { node.actionList?.any { it.id == actionId } == true }.getOrDefault(false)
 
     private fun isTextEntryNode(node: AccessibilityNodeInfo): Boolean {
         val cls = node.className?.toString().orEmpty()
@@ -2217,6 +2267,33 @@ class UssdNavigationService : AccessibilityService() {
         startStepTimeout()
     }
 
+    private fun handleAdvancedSessionArmed() {
+        if (!advancedActive) return
+        uiReturnSuppressed = false
+        isProcessing = false
+        lastRelevantEventElapsed = SystemClock.elapsedRealtime()
+        if (retryWindowStartedAt <= 0L) {
+            retryWindowStartedAt = SystemClock.elapsedRealtime()
+        }
+        requestAppUiBehindPopup(force = true)
+        startKeepingAppUiVisible()
+        updateOverlay()
+        startStepTimeout()
+    }
+
+    private fun finishAdvancedDispatch(finalText: String) {
+        lastFinalResponse = finalText.ifBlank { lastFinalResponse }
+        currentStep = advancedSteps.size
+        isProcessing = false
+        clearPendingAdvance()
+        clearPendingStepAdvance()
+        clearInputWriteMarkers()
+        onDispatchComplete?.invoke(buildDispatchResult(lastFinalResponse))
+        advancedInProgress = false
+        updateOverlay()
+        cleanupAdvanced()
+    }
+
     private fun redialAdvancedIfNeeded() {
         val dialCode = advancedDialCode.trim()
         if (dialCode.isBlank()) return
@@ -2793,31 +2870,6 @@ class UssdNavigationService : AccessibilityService() {
     // endregion
 
     // region Data classes for signature & internal use
-    data class UssdSignatureStep(
-        val stepIndex: Int,
-        val expectedInput: String,
-        val menuTitle: String,
-        val menuText: String,
-        val selectedOptionLabel: String,
-        val menuOptionsSnapshot: List<String>
-    )
-    data class UssdLearningCapture(
-        val stepIndex: Int,
-        val enteredInput: String,
-        val selectedOptionLabel: String,
-        val popupText: String
-    )
-    data class AdvancedDispatchResult(
-        val finalResponse: String,
-        val changeDetected: Boolean,
-        val autoAdjusted: Boolean,
-        val learningCompleted: Boolean,
-        val suggestedCode: String,
-        val changeSummary: String,
-        val learnedSignature: List<UssdSignatureStep>,
-        val learningCaptures: List<UssdLearningCapture>,
-        val popupTranscript: List<String>
-    )
     private data class UssdTreeSnapshot(
         val dialogText: String,
         val normalizedDialogText: String,
