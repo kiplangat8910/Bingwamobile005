@@ -206,7 +206,7 @@ fun SetupDoctorCard(onOpen: () -> Unit) {
                         .border(1.dp, accent.copy(alpha = 0.2f), RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Outlined.BuildIcon, null, tint = accent, modifier = Modifier.size(22.dp))
+                    Icon(BuildIcon, null, tint = accent, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {

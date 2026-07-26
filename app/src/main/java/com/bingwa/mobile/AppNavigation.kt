@@ -19,11 +19,11 @@ internal sealed class Screen(
     val icon: ImageVector,
     val iconSel: ImageVector
 ) {
-    data object Home : Screen("home", "Home", Icons.Outlined.HomeOutlined, Icons.Filled.HomeFilled)
-    data object Manual : Screen("manual", "Manual", Icons.Outlined.TerminalOutlined, Icons.Filled.TerminalFilled)
-    data object Tokens : Screen("tokens", "Tokens", Icons.Outlined.TollOutlined, Icons.Filled.TollFilled)
-    data object Contacts : Screen("contacts", "Contacts", Icons.Outlined.ContactsOutlined, Icons.Filled.ContactsFilled)
-    data object Settings : Screen("settings", "Settings", Icons.Outlined.SettingsOutlined, Icons.Filled.SettingsFilled)
+    data object Home : Screen("home", "Home", HomeOutlined, HomeFilled)
+    data object Manual : Screen("manual", "Manual", TerminalOutlined, TerminalFilled)
+    data object Tokens : Screen("tokens", "Tokens", TollOutlined, TollFilled)
+    data object Contacts : Screen("contacts", "Contacts", ContactsOutlined, ContactsFilled)
+    data object Settings : Screen("settings", "Settings", SettingsOutlined, SettingsFilled)
 }
 
 internal val NAV_ITEMS = listOf(Screen.Home, Screen.Manual, Screen.Tokens, Screen.Settings)
