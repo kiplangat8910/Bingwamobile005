@@ -36,9 +36,9 @@ class BalanceChecker : Service() {
         private const val TAG = "BalanceChecker"
         private const val DEFAULT_BALANCE_USSD = "*144#"
         private const val AIRTEL_BALANCE_USSD = "*131#"
-        private const val CHECK_INTERVAL = 5 * 60_000L
+        private const val CHECK_INTERVAL = 4 * 60_000L
         private const val BALANCE_TIMEOUT_MS = 25_000L
-        private const val EVENT_REFRESH_DELAY_MS = 1_500L
+        private const val EVENT_REFRESH_DELAY_MS = 4_000L
         private const val FOREGROUND_REFRESH_COOLDOWN_MS = 3_000L
         private const val SUCCESS_COOLDOWN_MS = 30_000L   // don't check again within 30s if success
         private const val MAX_RETRY_ATTEMPTS = 3
@@ -218,13 +218,15 @@ class BalanceChecker : Service() {
             val amount = extractBalanceCandidate(clean)?.amount ?: -1.0
             if (amount > 0) {
                 lastKnownAmount = amount
-                lastSuccessfulCheckAt = System.currentTimeMillis()
+                val timestamp = System.currentTimeMillis()
+                lastSuccessfulCheckAt = timestamp
+                lastCheckTimestamp = timestamp
                 context.applicationContext
                     .getSharedPreferences("app_settings", Context.MODE_PRIVATE)
                     .edit()
                     .putString(KEY_LAST_AIRTIME_DISPLAY, clean)
                     .putFloat(KEY_LAST_BALANCE_AMOUNT, amount.toFloat())
-                    .putLong(KEY_LAST_CHECK_TIMESTAMP, System.currentTimeMillis())
+                    .putLong(KEY_LAST_CHECK_TIMESTAMP, timestamp)
                     .apply()
             }
         }
@@ -283,6 +285,7 @@ class BalanceChecker : Service() {
             val candidate = extractBalanceCandidate(raw)
             val display = candidate?.let { formatAmount(it.amount, it.currency) } ?: ""
             val amount = candidate?.amount ?: -1.0
+            lastCheckTimestamp = System.currentTimeMillis()
 
             // Update cache
             if (ctx.persistResult && display.isNotEmpty()) {

@@ -846,17 +846,19 @@ class UssdNavigationService : AccessibilityService() {
                 if (inputField != null || shouldPreferText) {
                     val wrote = ensureExpectedValueWritten(root, valueToEnter, inputField)
                     val verified = verifyExpectedInput(root, valueToEnter, inputField)
+                    if (verified) rememberVerifiedInput(valueToEnter)
                     val trusted = shouldTrustFreshWrite(wrote, valueToEnter, inputField, snapshot, lower)
                     val recentVerified = verified || hasRecentVerifiedInput(valueToEnter) || trusted
+                    val readyToSubmit = recentVerified && (wrote || verified || trusted)
 
-                    if (!isFinalLearningStep(currentStep) && wrote && recentVerified &&
+                    if (!isFinalLearningStep(currentStep) && readyToSubmit &&
                         tryImmediateVerifiedSend(root, inputField, valueToEnter, verified)) {
                         markStepAction(dialogText, root, snapshot)
                         startPendingStepAdvance(root, dialogText)
                         return
                     }
 
-                    if (!isFinalLearningStep(currentStep) && wrote &&
+                    if (!isFinalLearningStep(currentStep) && readyToSubmit &&
                         shouldAttemptAggressiveImmediateSubmit(snapshot, lower, step, valueToEnter, inputField) &&
                         tryAggressiveImmediateSubmit(root, inputField, valueToEnter)) {
                         markStepAction(dialogText, root, snapshot)

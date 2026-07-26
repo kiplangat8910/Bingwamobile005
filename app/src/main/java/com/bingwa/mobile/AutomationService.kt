@@ -146,12 +146,12 @@ class AutomationService : Service() {
     ) {
         // Handle token purchase / balance callbacks first
         if (handleCallback(request, response)) {
-            finishExecution(scheduleAirtimeRefresh = true)
+            finishExecution(refreshReason = request.refreshReasonOrNull())
             return
         }
 
         if (request.txId < 0) {
-            finishExecution(scheduleAirtimeRefresh = true)
+            finishExecution(refreshReason = request.refreshReasonOrNull())
             return
         }
 
@@ -173,7 +173,7 @@ class AutomationService : Service() {
             TransactionStatus.FAILED.value -> handleFailed(request, response)
         }
 
-        finishExecution(scheduleAirtimeRefresh = true)
+        finishExecution(refreshReason = request.refreshReasonOrNull())
     }
 
     private fun handleCallback(request: UssdRequest, response: String): Boolean {
@@ -246,13 +246,13 @@ class AutomationService : Service() {
     private fun handleSignatureLearning(request: UssdRequest, result: AdvancedDispatchResult) {
         if (request.offerId < 0) {
             notificationHelper.notifyLearningNoOffer(request)
-            finishExecution(scheduleAirtimeRefresh = true)
+            finishExecution(refreshReason = null)
             return
         }
 
         if (result.learnedSignature.isEmpty() && result.learningCaptures.isEmpty()) {
             notificationHelper.notifyLearningFailed(request)
-            finishExecution(scheduleAirtimeRefresh = true)
+            finishExecution(refreshReason = null)
             return
         }
 
@@ -269,7 +269,7 @@ class AutomationService : Service() {
             .setPackage(packageName)
             .putExtra("offerId", request.offerId))
 
-        finishExecution(scheduleAirtimeRefresh = true)
+        finishExecution(refreshReason = null)
     }
     // endregion
 
@@ -286,11 +286,19 @@ class AutomationService : Service() {
         }
     }
 
-    private fun finishExecution(scheduleAirtimeRefresh: Boolean) {
-        if (scheduleAirtimeRefresh) {
-            BalanceChecker.scheduleAirtimeRefresh(this, "USSD execution")
-        }
+    private fun finishExecution(refreshReason: String?) {
+        refreshReason?.let { BalanceChecker.scheduleAirtimeRefresh(this, it) }
         stopSelf()
+    }
+
+    private fun UssdRequest.refreshReasonOrNull(): String? {
+        if (signatureLearning) return null
+        val normalizedCode = code.trim().replace("%23", "#")
+        return if (normalizedCode == BalanceChecker.resolveBalanceUssdCode(this@AutomationService, simSelection.takeUnless { it == OFFER_SIM_USE_GENERAL })) {
+            null
+        } else {
+            "USSD execution"
+        }
     }
     // endregion
 
@@ -848,7 +856,7 @@ class AutomationService : Service() {
             if (request.txId >= 0) {
                 saveAndBroadcast(request.txId, TransactionStatus.FAILED.value, message)
             }
-            finishExecution(scheduleAirtimeRefresh = true)
+            finishExecution(refreshReason = request.refreshReasonOrNull())
         }
 
         fun createFallbackTransaction(request: UssdRequest, offer: OfferItem, reason: String): Int {
