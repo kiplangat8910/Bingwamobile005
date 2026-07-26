@@ -168,6 +168,8 @@ class UssdNavigationService : AccessibilityService() {
     private var lastEventFingerprint = ""
     private var lastEventElapsed = 0L
     private var lastScreenSignatureKey = ""
+    private var lastObservedDialogStateKey = ""
+    private var lastObservedDialogStateChangedElapsed = 0L
 
     // Recent USSD context cache (to avoid repeated scans)
     private var recentUssdRoot: AccessibilityNodeInfo? = null
@@ -235,7 +237,7 @@ class UssdNavigationService : AccessibilityService() {
                     AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                     AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                     AccessibilityServiceInfo.DEFAULT
-            notificationTimeout = 32L
+            notificationTimeout = ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS
         }
         if (pendingArm) {
             pendingArm = false
@@ -324,6 +326,7 @@ class UssdNavigationService : AccessibilityService() {
             lastWindowPkg = windowPkg
             lastRelevantEventElapsed = SystemClock.elapsedRealtime()
             rememberRecentUssdContext(root, snapshot, windowId, windowPkg, dialogText, requireStrict)
+            rememberObservedDialogState(windowId, windowPkg, dialogText, snapshot)
 
             // ------- Advanced flow -------
             if (advancedActive && advancedSteps.isNotEmpty()) {
@@ -738,8 +741,9 @@ class UssdNavigationService : AccessibilityService() {
     private fun scheduleProcessStep(dialogChanged: Boolean, overrideDelay: Long? = null) {
         processStepRunnable?.let { handler.removeCallbacks(it) }
         val token = pendingProcessToken
+        val stabilityDelay = popupStabilityRemainingMs()
         val delay = overrideDelay ?: when {
-            dialogChanged && hasFreshRecentUssdContext() -> 0L
+            dialogChanged && stabilityDelay > 0L -> stabilityDelay
             hasSeenAdvancedPopup && dialogChanged -> RAPID_POST_POPUP_POLL_MS
             hasSeenAdvancedPopup && hasRecentUssdUiEvent() -> RAPID_POST_POPUP_VERIFY_MS
             dialogChanged && hasRecentUssdUiEvent() -> EVENT_HOT_POLL_MS
@@ -2260,7 +2264,11 @@ class UssdNavigationService : AccessibilityService() {
         val now = SystemClock.elapsedRealtime()
         if (retryWindowStartedAt <= 0) retryWindowStartedAt = now
         if (now - retryWindowStartedAt >= MAX_RETRY_WINDOW_MS) {
-            val failMsg = if (lastFinalResponse.isNotBlank()) lastFinalResponse else "FAILED after 1 minute of retries"
+            val failMsg = if (lastFinalResponse.isNotBlank()) {
+                lastFinalResponse
+            } else {
+                "FAILED after the retry window expired"
+            }
             onDispatchComplete?.invoke(buildDispatchResult(failMsg))
             tokenPurchaseCallback?.invoke(false)
             tokenPurchaseCallback = null
@@ -2277,6 +2285,8 @@ class UssdNavigationService : AccessibilityService() {
         lastUiReturnElapsed = 0L
         lastWindowId = -1
         lastWindowPkg = ""
+        lastObservedDialogStateKey = ""
+        lastObservedDialogStateChangedElapsed = 0L
         pendingProcessToken = 0L
         clearInputWriteMarkers()
         clearRecentUssdContext()
@@ -2555,6 +2565,8 @@ class UssdNavigationService : AccessibilityService() {
         lastStepActionKey = ""
         lastStepActionElapsed = 0L
         lastUiReturnElapsed = 0L
+        lastObservedDialogStateKey = ""
+        lastObservedDialogStateChangedElapsed = 0L
         clearPendingAdvance()
         clearPendingStepAdvance()
         clearInputWriteMarkers()
@@ -2691,6 +2703,33 @@ class UssdNavigationService : AccessibilityService() {
             lines.distinct()
         }
         return recorded.joinToString("\n").ifBlank { snapshot.dialogText }
+    }
+
+    private fun rememberObservedDialogState(
+        windowId: Int,
+        windowPkg: String,
+        dialogText: String,
+        snapshot: UssdTreeSnapshot?
+    ) {
+        val normalized = buildDialogStateKey(dialogText, snapshot?.inputStateSignature.orEmpty())
+            .ifBlank { normalizeCollapsedText(dialogText) }
+        if (normalized.isBlank()) return
+        val stateKey = "$windowId|$windowPkg|$normalized"
+        if (stateKey != lastObservedDialogStateKey) {
+            lastObservedDialogStateKey = stateKey
+            lastObservedDialogStateChangedElapsed = SystemClock.elapsedRealtime()
+        }
+    }
+
+    private fun popupStabilityRemainingMs(): Long {
+        if (lastObservedDialogStateChangedElapsed <= 0L) return 0L
+        val requiredStableMs = when {
+            !hasSeenAdvancedPopup -> STARTUP_POPUP_STABILITY_DELAY_MS
+            shouldUseExtendedTimeout() -> WEAK_NETWORK_POPUP_STABILITY_DELAY_MS
+            else -> POPUP_STABILITY_DELAY_MS
+        }
+        val elapsed = SystemClock.elapsedRealtime() - lastObservedDialogStateChangedElapsed
+        return (requiredStableMs - elapsed).coerceAtLeast(0L)
     }
 
     private fun shouldWaitForRootRecovery(): Boolean {
@@ -3172,38 +3211,38 @@ class UssdNavigationService : AccessibilityService() {
 
     // Timeouts (ms)
     private val STEP_DELAY_MS = 30L
-    private val EVENT_HOT_POLL_MS = 8L
-    private val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 32L
-    private val DUPLICATE_EVENT_WINDOW_MS = 32L
-    private val FAST_VERIFY_POLL_MS = 8L
-    private val HOT_SEND_RETRY_DELAY_MS = 10L
-    private val SEND_RETRY_DELAY_MS = 14L
-    private val POST_WRITE_VERIFY_POLL_MS = 6L
-    private val POST_WRITE_SEND_RETRY_MS = 10L
-    private val STEP_TIMEOUT_MS = 4500L
-    private val STARTUP_STEP_TIMEOUT_MS = 7000L
-    private val FINAL_RESPONSE_TIMEOUT_MS = 6500L
-    private val PENDING_STEP_TIMEOUT_MS = 6000L
-    private val PENDING_ADVANCE_TIMEOUT_MS = 6000L
-    private val ROOT_REACQUIRE_TIMEOUT_MS = 5000L
-    private val PENDING_STEP_ADVANCE_TIMEOUT_MS = 6000L
-    private val NETWORK_DELAY_STEP_TIMEOUT_MS = 16000L
-    private val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 18000L
-    private val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 16000L
-    private val NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS = 15000L
-    private val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 15000L
-    private val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 15000L
-    private val NETWORK_DELAY_ACTION_GRACE_MS = 18000L
-    private val PENDING_STEP_ADVANCE_KICK_MS = 140L
-    private val VERIFY_POLL_MS = 16L
-    private val RAPID_POST_POPUP_POLL_MS = 8L
-    private val RAPID_POST_POPUP_VERIFY_MS = 6L
-    private val RAPID_POST_POPUP_SEND_RETRY_MS = 8L
+    private val EVENT_HOT_POLL_MS = 60L
+    private val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 48L
+    private val DUPLICATE_EVENT_WINDOW_MS = 72L
+    private val FAST_VERIFY_POLL_MS = 70L
+    private val HOT_SEND_RETRY_DELAY_MS = 60L
+    private val SEND_RETRY_DELAY_MS = 90L
+    private val POST_WRITE_VERIFY_POLL_MS = 50L
+    private val POST_WRITE_SEND_RETRY_MS = 70L
+    private val STEP_TIMEOUT_MS = 9000L
+    private val STARTUP_STEP_TIMEOUT_MS = 15000L
+    private val FINAL_RESPONSE_TIMEOUT_MS = 14000L
+    private val PENDING_STEP_TIMEOUT_MS = 12000L
+    private val PENDING_ADVANCE_TIMEOUT_MS = 12000L
+    private val ROOT_REACQUIRE_TIMEOUT_MS = 10000L
+    private val PENDING_STEP_ADVANCE_TIMEOUT_MS = 12000L
+    private val NETWORK_DELAY_STEP_TIMEOUT_MS = 22000L
+    private val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 26000L
+    private val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 22000L
+    private val NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS = 22000L
+    private val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 20000L
+    private val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 22000L
+    private val NETWORK_DELAY_ACTION_GRACE_MS = 24000L
+    private val PENDING_STEP_ADVANCE_KICK_MS = 220L
+    private val VERIFY_POLL_MS = 120L
+    private val RAPID_POST_POPUP_POLL_MS = 60L
+    private val RAPID_POST_POPUP_VERIFY_MS = 50L
+    private val RAPID_POST_POPUP_SEND_RETRY_MS = 60L
     private val MAX_VERIFY_ATTEMPTS = 10
     private val MAX_SEND_ATTEMPTS = 5
     private val FORCEFUL_WRITE_PASSES = 6
     private val WRITE_VERIFICATION_PASSES = 5
-    private val WRITE_VERIFICATION_SETTLE_MS = 16L
+    private val WRITE_VERIFICATION_SETTLE_MS = 50L
     private val DIRECT_WRITE_VERIFY_PASSES = 3
     private val SET_TEXT_BURST_ATTEMPTS = 3
     private val PASTE_BURST_ATTEMPTS = 3
@@ -3213,21 +3252,23 @@ class UssdNavigationService : AccessibilityService() {
     private val INPUT_NEARBY_SCOPE_DEPTH = 2
     private val RECENT_INPUT_GRACE_MS = 4000L
     private val RECENT_VERIFIED_INPUT_GRACE_MS = 6500L
-    private val RECENT_UI_EVENT_GRACE_MS = 1200L
-    private val RECENT_USSD_CONTEXT_WINDOW_MS = 900L
-    private val GESTURE_SETTLE_MS = 12L
-    private val POST_GESTURE_WAIT_MS = 10L
-    private val POPUP_STABILITY_DELAY_MS = 14L
-    private val SIM_CHOOSER_SETTLE_MS = 90L
-    private val TAP_GESTURE_DURATION_MS = 24L
-    private val REDIAL_COOLDOWN_MS = 300L
-    private val PENDING_ADVANCE_KICK_MS = 16L
-    private val ROOT_REACQUIRE_RETRY_DELAY_MS = 18L
-    private val DIALOG_DISMISS_SETTLE_MS = 20L
+    private val RECENT_UI_EVENT_GRACE_MS = 1800L
+    private val RECENT_USSD_CONTEXT_WINDOW_MS = 1800L
+    private val GESTURE_SETTLE_MS = 45L
+    private val POST_GESTURE_WAIT_MS = 40L
+    private val POPUP_STABILITY_DELAY_MS = 140L
+    private val STARTUP_POPUP_STABILITY_DELAY_MS = 220L
+    private val WEAK_NETWORK_POPUP_STABILITY_DELAY_MS = 320L
+    private val SIM_CHOOSER_SETTLE_MS = 250L
+    private val TAP_GESTURE_DURATION_MS = 40L
+    private val REDIAL_COOLDOWN_MS = 1800L
+    private val PENDING_ADVANCE_KICK_MS = 90L
+    private val ROOT_REACQUIRE_RETRY_DELAY_MS = 150L
+    private val DIALOG_DISMISS_SETTLE_MS = 120L
     private val UI_KEEP_VISIBLE_INTERVAL_MS = 500L
-    private val STARTUP_UI_KEEP_VISIBLE_MS = 8000L
-    private val STEP_TRANSITION_GUARD_MS = 240L
-    private val MAX_RETRY_WINDOW_MS = 60000L
+    private val STARTUP_UI_KEEP_VISIBLE_MS = 12000L
+    private val STEP_TRANSITION_GUARD_MS = 900L
+    private val MAX_RETRY_WINDOW_MS = 90000L
     private val MAX_POPUP_TRANSCRIPT_ENTRIES = 80
     private val MAX_POPUP_TRANSCRIPT_CHARS = 1200
     private val MIN_SIM_CHOOSER_SCORE = 260

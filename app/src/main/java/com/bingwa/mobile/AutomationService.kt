@@ -304,8 +304,8 @@ class AutomationService : Service() {
         private const val CHANNEL_ID = "automation_service"
         private const val NOTIFICATION_ID = 2014
         private const val RETRIABLE_RETRY_PREFS_NAME = "retriable_ussd_response_retry"
-        private const val ACTIVE_RETRY_WINDOW_MS = 60_000L
-        private const val ACTIVE_RETRY_INTERVAL_MS = 5_000L
+        private const val ACTIVE_RETRY_WINDOW_MS = 90_000L
+        private const val ACTIVE_RETRY_INTERVAL_MS = 7_000L
         private const val FIRST_BACKOFF_MS = 5 * 60_000L
         private const val REPEATED_BACKOFF_MS = 10 * 60_000L
 

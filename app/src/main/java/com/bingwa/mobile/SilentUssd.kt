@@ -13,7 +13,7 @@ import java.lang.reflect.Proxy
 
 object SilentUssd {
     private const val TAG             = "SilentUssd"
-    private const val TIMEOUT_MS      = 3_000L
+    private const val TIMEOUT_MS      = 12_000L
     @Volatile private var inProgress  = false
 
     private var successCb : ((String) -> Unit)? = null
@@ -256,7 +256,7 @@ object SilentUssd {
         cancelTimeout()
         val timeout = Runnable {
             Log.w(TAG, "Silent USSD timed out for $code")
-            deliverFailure("Timeout waiting for USSD response")
+            deliverFailure("Timeout waiting for USSD response on a weak or delayed network")
         }
         timeoutRunnable = timeout
         handler.postDelayed(timeout, TIMEOUT_MS)

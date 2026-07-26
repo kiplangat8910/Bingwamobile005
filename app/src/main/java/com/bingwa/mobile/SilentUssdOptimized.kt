@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 object SilentUssdOptimized {
     private const val TAG = "SilentUssd"
-    private const val TIMEOUT_MS = 3_000L
+    private const val TIMEOUT_MS = 12_000L
 
     @Volatile private var successCb: ((String) -> Unit)? = null
     @Volatile private var failureCb: ((String) -> Unit)? = null
@@ -237,7 +237,7 @@ object SilentUssdOptimized {
         cancelTimeout()
         val timeout = Runnable {
             Log.w(TAG, "USSD timeout for $code")
-            deliverFailure(requestId, "Timeout")
+            deliverFailure(requestId, "Timeout waiting for USSD response on a weak or delayed network")
         }
         timeoutRunnable = timeout
         handler.postDelayed(timeout, TIMEOUT_MS)
