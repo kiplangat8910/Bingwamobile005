@@ -16,11 +16,9 @@ import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.util.Calendar
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
 
 // ============================================================
-// AUTOMATION SERVICE – REFACTORED & POWERFUL
+// AUTOMATION SERVICE – FIXED
 // ============================================================
 
 class AutomationService : Service() {
@@ -310,7 +308,7 @@ class AutomationService : Service() {
     // endregion
 
     // ============================================================
-    // INNER HELPER CLASSES (encapsulated within the service)
+    // INNER HELPER CLASSES
     // ============================================================
 
     // region UssdRequest – data class for request parameters
@@ -999,6 +997,7 @@ class AutomationService : Service() {
         finalCode: String,
         mode: String
     ) {
+        // IMPORTANT: OfferItem uses signatureDetectionEnabled and signatureAction, not signatureEnabled/signatureMode.
         val intent = Intent(this, AutomationService::class.java).apply {
             putExtra("mode", mode)
             putExtra("code", finalCode)
@@ -1007,14 +1006,13 @@ class AutomationService : Service() {
             putExtra("offerId", offer.id)
             putExtra("offerName", offer.name)
             putExtra("simSelection", offer.simSelection)
-            putExtra("signatureEnabled", offer.signatureEnabled)
-            putExtra("signatureMode", offer.signatureMode)
+            putExtra("signatureEnabled", offer.signatureDetectionEnabled)  // fixed
+            putExtra("signatureMode", offer.signatureAction)               // fixed
             putExtra("signatureLearning", false)
             putExtra("executionPriority", USSD_EXECUTION_PRIORITY_NORMAL)
             putExtra("returnToAppAggressively", true)
         }
         startService(intent)
     }
-
     // endregion
 }
