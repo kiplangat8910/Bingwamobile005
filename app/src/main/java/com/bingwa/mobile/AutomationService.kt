@@ -290,8 +290,7 @@ class AutomationService : Service() {
         if (scheduleAirtimeRefresh) {
             BalanceChecker.scheduleAirtimeRefresh(this, "USSD execution")
         }
-        UssdQueue.markCompleted()
-        if (!UssdQueue.hasWork()) stopSelf()
+        stopSelf()
     }
     // endregion
 
@@ -304,6 +303,36 @@ class AutomationService : Service() {
         const val ACTION_RUN_SCHEDULED = "com.bingwa.mobile.ACTION_RUN_SCHEDULED"
         private const val CHANNEL_ID = "automation_service"
         private const val NOTIFICATION_ID = 2014
+        private const val RETRIABLE_RETRY_PREFS_NAME = "retriable_ussd_response_retry"
+        private const val ACTIVE_RETRY_WINDOW_MS = 60_000L
+        private const val ACTIVE_RETRY_INTERVAL_MS = 5_000L
+        private const val FIRST_BACKOFF_MS = 5 * 60_000L
+        private const val REPEATED_BACKOFF_MS = 10 * 60_000L
+
+        fun cancelRetriableResponseRetry(context: Context, txId: Int) {
+            if (txId < 0) return
+            runCatching {
+                val appContext = context.applicationContext
+                val intent = Intent(appContext, AutomationService::class.java).apply {
+                    action = ACTION_RETRY_RETRIABLE_RESPONSE
+                }
+                val pi = PendingIntent.getService(
+                    appContext,
+                    txId,
+                    intent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                (appContext.getSystemService(Context.ALARM_SERVICE) as? AlarmManager)?.cancel(pi)
+                pi.cancel()
+                appContext.getSharedPreferences(RETRIABLE_RETRY_PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .remove("tx_${txId}_windowStart")
+                    .remove("tx_${txId}_completedWindows")
+                    .remove("tx_${txId}_nextWindow")
+                    .remove("tx_${txId}_attempts")
+                    .apply()
+            }
+        }
     }
     // endregion
 
@@ -365,6 +394,13 @@ class AutomationService : Service() {
         }
     }
     // endregion
+
+    private data class RetryState(
+        val windowStartAtMillis: Long,
+        val completedWindows: Int,
+        val nextAttemptStartsNewWindow: Boolean,
+        val totalAttempts: Int
+    )
 
     // region UssdDispatcher – handles USSD execution (simple & advanced)
     private inner class UssdDispatcher(private val context: Context) {
@@ -634,22 +670,9 @@ class AutomationService : Service() {
 
     // region RetryManager – handles retry scheduling and state
     private inner class RetryManager(private val context: Context) {
-        companion object {
-            private const val PREFS_NAME = "retriable_ussd_response_retry"
-            private const val ACTIVE_RETRY_WINDOW_MS = 60_000L
-            private const val ACTIVE_RETRY_INTERVAL_MS = 5_000L
-            private const val FIRST_BACKOFF_MS = 5 * 60_000L
-            private const val REPEATED_BACKOFF_MS = 10 * 60_000L
+        private val prefs by lazy {
+            context.getSharedPreferences(RETRIABLE_RETRY_PREFS_NAME, Context.MODE_PRIVATE)
         }
-
-        private data class RetryState(
-            val windowStartAtMillis: Long,
-            val completedWindows: Int,
-            val nextAttemptStartsNewWindow: Boolean,
-            val totalAttempts: Int
-        )
-
-        private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
         fun scheduleRetry(request: UssdRequest, response: String, status: String, transcript: List<String>?) {
             val now = System.currentTimeMillis()
