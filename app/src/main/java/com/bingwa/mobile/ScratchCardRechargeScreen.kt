@@ -286,8 +286,18 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
     fun publishSharedBalance(display: String, simSelection: Int = selectedRechargeSim) {
         if (display.isBlank()) return
         BalanceChecker.balanceResultListener?.invoke(
-            BalanceChecker.BalanceCheckResult(
+            BalanceChecker.BalanceResult(
                 display = display,
+                rawAmount = BalanceChecker.getLastKnownBalanceAmount(),
+                currency = splitScratchBalance(display).first,
+                rawText = display,
+                timestamp = System.currentTimeMillis(),
+                sourceSimSlot = when (simSelection) {
+                    USSD_SIM_SELECTION_SLOT_1 -> 0
+                    USSD_SIM_SELECTION_SLOT_2 -> 1
+                    else -> null
+                },
+                success = true,
                 selectionOverride = simSelection,
                 persistResult = true
             )
@@ -2281,8 +2291,18 @@ private suspend fun startScratchBalanceCheck(
                     }
                     RelayManager.syncPrimaryAirtimeBalance(context, display)
                     BalanceChecker.balanceResultListener?.invoke(
-                        BalanceChecker.BalanceCheckResult(
+                        BalanceChecker.BalanceResult(
                             display = display,
+                            rawAmount = BalanceChecker.getLastKnownBalanceAmount(),
+                            currency = splitScratchBalance(display).first,
+                            rawText = response,
+                            timestamp = System.currentTimeMillis(),
+                            sourceSimSlot = when (simSelection) {
+                                USSD_SIM_SELECTION_SLOT_1 -> 0
+                                USSD_SIM_SELECTION_SLOT_2 -> 1
+                                else -> null
+                            },
+                            success = true,
                             selectionOverride = simSelection,
                             persistResult = true
                         )

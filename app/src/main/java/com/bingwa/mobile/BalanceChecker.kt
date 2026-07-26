@@ -54,12 +54,24 @@ class BalanceChecker : Service() {
         @Volatile var balanceCallback: ((String) -> Unit)? = null  // legacy simple callback
 
         // State
+        @Volatile private var appContext: Context? = null
         @Volatile private var lastKnownDisplay: String = ""
         @Volatile private var lastKnownAmount: Double = -1.0
         @Volatile private var lastCheckTimestamp: Long = 0L
         @Volatile private var checking = false
         @Volatile private var lastCheckStartedAt = 0L
         @Volatile private var lastSuccessfulCheckAt = 0L
+        @Volatile var currentBalance: Int = -1
+            set(value) {
+                field = value
+                if (value >= 0) {
+                    lastKnownAmount = value.toDouble()
+                }
+            }
+        val currentBalanceStr: String
+            get() = lastKnownDisplay.ifBlank {
+                appContext?.let(::getLastKnownBalanceDisplay).orEmpty()
+            }
 
         private val timeoutHandler = Handler(Looper.getMainLooper())
         private var timeoutRunnable: Runnable? = null
@@ -93,7 +105,7 @@ class BalanceChecker : Service() {
             ignoreCooldown: Boolean = false,
             specialHandling: Boolean = false
         ): Boolean {
-            val appContext = context.applicationContext
+            val appContext = context.applicationContext.also { this.appContext = it }
             val now = System.currentTimeMillis()
 
             // If we have a recent successful check and cooldown applies, skip
@@ -144,7 +156,7 @@ class BalanceChecker : Service() {
             reason: String,
             delayMs: Long = EVENT_REFRESH_DELAY_MS
         ): Boolean {
-            val appContext = context.applicationContext
+            val appContext = context.applicationContext.also { this.appContext = it }
             val automationEnabled = appContext
                 .getSharedPreferences("app_settings", Context.MODE_PRIVATE)
                 .getBoolean("automation_enabled", true)
@@ -190,19 +202,20 @@ class BalanceChecker : Service() {
                 .also { if (it.isNotEmpty()) lastKnownDisplay = it }
         }
 
-        fun getLastKnownBalanceAmount(): Double = lastKnownAmount
-
         /**
          * Persist balance to shared preferences.
          */
         fun persistLastKnownBalance(context: Context, display: String) {
+            appContext = context.applicationContext
             val clean = display.trim()
             if (clean.isEmpty()) return
             lastKnownDisplay = clean
             val amount = extractBalanceCandidate(clean)?.amount ?: -1.0
             if (amount > 0) {
                 lastKnownAmount = amount
+                currentBalance = amount.toInt()
                 lastSuccessfulCheckAt = System.currentTimeMillis()
+                lastCheckTimestamp = System.currentTimeMillis()
                 context.applicationContext
                     .getSharedPreferences("app_settings", Context.MODE_PRIVATE)
                     .edit()
@@ -267,6 +280,10 @@ class BalanceChecker : Service() {
             val candidate = extractBalanceCandidate(raw)
             val display = candidate?.let { formatAmount(it.amount, it.currency) } ?: ""
             val amount = candidate?.amount ?: -1.0
+            if (display.isNotEmpty()) {
+                lastKnownDisplay = display
+                currentBalance = amount.toInt()
+            }
 
             // Update cache
             if (ctx.persistResult && display.isNotEmpty()) {
@@ -477,7 +494,7 @@ class BalanceChecker : Service() {
             return "$currency $formatted"
         }
 
-        private fun resolveBalanceUssdCode(context: Context, selectionOverride: Int?): String {
+        fun resolveBalanceUssdCode(context: Context, selectionOverride: Int?): String {
             return if (isAirtelBalanceTarget(context, selectionOverride)) {
                 AIRTEL_BALANCE_USSD
             } else {
@@ -526,11 +543,12 @@ class BalanceChecker : Service() {
             checking = false
             val ctx = activeRequestContext ?: BalanceRequestContext()
             activeRequestContext = null
+            val appCtx = appContext ?: return
             // If we have retries left, schedule one
             if (retryCount < MAX_RETRY_ATTEMPTS) {
-                scheduleRetry(applicationContext, ctx.selectionOverride, ctx.persistResult)
+                scheduleRetry(appCtx, ctx.selectionOverride, ctx.persistResult)
             } else {
-                notifyFailure(applicationContext, ctx.selectionOverride, ctx.persistResult)
+                notifyFailure(appCtx, ctx.selectionOverride, ctx.persistResult)
             }
         }
 
@@ -544,15 +562,13 @@ class BalanceChecker : Service() {
         // ─── Cache / Persistence ──────────────────────────────────────────
 
         fun getLastKnownBalanceAmount(): Double {
-            if (lastKnownAmount > 0) return lastKnownAmount
-            val prefs = applicationContext.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-            return prefs.getFloat(KEY_LAST_BALANCE_AMOUNT, -1f).toDouble()
+            val prefs = appContext?.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+            return prefs?.getFloat(KEY_LAST_BALANCE_AMOUNT, -1f)?.toDouble() ?: -1.0
         }
 
         fun getLastCheckTimestamp(): Long {
-            if (lastCheckTimestamp > 0) return lastCheckTimestamp
-            val prefs = applicationContext.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-            return prefs.getLong(KEY_LAST_CHECK_TIMESTAMP, 0L)
+            val prefs = appContext?.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+            return prefs?.getLong(KEY_LAST_CHECK_TIMESTAMP, 0L) ?: 0L
         }
     }
 

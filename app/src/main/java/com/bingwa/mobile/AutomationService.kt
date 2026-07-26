@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -23,6 +24,12 @@ import kotlin.coroutines.suspendCoroutine
 // ============================================================
 
 class AutomationService : Service() {
+    private data class RetryState(
+        val windowStartAtMillis: Long,
+        val completedWindows: Int,
+        val nextAttemptStartsNewWindow: Boolean,
+        val totalAttempts: Int
+    )
 
     // region Delegates (separate responsibilities)
     private val dispatcher = UssdDispatcher(this)
@@ -303,8 +310,33 @@ class AutomationService : Service() {
         const val ACTION_RETRY_MAINTENANCE = "com.bingwa.mobile.ACTION_RETRY_MAINTENANCE"
         const val ACTION_RETRY_RETRIABLE_RESPONSE = "com.bingwa.mobile.ACTION_RETRY_RETRIABLE_RESPONSE"
         const val ACTION_RUN_SCHEDULED = "com.bingwa.mobile.ACTION_RUN_SCHEDULED"
+        private const val RETRIABLE_PREFS_NAME = "retriable_ussd_response_retry"
         private const val CHANNEL_ID = "automation_service"
         private const val NOTIFICATION_ID = 2014
+
+        fun cancelRetriableResponseRetry(context: Context, txId: Int) {
+            if (txId < 0) return
+            runCatching {
+                val intent = Intent(context, AutomationService::class.java).apply {
+                    action = ACTION_RETRY_RETRIABLE_RESPONSE
+                }
+                val pi = PendingIntent.getService(
+                    context,
+                    txId,
+                    intent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                (context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager)?.cancel(pi)
+                pi.cancel()
+            }
+            context.getSharedPreferences(RETRIABLE_PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .remove("tx_${txId}_windowStart")
+                .remove("tx_${txId}_completedWindows")
+                .remove("tx_${txId}_nextWindow")
+                .remove("tx_${txId}_attempts")
+                .apply()
+        }
     }
     // endregion
 
@@ -635,22 +667,12 @@ class AutomationService : Service() {
 
     // region RetryManager – handles retry scheduling and state
     private inner class RetryManager(private val context: Context) {
-        companion object {
-            private const val PREFS_NAME = "retriable_ussd_response_retry"
-            private const val ACTIVE_RETRY_WINDOW_MS = 60_000L
-            private const val ACTIVE_RETRY_INTERVAL_MS = 5_000L
-            private const val FIRST_BACKOFF_MS = 5 * 60_000L
-            private const val REPEATED_BACKOFF_MS = 10 * 60_000L
-        }
+        private val activeRetryWindowMs = 60_000L
+        private val activeRetryIntervalMs = 5_000L
+        private val firstBackoffMs = 5 * 60_000L
+        private val repeatedBackoffMs = 10 * 60_000L
 
-        private data class RetryState(
-            val windowStartAtMillis: Long,
-            val completedWindows: Int,
-            val nextAttemptStartsNewWindow: Boolean,
-            val totalAttempts: Int
-        )
-
-        private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
+        private val prefs by lazy { context.getSharedPreferences(RETRIABLE_PREFS_NAME, Context.MODE_PRIVATE) }
 
         fun scheduleRetry(request: UssdRequest, response: String, status: String, transcript: List<String>?) {
             val now = System.currentTimeMillis()
@@ -662,14 +684,14 @@ class AutomationService : Service() {
             )
 
             val elapsedInWindow = (now - state.windowStartAtMillis).coerceAtLeast(0L)
-            val withinActiveWindow = elapsedInWindow < ACTIVE_RETRY_WINDOW_MS
+            val withinActiveWindow = elapsedInWindow < activeRetryWindowMs
 
             val delayMs = if (withinActiveWindow) {
-                ACTIVE_RETRY_INTERVAL_MS
+                activeRetryIntervalMs
             } else if (state.completedWindows == 0) {
-                FIRST_BACKOFF_MS
+                firstBackoffMs
             } else {
-                REPEATED_BACKOFF_MS
+                repeatedBackoffMs
             }
 
             val nextState = state.copy(
@@ -785,7 +807,7 @@ class AutomationService : Service() {
             elapsedInWindow: Long
         ): String {
             val timing = if (withinActiveWindow) {
-                val remaining = ((ACTIVE_RETRY_WINDOW_MS - elapsedInWindow).coerceAtLeast(0L) + 999L) / 1000L
+                val remaining = ((activeRetryWindowMs - elapsedInWindow).coerceAtLeast(0L) + 999L) / 1000L
                 "Automatic retry still active. Next retry in ${formatDelay(delayMs)}. Remaining window: ${remaining}s."
             } else {
                 val backoff = if (state.completedWindows == 1) "5 minutes" else "10 minutes"
@@ -1006,8 +1028,8 @@ class AutomationService : Service() {
             putExtra("offerId", offer.id)
             putExtra("offerName", offer.name)
             putExtra("simSelection", offer.simSelection)
-            putExtra("signatureEnabled", offer.signatureEnabled)
-            putExtra("signatureMode", offer.signatureMode)
+            putExtra("signatureEnabled", offer.signatureDetectionEnabled)
+            putExtra("signatureMode", offer.signatureAction)
             putExtra("signatureLearning", false)
             putExtra("executionPriority", USSD_EXECUTION_PRIORITY_NORMAL)
             putExtra("returnToAppAggressively", true)

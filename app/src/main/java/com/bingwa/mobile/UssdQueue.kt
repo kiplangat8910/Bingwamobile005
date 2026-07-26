@@ -132,6 +132,12 @@ object UssdQueue {
     }
 
     /**
+     * Compatibility no-op for older call sites. The queue now tracks completion
+     * automatically when the enqueued runnable returns.
+     */
+    fun markCompleted() = Unit
+
+    /**
      * Shuts down the worker thread gracefully.
      * Pending tasks will not be executed.
      */

@@ -8,6 +8,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.*
 import android.graphics.drawable.GradientDrawable
 import android.os.*
@@ -23,6 +24,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import java.util.Locale
 
 class UssdNavigationService : AccessibilityService() {
 
@@ -55,6 +57,8 @@ class UssdNavigationService : AccessibilityService() {
 
         private var activeInstance: UssdNavigationService? = null
         private var pendingArm = false
+        private var pendingForegroundUi = false
+        @Volatile private var keepAppUiVisibleDefault = true
 
         fun beginAdvancedSessionMonitoring() {
             activeInstance?.let { it.handler.post { it.handleAdvancedSessionArmed() } }
@@ -63,6 +67,43 @@ class UssdNavigationService : AccessibilityService() {
 
         fun resetSignatureTracking() { /* handled internally */ }
         fun refreshRunningOverlay() { activeInstance?.updateOverlay() }
+        fun configureUiReturn(keepVisible: Boolean) {
+            keepAppUiVisibleDefault = keepVisible
+            activeInstance?.let { service ->
+                service.handler.post {
+                    service.keepAppUiVisibleEnabled = keepVisible
+                    if (!keepVisible) {
+                        service.uiReturnSuppressed = true
+                        service.stopKeepingAppUiVisible()
+                        service.disarmForegroundUi()
+                    } else {
+                        service.uiReturnSuppressed = false
+                    }
+                    service.updateOverlay()
+                }
+            }
+        }
+        fun armForegroundUi() {
+            activeInstance?.let { service -> service.handler.post { service.activateForegroundUi() } }
+                ?: run { pendingForegroundUi = true }
+        }
+        fun onAppUiForegrounded() {
+            activeInstance?.let { service ->
+                service.handler.post {
+                    service.uiReturnSuppressed = false
+                    if (service.foregroundUiActive) service.refreshForegroundUi()
+                    service.updateOverlay()
+                }
+            }
+        }
+        fun isBusyForBalanceCheck(): Boolean {
+            val instance = activeInstance
+            return advancedActive ||
+                advancedInProgress ||
+                balanceCallback != null ||
+                tokenPurchaseCallback != null ||
+                (instance?.isForegroundUiActive() == true)
+        }
     }
 
     // region Internal Helpers (all functionality is inside this service – no external dependencies)
@@ -150,11 +191,16 @@ class UssdNavigationService : AccessibilityService() {
         bgThread = HandlerThread("UssdNavBg").apply { start() }
         bgHandler = Handler(bgThread.looper)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+        keepAppUiVisibleEnabled = keepAppUiVisibleDefault
         createNotificationChannel()
         startForegroundCompat()
         if (pendingArm) {
             pendingArm = false
             handler.post { handleAdvancedSessionArmed() }
+        }
+        if (pendingForegroundUi) {
+            pendingForegroundUi = false
+            activateForegroundUi()
         }
     }
 
@@ -180,6 +226,10 @@ class UssdNavigationService : AccessibilityService() {
         if (pendingArm) {
             pendingArm = false
             handler.post { handleAdvancedSessionArmed() }
+        }
+        if (pendingForegroundUi) {
+            pendingForegroundUi = false
+            handler.post { activateForegroundUi() }
         }
     }
 
@@ -633,6 +683,71 @@ class UssdNavigationService : AccessibilityService() {
         val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(lower)
         if (pkg == "android" || pkg.isBlank()) return advancedActive || isForegroundUiActive() || (hasUssdLang || menuLike)
         return isPotentialUssdPackage(pkg) && (hasUssdLang || menuLike)
+    }
+
+    private fun normalizeCollapsedText(raw: String?): String {
+        return raw.orEmpty()
+            .replace(Regex("""[\u00A0\t\r\n]+"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+    }
+
+    private fun normalizeActionLabel(raw: String?): String {
+        return normalizeCollapsedText(raw)
+            .lowercase(Locale.getDefault())
+            .replace(Regex("""[^\p{L}\p{N}\s]"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+    }
+
+    private fun normalizeMenuText(raw: String?): String = normalizeActionLabel(raw)
+
+    private fun tokenizeMenuLabel(normalized: String?): Set<String> {
+        return normalizeMenuText(normalized)
+            .split(Regex("""[^\p{L}\p{N}]+"""))
+            .map { it.trim() }
+            .filter { it.length >= 2 && it !in setOf("the", "for", "and", "with") }
+            .toSet()
+    }
+
+    private fun isLikelyPromptText(text: String?): Boolean {
+        val normalized = normalizeActionLabel(text)
+        if (normalized.isBlank()) return true
+        return normalized.length > 24 ||
+            INPUT_FIELD_HINTS.any { normalized.contains(it) } ||
+            normalized.startsWith("enter ") ||
+            normalized.startsWith("reply ") ||
+            normalized.startsWith("input ")
+    }
+
+    private fun handleAdvancedSessionArmed() {
+        if (!advancedActive) return
+        keepAppUiVisibleEnabled = keepAppUiVisibleDefault
+        uiReturnSuppressed = false
+        hasSeenAdvancedPopup = false
+        clearPendingAdvance()
+        clearPendingStepAdvance()
+        clearRootRecoveryState()
+        updateOverlay()
+        startStepTimeout()
+        if (shouldKeepAppUiVisible()) {
+            requestAppUiBehindPopup(force = true)
+            startKeepingAppUiVisible()
+        }
+    }
+
+    private fun finishAdvancedDispatch(finalResponse: String) {
+        lastFinalResponse = finalResponse
+        currentStep = advancedSteps.size
+        clearPendingAdvance()
+        clearPendingStepAdvance()
+        clearInputWriteMarkers()
+        isProcessing = false
+        closeCurrentUssdUi()
+        onDispatchComplete?.invoke(buildDispatchResult(finalResponse))
+        advancedInProgress = false
+        updateOverlay()
+        cleanupAdvanced()
     }
     // endregion
 
@@ -2603,6 +2718,13 @@ class UssdNavigationService : AccessibilityService() {
 
     // region Foreground UI & Overlay
     private fun isForegroundUiActive(): Boolean = foregroundUiActive && SystemClock.elapsedRealtime() < foregroundUiUntilElapsed
+    private fun activateForegroundUi(durationMs: Long = 35_000L) {
+        foregroundUiActive = true
+        foregroundUiUntilElapsed = SystemClock.elapsedRealtime() + durationMs
+        keepAppUiVisibleEnabled = true
+        uiReturnSuppressed = false
+        updateOverlay()
+    }
     private fun refreshForegroundUi() { if (foregroundUiActive) foregroundUiUntilElapsed = SystemClock.elapsedRealtime() + 35000L }
     private fun disarmForegroundUi() { foregroundUiActive = false; foregroundUiUntilElapsed = 0L }
     private fun shouldKeepAppUiVisible(): Boolean = keepAppUiVisibleEnabled && !uiReturnSuppressed && (advancedActive || isForegroundUiActive())
@@ -2690,9 +2812,9 @@ class UssdNavigationService : AccessibilityService() {
             setTextColor(Color.parseColor("#FFD7E3F4")); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
         }
         val progress = ProgressBar(this).apply { isIndeterminate = true; alpha = 0.9f }
-        container.addView(status, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-        container.addView(detail, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = dp(4) })
-        container.addView(progress, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { gravity = Gravity.END; topMargin = dp(6) })
+        container.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        container.addView(detail, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+        container.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.END; topMargin = dp(6) })
         overlayStatusText = status
         overlayDetailText = detail
         return container
@@ -2759,40 +2881,6 @@ class UssdNavigationService : AccessibilityService() {
     // endregion
 
     // region Data classes for signature & internal use
-    data class UssdSignatureStep(
-        val stepIndex: Int,
-        val expectedInput: String,
-        val menuTitle: String,
-        val menuText: String,
-        val selectedOptionLabel: String,
-        val menuOptionsSnapshot: List<String>
-    )
-    data class UssdLearningCapture(
-        val stepIndex: Int,
-        val enteredInput: String,
-        val selectedOptionLabel: String,
-        val popupText: String
-    )
-    data class AdvancedDispatchResult(
-        val finalResponse: String,
-        val changeDetected: Boolean,
-        val autoAdjusted: Boolean,
-        val learningCompleted: Boolean,
-        val suggestedCode: String,
-        val changeSummary: String,
-        val learnedSignature: List<UssdSignatureStep>,
-        val learningCaptures: List<UssdLearningCapture>,
-        val popupTranscript: List<String>
-    )
-    private data class UssdTreeSnapshot(
-        val dialogText: String,
-        val normalizedDialogText: String,
-        val textTokens: List<String>,
-        val hasEditableField: Boolean,
-        val hasSendButton: Boolean,
-        val hasDismissButton: Boolean,
-        val inputStateSignature: String
-    )
     private data class MenuOptionDescriptor(
         val key: String,
         val label: String,
@@ -2976,25 +3064,5 @@ class UssdNavigationService : AccessibilityService() {
     private val CHANNEL_ID = "bingwa_ussd"
     private val NOTIFICATION_ID = 2001
     private val SHOW_RUNNING_OVERLAY = false
-    // endregion
-
-    // region UssdHelper stub (should exist in your project)
-    object UssdHelper {
-        fun buildCallIntent(ctx: Context, dialCode: String): Intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$dialCode"))
-        fun relaunchAppUi(ctx: Context, delayMs: Long = 0L) {
-            if (delayMs > 0) Handler(Looper.getMainLooper()).postDelayed({
-                ctx.startActivity(Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }, delayMs) else ctx.startActivity(Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-        fun normalizeRecipientForUssdInput(number: String): String = number.replace(Regex("[^0-9+]"), "")
-    }
-
-    object BalanceChecker {
-        var currentBalance = 0.0
-        fun parseBalanceDisplay(text: String): String { /* parse */ return text }
-        fun parseBalanceInt(text: String): Double { /* parse */ return 0.0 }
-        fun persistLastKnownBalance(ctx: Context, display: String) { /* store */ }
-        var balanceCallback: ((String) -> Unit)? = null
-    }
     // endregion
 }
