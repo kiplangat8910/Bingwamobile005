@@ -9,6 +9,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.graphics.*
 import android.graphics.drawable.GradientDrawable
 import android.os.*
@@ -357,6 +358,38 @@ class UssdNavigationService : AccessibilityService() {
         val parts = mutableListOf<String>()
         runCatching { event.text?.forEach { cs -> cs?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { parts += it } } }
         return normalizeCollapsedText(parts.distinct().joinToString(" "))
+    }
+
+    private fun normalizeCollapsedText(value: String?): String {
+        return value.orEmpty()
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    private fun normalizeActionLabel(value: String?): String {
+        return normalizeCollapsedText(value).lowercase()
+    }
+
+    private fun normalizeMenuText(value: String?): String {
+        val normalized = normalizeActionLabel(value)
+            .replace(Regex("""^\d+\s*[\)\].:\-]?\s*"""), "")
+            .replace(Regex("""[^\p{L}\p{N}\s]"""), " ")
+        return normalizeCollapsedText(normalized)
+    }
+
+    private fun tokenizeMenuLabel(value: String?): Set<String> {
+        return normalizeMenuText(value)
+            .split(' ')
+            .map { it.trim() }
+            .filter { it.length >= 2 }
+            .toSet()
+    }
+
+    private fun isLikelyPromptText(value: String?): Boolean {
+        val normalized = normalizeActionLabel(value)
+        if (normalized.isBlank()) return false
+        if (PHONE_INPUT_HINTS.any { normalized.contains(it) }) return true
+        return INPUT_FIELD_HINTS.any { normalized.contains(it) }
     }
     // endregion
 
@@ -2691,9 +2724,9 @@ class UssdNavigationService : AccessibilityService() {
             setTextColor(Color.parseColor("#FFD7E3F4")); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
         }
         val progress = ProgressBar(this).apply { isIndeterminate = true; alpha = 0.9f }
-        container.addView(status, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-        container.addView(detail, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = dp(4) })
-        container.addView(progress, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { gravity = Gravity.END; topMargin = dp(6) })
+        container.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        container.addView(detail, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+        container.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.END; topMargin = dp(6) })
         overlayStatusText = status
         overlayDetailText = detail
         return container
