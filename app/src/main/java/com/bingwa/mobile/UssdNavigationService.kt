@@ -2870,15 +2870,8 @@ class UssdNavigationService : AccessibilityService() {
     // endregion
 
     // region Data classes for signature & internal use
-    private data class UssdTreeSnapshot(
-        val dialogText: String,
-        val normalizedDialogText: String,
-        val textTokens: List<String>,
-        val hasEditableField: Boolean,
-        val hasSendButton: Boolean,
-        val hasDismissButton: Boolean,
-        val inputStateSignature: String
-    )
+    // NOTE: UssdTreeSnapshot is now defined only once above (in the Snapshot & Parsing region).
+    // The duplicate has been removed.
     private data class MenuOptionDescriptor(
         val key: String,
         val label: String,
