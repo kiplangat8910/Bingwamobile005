@@ -358,7 +358,15 @@ class UssdNavigationService : AccessibilityService() {
                     return
                 }
 
-                if (currentStep >= advancedSteps.size && isTransientResponse(lower)) return
+                if (isTransientResponse(lower)) {
+                    if (currentStep >= advancedSteps.size) {
+                        if (signatureLearningMode) finishAdvancedDispatch(dialogText)
+                        return
+                    }
+                    isProcessing = false
+                    scheduleProcessStep(false, RAPID_POST_POPUP_POLL_MS)
+                    return
+                }
 
                 if (pendingStepAdvanceFromKey.isNotBlank() && handlePendingStepAdvance(windowId, windowPkg, root, snapshot, dialogText)) {
                     return
@@ -805,6 +813,12 @@ class UssdNavigationService : AccessibilityService() {
                 return
             }
 
+            if (isTransientResponse(lower)) {
+                isProcessing = false
+                scheduleProcessStep(false, RAPID_POST_POPUP_POLL_MS)
+                return
+            }
+
             val step = advancedSteps[currentStep]
             val menu = parseMenuFromSnapshot(snapshot)
             if (step != "INPUT_PHONE") {
@@ -930,7 +944,10 @@ class UssdNavigationService : AccessibilityService() {
         if (lastStepActionKey.isBlank() || key.isBlank()) return false
         if (key != lastStepActionKey) { lastStepActionKey = ""; lastStepActionElapsed = 0L; return false }
         if (windowId != lastWindowId) return false
-        return SystemClock.elapsedRealtime() - lastStepActionElapsed <= STEP_TRANSITION_GUARD_MS
+        val elapsed = SystemClock.elapsedRealtime() - lastStepActionElapsed
+        if (elapsed > STEP_TRANSITION_GUARD_MS) return false
+        if (isTransientResponse(normalizeMenuText(dialogText))) return true
+        return true
     }
 
     private fun buildDialogStateKey(dialogText: String, inputSig: String): String {
@@ -2373,10 +2390,27 @@ class UssdNavigationService : AccessibilityService() {
         lower: String,
         windowPkg: String
     ): Boolean {
-        if (!looksLikeSimChooserDialog(lower, windowPkg)) return false
-        val target = findPreferredSimChooserAction(root) ?: return false
-        return try {
-            if (!performClick(target)) return false
+        if (looksLikeSimChooserDialog(lower, windowPkg)) {
+            val target = findPreferredSimChooserAction(root) ?: return false
+            return try {
+                if (!performClick(target)) return false
+                lastRelevantEventElapsed = SystemClock.elapsedRealtime()
+                lastDialogText = dialogText
+                isProcessing = false
+                if (advancedActive || isForegroundUiActive()) {
+                    requestAppUiBehindPopup(force = true)
+                    startKeepingAppUiVisible()
+                    updateOverlay()
+                }
+                if (advancedActive) {
+                    scheduleProcessStep(dialogChanged = true, overrideDelay = SIM_CHOOSER_SETTLE_MS)
+                }
+                true
+            } finally {
+                target.recycle()
+            }
+        }
+        if (advancedActive && isIntermediateUssdPopup(root, lower, windowPkg)) {
             lastRelevantEventElapsed = SystemClock.elapsedRealtime()
             lastDialogText = dialogText
             isProcessing = false
@@ -2386,12 +2420,24 @@ class UssdNavigationService : AccessibilityService() {
                 updateOverlay()
             }
             if (advancedActive) {
-                scheduleProcessStep(dialogChanged = true, overrideDelay = SIM_CHOOSER_SETTLE_MS)
+                scheduleProcessStep(dialogChanged = true, overrideDelay = INTERMEDIATE_POPUP_SETTLE_MS)
             }
-            true
-        } finally {
-            target.recycle()
+            return true
         }
+        return false
+    }
+
+    private fun isIntermediateUssdPopup(root: AccessibilityNodeInfo, lower: String, windowPkg: String): Boolean {
+        if (windowPkg in BLOCKED_PACKAGES || windowPkg == "android" || windowPkg == "com.android.systemui" ||
+            windowPkg.contains("phone", ignoreCase = true) || windowPkg.contains("telecom", ignoreCase = true)
+        ) return false
+        if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return false
+        if (looksLikeSimChooserDialog(lower, windowPkg)) return false
+        val hasUssdLang = USSD_HINTS.any { lower.contains(it) } || errorKeywords.any { lower.contains(it) }
+        val menuLike = Regex("""\d+\s*[\)\].:\-]""").containsMatchIn(lower)
+        val isTransient = TRANSIENT_RESPONSE_HINTS.any { lower.contains(it) }
+        val hasDialogLayout = hasDialogLayout(root)
+        return (hasUssdLang || menuLike || isTransient) && (hasDialogLayout || windowPkg == "android")
     }
 
     private fun looksLikeSimChooserDialog(lower: String, windowPkg: String): Boolean {
@@ -3276,6 +3322,7 @@ class UssdNavigationService : AccessibilityService() {
     private val WEAK_NETWORK_FAST_POPUP_STABILITY_DELAY_MS = 40L
     private val WEAK_NETWORK_POPUP_STABILITY_DELAY_MS = 110L
     private val SIM_CHOOSER_SETTLE_MS = 120L
+    private val INTERMEDIATE_POPUP_SETTLE_MS = 200L
     private val TAP_GESTURE_DURATION_MS = 28L
     private val REDIAL_COOLDOWN_MS = 1200L
     private val PENDING_ADVANCE_KICK_MS = 28L
