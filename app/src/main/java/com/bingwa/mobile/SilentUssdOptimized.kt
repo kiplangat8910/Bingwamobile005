@@ -15,7 +15,9 @@ import java.util.concurrent.atomic.AtomicLong
 
 object SilentUssdOptimized {
     private const val TAG = "SilentUssd"
-    private const val TIMEOUT_MS = 12_000L
+    private const val TIMEOUT_MS = 15_000L
+    private const val MAX_RETRIES = 2
+    private const val RETRY_DELAY_MS = 500L
 
     @Volatile private var successCb: ((String) -> Unit)? = null
     @Volatile private var failureCb: ((String) -> Unit)? = null
@@ -25,6 +27,8 @@ object SilentUssdOptimized {
     private val methodCache = mutableMapOf<String, Method>()
     private val requestCounter = AtomicLong(0L)
     @Volatile private var activeRequestId: Long = 0L
+    private var retryCount = 0
+    private var lastError: String? = null
 
     fun execute(
         context: Context,
@@ -43,7 +47,6 @@ object SilentUssdOptimized {
         onSuccess: (String) -> Unit,
         onFailure: (String) -> Unit
     ): Boolean {
-        // Skip if already processing
         if (!isProcessing.compareAndSet(false, true)) {
             onFailure("USSD execution already in progress")
             return false
@@ -51,6 +54,8 @@ object SilentUssdOptimized {
 
         val code = normaliseCode(ussdCode)
         val requestId = requestCounter.incrementAndGet()
+        retryCount = 0
+        lastError = null
         Log.d(TAG, "execute: code=$code sdk=${Build.VERSION.SDK_INT}")
 
         successCb = onSuccess
@@ -58,13 +63,25 @@ object SilentUssdOptimized {
         activeRequestId = requestId
         armTimeout(requestId, code)
 
-        // Try public API first (fastest on Android 8+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (tryPublicApi(telephonyManager, code, requestId)) return true
         }
 
-        // Fall back to reflection for older devices
         if (tryReflectionApi(telephonyManager, code, requestId)) return true
+
+        if (retryCount < MAX_RETRIES) {
+            retryCount++
+            Log.w(TAG, "Silent USSD failed, retry $retryCount/$MAX_RETRIES after ${RETRY_DELAY_MS}ms")
+            handler.postDelayed({
+                isProcessing.set(false)
+                activeRequestId = 0L
+                successCb = null
+                failureCb = null
+                cancelTimeout()
+                execute(telephonyManager, ussdCode, onSuccess, onFailure)
+            }, RETRY_DELAY_MS)
+            return true
+        }
 
         isProcessing.set(false)
         activeRequestId = 0L
@@ -179,17 +196,39 @@ object SilentUssdOptimized {
     private fun extractUssdPopupResponse(rawResponse: String): String {
         if (rawResponse.isBlank()) return ""
         val trimmed = rawResponse.trim()
+
         val isMenuPopup = trimmed.contains(Regex("""\d+\s*[\)\].:\-]"""))
         val hasUssdKeywords = listOf(
             "success", "failed", "error", "balance", "ksh", "kes",
             "thank you", "wait", "enter", "confirm", "please", "option",
-            "try again", "maintained", "process", "received", "activated"
+            "try again", "maintained", "process", "received", "activated",
+            "bundle", "data", "airtime", "loan", "refund", "withdraw",
+            "transfer", "send", "buy", "purchase", "subscription",
+            "completed", "successful", "unsuccessful", "insufficient"
         ).any { keyword -> trimmed.lowercase().contains(keyword) }
-        val lines = trimmed.split("\n")
-        return if (lines.size <= 2 || isMenuPopup || hasUssdKeywords) {
-            trimmed
+
+        val lines = trimmed.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+        if (lines.isEmpty()) return trimmed
+
+        // Single line or menu popup: return as-is
+        if (lines.size <= 2 || isMenuPopup) return trimmed
+
+        // Has USSD keywords: return full trimmed response
+        if (hasUssdKeywords) return trimmed
+
+        // Multi-line without keywords: extract the most meaningful content
+        // Prioritize lines with actionable content (numbers, amounts, confirmations)
+        val meaningfulLines = lines.filter { line ->
+            line.length >= 5 &&
+            line.contains(Regex("""\d""")) ||
+            line.lowercase().containsAny(listOf("success", "fail", "error", "confirm", "enter", "select", "choose", "amount", "balance", "ksh", "kes", "paid", "received", "sent", "to", "from", "account", "ref", "transaction", "id", "code"))
+        }
+
+        return if (meaningfulLines.isNotEmpty()) {
+            meaningfulLines.joinToString("\n")
         } else {
-            lines.firstOrNull { it.trim().isNotEmpty() }?.trim() ?: trimmed
+            // Fallback: first 3 meaningful lines
+            lines.take(3).joinToString("\n")
         }
     }
 
@@ -216,7 +255,10 @@ object SilentUssdOptimized {
         failureCb = null
         activeRequestId = 0L
         isProcessing.set(false)
-        handler.post { cb?.invoke(response) }
+        val enrichedResponse = if (retryCount > 0) {
+            "$response\n[Silent USSD succeeded after $retryCount retry/retries]"
+        } else response
+        handler.post { cb?.invoke(enrichedResponse) }
     }
 
     private fun deliverFailure(requestId: Long, reason: String) {
@@ -230,6 +272,7 @@ object SilentUssdOptimized {
         failureCb = null
         activeRequestId = 0L
         isProcessing.set(false)
+        lastError = reason
         handler.post { cb?.invoke(reason) }
     }
 
@@ -253,7 +296,14 @@ object SilentUssdOptimized {
         return when {
             trimmed.startsWith("*") && trimmed.endsWith("#") -> trimmed
             trimmed.startsWith("*") -> "$trimmed#"
-            else -> trimmed.replace("%23", "#").let { if (it.startsWith("*")) if (it.endsWith("#")) it else "$it#" else it }
+            else -> {
+                val decoded = trimmed.replace("%23", "#")
+                when {
+                    decoded.startsWith("*") && decoded.endsWith("#") -> decoded
+                    decoded.startsWith("*") -> "$decoded#"
+                    else -> decoded
+                }
+            }
         }
     }
 }

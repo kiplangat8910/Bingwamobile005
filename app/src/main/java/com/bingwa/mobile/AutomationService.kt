@@ -648,13 +648,33 @@ class AutomationService : Service() {
         private val patternManager = UssdResponsePatternManager(context)
 
         fun determineStatus(response: String): String {
-            return patternManager.determineResponseStatus(response)
+            if (response.isBlank()) return TransactionStatus.FAILED.value
+            val normalized = response.lowercase().trim()
+            // Check for success first (most specific patterns)
+            if (patternManager.matchesSuccessPattern(response)) return TransactionStatus.SUCCESS.value
+            // Check for maintenance
+            if (patternManager.matchesMaintenancePattern(response)) return TransactionStatus.UNDER_MAINTENANCE.value
+            // Check for already recommended
+            if (patternManager.matchesAlreadyRecommendedPattern(response)) return TransactionStatus.PENDING.value
+            // Check for failed retry patterns
+            if (patternManager.matchesFailedRetryPattern(response)) return TransactionStatus.FAILED.value
+            // Check for generic failure indicators
+            if (patternManager.matchesFailedPattern(response)) return TransactionStatus.FAILED.value
+            // Check for retriable patterns
+            if (patternManager.matchesRetriableFinalPattern(response)) return TransactionStatus.RETRYING.value
+            // Heuristic: if response has meaningful content, treat as success
+            if (looksLikeSuccessResponse(normalized)) return TransactionStatus.SUCCESS.value
+            // Default: check if it looks like a valid response at all
+            if (looksLikeValidResponse(normalized)) return TransactionStatus.SUCCESS.value
+            return TransactionStatus.FAILED.value
         }
 
         fun isSuccess(response: String): Boolean {
+            if (response.isBlank()) return false
             return patternManager.matchesSuccessPattern(response) ||
                     response.contains("you have transferred", ignoreCase = true) ||
-                    response.contains("transferred successfully", ignoreCase = true)
+                    response.contains("transferred successfully", ignoreCase = true) ||
+                    looksLikeSuccessResponse(response.lowercase().trim())
         }
 
         fun shouldRetry(status: String, response: String): Boolean {
@@ -665,7 +685,42 @@ class AutomationService : Service() {
                     TransactionStatus.CANCELLED.value
                 )
             ) return false
-            return patternManager.matchesRetriableFinalPattern(response)
+            // Don't retry if it's a clear failure
+            if (patternManager.matchesFailedPattern(response)) return false
+            // Don't retry if it's already recommended
+            if (patternManager.matchesAlreadyRecommendedPattern(response)) return false
+            // Retry for retriable patterns
+            if (patternManager.matchesRetriableFinalPattern(response)) return true
+            // Retry for ambiguous responses that might be network issues
+            return looksLikeRetriableResponse(response.lowercase().trim())
+        }
+
+        private fun looksLikeSuccessResponse(normalized: String): Boolean {
+            if (normalized.length < 3) return false
+            val successIndicators = listOf(
+                "successful", "success", "completed", "done", "finished",
+                "processed", "activated", "confirmed", "delivered", "sent",
+                "purchased", "bought", "paid", "received", "approved",
+                "accepted", "granted", "enabled", "subscribed"
+            )
+            return successIndicators.any { normalized.contains(it) }
+        }
+
+        private fun looksLikeValidResponse(normalized: String): Boolean {
+            if (normalized.length < 5) return false
+            val hasContent = normalized.any { it.isLetterOrDigit() }
+            val hasMultipleWords = normalized.split("\\s+".toRegex()).size > 2
+            return hasContent && hasMultipleWords
+        }
+
+        private fun looksLikeRetriableResponse(normalized: String): Boolean {
+            if (normalized.length < 3) return false
+            val retriableIndicators = listOf(
+                "timeout", "network", "error", "failed", "busy", "unavailable",
+                "try again", "retry", "later", "wait", "slow", "delayed",
+                "connection", "server", "temporary", "overloaded"
+            )
+            return retriableIndicators.any { normalized.contains(it) }
         }
     }
     // endregion

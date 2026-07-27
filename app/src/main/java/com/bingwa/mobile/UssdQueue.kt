@@ -30,8 +30,8 @@ object UssdQueue {
     // Task timeout in milliseconds (if a task runs longer, it will be aborted)
     private const val TASK_TIMEOUT_MS = 30_000L
 
-    // Retry policy (0 = no retry)
-    private const val MAX_RETRIES = 0
+    // Retry policy (0 = no retry by default, can be overridden per task)
+    private const val DEFAULT_MAX_RETRIES = 1
 
     // Dedicated worker thread
     private val workerThread = HandlerThread("UssdQueueWorker").apply { start() }
@@ -60,17 +60,18 @@ object UssdQueue {
      * Enqueues a task with the given priority.
      * @param task the action to run
      * @param priority one of [USSD_EXECUTION_PRIORITY_SPECIAL], [USSD_EXECUTION_PRIORITY_HIGH], or [USSD_EXECUTION_PRIORITY_NORMAL]
+     * @param maxRetries maximum number of retries on failure (default 1)
      * @return a token that can be used to cancel the task (or null if not needed)
      */
-    fun enqueue(task: Runnable, priority: String = USSD_EXECUTION_PRIORITY_NORMAL): CancellationToken? {
+    fun enqueue(task: Runnable, priority: String = USSD_EXECUTION_PRIORITY_NORMAL, maxRetries: Int = DEFAULT_MAX_RETRIES): CancellationToken? {
         val p = when {
             priority.equals(USSD_EXECUTION_PRIORITY_SPECIAL, ignoreCase = true) -> PRIORITY_SPECIAL
             priority.equals(USSD_EXECUTION_PRIORITY_HIGH, ignoreCase = true) -> PRIORITY_HIGH
             else -> PRIORITY_NORMAL
         }
-        val queueTask = QueueTask(task, p)
+        val queueTask = QueueTask(task, p, maxRetries)
         taskQueue.add(queueTask)
-        Log.d(TAG, "Enqueued task with priority $p, queue size=${taskQueue.size}")
+        Log.d(TAG, "Enqueued task with priority $p, maxRetries=$maxRetries, queue size=${taskQueue.size}")
         return queueTask.token
     }
 
@@ -82,13 +83,14 @@ object UssdQueue {
             task = Runnable {
                 BalanceChecker.requestBalanceCheck(context, specialHandling = true)
             },
-            priority = USSD_EXECUTION_PRIORITY_SPECIAL
+            priority = USSD_EXECUTION_PRIORITY_SPECIAL,
+            maxRetries = 2
         )
     }
 
     /**
      * Cancels a specific task using its cancellation token.
-     * @return true if the task was removed from the queue (or is the current running task and was aborted)
+     * @return true if the task was removed from the queue (or is the currently running task and was aborted)
      */
     fun cancel(token: CancellationToken): Boolean {
         synchronized(lock) {
@@ -128,6 +130,15 @@ object UssdQueue {
     fun hasWork(): Boolean {
         synchronized(lock) {
             return currentTask != null || taskQueue.isNotEmpty()
+        }
+    }
+
+    /**
+     * Returns the number of tasks currently in the queue.
+     */
+    fun pendingCount(): Int {
+        synchronized(lock) {
+            return taskQueue.size
         }
     }
 
@@ -176,7 +187,7 @@ object UssdQueue {
     private fun executeTask(task: QueueTask) {
         var retries = 0
         var success = false
-        while (retries <= MAX_RETRIES && !task.abortRequested && !stopWorker.get()) {
+        while (retries <= task.maxRetries && !task.abortRequested && !stopWorker.get()) {
             try {
                 // Schedule a timeout on the main thread (since we can't interrupt a Runnable directly)
                 val timeoutRunnable = Runnable {
@@ -214,19 +225,21 @@ object UssdQueue {
                 }
                 break
             } catch (e: Exception) {
-                Log.e(TAG, "Task execution failed (attempt ${retries + 1})", e)
+                Log.e(TAG, "Task execution failed (attempt ${retries + 1}/${task.maxRetries})", e)
                 retries++
-                if (retries > MAX_RETRIES) {
+                if (retries > task.maxRetries) {
                     success = false
                     break
                 }
-                // Wait before retry
-                Thread.sleep(1000)
+                // Wait before retry with exponential backoff
+                val backoffMs = (RETRY_BASE_DELAY_MS * (1L shl (retries - 1))).coerceAtMost(MAX_RETRY_BACKOFF_MS)
+                Log.d(TAG, "Retrying task in ${backoffMs}ms (attempt $retries/${task.maxRetries})")
+                Thread.sleep(backoffMs)
             }
         }
 
         if (!success && !task.abortRequested && !stopWorker.get()) {
-            Log.w(TAG, "Task failed after $MAX_RETRIES retries")
+            Log.w(TAG, "Task failed after ${task.maxRetries} retries")
         }
     }
 
@@ -234,7 +247,8 @@ object UssdQueue {
 
     private class QueueTask(
         val runnable: Runnable,
-        val priority: Int
+        val priority: Int,
+        val maxRetries: Int
     ) {
         val token = CancellationToken()
         @Volatile var abortRequested = false
@@ -251,7 +265,8 @@ object UssdQueue {
     const val USSD_EXECUTION_PRIORITY_SPECIAL = "SPECIAL"
     const val USSD_EXECUTION_PRIORITY_HIGH = "HIGH"
     const val USSD_EXECUTION_PRIORITY_NORMAL = "NORMAL"
-}
 
-// Note: The original file had imports for Context, Handler, etc.
-// Make sure the companion object constants are defined in your UssdNavigationService or elsewhere.
+    // Retry constants
+    private const val RETRY_BASE_DELAY_MS = 500L
+    private const val MAX_RETRY_BACKOFF_MS = 5_000L
+}
