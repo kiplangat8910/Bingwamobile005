@@ -3269,12 +3269,12 @@ class UssdNavigationService : AccessibilityService() {
     private val RECENT_USSD_CONTEXT_WINDOW_MS = 1200L
     private val GESTURE_SETTLE_MS = 18L
     private val POST_GESTURE_WAIT_MS = 14L
-    private val FAST_POPUP_STABILITY_DELAY_MS = 18L
-    private val POPUP_STABILITY_DELAY_MS = 70L
-    private val STARTUP_FAST_POPUP_STABILITY_DELAY_MS = 36L
-    private val STARTUP_POPUP_STABILITY_DELAY_MS = 110L
-    private val WEAK_NETWORK_FAST_POPUP_STABILITY_DELAY_MS = 70L
-    private val WEAK_NETWORK_POPUP_STABILITY_DELAY_MS = 170L
+    private val FAST_POPUP_STABILITY_DELAY_MS = 10L
+    private val POPUP_STABILITY_DELAY_MS = 40L
+    private val STARTUP_FAST_POPUP_STABILITY_DELAY_MS = 20L
+    private val STARTUP_POPUP_STABILITY_DELAY_MS = 70L
+    private val WEAK_NETWORK_FAST_POPUP_STABILITY_DELAY_MS = 40L
+    private val WEAK_NETWORK_POPUP_STABILITY_DELAY_MS = 110L
     private val SIM_CHOOSER_SETTLE_MS = 120L
     private val TAP_GESTURE_DURATION_MS = 28L
     private val REDIAL_COOLDOWN_MS = 1200L
@@ -3283,7 +3283,7 @@ class UssdNavigationService : AccessibilityService() {
     private val DIALOG_DISMISS_SETTLE_MS = 40L
     private val UI_KEEP_VISIBLE_INTERVAL_MS = 500L
     private val STARTUP_UI_KEEP_VISIBLE_MS = 10000L
-    private val STEP_TRANSITION_GUARD_MS = 420L
+    private val STEP_TRANSITION_GUARD_MS = 240L
     private val MAX_RETRY_WINDOW_MS = 90000L
     private val MAX_POPUP_TRANSCRIPT_ENTRIES = 80
     private val MAX_POPUP_TRANSCRIPT_CHARS = 1200

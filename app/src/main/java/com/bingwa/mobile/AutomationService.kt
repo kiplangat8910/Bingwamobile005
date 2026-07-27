@@ -246,13 +246,13 @@ class AutomationService : Service() {
     private fun handleSignatureLearning(request: UssdRequest, result: AdvancedDispatchResult) {
         if (request.offerId < 0) {
             notificationHelper.notifyLearningNoOffer(request)
-            finishExecution(scheduleAirtimeRefresh = true)
+            finishExecution(scheduleAirtimeRefresh = false)
             return
         }
 
         if (result.learnedSignature.isEmpty() && result.learningCaptures.isEmpty()) {
             notificationHelper.notifyLearningFailed(request)
-            finishExecution(scheduleAirtimeRefresh = true)
+            finishExecution(scheduleAirtimeRefresh = false)
             return
         }
 
@@ -269,7 +269,7 @@ class AutomationService : Service() {
             .setPackage(packageName)
             .putExtra("offerId", request.offerId))
 
-        finishExecution(scheduleAirtimeRefresh = true)
+        finishExecution(scheduleAirtimeRefresh = false)
     }
     // endregion
 

@@ -238,12 +238,9 @@ class MpesaReceiver : BroadcastReceiver() {
             if (handleCustomerReplySms(context, sender, body)) return@forEach
             if (!isMpesaSms(sender, body)) return@forEach
             Log.d(TAG, "M-PESA SMS sender='$sender' body='$body'")
-            val refreshReason = if (isAirtimeTopup(sender, body)) {
-                "airtime top-up SMS"
-            } else {
-                "M-PESA SMS"
+            if (isAirtimeTopup(sender, body)) {
+                BalanceChecker.scheduleAirtimeRefresh(context, "airtime top-up SMS")
             }
-            BalanceChecker.scheduleAirtimeRefresh(context, refreshReason)
 
             if (appPrefs.getBoolean("auto_save_contacts", true)) {
                 val rawPhone = extractPhoneOrMasked(body)

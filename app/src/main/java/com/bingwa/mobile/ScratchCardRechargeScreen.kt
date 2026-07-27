@@ -96,6 +96,7 @@ private const val FREE_RECHARGE_WINDOW_MS = 24 * 60 * 60 * 1000L
 private const val USED_PIN_RECORD_RETENTION_MS = 60 * 60 * 1000L
 private const val SCRATCH_BALANCE_REFRESH_POLL_MS = 250L
 private const val SCRATCH_BATCH_GAP_MS = 650L
+private const val SCRATCH_POST_RECHARGE_REFRESH_DELAY_MS = 4_000L
 private const val SCRATCH_DEFAULT_SCAN_MESSAGE =
     "Pick one image to scan for 16-digit scratch card PINs."
 
@@ -432,7 +433,7 @@ fun ScratchCardRechargeScreen(onBack: () -> Unit) {
             responseMessage = summary
             Toast.makeText(ctx, summary, Toast.LENGTH_SHORT).show()
             if (successCount > 0) {
-                delay(400L)
+                delay(SCRATCH_POST_RECHARGE_REFRESH_DELAY_MS)
                 requestBalanceRefresh()
             }
         }

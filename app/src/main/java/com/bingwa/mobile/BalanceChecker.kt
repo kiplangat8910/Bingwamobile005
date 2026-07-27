@@ -36,9 +36,9 @@ class BalanceChecker : Service() {
         private const val TAG = "BalanceChecker"
         private const val DEFAULT_BALANCE_USSD = "*144#"
         private const val AIRTEL_BALANCE_USSD = "*131#"
-        private const val CHECK_INTERVAL = 5 * 60_000L
+        private const val CHECK_INTERVAL = 4 * 60_000L
         private const val BALANCE_TIMEOUT_MS = 25_000L
-        private const val EVENT_REFRESH_DELAY_MS = 1_500L
+        private const val EVENT_REFRESH_DELAY_MS = 4_000L
         private const val FOREGROUND_REFRESH_COOLDOWN_MS = 3_000L
         private const val SUCCESS_COOLDOWN_MS = 30_000L   // don't check again within 30s if success
         private const val MAX_RETRY_ATTEMPTS = 3
