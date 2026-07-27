@@ -693,7 +693,7 @@ class UssdNavigationService : AccessibilityService() {
         val lines = tokens.map { normalizeCollapsedText(it) }.filter { it.isNotBlank() }
         for (i in lines.indices) {
             val match = Regex("""^(\d+)\s*[\)\].:\-]?\s*(.+)$""").find(lines[i])
-            if (match != null && (match.groupValues[1] == "0" || match.groupValues[1] == "1")) {
+            if (match != null) {
                 val opts = linkedMapOf<String, String>()
                 var idx = i
                 while (idx < lines.size) {
@@ -863,12 +863,11 @@ class UssdNavigationService : AccessibilityService() {
 
                 if (inputField != null || shouldPreferText) {
                     val wrote = ensureExpectedValueWritten(root, valueToEnter, inputField)
-                    val verified = verifyExpectedInput(root, valueToEnter, inputField)
                     val trusted = shouldTrustFreshWrite(wrote, valueToEnter, inputField, snapshot, lower)
-                    val recentVerified = verified || hasRecentVerifiedInput(valueToEnter) || trusted
+                    val recentVerified = trusted || hasRecentVerifiedInput(valueToEnter)
 
                     if (!isFinalLearningStep(currentStep) && wrote && recentVerified &&
-                        tryImmediateVerifiedSend(root, inputField, valueToEnter, verified)) {
+                        tryImmediateVerifiedSend(root, inputField, valueToEnter, recentVerified)) {
                         markStepAction(dialogText, root, snapshot)
                         startPendingStepAdvance(root, dialogText)
                         return
@@ -1727,10 +1726,10 @@ class UssdNavigationService : AccessibilityService() {
         val a = normalizeInputValue(actual)
         val e = normalizeInputValue(expected)
         if (a.isBlank() || e.isBlank()) return false
-        if (a == e || a.endsWith(e) || e.endsWith(a)) return true
+        if (a == e || (a.length >= e.length && a.endsWith(e))) return true
         val aPhone = normalizePhoneComparable(actual)
         val ePhone = normalizePhoneComparable(expected)
-        return aPhone.isNotBlank() && ePhone.isNotBlank() && (aPhone == ePhone || aPhone.endsWith(ePhone) || ePhone.endsWith(aPhone))
+        return aPhone.isNotBlank() && ePhone.isNotBlank() && (aPhone == ePhone || (aPhone.length >= ePhone.length && aPhone.endsWith(ePhone)))
     }
 
     private fun normalizePhoneComparable(value: String?): String {
@@ -2770,11 +2769,12 @@ class UssdNavigationService : AccessibilityService() {
     private fun popupStabilityRemainingMs(): Long {
         if (lastObservedDialogStateChangedElapsed <= 0L) return 0L
         val fastReady = isRecentPopupReadyForFastProcessing()
+        val networkDelay = if (shouldUseExtendedTimeout()) 1.6f else 1.0f
         val requiredStableMs = when {
-            !hasSeenAdvancedPopup && fastReady -> STARTUP_FAST_POPUP_STABILITY_DELAY_MS
-            !hasSeenAdvancedPopup -> STARTUP_POPUP_STABILITY_DELAY_MS
-            shouldUseExtendedTimeout() && fastReady -> WEAK_NETWORK_FAST_POPUP_STABILITY_DELAY_MS
-            shouldUseExtendedTimeout() -> WEAK_NETWORK_POPUP_STABILITY_DELAY_MS
+            !hasSeenAdvancedPopup && fastReady -> (STARTUP_FAST_POPUP_STABILITY_DELAY_MS * networkDelay).toLong()
+            !hasSeenAdvancedPopup -> (STARTUP_POPUP_STABILITY_DELAY_MS * networkDelay).toLong()
+            shouldUseExtendedTimeout() && fastReady -> (WEAK_NETWORK_FAST_POPUP_STABILITY_DELAY_MS * networkDelay).toLong()
+            shouldUseExtendedTimeout() -> (WEAK_NETWORK_POPUP_STABILITY_DELAY_MS * networkDelay).toLong()
             fastReady -> FAST_POPUP_STABILITY_DELAY_MS
             else -> POPUP_STABILITY_DELAY_MS
         }
@@ -3270,68 +3270,68 @@ class UssdNavigationService : AccessibilityService() {
 
     // Timeouts (ms)
     private val STEP_DELAY_MS = 30L
-    private val EVENT_HOT_POLL_MS = 24L
-    private val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 40L
-    private val DUPLICATE_EVENT_WINDOW_MS = 56L
-    private val FAST_VERIFY_POLL_MS = 26L
-    private val HOT_SEND_RETRY_DELAY_MS = 20L
-    private val SEND_RETRY_DELAY_MS = 34L
-    private val POST_WRITE_VERIFY_POLL_MS = 14L
-    private val POST_WRITE_SEND_RETRY_MS = 20L
-    private val STEP_TIMEOUT_MS = 7500L
-    private val STARTUP_STEP_TIMEOUT_MS = 12000L
-    private val FINAL_RESPONSE_TIMEOUT_MS = 11000L
-    private val PENDING_STEP_TIMEOUT_MS = 10000L
-    private val PENDING_ADVANCE_TIMEOUT_MS = 10000L
-    private val ROOT_REACQUIRE_TIMEOUT_MS = 8000L
-    private val PENDING_STEP_ADVANCE_TIMEOUT_MS = 10000L
-    private val NETWORK_DELAY_STEP_TIMEOUT_MS = 20000L
-    private val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 24000L
-    private val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 20000L
-    private val NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS = 20000L
-    private val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 18000L
-    private val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 20000L
-    private val NETWORK_DELAY_ACTION_GRACE_MS = 22000L
-    private val PENDING_STEP_ADVANCE_KICK_MS = 90L
-    private val VERIFY_POLL_MS = 42L
-    private val RAPID_POST_POPUP_POLL_MS = 16L
-    private val RAPID_POST_POPUP_VERIFY_MS = 12L
-    private val RAPID_POST_POPUP_SEND_RETRY_MS = 16L
-    private val MAX_VERIFY_ATTEMPTS = 10
-    private val MAX_SEND_ATTEMPTS = 5
-    private val FORCEFUL_WRITE_PASSES = 6
-    private val WRITE_VERIFICATION_PASSES = 5
-    private val WRITE_VERIFICATION_SETTLE_MS = 16L
-    private val DIRECT_WRITE_VERIFY_PASSES = 3
-    private val SET_TEXT_BURST_ATTEMPTS = 3
-    private val PASTE_BURST_ATTEMPTS = 3
-    private val NO_FIELD_PATIENCE = 4
-    private val INPUT_TARGET_DEPTH = 8
-    private val INPUT_DESCENT_DEPTH = 4
+    private val EVENT_HOT_POLL_MS = 18L
+    private val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 35L
+    private val DUPLICATE_EVENT_WINDOW_MS = 50L
+    private val FAST_VERIFY_POLL_MS = 22L
+    private val HOT_SEND_RETRY_DELAY_MS = 16L
+    private val SEND_RETRY_DELAY_MS = 28L
+    private val POST_WRITE_VERIFY_POLL_MS = 10L
+    private val POST_WRITE_SEND_RETRY_MS = 16L
+    private val STEP_TIMEOUT_MS = 5500L
+    private val STARTUP_STEP_TIMEOUT_MS = 9000L
+    private val FINAL_RESPONSE_TIMEOUT_MS = 8000L
+    private val PENDING_STEP_TIMEOUT_MS = 7000L
+    private val PENDING_ADVANCE_TIMEOUT_MS = 7000L
+    private val ROOT_REACQUIRE_TIMEOUT_MS = 6000L
+    private val PENDING_STEP_ADVANCE_TIMEOUT_MS = 8000L
+    private val NETWORK_DELAY_STEP_TIMEOUT_MS = 18000L
+    private val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 22000L
+    private val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 18000L
+    private val NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS = 18000L
+    private val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 15000L
+    private val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 18000L
+    private val NETWORK_DELAY_ACTION_GRACE_MS = 20000L
+    private val PENDING_STEP_ADVANCE_KICK_MS = 70L
+    private val VERIFY_POLL_MS = 32L
+    private val RAPID_POST_POPUP_POLL_MS = 12L
+    private val RAPID_POST_POPUP_VERIFY_MS = 10L
+    private val RAPID_POST_POPUP_SEND_RETRY_MS = 12L
+    private val MAX_VERIFY_ATTEMPTS = 6
+    private val MAX_SEND_ATTEMPTS = 4
+    private val FORCEFUL_WRITE_PASSES = 4
+    private val WRITE_VERIFICATION_PASSES = 3
+    private val WRITE_VERIFICATION_SETTLE_MS = 12L
+    private val DIRECT_WRITE_VERIFY_PASSES = 2
+    private val SET_TEXT_BURST_ATTEMPTS = 2
+    private val PASTE_BURST_ATTEMPTS = 2
+    private val NO_FIELD_PATIENCE = 3
+    private val INPUT_TARGET_DEPTH = 6
+    private val INPUT_DESCENT_DEPTH = 3
     private val INPUT_NEARBY_SCOPE_DEPTH = 2
-    private val RECENT_INPUT_GRACE_MS = 4000L
-    private val RECENT_VERIFIED_INPUT_GRACE_MS = 6500L
-    private val RECENT_UI_EVENT_GRACE_MS = 1500L
-    private val RECENT_USSD_CONTEXT_WINDOW_MS = 1200L
-    private val GESTURE_SETTLE_MS = 18L
-    private val POST_GESTURE_WAIT_MS = 14L
-    private val FAST_POPUP_STABILITY_DELAY_MS = 10L
-    private val POPUP_STABILITY_DELAY_MS = 40L
-    private val STARTUP_FAST_POPUP_STABILITY_DELAY_MS = 20L
-    private val STARTUP_POPUP_STABILITY_DELAY_MS = 70L
-    private val WEAK_NETWORK_FAST_POPUP_STABILITY_DELAY_MS = 40L
-    private val WEAK_NETWORK_POPUP_STABILITY_DELAY_MS = 110L
-    private val SIM_CHOOSER_SETTLE_MS = 120L
-    private val INTERMEDIATE_POPUP_SETTLE_MS = 200L
-    private val TAP_GESTURE_DURATION_MS = 28L
-    private val REDIAL_COOLDOWN_MS = 1200L
-    private val PENDING_ADVANCE_KICK_MS = 28L
-    private val ROOT_REACQUIRE_RETRY_DELAY_MS = 42L
-    private val DIALOG_DISMISS_SETTLE_MS = 40L
-    private val UI_KEEP_VISIBLE_INTERVAL_MS = 500L
-    private val STARTUP_UI_KEEP_VISIBLE_MS = 10000L
-    private val STEP_TRANSITION_GUARD_MS = 240L
-    private val MAX_RETRY_WINDOW_MS = 90000L
+    private val RECENT_INPUT_GRACE_MS = 3000L
+    private val RECENT_VERIFIED_INPUT_GRACE_MS = 5000L
+    private val RECENT_UI_EVENT_GRACE_MS = 1200L
+    private val RECENT_USSD_CONTEXT_WINDOW_MS = 1000L
+    private val GESTURE_SETTLE_MS = 14L
+    private val POST_GESTURE_WAIT_MS = 10L
+    private val FAST_POPUP_STABILITY_DELAY_MS = 6L
+    private val POPUP_STABILITY_DELAY_MS = 28L
+    private val STARTUP_FAST_POPUP_STABILITY_DELAY_MS = 14L
+    private val STARTUP_POPUP_STABILITY_DELAY_MS = 50L
+    private val WEAK_NETWORK_FAST_POPUP_STABILITY_DELAY_MS = 30L
+    private val WEAK_NETWORK_POPUP_STABILITY_DELAY_MS = 80L
+    private val SIM_CHOOSER_SETTLE_MS = 80L
+    private val INTERMEDIATE_POPUP_SETTLE_MS = 140L
+    private val TAP_GESTURE_DURATION_MS = 22L
+    private val REDIAL_COOLDOWN_MS = 900L
+    private val PENDING_ADVANCE_KICK_MS = 22L
+    private val ROOT_REACQUIRE_RETRY_DELAY_MS = 32L
+    private val DIALOG_DISMISS_SETTLE_MS = 30L
+    private val UI_KEEP_VISIBLE_INTERVAL_MS = 400L
+    private val STARTUP_UI_KEEP_VISIBLE_MS = 8000L
+    private val STEP_TRANSITION_GUARD_MS = 180L
+    private val MAX_RETRY_WINDOW_MS = 75000L
     private val MAX_POPUP_TRANSCRIPT_ENTRIES = 80
     private val MAX_POPUP_TRANSCRIPT_CHARS = 1200
     private val MIN_SIM_CHOOSER_SCORE = 260
