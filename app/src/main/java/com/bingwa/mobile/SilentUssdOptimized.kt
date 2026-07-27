@@ -220,8 +220,8 @@ object SilentUssdOptimized {
         // Prioritize lines with actionable content (numbers, amounts, confirmations)
         val meaningfulLines = lines.filter { line ->
             line.length >= 5 &&
-            line.contains(Regex("""\d""")) ||
-            line.lowercase().containsAny(listOf("success", "fail", "error", "confirm", "enter", "select", "choose", "amount", "balance", "ksh", "kes", "paid", "received", "sent", "to", "from", "account", "ref", "transaction", "id", "code"))
+            (line.contains(Regex("""\d""")) ||
+            line.lowercase().containsAny(listOf("success", "fail", "error", "confirm", "enter", "select", "choose", "amount", "balance", "ksh", "kes", "paid", "received", "sent", "to", "from", "account", "ref", "transaction", "id", "code")))
         }
 
         return if (meaningfulLines.isNotEmpty()) {

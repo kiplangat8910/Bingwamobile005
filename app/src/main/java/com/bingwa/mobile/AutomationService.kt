@@ -653,7 +653,7 @@ class AutomationService : Service() {
             // Check for success first (most specific patterns)
             if (patternManager.matchesSuccessPattern(response)) return TransactionStatus.SUCCESS.value
             // Check for maintenance
-            if (patternManager.matchesMaintenancePattern(response)) return TransactionStatus.UNDER_MAINTENANCE.value
+            if (patternManager.matchesMaintenancePattern(response)) return TransactionStatus.PENDING.value
             // Check for already recommended
             if (patternManager.matchesAlreadyRecommendedPattern(response)) return TransactionStatus.PENDING.value
             // Check for failed retry patterns
