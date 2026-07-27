@@ -4104,7 +4104,7 @@ private fun HomeSplitBalanceCard(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         HomeBalanceActionChip(
-                            label = "SIM 1",
+                            label = "",
                             tint = amber,
                             enabled = !isRefreshing,
                             highlighted = !isShowingSlot2Preview,
@@ -4112,7 +4112,7 @@ private fun HomeSplitBalanceCard(
                         )
                         if (canCheckSlot2 || isShowingSlot2Preview) {
                             HomeBalanceActionChip(
-                                label = if (isShowingSlot2Preview) "SIM 2 Active" else "SIM 2",
+                                label = "",
                                 tint = cyan,
                                 enabled = !isRefreshing,
                                 highlighted = isShowingSlot2Preview,
@@ -4215,14 +4215,16 @@ private fun HomeBalanceActionChip(
                     .clip(CircleShape)
                     .background(tint.copy(alpha = if (enabled) 1f else 0.55f))
             )
-            Text(
-                text = label,
-                color = if (enabled) Color(0xFFEEF2F1) else Color(0xFF8A9396),
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp,
-                maxLines = 1
-            )
+            if (label.isNotBlank()) {
+                Text(
+                    text = label,
+                    color = if (enabled) Color(0xFFEEF2F1) else Color(0xFF8A9396),
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
