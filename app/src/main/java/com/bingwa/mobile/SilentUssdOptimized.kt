@@ -221,7 +221,7 @@ object SilentUssdOptimized {
         val meaningfulLines = lines.filter { line ->
             line.length >= 5 &&
             (line.contains(Regex("""\d""")) ||
-            line.lowercase().containsAny(listOf("success", "fail", "error", "confirm", "enter", "select", "choose", "amount", "balance", "ksh", "kes", "paid", "received", "sent", "to", "from", "account", "ref", "transaction", "id", "code")))
+            listOf("success", "fail", "error", "confirm", "enter", "select", "choose", "amount", "balance", "ksh", "kes", "paid", "received", "sent", "to", "from", "account", "ref", "transaction", "id", "code").any { line.lowercase().contains(it) })
         }
 
         return if (meaningfulLines.isNotEmpty()) {
