@@ -2984,6 +2984,42 @@ fun BingwaApp() {
                     Screen.Tokens   -> TokensScreen()
                     Screen.Contacts -> ContactsScreen()
                     Screen.Settings -> GroupedSettingsScreen()
+                    else -> HomeScreenVolcanic(
+                        tokenBal = tokenBal,
+                        airBal = displayedAirBal,
+                        isRefreshing = isRefreshing,
+                        canCheckSlot2 = canPreviewSlot2,
+                        isShowingSlot2Preview = slot2PreviewBalance != null,
+                        txns = txns,
+                        running = running,
+                        unlimitedLabel = unlimitedLabel,
+                        unlimitedRemaining = unlimitedLabel?.let { formatRemainingTimeHome(remainingMs) },
+                        onCheckSlot1 = {
+                            slot2PreviewBalance = null
+                            if (relayCfg.enabled && relayCfg.role == "RELAY") {
+                                airBal = mirroredPrimaryAirtime.ifBlank { airBal }
+                            } else if (!isRefreshing) {
+                                isRefreshing = true
+                                if (!requestBalanceCheckSafely(ctx, specialHandling = true)) isRefreshing = false
+                            }
+                        },
+                        onCheckSlot2 = {
+                            if (canPreviewSlot2 && !isRefreshing) {
+                                slot2PreviewBalance = null
+                                isRefreshing = true
+                                if (!requestBalanceCheckSafely(
+                                        context = ctx,
+                                        selectionOverride = USSD_SIM_SELECTION_SLOT_2,
+                                        persistResult = false,
+                                        specialHandling = true
+                                    )
+                                ) {
+                                    isRefreshing = false
+                                }
+                            }
+                        },
+                        onToggleRunning = toggleRunning
+                    )
                 }
             }
         }
