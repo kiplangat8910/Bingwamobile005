@@ -60,6 +60,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.rounded.ArrowBack
@@ -155,6 +156,7 @@ private sealed class SettingsDest {
     data object Notifications : SettingsDest()
     data object Automation : SettingsDest()
     data object Contacts : SettingsDest()
+    data object Blacklist : SettingsDest()
     data object Offers : SettingsDest()
     data object Alerts : SettingsDest()
     data object Transactions : SettingsDest()
@@ -182,6 +184,7 @@ fun GroupedSettingsScreen() {
             onOpenNotifications = { dest = SettingsDest.Notifications },
             onOpenAutomation = { dest = SettingsDest.Automation },
             onOpenContacts = { dest = SettingsDest.Contacts },
+            onOpenBlacklist = { dest = SettingsDest.Blacklist },
             onOpenOffers = { dest = SettingsDest.Offers },
             onOpenAlerts = { dest = SettingsDest.Alerts },
             onOpenTransactions = { dest = SettingsDest.Transactions },
@@ -194,6 +197,7 @@ fun GroupedSettingsScreen() {
         SettingsDest.Notifications -> CustomerNotificationSettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Automation -> AutomationSettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Contacts -> ContactsScreen(onBack = { dest = SettingsDest.Home })
+        SettingsDest.Blacklist -> BlacklistScreen(onBack = { dest = SettingsDest.Home })
         SettingsDest.Offers -> OffersScreen(onBack = { dest = SettingsDest.Home })
         SettingsDest.Alerts -> AdminAlertsSettings(onBack = { dest = SettingsDest.Home })
         SettingsDest.Transactions -> TransactionSettings(onBack = { dest = SettingsDest.Home })
@@ -210,6 +214,7 @@ private fun SettingsHome(
     onOpenNotifications: () -> Unit,
     onOpenAutomation: () -> Unit,
     onOpenContacts: () -> Unit,
+    onOpenBlacklist: () -> Unit,
     onOpenOffers: () -> Unit,
     onOpenAlerts: () -> Unit,
     onOpenTransactions: () -> Unit,
@@ -279,6 +284,8 @@ private fun SettingsHome(
                         ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
                 }
+                GroupDivider(C.amber)
+                LinkRow(Icons.Filled.Block, "Blacklist", "Block phone numbers from receiving automated bundles", C.red, onOpenBlacklist)
             }
             }
             Spacer(Modifier.height(22.dp))

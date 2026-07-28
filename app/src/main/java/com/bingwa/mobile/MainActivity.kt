@@ -2787,7 +2787,6 @@ fun BingwaApp() {
             Screen.Manual.route -> Screen.Manual
             Screen.Tokens.route -> Screen.Tokens
             Screen.Contacts.route -> Screen.Contacts
-            Screen.Blacklist.route -> Screen.Blacklist
             Screen.Settings.route -> Screen.Settings
             else -> Screen.Home
         }
@@ -2981,9 +2980,8 @@ fun BingwaApp() {
                     )
                     Screen.Manual   -> ManualScreen(txns)
                     Screen.Tokens   -> TokensScreen()
-                    Screen.Contacts -> ContactsScreen(onBlacklist = { screenRoute = Screen.Blacklist.route })
-                    Screen.Blacklist -> BlacklistScreen(onBack = { screenRoute = Screen.Contacts.route })
-                    Screen.Settings -> GroupedSettingsScreen()
+            Screen.Contacts -> ContactsScreen()
+            Screen.Settings -> GroupedSettingsScreen()
                 }
             }
         }
@@ -8410,7 +8408,7 @@ private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
 
 // ─── Contacts Screen ─────────────────────────────────────────────────────
 @Composable
-fun ContactsScreen(onBack: (() -> Unit)? = null, onBlacklist: (() -> Unit)? = null) {
+fun ContactsScreen(onBack: (() -> Unit)? = null) {
     val ctx = LocalContext.current
     var contacts by remember { mutableStateOf(SavedContactStore.load(ctx)) }
     var query by remember { mutableStateOf("") }
@@ -8463,9 +8461,6 @@ fun ContactsScreen(onBack: (() -> Unit)? = null, onBlacklist: (() -> Unit)? = nu
                     Text("Contacts", color = C.t1, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Text("${contacts.size} customers saved", color = C.t2, fontSize = 12.sp)
                 }
-                if (onBlacklist != null) {
-                    ContactHeaderAction(Icons.Filled.Block, C.red) { onBlacklist() }
-                }
                 ContactHeaderAction(Icons.Filled.CloudDownload, C.cyan) { showImport = true }
                 ContactHeaderAction(Icons.Filled.PersonAdd, C.purple) {
                     showAddDlg = true
@@ -8474,23 +8469,15 @@ fun ContactsScreen(onBack: (() -> Unit)? = null, onBlacklist: (() -> Unit)? = nu
                 }
             }
         } else {
+            PageHeader("Contacts", "${contacts.size} customers saved")
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Contacts", color = C.t1, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text("${contacts.size} customers saved", color = C.t2, fontSize = 12.sp)
-                }
-                if (onBlacklist != null) {
-                    ContactHeaderAction(Icons.Filled.Block, C.red) { onBlacklist() }
-                }
-                ContactHeaderAction(Icons.Filled.CloudDownload, C.cyan) { showImport = true }
-                ContactHeaderAction(Icons.Filled.PersonAdd, C.purple) {
+                ActionButton(Modifier.weight(1f), "Import M-PESA", Icons.Filled.CloudDownload, C.cyan) { showImport = true }
+                ActionButton(Modifier.weight(1f), "Add Manually", Icons.Filled.PersonAdd, C.purple) {
                     showAddDlg = true
                     newName = ""
                     newPhone = ""
