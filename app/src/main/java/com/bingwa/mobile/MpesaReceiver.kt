@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -211,7 +212,7 @@ class MpesaReceiver : BroadcastReceiver() {
                 handleIncomingMessages(appContext, appPrefs, automationEnabled, fallback)
             } finally {
                 pendingResult.finish()
-                scope.coroutineContext.cancel()
+                (scope.coroutineContext[Job] ?: scope.coroutineContext).cancel()
             }
         }
     }

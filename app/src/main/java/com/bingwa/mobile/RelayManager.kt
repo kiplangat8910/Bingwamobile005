@@ -61,7 +61,7 @@ object RelayManager {
         prefsListener = null
         monitorJob?.cancel()
         monitorJob = null
-        scope.coroutineContext.cancel()
+        scope.coroutineContext[Job]?.cancel()
     }
 
     data class Config(
