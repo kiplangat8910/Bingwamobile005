@@ -1006,7 +1006,7 @@ class AutomationService : Service() {
             }.getOrElse { "It was scheduled for today because the previous attempt could not be completed yesterday." }
             val updatedNote = "${tx.description ?: "your bundle"}. $reason"
             transactionHelper.saveAndBroadcast(request.txId, TransactionStatus.SUCCESS.value, updatedNote, tx.ussdTranscript.split("\n"))
-            DailyLimitPolicy.sendCustomerOutcomeSms(this, "scheduled", tx)
+            sendCustomerOutcomeSms(this, "scheduled", tx)
         }
     }
 
