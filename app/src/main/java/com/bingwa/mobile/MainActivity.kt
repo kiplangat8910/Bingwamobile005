@@ -2980,8 +2980,44 @@ fun BingwaApp() {
                     )
                     Screen.Manual   -> ManualScreen(txns)
                     Screen.Tokens   -> TokensScreen()
-            Screen.Contacts -> ContactsScreen()
-            Screen.Settings -> GroupedSettingsScreen()
+                    Screen.Contacts -> ContactsScreen()
+                    Screen.Settings -> GroupedSettingsScreen()
+                    else -> HomeScreenVolcanic(
+                        tokenBal = tokenBal,
+                        airBal = displayedAirBal,
+                        isRefreshing = isRefreshing,
+                        canCheckSlot2 = canPreviewSlot2,
+                        isShowingSlot2Preview = slot2PreviewBalance != null,
+                        txns = txns,
+                        running = running,
+                        unlimitedLabel = unlimitedLabel,
+                        unlimitedRemaining = unlimitedLabel?.let { formatRemainingTimeHome(remainingMs) },
+                        onCheckSlot1 = {
+                            slot2PreviewBalance = null
+                            if (relayCfg.enabled && relayCfg.role == "RELAY") {
+                                airBal = mirroredPrimaryAirtime.ifBlank { airBal }
+                            } else if (!isRefreshing) {
+                                isRefreshing = true
+                                if (!requestBalanceCheckSafely(ctx, specialHandling = true)) isRefreshing = false
+                            }
+                        },
+                        onCheckSlot2 = {
+                            if (canPreviewSlot2 && !isRefreshing) {
+                                slot2PreviewBalance = null
+                                isRefreshing = true
+                                if (!requestBalanceCheckSafely(
+                                        context = ctx,
+                                        selectionOverride = USSD_SIM_SELECTION_SLOT_2,
+                                        persistResult = false,
+                                        specialHandling = true
+                                    )
+                                ) {
+                                    isRefreshing = false
+                                }
+                            }
+                        },
+                        onToggleRunning = toggleRunning
+                    )
                 }
             }
         }
@@ -3984,11 +4020,11 @@ private fun HomeSplitBalanceCard(
     val line = Color(0xFF333B3E)
     val lineSoft = Color(0xFF262D2F)
     val balanceHelperText = when {
-        isRefreshing && isShowingSlot2Preview -> "Checking SIM 2 balance"
-        isRefreshing -> "Checking balance"
-        isShowingSlot2Preview -> "Showing SIM 2 balance preview"
-        canCheckSlot2 -> "Choose a SIM to check balance"
-        else -> "Check balance"
+        isRefreshing -> "Refreshing..."
+        isShowingSlot2Preview -> "SIM 2 balance — tap to refresh SIM 1"
+        canCheckSlot2 && sim2TapCount > 0 -> "Tap 3 times for SIM 2 balance"
+        canCheckSlot2 -> "Tap to refresh"
+        else -> "Tap to refresh"
     }
     BoxWithConstraints(
         modifier = Modifier
@@ -4005,6 +4041,21 @@ private fun HomeSplitBalanceCard(
             )
             .border(1.dp, lineSoft, RoundedCornerShape(18.dp))
             .padding(horizontal = 13.dp, vertical = 10.dp)
+            .clickable(enabled = !isRefreshing) {
+                if (canCheckSlot2 && !isShowingSlot2Preview) {
+                    sim2TapCount++
+                    if (sim2TapCount >= 3) {
+                        sim2TapCount = 0
+                        sim2TapResets++
+                        onCheckSlot2()
+                    } else {
+                        sim2TapResets++
+                        onCheckSlot1()
+                    }
+                } else {
+                    onCheckSlot1()
+                }
+            }
     ) {
         val compact = maxWidth < 380.dp
         val airtimeFontSize = balanceValueFontSize(
@@ -4030,10 +4081,19 @@ private fun HomeSplitBalanceCard(
         val helperFontSize = balanceCaptionFontSize(
             balanceHelperText,
             if (compact) 9.sp else 9.5.sp,
-            if (compact) 8.sp else 8.5.sp,
+            if (compact) 8.5.sp else 8.5.sp,
             if (compact) 7.sp else 7.5.sp
         )
         val statsSpacing = if (compact) 5.dp else 7.dp
+        var sim2TapCount by remember { mutableIntStateOf(0) }
+        var sim2TapResets by remember { mutableIntStateOf(0) }
+
+        LaunchedEffect(sim2TapResets, isRefreshing, isShowingSlot2Preview) {
+            if (sim2TapCount > 0 && !isRefreshing && !isShowingSlot2Preview) {
+                delay(5000L)
+                sim2TapCount = 0
+            }
+        }
 
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -4099,27 +4159,16 @@ private fun HomeSplitBalanceCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(Modifier.height(7.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        HomeBalanceActionChip(
-                            label = "",
-                            tint = amber,
-                            enabled = !isRefreshing,
-                            highlighted = !isShowingSlot2Preview,
-                            onClick = onCheckSlot1
-                        )
-                        if (canCheckSlot2 || isShowingSlot2Preview) {
-                            HomeBalanceActionChip(
-                                label = "",
-                                tint = cyan,
-                                enabled = !isRefreshing,
-                                highlighted = isShowingSlot2Preview,
-                                onClick = onCheckSlot2
-                            )
-                        }
-                    }
+                    Text(
+                        text = if (canCheckSlot2 && !isShowingSlot2Preview && !isRefreshing && sim2TapCount > 0) {
+                            "Tap 3 times for SIM 2 balance"
+                        } else balanceHelperText,
+                        color = textDimmer,
+                        fontSize = helperFontSize,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(7.dp))
                 }
                 Box(
                     modifier = Modifier
