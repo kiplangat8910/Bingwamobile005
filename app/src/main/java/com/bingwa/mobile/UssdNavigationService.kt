@@ -1052,9 +1052,9 @@ class UssdNavigationService : AccessibilityService() {
         if (currentKey == fromKey) return false
         if (verifyExpectedInput(root, expected)) {
             pendingAdvanceFromKey = currentKey
-            return false
+            return true
         }
-        return true
+        return false
     }
 
     private fun clearPendingAdvance() {
@@ -1131,6 +1131,12 @@ class UssdNavigationService : AccessibilityService() {
         }
         val currentKey = buildStepAdvanceSignatureKey(root, dialogText, snapshot)
         if (currentKey == fromKey) {
+            schedulePendingStepAdvanceKick()
+            return true
+        }
+        val expected = pendingExpectedValue ?: ""
+        val verified = expected.isBlank() || verifyExpectedInput(root, expected)
+        if (!verified) {
             schedulePendingStepAdvanceKick()
             return true
         }
@@ -1745,10 +1751,10 @@ class UssdNavigationService : AccessibilityService() {
         val a = normalizeInputValue(actual)
         val e = normalizeInputValue(expected)
         if (a.isBlank() || e.isBlank()) return false
-        if (a == e || (a.length >= e.length && a.endsWith(e))) return true
+        if (a == e || (a.length > e.length && a.startsWith(e))) return true
         val aPhone = normalizePhoneComparable(actual)
         val ePhone = normalizePhoneComparable(expected)
-        return aPhone.isNotBlank() && ePhone.isNotBlank() && (aPhone == ePhone || (aPhone.length >= ePhone.length && aPhone.endsWith(ePhone)))
+        return aPhone.isNotBlank() && ePhone.isNotBlank() && (aPhone == ePhone || (aPhone.length > ePhone.length && aPhone.startsWith(ePhone)))
     }
 
     private fun normalizePhoneComparable(value: String?): String {
