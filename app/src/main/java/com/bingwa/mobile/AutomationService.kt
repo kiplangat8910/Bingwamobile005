@@ -995,7 +995,7 @@ class AutomationService : Service() {
         runCatching {
             val tx = TransactionStore.load(this).firstOrNull { it.id == request.txId } ?: return@runCatching
             val reason = runCatching {
-                val transcript = tx.ussdTranscript.orEmpty()
+                val transcript = tx.ussdTranscript.orEmpty().split("\n")
                 val limitLine = transcript.firstOrNull { it.contains("already received", ignoreCase = true) || it.contains("daily limit", ignoreCase = true) || it.contains("twice", ignoreCase = true) }
                 val bingwaLine = transcript.firstOrNull { it.contains("Bingwa Sokoni", ignoreCase = true) }
                 when {
@@ -1005,7 +1005,7 @@ class AutomationService : Service() {
                 }
             }.getOrElse { "It was scheduled for today because the previous attempt could not be completed yesterday." }
             val updatedNote = "${tx.description ?: "your bundle"}. $reason"
-            transactionHelper.saveAndBroadcast(request.txId, TransactionStatus.SUCCESS.value, updatedNote, tx.ussdTranscript)
+            transactionHelper.saveAndBroadcast(request.txId, TransactionStatus.SUCCESS.value, updatedNote, tx.ussdTranscript.split("\n"))
             DailyLimitPolicy.sendCustomerOutcomeSms(this, "scheduled", tx)
         }
     }
