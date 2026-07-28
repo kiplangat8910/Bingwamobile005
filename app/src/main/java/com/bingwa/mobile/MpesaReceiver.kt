@@ -211,7 +211,7 @@ class MpesaReceiver : BroadcastReceiver() {
                 handleIncomingMessages(appContext, appPrefs, automationEnabled, fallback)
             } finally {
                 pendingResult.finish()
-                scope.cancel()
+                scope.coroutineContext.cancel()
             }
         }
     }

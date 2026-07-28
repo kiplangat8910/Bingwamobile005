@@ -44,13 +44,6 @@ object RelayResultTracker {
     }
 
     fun shutdown() {
-        val br = receiver
-        if (br != null) {
-            runCatching {
-                val ctx = BingwaMobileApp.instance?.applicationContext
-                ctx?.unregisterReceiver(br)
-            }
-        }
         receiver = null
         registered = false
         pending.clear()
