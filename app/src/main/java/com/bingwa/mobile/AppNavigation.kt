@@ -1,9 +1,11 @@
 package com.bingwa.mobile
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
@@ -19,6 +21,7 @@ internal sealed class Screen(
     data object Manual : Screen("manual", "Manual", Icons.Outlined.Contacts, Icons.Filled.Contacts)
     data object Tokens : Screen("tokens", "Tokens", Icons.Outlined.Settings, Icons.Filled.Settings)
     data object Contacts : Screen("contacts", "Contacts", Icons.Outlined.Contacts, Icons.Filled.Contacts)
+    data object Blacklist : Screen("blacklist", "Blacklist", Icons.Outlined.Block, Icons.Filled.Block)
     data object Settings : Screen("settings", "Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
 }
 

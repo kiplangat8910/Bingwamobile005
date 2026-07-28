@@ -2787,6 +2787,7 @@ fun BingwaApp() {
             Screen.Manual.route -> Screen.Manual
             Screen.Tokens.route -> Screen.Tokens
             Screen.Contacts.route -> Screen.Contacts
+            Screen.Blacklist.route -> Screen.Blacklist
             Screen.Settings.route -> Screen.Settings
             else -> Screen.Home
         }
@@ -2980,7 +2981,8 @@ fun BingwaApp() {
                     )
                     Screen.Manual   -> ManualScreen(txns)
                     Screen.Tokens   -> TokensScreen()
-                    Screen.Contacts -> ContactsScreen()
+                    Screen.Contacts -> ContactsScreen(onBlacklist = { screenRoute = Screen.Blacklist.route })
+                    Screen.Blacklist -> BlacklistScreen(onBack = { screenRoute = Screen.Contacts.route })
                     Screen.Settings -> GroupedSettingsScreen()
                 }
             }
@@ -8408,7 +8410,7 @@ private fun UnlimitedPlanCard(plan: UnlimitedManager.Plan, onBuy: () -> Unit) {
 
 // ─── Contacts Screen ─────────────────────────────────────────────────────
 @Composable
-fun ContactsScreen(onBack: (() -> Unit)? = null) {
+fun ContactsScreen(onBack: (() -> Unit)? = null, onBlacklist: (() -> Unit)? = null) {
     val ctx = LocalContext.current
     var contacts by remember { mutableStateOf(SavedContactStore.load(ctx)) }
     var query by remember { mutableStateOf("") }
@@ -8461,6 +8463,9 @@ fun ContactsScreen(onBack: (() -> Unit)? = null) {
                     Text("Contacts", color = C.t1, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Text("${contacts.size} customers saved", color = C.t2, fontSize = 12.sp)
                 }
+                if (onBlacklist != null) {
+                    ContactHeaderAction(Icons.Filled.Block, C.red) { onBlacklist() }
+                }
                 ContactHeaderAction(Icons.Filled.CloudDownload, C.cyan) { showImport = true }
                 ContactHeaderAction(Icons.Filled.PersonAdd, C.purple) {
                     showAddDlg = true
@@ -8469,15 +8474,23 @@ fun ContactsScreen(onBack: (() -> Unit)? = null) {
                 }
             }
         } else {
-            PageHeader("Contacts", "${contacts.size} customers saved")
             Row(
                 modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                ActionButton(Modifier.weight(1f), "Import M-PESA", Icons.Filled.CloudDownload, C.cyan) { showImport = true }
-                ActionButton(Modifier.weight(1f), "Add Manually", Icons.Filled.PersonAdd, C.purple) {
+                Column(Modifier.weight(1f)) {
+                    Text("Contacts", color = C.t1, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("${contacts.size} customers saved", color = C.t2, fontSize = 12.sp)
+                }
+                if (onBlacklist != null) {
+                    ContactHeaderAction(Icons.Filled.Block, C.red) { onBlacklist() }
+                }
+                ContactHeaderAction(Icons.Filled.CloudDownload, C.cyan) { showImport = true }
+                ContactHeaderAction(Icons.Filled.PersonAdd, C.purple) {
                     showAddDlg = true
                     newName = ""
                     newPhone = ""
@@ -8750,6 +8763,214 @@ fun ActionButton(modifier: Modifier, label: String, icon: ImageVector, color: Co
         Icon(icon, null, tint = color, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(6.dp))
         Text(label, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+// ─── Blacklist Screen ─────────────────────────────────────────────────────
+@Composable
+fun BlacklistScreen(onBack: (() -> Unit)? = null) {
+    val ctx = LocalContext.current
+    var blacklist by remember { mutableStateOf(BlacklistedContactStore.load(ctx)) }
+    var showAddDlg by remember { mutableStateOf(false) }
+    var newPhone by remember { mutableStateOf("") }
+    val sorted = remember(blacklist) { blacklist.sorted() }
+
+    DisposableEffect(ctx) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == BlacklistedContactStore.ACTION_BLACKLIST_UPDATED) {
+                    blacklist = BlacklistedContactStore.load(ctx)
+                }
+            }
+        }
+        val registered = registerAppReceiver(
+            ctx,
+            receiver,
+            android.content.IntentFilter(BlacklistedContactStore.ACTION_BLACKLIST_UPDATED)
+        )
+        onDispose {
+            if (registered) {
+                try { ctx.unregisterReceiver(receiver) } catch (_: Exception) {}
+            }
+        }
+    }
+
+    Column(Modifier.fillMaxSize().background(C.bg)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (onBack != null) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = C.cardHi.copy(alpha = 0.96f),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.9f))
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Rounded.ArrowBack, null, tint = C.t1)
+                    }
+                }
+            }
+            Column(Modifier.weight(1f)) {
+                Text("Blacklist", color = C.t1, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("${sorted.size} blocked numbers", color = C.t2, fontSize = 12.sp)
+            }
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = C.red.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, C.red.copy(alpha = 0.28f))
+            ) {
+                IconButton(onClick = { showAddDlg = true; newPhone = "" }) {
+                    Icon(Icons.Filled.Add, null, tint = C.red, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        if (sorted.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = C.card,
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(C.red.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.Block, null, tint = C.red, modifier = Modifier.size(28.dp))
+                        }
+                        Text("No blacklisted numbers", color = C.t1, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text("Tap + to block a phone number from receiving automated bundles.", color = C.t2, fontSize = 12.sp, lineHeight = 18.sp, textAlign = TextAlign.Center)
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(sorted, key = { it }) { phone ->
+                    BlacklistCard(
+                        phone = phone,
+                        onUnblock = {
+                            blacklist = BlacklistedContactStore.remove(ctx, phone)
+                            vib(ctx, 80L)
+                        }
+                    )
+                }
+                item { Spacer(Modifier.height(16.dp)) }
+            }
+        }
+    }
+
+    if (showAddDlg) {
+        AlertDialog(
+            containerColor = C.card,
+            shape = RoundedCornerShape(18.dp),
+            onDismissRequest = { showAddDlg = false },
+            title = { Text("Block Number", color = C.t1, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = newPhone,
+                        onValueChange = { newPhone = it },
+                        label = { Text("Phone number (07xxxxxxxx)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        colors = dialogFieldColors(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (newPhone.isNotBlank()) {
+                        blacklist = BlacklistedContactStore.add(ctx, newPhone.trim())
+                        showAddDlg = false
+                        vib(ctx)
+                    }
+                }, colors = ButtonDefaults.buttonColors(containerColor = C.red)) {
+                    Text("Block", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDlg = false }) { Text("Cancel", color = C.t2) }
+            }
+        )
+    }
+}
+
+@Composable
+private fun BlacklistCard(phone: String, onUnblock: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = C.card,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.86f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(C.red.copy(alpha = 0.14f))
+                    .border(1.dp, C.red.copy(alpha = 0.24f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Block, null, tint = C.red, modifier = Modifier.size(20.dp))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(phone, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text("Blocked from automated bundles", color = C.t2, fontSize = 11.sp)
+            }
+            Box {
+                IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Outlined.MoreVert, null, tint = C.t3, modifier = Modifier.size(16.dp))
+                }
+                DropdownMenu(
+                    expanded = menu,
+                    onDismissRequest = { menu = false },
+                    modifier = Modifier
+                        .background(C.cardHi)
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, C.border, RoundedCornerShape(12.dp))
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Unblock", color = C.green, fontSize = 13.sp) },
+                        leadingIcon = { Icon(Icons.Outlined.CheckCircle, null, tint = C.green, modifier = Modifier.size(16.dp)) },
+                        onClick = { onUnblock(); menu = false }
+                    )
+                }
+            }
+        }
     }
 }
 
