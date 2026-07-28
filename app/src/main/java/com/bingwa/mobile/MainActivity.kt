@@ -4019,6 +4019,16 @@ private fun HomeSplitBalanceCard(
     val cardBg = Color(0xFF1C2123)
     val line = Color(0xFF333B3E)
     val lineSoft = Color(0xFF262D2F)
+    var sim2TapCount by remember { mutableIntStateOf(0) }
+    var sim2TapResets by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(sim2TapResets, isRefreshing, isShowingSlot2Preview) {
+        if (sim2TapCount > 0 && !isRefreshing && !isShowingSlot2Preview) {
+            delay(5000L)
+            sim2TapCount = 0
+        }
+    }
+
     val balanceHelperText = when {
         isRefreshing -> "Refreshing..."
         isShowingSlot2Preview -> "SIM 2 balance — tap to refresh SIM 1"
@@ -4085,15 +4095,6 @@ private fun HomeSplitBalanceCard(
             if (compact) 7.sp else 7.5.sp
         )
         val statsSpacing = if (compact) 5.dp else 7.dp
-        var sim2TapCount by remember { mutableIntStateOf(0) }
-        var sim2TapResets by remember { mutableIntStateOf(0) }
-
-        LaunchedEffect(sim2TapResets, isRefreshing, isShowingSlot2Preview) {
-            if (sim2TapCount > 0 && !isRefreshing && !isShowingSlot2Preview) {
-                delay(5000L)
-                sim2TapCount = 0
-            }
-        }
 
         Column(
             modifier = Modifier.fillMaxWidth(),
