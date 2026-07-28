@@ -3,6 +3,7 @@ package com.bingwa.mobile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import java.util.concurrent.ConcurrentHashMap
@@ -10,19 +11,21 @@ import java.util.concurrent.ConcurrentHashMap
 object RelayResultTracker {
     private val pending = ConcurrentHashMap<Int, String>()
     @Volatile private var registered = false
+    private var receiver: BroadcastReceiver? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     fun trackAndReply(context: Context, txId: Int, replyTo: String) {
         if (txId < 0 || replyTo.isBlank()) return
         pending[txId] = replyTo
         ensureReceiver(context.applicationContext)
-        Handler(Looper.getMainLooper()).postDelayed({ pending.remove(txId) }, 3 * 60 * 1000L)
+        mainHandler.postDelayed({ pending.remove(txId) }, 3 * 60 * 1000L)
     }
 
     private fun ensureReceiver(ctx: Context) {
         if (registered) return
         synchronized(this) {
             if (registered) return
-            val receiver = object : BroadcastReceiver() {
+            val br = object : BroadcastReceiver() {
                 override fun onReceive(context: Context, intent: Intent) {
                     val txId = intent.getIntExtra("txId", -1)
                     val status = intent.getStringExtra("status") ?: return
@@ -31,11 +34,26 @@ object RelayResultTracker {
                     SmsCommandHandler.sendSms(context, dest, msg)
                 }
             }
+            receiver = br
             registered = registerAppReceiver(
                 ctx,
-                receiver,
-                android.content.IntentFilter("com.bingwa.mobile.TX_UPDATED")
+                br,
+                IntentFilter("com.bingwa.mobile.TX_UPDATED")
             )
         }
+    }
+
+    fun shutdown() {
+        val br = receiver
+        if (br != null) {
+            runCatching {
+                val ctx = BingwaMobileApp.instance?.applicationContext
+                ctx?.unregisterReceiver(br)
+            }
+        }
+        receiver = null
+        registered = false
+        pending.clear()
+        mainHandler.removeCallbacksAndMessages(null)
     }
 }

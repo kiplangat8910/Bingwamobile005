@@ -67,15 +67,15 @@ object OfferRepository {
     }
 
     fun save(context: Context, offers: List<OfferItem>) {
+        val sanitized = sanitize(offers)
+        val json = gson.toJson(sanitized)
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         synchronized(lock) {
-            val sanitized = sanitize(offers)
-            val json = gson.toJson(sanitized)
-            updateCache(json, sanitized)
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
+            prefs.edit()
                 .putString(KEY_OFFERS, json)
                 .putInt(KEY_CATALOG_VERSION, CURRENT_CATALOG_VERSION)
-                .apply()
+                .commit()
+            updateCache(json, sanitized)
         }
         context.sendBroadcast(Intent(ACTION_OFFERS_UPDATED).setPackage(context.packageName))
     }

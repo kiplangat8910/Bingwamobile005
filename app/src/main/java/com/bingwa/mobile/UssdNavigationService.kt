@@ -2613,7 +2613,14 @@ class UssdNavigationService : AccessibilityService() {
         cancelStepTimeout()
         processStepRunnable?.let { handler.removeCallbacks(it) }
         processStepRunnable = null
-        handler.removeCallbacksAndMessages(null)
+        pendingAdvanceKickRunnable?.let { handler.removeCallbacks(it) }
+        pendingAdvanceKickRunnable = null
+        pendingStepAdvanceTimeoutRunnable?.let { handler.removeCallbacks(it) }
+        pendingStepAdvanceTimeoutRunnable = null
+        pendingStepAdvanceKickRunnable?.let { handler.removeCallbacks(it) }
+        pendingStepAdvanceKickRunnable = null
+        uiKeepVisibleRunnable?.let { handler.removeCallbacks(it) }
+        uiKeepVisibleRunnable = null
         currentStep = 0
         advancedSteps = emptyList()
         advancedPhoneNumber = ""

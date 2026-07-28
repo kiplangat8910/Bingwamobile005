@@ -31,16 +31,14 @@ internal object TransactionStore {
     }
 
     fun save(context: Context, list: List<Transaction>) {
+        val normalized = list.map { it.normalized() }
+        val json = JSONArray().apply {
+            normalized.forEach { put(it.toJson()) }
+        }.toString()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         synchronized(lock) {
-            val normalized = list.map { it.normalized() }
-            val json = JSONArray().apply {
-                normalized.forEach { put(it.toJson()) }
-            }.toString()
+            prefs.edit().putString(KEY_LIST, json).commit()
             updateCache(json, normalized)
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putString(KEY_LIST, json)
-                .apply()
         }
     }
 

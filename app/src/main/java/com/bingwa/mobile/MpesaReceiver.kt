@@ -23,7 +23,6 @@ class MpesaReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "MpesaReceiver"
         private const val TOKEN_PHONE = "0746027073"
-        private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         private val MPESA_TRIGGER_WORDS = listOf(
             "confirmed", "received", "sent to", "m-pesa", "mpesa",
@@ -185,7 +184,8 @@ class MpesaReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val pendingResult = goAsync()
         val appContext = context.applicationContext
-        receiverScope.launch {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scope.launch {
             try {
                 val appPrefs = appContext.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
                 val automationEnabled = appPrefs.getBoolean("automation_enabled", true)
@@ -211,6 +211,7 @@ class MpesaReceiver : BroadcastReceiver() {
                 handleIncomingMessages(appContext, appPrefs, automationEnabled, fallback)
             } finally {
                 pendingResult.finish()
+                scope.cancel()
             }
         }
     }

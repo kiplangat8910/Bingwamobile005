@@ -55,6 +55,15 @@ object RelayManager {
     private var observedPrefs: SharedPreferences? = null
     private var prefsListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
+    fun shutdown() {
+        runCatching { observedPrefs?.unregisterOnSharedPreferenceChangeListener(prefsListener) }
+        observedPrefs = null
+        prefsListener = null
+        monitorJob?.cancel()
+        monitorJob = null
+        scope.coroutineContext.cancelChildren()
+    }
+
     data class Config(
         val enabled: Boolean,
         val role: String,

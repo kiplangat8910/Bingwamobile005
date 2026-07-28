@@ -73,7 +73,10 @@ object SilentUssdOptimized {
             retryCount++
             Log.w(TAG, "Silent USSD failed, retry $retryCount/$MAX_RETRIES after ${RETRY_DELAY_MS}ms")
             handler.postDelayed({
-                isProcessing.set(false)
+                if (!isProcessing.compareAndSet(false, true)) {
+                    Log.w(TAG, "Retry aborted: another USSD request is already in progress")
+                    return@postDelayed
+                }
                 activeRequestId = 0L
                 successCb = null
                 failureCb = null
@@ -245,35 +248,39 @@ object SilentUssdOptimized {
     }
 
     private fun deliverSuccess(requestId: Long, response: String) {
-        if (requestId != activeRequestId) {
-            Log.d(TAG, "Ignoring stale USSD success for requestId=$requestId")
-            return
+        synchronized(this) {
+            if (requestId != activeRequestId) {
+                Log.d(TAG, "Ignoring stale USSD success for requestId=$requestId")
+                return
+            }
+            cancelTimeout()
+            val cb = successCb
+            successCb = null
+            failureCb = null
+            activeRequestId = 0L
+            isProcessing.set(false)
+            val enrichedResponse = if (retryCount > 0) {
+                "$response\n[Silent USSD succeeded after $retryCount retry/retries]"
+            } else response
+            handler.post { cb?.invoke(enrichedResponse) }
         }
-        cancelTimeout()
-        val cb = successCb
-        successCb = null
-        failureCb = null
-        activeRequestId = 0L
-        isProcessing.set(false)
-        val enrichedResponse = if (retryCount > 0) {
-            "$response\n[Silent USSD succeeded after $retryCount retry/retries]"
-        } else response
-        handler.post { cb?.invoke(enrichedResponse) }
     }
 
     private fun deliverFailure(requestId: Long, reason: String) {
-        if (requestId != activeRequestId) {
-            Log.d(TAG, "Ignoring stale USSD failure for requestId=$requestId")
-            return
+        synchronized(this) {
+            if (requestId != activeRequestId) {
+                Log.d(TAG, "Ignoring stale USSD failure for requestId=$requestId")
+                return
+            }
+            cancelTimeout()
+            val cb = failureCb
+            successCb = null
+            failureCb = null
+            activeRequestId = 0L
+            isProcessing.set(false)
+            lastError = reason
+            handler.post { cb?.invoke(reason) }
         }
-        cancelTimeout()
-        val cb = failureCb
-        successCb = null
-        failureCb = null
-        activeRequestId = 0L
-        isProcessing.set(false)
-        lastError = reason
-        handler.post { cb?.invoke(reason) }
     }
 
     private fun armTimeout(requestId: Long, code: String) {
