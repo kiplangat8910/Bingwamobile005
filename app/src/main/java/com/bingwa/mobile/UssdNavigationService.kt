@@ -2042,15 +2042,16 @@ class UssdNavigationService : AccessibilityService() {
 
     // region Signature Learning
     private fun captureSignatureStepIfNeeded(stepIndex: Int, rawStep: String, menu: LinkedHashMap<String, String>?, snapshot: UssdTreeSnapshot, dialogText: String) {
-        if (!signatureLearningMode || !rawStep.all(Char::isDigit) || menu == null) return
-        val optionLabel = menu[rawStep] ?: return
+        if (!signatureLearningMode || !rawStep.all(Char::isDigit)) return
+        val optionLabel = menu?.get(rawStep).orEmpty()
+        if (optionLabel.isBlank() && menu != null) return
         val captured = UssdSignatureStep(
             stepIndex = stepIndex,
             expectedInput = rawStep,
             menuTitle = extractMenuTitle(snapshot.textTokens),
             menuText = formatRecordedDialogText(snapshot.textTokens, dialogText),
             selectedOptionLabel = optionLabel,
-            menuOptionsSnapshot = menu.values.map { normalizeCollapsedText(it) }.filter { it.isNotBlank() }
+            menuOptionsSnapshot = menu?.values?.map { normalizeCollapsedText(it) }?.filter { it.isNotBlank() } ?: emptyList()
         )
         val existing = learnedSignatureSteps.indexOfFirst { it.stepIndex == stepIndex }
         if (existing >= 0) learnedSignatureSteps[existing] = captured else learnedSignatureSteps.add(captured)
@@ -2058,7 +2059,7 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun captureLearningDialogIfNeeded(snapshot: UssdTreeSnapshot?, root: AccessibilityNodeInfo, pkg: String) {
         if (snapshot == null) return
-        val menu = parseMenuFromSnapshot(snapshot) ?: return
+        val menu = parseMenuFromSnapshot(snapshot)
         val recordedText = formatLearningRecordedDialogText(snapshot, menu)
         if (recordedText.isBlank()) return
         val captureIndex = if (currentStep >= advancedSteps.size) advancedSteps.lastIndex else currentStep
@@ -2226,8 +2227,15 @@ class UssdNavigationService : AccessibilityService() {
         } else fallback
     }
 
-    private fun formatLearningRecordedDialogText(snapshot: UssdTreeSnapshot, menu: LinkedHashMap<String, String>): String {
-        return snapshot.textTokens.joinToString("\n") // simplified
+    private fun formatLearningRecordedDialogText(snapshot: UssdTreeSnapshot, menu: LinkedHashMap<String, String>?): String {
+        val lines = snapshot.textTokens.map { normalizeCollapsedText(it) }.filter { it.isNotBlank() }
+        return if (menu != null && menu.isNotEmpty()) {
+            val firstOptionIdx = lines.indexOfFirst { Regex("""^\d+\s*[\)\].:\-]""").containsMatchIn(it) }
+            val title = if (firstOptionIdx > 0) lines.take(firstOptionIdx) else emptyList()
+            (title + menu.entries.map { "${it.key}. ${normalizeCollapsedText(it.value)}" }).joinToString("\n")
+        } else {
+            lines.joinToString("\n")
+        }
     }
     // endregion
 
@@ -2237,7 +2245,11 @@ class UssdNavigationService : AccessibilityService() {
         val timeout = Runnable {
             if (shouldExtendStepTimeout()) { startStepTimeout(); return@Runnable }
             val dismissed = closeCurrentUssdUi()
-            handler.postDelayed({ restartFromBeginning() }, if (dismissed) DIALOG_DISMISS_SETTLE_MS else 0L)
+            if (currentStep >= advancedSteps.size) {
+                finishAdvancedDispatch(lastFinalResponse)
+            } else {
+                handler.postDelayed({ restartFromBeginning() }, if (dismissed) DIALOG_DISMISS_SETTLE_MS else 0L)
+            }
         }
         stepTimeoutRunnable = timeout
         handler.postDelayed(timeout, currentStepTimeoutMs())
