@@ -128,10 +128,7 @@ class AutomationService : Service() {
             result.finalResponse
         }
 
-        val status = when {
-            result.changeDetected && !result.autoAdjusted -> TransactionStatus.FAILED.value
-            else -> responseAnalyzer.determineStatus(finalResponse)
-        }
+        val status = responseAnalyzer.determineStatus(result.finalResponse)
 
         processFinalResponse(request, finalResponse, status, result.popupTranscript)
     }

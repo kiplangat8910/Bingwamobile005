@@ -432,6 +432,17 @@ class UssdNavigationService : AccessibilityService() {
     private fun extractDialogText(event: AccessibilityEvent): String {
         val parts = mutableListOf<String>()
         runCatching { event.text?.forEach { cs -> cs?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { parts += it } } }
+        runCatching { event.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { parts += it } }
+        runCatching {
+            event.packageName?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { pkg ->
+                if (parts.none { it.contains(pkg, ignoreCase = true) }) parts += pkg
+            }
+        }
+        runCatching {
+            event.className?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { cls ->
+                if (parts.none { it.contains(cls, ignoreCase = true) }) parts += cls
+            }
+        }
         return normalizeCollapsedText(parts.distinct().joinToString(" "))
     }
 
@@ -832,12 +843,20 @@ class UssdNavigationService : AccessibilityService() {
             try {
                 val dialogAllowsPhone = step == "INPUT_PHONE" && dialogSuggestsPhoneInput(lower)
                 if (step == "INPUT_PHONE" && inputField == null && !dialogAllowsPhone) {
+                    val aggressiveCandidates = mutableListOf<AccessibilityNodeInfo>()
+                    collectAggressiveTextEntryCandidates(root, aggressiveCandidates)
+                    val aggressiveField = aggressiveCandidates.firstOrNull()
+                    if (aggressiveField != null) {
+                        tryWriteValueToField(aggressiveField, valueToEnter, root)
+                        aggressiveField.recycle()
+                    }
                     isProcessing = false
                     scheduleProcessStep(false)
                     return
                 }
 
                 val shouldPreferText = inputField != null ||
+                        step == "INPUT_PHONE" ||
                         shouldTreatAsTextInput(step, valueToEnter, selectedLabel) ||
                         shouldTreatNumericReplyAsTextInput(step, valueToEnter, snapshot, lower, menu) ||
                         dialogSuggestsTextInput(lower) ||
@@ -851,7 +870,7 @@ class UssdNavigationService : AccessibilityService() {
                     }
                 }
 
-                if (inputField == null && shouldPreferText && !dialogSuggestsTextInput(lower) && !dialogAllowsPhone && !shouldTreatNumericReplyAsTextInput(step, valueToEnter, snapshot, lower, menu)) {
+                if (inputField == null && shouldPreferText && !dialogSuggestsTextInput(lower) && !dialogAllowsPhone && step != "INPUT_PHONE" && !shouldTreatNumericReplyAsTextInput(step, valueToEnter, snapshot, lower, menu)) {
                     if (!snapshot.hasEditableField) {
                         if (!writeValueToField(root, valueToEnter)) {
                             isProcessing = false
@@ -2881,7 +2900,11 @@ class UssdNavigationService : AccessibilityService() {
     private fun dialogSuggestsPhoneInput(lower: String) =
         PHONE_INPUT_HINTS.any { lower.contains(it) } ||
                 (lower.contains("254") && (lower.contains("phone") || lower.contains("mobile"))) ||
-                (lower.contains("07") && (lower.contains("phone") || lower.contains("number")))
+                (lower.contains("07") && (lower.contains("phone") || lower.contains("number"))) ||
+                lower.contains("tel:") || lower.contains("call") || lower.contains("dial") ||
+                lower.contains("recipient") || lower.contains("subscriber") ||
+                lower.contains("msisdn") || lower.contains("beneficiary") ||
+                (Regex("""\b\d{9,15}\b""").containsMatchIn(lower) && lower.contains("phone"))
 
     private fun markStepAction(dialogText: String, root: AccessibilityNodeInfo?, snapshot: UssdTreeSnapshot?) {
         val sig = snapshot?.inputStateSignature ?: root?.let { captureInputStateSignature(it) }.orEmpty()
