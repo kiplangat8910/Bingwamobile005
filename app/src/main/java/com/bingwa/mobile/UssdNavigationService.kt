@@ -800,7 +800,16 @@ class UssdNavigationService : AccessibilityService() {
         val root = context.root
         try {
             val snapshot = context.snapshot ?: capturePreferredPopupSnapshot(root, requireStrict)
-                ?: run { isProcessing = false; scheduleProcessStep(false); return }
+                ?: run { 
+                    if (hasSeenAdvancedPopup && !shouldWaitForRootRecovery()) {
+                        isProcessing = false
+                        dismissErrorAndRestart()
+                    } else {
+                        isProcessing = false
+                        scheduleProcessStep(false)
+                    }
+                    return
+                }
 
             val dialogText = snapshot.dialogText.ifBlank { lastFinalResponse }
             val lower = dialogText.lowercase()
@@ -866,7 +875,7 @@ class UssdNavigationService : AccessibilityService() {
                 if (!shouldPreferText && step.all(Char::isDigit) && menu != null && menu.isNotEmpty()) {
                     if (!menu.containsKey(valueToEnter)) {
                         isProcessing = false
-                        scheduleProcessStep(false)
+                        dismissErrorAndRestart()
                         return
                     }
                 }
@@ -875,7 +884,7 @@ class UssdNavigationService : AccessibilityService() {
                     if (!snapshot.hasEditableField) {
                         if (!writeValueToField(root, valueToEnter)) {
                             isProcessing = false
-                            scheduleProcessStep(false)
+                            dismissErrorAndRestart()
                             return
                         }
                     }
@@ -883,6 +892,11 @@ class UssdNavigationService : AccessibilityService() {
 
                 if (inputField != null || shouldPreferText) {
                     val wrote = ensureExpectedValueWritten(root, valueToEnter, inputField)
+                    if (!wrote) {
+                        isProcessing = false
+                        dismissErrorAndRestart()
+                        return
+                    }
                     val trusted = shouldTrustFreshWrite(wrote, valueToEnter, inputField, snapshot, lower)
                     val recentVerified = trusted || hasRecentVerifiedInput(valueToEnter)
 
