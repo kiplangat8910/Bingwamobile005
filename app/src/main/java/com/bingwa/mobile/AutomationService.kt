@@ -509,9 +509,28 @@ class AutomationService : Service() {
             }
 
             // Set up navigation service
+            if (UssdNavigationService.isUsdExecutionLocked) {
+                UssdNavigationService.advancedActive = false
+                UssdNavigationService.advancedInProgress = false
+                UssdNavigationService.onDispatchComplete = null
+                onComplete(AdvancedDispatchResult(
+                    finalResponse = "Another USSD task is already running. Please wait.",
+                    changeDetected = false,
+                    autoAdjusted = false,
+                    learningCompleted = false,
+                    suggestedCode = "",
+                    changeSummary = "",
+                    learnedSignature = emptyList(),
+                    learningCaptures = emptyList(),
+                    popupTranscript = emptyList()
+                ))
+                return
+            }
+            UssdNavigationService.isUsdExecutionLocked = true
             val keepVisible = request.returnToAppAggressively && BingwaMobileApp.wasInForegroundRecently()
             UssdNavigationService.configureUiReturn(keepVisible)
             UssdNavigationService.onDispatchComplete = { result ->
+                UssdNavigationService.isUsdExecutionLocked = false
                 onComplete(result)
                 UssdNavigationService.onDispatchComplete = null
             }
@@ -543,6 +562,7 @@ class AutomationService : Service() {
                 UssdNavigationService.advancedActive = false
                 UssdNavigationService.advancedInProgress = false
                 UssdNavigationService.onDispatchComplete = null
+                UssdNavigationService.isUsdExecutionLocked = false
                 onComplete(AdvancedDispatchResult(
                     finalResponse = "No available SIM",
                     changeDetected = false,
@@ -561,6 +581,7 @@ class AutomationService : Service() {
                 UssdNavigationService.advancedActive = false
                 UssdNavigationService.advancedInProgress = false
                 UssdNavigationService.onDispatchComplete = null
+                UssdNavigationService.isUsdExecutionLocked = false
                 onComplete(AdvancedDispatchResult(
                     finalResponse = "No dialer available",
                     changeDetected = false,

@@ -45,6 +45,7 @@ class UssdNavigationService : AccessibilityService() {
         @Volatile var preferredDialSlotIndex = -1
         @Volatile var advancedActive = false
         @Volatile var advancedInProgress = false
+        @Volatile var isUsdExecutionLocked = false
         @Volatile var currentStep = 0
         @Volatile var retryCount = 0
         @Volatile var retryWindowStartedAt = 0L
@@ -131,6 +132,7 @@ class UssdNavigationService : AccessibilityService() {
     private var windowManager: WindowManager? = null
 
     private var isProcessing = false
+    private var isUsdExecutionLocked = false
     private var lastDialogText = ""
     private var lastFinalResponse = ""
 
@@ -2638,6 +2640,7 @@ class UssdNavigationService : AccessibilityService() {
         retryWindowStartedAt = 0L
         advancedActive = false
         advancedInProgress = false
+        isUsdExecutionLocked = false
         isProcessing = false
         retryCount = 0
         lastRedialElapsed = 0L
@@ -2975,7 +2978,8 @@ class UssdNavigationService : AccessibilityService() {
         val cls = root.className?.toString().orEmpty()
         val flags = snapshot?.let { "${it.hasEditableField}|${it.hasSendButton}|${it.hasDismissButton}" }.orEmpty()
         val menuFingerprint = snapshot?.let { parseMenuFromSnapshot(it) }?.entries?.joinToString(";") { "${it.key}:${normalizeMenuText(it.value)}" }.orEmpty()
-        return "${root.windowId}|${root.packageName?.toString().orEmpty()}|$cls|$flags|${normalizeCollapsedText(text)}|$menuFingerprint"
+        val stepFingerprint = "$currentStep|${normalizeInputValue(pendingExpectedValue)}"
+        return "$stepFingerprint|${root.windowId}|${root.packageName?.toString().orEmpty()}|$cls|$flags|${normalizeCollapsedText(text)}|$menuFingerprint"
     }
 
     private fun extractAllText(root: AccessibilityNodeInfo): String {
