@@ -189,15 +189,13 @@ object UssdQueue {
         var success = false
         while (retries <= task.maxRetries && !task.abortRequested && !stopWorker.get()) {
             try {
-                // Schedule a timeout on the main thread (since we can't interrupt a Runnable directly)
+                waitForSilentUssdLock()
+
                 val timeoutRunnable = Runnable {
                     synchronized(lock) {
                         if (currentTask === task) {
                             Log.e(TAG, "Task timed out after ${TASK_TIMEOUT_MS}ms")
-                            // We can't forcibly stop the running Runnable, but we mark it as aborted
                             task.abortRequested = true
-                            // The worker loop will check this flag after the runnable finishes (if it does)
-                            // If the runnable hangs, we can't do much – but we log and continue.
                         }
                     }
                 }
@@ -206,11 +204,9 @@ object UssdQueue {
                 }
                 mainHandler.postDelayed(timeoutRunnable, TASK_TIMEOUT_MS)
 
-                // Execute the task
                 task.runnable.run()
                 success = true
 
-                // Cancel timeout
                 mainHandler.removeCallbacks(timeoutRunnable)
                 synchronized(lock) {
                     if (currentTimeoutRunnable === timeoutRunnable) {
@@ -218,7 +214,6 @@ object UssdQueue {
                     }
                 }
 
-                // If task was aborted during execution, consider it failed
                 if (task.abortRequested) {
                     Log.w(TAG, "Task was aborted (timeout or cancellation)")
                     success = false
@@ -231,7 +226,6 @@ object UssdQueue {
                     success = false
                     break
                 }
-                // Wait before retry with exponential backoff
                 val backoffMs = (RETRY_BASE_DELAY_MS * (1L shl (retries - 1))).coerceAtMost(MAX_RETRY_BACKOFF_MS)
                 Log.d(TAG, "Retrying task in ${backoffMs}ms (attempt $retries/${task.maxRetries})")
                 Thread.sleep(backoffMs)
@@ -240,6 +234,22 @@ object UssdQueue {
 
         if (!success && !task.abortRequested && !stopWorker.get()) {
             Log.w(TAG, "Task failed after ${task.maxRetries} retries")
+        }
+    }
+
+    private fun waitForSilentUssdLock() {
+        val waitStart = System.currentTimeMillis()
+        val maxWait = 20_000L
+        while (SilentUssdOptimized.isExecutionInProgress() && System.currentTimeMillis() - waitStart < maxWait) {
+            try {
+                Thread.sleep(250)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return
+            }
+        }
+        if (SilentUssdOptimized.isExecutionInProgress()) {
+            Log.w(TAG, "SilentUssdOptimized still busy after waiting ${maxWait}ms")
         }
     }
 

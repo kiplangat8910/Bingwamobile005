@@ -513,6 +513,7 @@ class AutomationService : Service() {
                 UssdNavigationService.advancedActive = false
                 UssdNavigationService.advancedInProgress = false
                 UssdNavigationService.onDispatchComplete = null
+                UssdNavigationService.isUsdExecutionLocked = false
                 onComplete(AdvancedDispatchResult(
                     finalResponse = "Another USSD task is already running. Please wait.",
                     changeDetected = false,

@@ -132,7 +132,6 @@ class UssdNavigationService : AccessibilityService() {
     private var windowManager: WindowManager? = null
 
     private var isProcessing = false
-    private var isUsdExecutionLocked = false
     private var lastDialogText = ""
     private var lastFinalResponse = ""
 
@@ -2384,6 +2383,24 @@ class UssdNavigationService : AccessibilityService() {
         val now = SystemClock.elapsedRealtime()
         if (now - lastRedialElapsed < REDIAL_COOLDOWN_MS) return
         lastRedialElapsed = now
+
+        val existingRoot = getUssdRoot()
+        if (existingRoot != null) {
+            try {
+                val pkg = existingRoot.packageName?.toString().orEmpty()
+                val text = normalizeCollapsedText(extractAllText(existingRoot))
+                val lower = text.lowercase()
+                val looksLikeUssd = text.isNotBlank() && !NON_USSD_DIALOG_HINTS.any { lower.contains(it) } &&
+                    (looksLikeUssdDialogFast(lower, pkg) || hasDialogLayout(existingRoot))
+                if (looksLikeUssd) {
+                    Log.d(TAG, "redialAdvancedIfNeeded: USSD dialog already visible, skipping redial")
+                    return
+                }
+            } finally {
+                existingRoot.recycle()
+            }
+        }
+
         runCatching {
             val intent = com.bingwa.mobile.UssdHelper.buildCallIntent(
                 this,
@@ -2406,6 +2423,11 @@ class UssdNavigationService : AccessibilityService() {
                     (looksLikeUssdDialogFast(lower, pkg) || hasDialogLayout(root))
             if (!looksLikeUssd) return false
             performGlobalAction(GLOBAL_ACTION_BACK)
+            handler.postDelayed({
+                if (getUssdRoot() != null) {
+                    performGlobalAction(GLOBAL_ACTION_BACK)
+                }
+            }, 150L)
             return true
         } finally {
             root.recycle()
@@ -2640,7 +2662,7 @@ class UssdNavigationService : AccessibilityService() {
         retryWindowStartedAt = 0L
         advancedActive = false
         advancedInProgress = false
-        isUsdExecutionLocked = false
+        UssdNavigationService.isUsdExecutionLocked = false
         isProcessing = false
         retryCount = 0
         lastRedialElapsed = 0L
@@ -2846,7 +2868,11 @@ class UssdNavigationService : AccessibilityService() {
         if (waitingForRootSinceElapsed == 0L) waitingForRootSinceElapsed = SystemClock.elapsedRealtime()
         if (SystemClock.elapsedRealtime() - waitingForRootSinceElapsed > rootReacquireTimeout()) {
             clearRootRecoveryState()
-            handler.post { dismissErrorAndRestart() }
+            if (signatureLearningMode) {
+                finishLearningWithoutFinalSubmission()
+            } else {
+                handler.post { dismissErrorAndRestart() }
+            }
             return
         }
         pendingProcessToken = SystemClock.elapsedRealtime()

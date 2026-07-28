@@ -22,6 +22,7 @@ object SilentUssdOptimized {
     @Volatile private var successCb: ((String) -> Unit)? = null
     @Volatile private var failureCb: ((String) -> Unit)? = null
     private var timeoutRunnable: Runnable? = null
+    private var watchdogRunnable: Runnable? = null
     private val handler = Handler(Looper.getMainLooper())
     private val isProcessing = AtomicBoolean(false)
     private val methodCache = mutableMapOf<String, Method>()
@@ -62,6 +63,7 @@ object SilentUssdOptimized {
         failureCb = onFailure
         activeRequestId = requestId
         armTimeout(requestId, code)
+        armWatchdog(requestId)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (tryPublicApi(telephonyManager, code, requestId)) return true
@@ -73,6 +75,7 @@ object SilentUssdOptimized {
             retryCount++
             Log.w(TAG, "Silent USSD failed, retry $retryCount/$MAX_RETRIES after ${RETRY_DELAY_MS}ms")
             handler.postDelayed({
+                cancelWatchdog()
                 if (!isProcessing.compareAndSet(false, true)) {
                     Log.w(TAG, "Retry aborted: another USSD request is already in progress")
                     return@postDelayed
@@ -254,6 +257,7 @@ object SilentUssdOptimized {
                 return
             }
             cancelTimeout()
+            cancelWatchdog()
             val cb = successCb
             successCb = null
             failureCb = null
@@ -273,6 +277,7 @@ object SilentUssdOptimized {
                 return
             }
             cancelTimeout()
+            cancelWatchdog()
             val cb = failureCb
             successCb = null
             failureCb = null
@@ -291,6 +296,23 @@ object SilentUssdOptimized {
         }
         timeoutRunnable = timeout
         handler.postDelayed(timeout, TIMEOUT_MS)
+    }
+
+    private fun armWatchdog(requestId: Long) {
+        cancelWatchdog()
+        val watchdog = Runnable {
+            if (isProcessing.get() && activeRequestId == requestId) {
+                Log.w(TAG, "Watchdog resetting stuck USSD lock for requestId=$requestId")
+                deliverFailure(requestId, "Watchdog reset: USSD lock was stuck")
+            }
+        }
+        watchdogRunnable = watchdog
+        handler.postDelayed(watchdog, TIMEOUT_MS + 5_000L)
+    }
+
+    private fun cancelWatchdog() {
+        watchdogRunnable?.let { handler.removeCallbacks(it) }
+        watchdogRunnable = null
     }
 
     private fun cancelTimeout() {

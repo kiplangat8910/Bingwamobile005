@@ -1,0 +1,507 @@
+{
+  "worktrees": {
+    "wt-1785159678484-1": {
+      "branch": "glory-shaker",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/glory-shaker",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T13:41:18.484Z",
+      "remote": "origin",
+      "branchOwned": true,
+      "autoNameSessionId": "ses_05c3101e6ffe606kjZah7V7D1k",
+      "autoNamePromptCount": 0
+    },
+    "wt-1785159728507-2": {
+      "branch": "natural-promise",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/natural-promise",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T13:42:08.507Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785160415825-3": {
+      "branch": "voltaic-gemini",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/voltaic-gemini",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T13:53:35.825Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785160544457-4": {
+      "branch": "little-hacksaw",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/little-hacksaw",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T13:55:44.457Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785160684452-5": {
+      "branch": "cake-jobaria",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/cake-jobaria",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T13:58:04.452Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785160755633-6": {
+      "branch": "hulking-honesty",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/hulking-honesty",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T13:59:15.633Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785160844627-7": {
+      "branch": "wholesale-leaf",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/wholesale-leaf",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T14:00:44.627Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785160858185-8": {
+      "branch": "merciful-leotard",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/merciful-leotard",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T14:00:58.185Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785160954476-9": {
+      "branch": "tortoiseshell-polish",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/tortoiseshell-polish",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T14:02:34.476Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785161153902-10": {
+      "branch": "lumbar-lifter",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/lumbar-lifter",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T14:05:53.902Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785161607226-11": {
+      "branch": "awake-catsup",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/awake-catsup",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T14:13:27.226Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785165871560-1": {
+      "branch": "quilted-krypton",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/quilted-krypton",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T15:24:31.560Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785165919349-2": {
+      "branch": "climbing-table",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/climbing-table",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T15:25:19.349Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785166095984-1": {
+      "branch": "vanilla-motorist",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/vanilla-motorist",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T15:28:15.984Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785166185397-2": {
+      "branch": "opalescent-thorn",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/opalescent-thorn",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T15:29:45.397Z",
+      "remote": "origin",
+      "branchOwned": true,
+      "autoNameSessionId": "ses_05bcdb89effevhsNvJqLa6W4WD",
+      "autoNamePromptCount": 0
+    },
+    "wt-1785166264968-3": {
+      "branch": "charmed-homegrown",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/charmed-homegrown",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T15:31:04.968Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785166376649-4": {
+      "branch": "zany-ferryboat",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/zany-ferryboat",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T15:32:56.649Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785166414098-5": {
+      "branch": "sugar-plant",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/sugar-plant",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T15:33:34.098Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785168481378-1": {
+      "branch": "nebulous-way",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/nebulous-way",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T16:08:01.378Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785168658905-2": {
+      "branch": "utopian-newsprint",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/utopian-newsprint",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T16:10:58.905Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785168724171-3": {
+      "branch": "flax-sodalite",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/flax-sodalite",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T16:12:04.171Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785169817903-1": {
+      "branch": "prairie-taleggio",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/prairie-taleggio",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T16:30:17.903Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785169879781-2": {
+      "branch": "shine-bit",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/shine-bit",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T16:31:19.781Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785176086464-1": {
+      "branch": "expensive-judge",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/expensive-judge",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T18:14:46.464Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785178654876-1": {
+      "branch": "foregoing-atlasaurus",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/foregoing-atlasaurus",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T18:57:34.876Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785181110213-1": {
+      "branch": "western-gate",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/western-gate",
+      "parentBranch": "main",
+      "createdAt": "2026-07-27T19:38:30.213Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785197738580-1": {
+      "branch": "fast-dietician",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/fast-dietician",
+      "parentBranch": "main",
+      "createdAt": "2026-07-28T00:15:38.580Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785218008137-1": {
+      "branch": "chiseled-cabbage",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/chiseled-cabbage",
+      "parentBranch": "main",
+      "createdAt": "2026-07-28T05:53:28.137Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785232027685-1": {
+      "branch": "subdued-minotaurasaurus",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/subdued-minotaurasaurus",
+      "parentBranch": "main",
+      "createdAt": "2026-07-28T09:47:07.685Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785272370583-1": {
+      "branch": "knowledgeable-joggers",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/knowledgeable-joggers",
+      "parentBranch": "main",
+      "createdAt": "2026-07-28T20:59:30.583Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785276568270-1": {
+      "branch": "stupendous-celestite",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/stupendous-celestite",
+      "parentBranch": "main",
+      "createdAt": "2026-07-28T22:09:28.270Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785278195315-2": {
+      "branch": "petite-expansion",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/petite-expansion",
+      "parentBranch": "main",
+      "createdAt": "2026-07-28T22:36:35.315Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785278615433-1": {
+      "branch": "powerful-albertonykus",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/powerful-albertonykus",
+      "parentBranch": "main",
+      "createdAt": "2026-07-28T22:43:35.433Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785278739260-2": {
+      "branch": "scientific-radon",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/scientific-radon",
+      "parentBranch": "main",
+      "createdAt": "2026-07-28T22:45:39.260Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785279008976-3": {
+      "branch": "developing-deerstalker",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/developing-deerstalker",
+      "parentBranch": "main",
+      "createdAt": "2026-07-28T22:50:08.976Z",
+      "remote": "origin",
+      "branchOwned": true
+    },
+    "wt-1785279113997-4": {
+      "branch": "diamond-artichoke",
+      "path": "/workspaces/Bingwamobile005/.kilo/worktrees/diamond-artichoke",
+      "parentBranch": "main",
+      "createdAt": "2026-07-28T22:51:53.997Z",
+      "remote": "origin",
+      "branchOwned": true
+    }
+  },
+  "sessions": {
+    "ses_05c3101e6ffe606kjZah7V7D1k": {
+      "worktreeId": "wt-1785159678484-1",
+      "createdAt": "2026-07-27T13:41:19.720Z"
+    },
+    "ses_05c303f83ffeNCLGlKr4HuQOaU": {
+      "worktreeId": "wt-1785159728507-2",
+      "createdAt": "2026-07-27T13:42:12.083Z"
+    },
+    "ses_05c25c35dffegD6MMqsEvXK3iD": {
+      "worktreeId": "wt-1785160415825-3",
+      "createdAt": "2026-07-27T13:53:41.540Z"
+    },
+    "ses_05c23cd25ffeqdvIjYO84D5vD4": {
+      "worktreeId": "wt-1785160544457-4",
+      "createdAt": "2026-07-27T13:55:50.536Z"
+    },
+    "ses_05c21aa13ffe3n9u8Ffygg7YYV": {
+      "worktreeId": "wt-1785160684452-5",
+      "createdAt": "2026-07-27T13:58:11.278Z"
+    },
+    "ses_05c2094a2ffegzN7DwMkdwhrQp": {
+      "worktreeId": "wt-1785160755633-6",
+      "createdAt": "2026-07-27T13:59:22.500Z"
+    },
+    "ses_05c1f3677ffeGxk7dFYquLammM": {
+      "worktreeId": "wt-1785160844627-7",
+      "createdAt": "2026-07-27T14:00:52.051Z"
+    },
+    "ses_05c1f01b7ffe80SEwDo17DSb0j": {
+      "worktreeId": "wt-1785160858185-8",
+      "createdAt": "2026-07-27T14:01:07.160Z"
+    },
+    "ses_05c1d8b88ffeHp3MxWG43nWEih": {
+      "worktreeId": "wt-1785160954476-9",
+      "createdAt": "2026-07-27T14:02:43.364Z"
+    },
+    "ses_05c1a8084ffe1rydIK3QTkK9MJ": {
+      "worktreeId": "wt-1785161153902-10",
+      "createdAt": "2026-07-27T14:06:04.803Z"
+    },
+    "ses_05c1395adffe6ouesLRUkXqxe6": {
+      "worktreeId": "wt-1785161607226-11",
+      "createdAt": "2026-07-27T14:13:37.949Z"
+    },
+    "ses_05bd28239ffecdJttdKdYz0Kzn": {
+      "worktreeId": "wt-1785165871560-1",
+      "createdAt": "2026-07-27T15:24:48.008Z"
+    },
+    "ses_05bd1c9c7ffe1ssM6D60HFOF6y": {
+      "worktreeId": "wt-1785165919349-2",
+      "createdAt": "2026-07-27T15:25:34.112Z"
+    },
+    "ses_05bcf167affecAYRaAfGaG9G4T": {
+      "worktreeId": "wt-1785166095984-1",
+      "createdAt": "2026-07-27T15:28:34.061Z"
+    },
+    "ses_05bcdb89effevhsNvJqLa6W4WD": {
+      "worktreeId": "wt-1785166185397-2",
+      "createdAt": "2026-07-27T15:29:46.818Z"
+    },
+    "ses_05bcc83c0ffeDTJwhNsjpIwptI": {
+      "worktreeId": "wt-1785166264968-3",
+      "createdAt": "2026-07-27T15:31:25.082Z"
+    },
+    "ses_05bcace0effeC3y6c6vIN2dX2z": {
+      "worktreeId": "wt-1785166376649-4",
+      "createdAt": "2026-07-27T15:33:17.791Z"
+    },
+    "ses_05bca3533ffeVJ8PuMoZpX7UQm": {
+      "worktreeId": "wt-1785166414098-5",
+      "createdAt": "2026-07-27T15:33:52.447Z"
+    },
+    "ses_05baab011ffejN3GuU0hde0aqo": {
+      "worktreeId": "wt-1785168481378-1",
+      "createdAt": "2026-07-27T16:08:34.187Z"
+    },
+    "ses_05ba7fbddffeFLtjfa47vMsa37": {
+      "worktreeId": "wt-1785168658905-2",
+      "createdAt": "2026-07-27T16:11:24.186Z"
+    },
+    "ses_05ba6f38fffegmI2yvuK0lLbMo": {
+      "worktreeId": "wt-1785168724171-3",
+      "createdAt": "2026-07-27T16:12:41.600Z"
+    },
+    "ses_05b964bacffe8K5hF886ygYSpJ": {
+      "worktreeId": "wt-1785169817903-1",
+      "createdAt": "2026-07-27T16:31:04.491Z"
+    },
+    "ses_05b955282ffe7W46wFGjwJmNGx": {
+      "worktreeId": "wt-1785169879781-2",
+      "createdAt": "2026-07-27T16:32:02.058Z"
+    },
+    "ses_05b36a3a5ffeV8CUA3uy0gwue3": {
+      "worktreeId": "wt-1785176086464-1",
+      "createdAt": "2026-07-27T18:15:17.010Z"
+    },
+    "ses_05b0f4035ffe6nIc15enT30MMP": {
+      "worktreeId": "wt-1785178654876-1",
+      "createdAt": "2026-07-27T18:58:16.162Z"
+    },
+    "ses_05ae9f765ffe5PxbtvZ1gd3frw": {
+      "worktreeId": "wt-1785181110213-1",
+      "createdAt": "2026-07-27T19:39:01.881Z"
+    },
+    "ses_059f82334ffeY4fu7SV902fziu": {
+      "worktreeId": null,
+      "createdAt": "2026-07-28T00:02:41.951Z"
+    },
+    "ses_059ec425dffepDucIBozceD3RJ": {
+      "worktreeId": "wt-1785197738580-1",
+      "createdAt": "2026-07-28T00:16:15.261Z"
+    },
+    "ses_058b6ef2cfferwi56XiwSWODsa": {
+      "worktreeId": "wt-1785218008137-1",
+      "createdAt": "2026-07-28T05:54:59.564Z"
+    },
+    "ses_057e10c82ffeDAeKM1NXSKhqFB": {
+      "worktreeId": "wt-1785232027685-1",
+      "createdAt": "2026-07-28T09:47:58.595Z"
+    },
+    "ses_057d64f3fffe57ZdWN2Atrb6uU": {
+      "worktreeId": "wt-1785232027685-1",
+      "createdAt": "2026-07-28T10:00:18.459Z"
+    },
+    "ses_057d64480ffeYiYOFoKgFNN6PN": {
+      "worktreeId": "wt-1785232027685-1",
+      "createdAt": "2026-07-28T10:00:22.271Z"
+    },
+    "ses_055797136fferNHI77QvbZ84mw": {
+      "worktreeId": "wt-1785272370583-1",
+      "createdAt": "2026-07-28T21:00:51.175Z"
+    },
+    "ses_0553a1b63ffezjA8xUaCksrV76": {
+      "worktreeId": null,
+      "createdAt": "2026-07-28T22:09:08.802Z"
+    },
+    "ses_0553969c4ffeMR7fqqfYmXe1FD": {
+      "worktreeId": "wt-1785276568270-1",
+      "createdAt": "2026-07-28T22:10:29.418Z"
+    },
+    "ses_055209471ffeGWErkBfCsLIGig": {
+      "worktreeId": "wt-1785278195315-2",
+      "createdAt": "2026-07-28T22:37:32.274Z"
+    },
+    "ses_0551a2735ffensJn0GqbyLXuEI": {
+      "worktreeId": "wt-1785278615433-1",
+      "createdAt": "2026-07-28T22:44:48.019Z"
+    },
+    "ses_055184542ffev9b5e9SMN7Q7vF": {
+      "worktreeId": "wt-1785278739260-2",
+      "createdAt": "2026-07-28T22:46:49.607Z"
+    },
+    "ses_055142848ffewv6M6q2sLJEcfA": {
+      "worktreeId": "wt-1785279008976-3",
+      "createdAt": "2026-07-28T22:51:16.956Z"
+    },
+    "ses_0551288f9ffeD10MLXp3u0OhXp": {
+      "worktreeId": "wt-1785279113997-4",
+      "createdAt": "2026-07-28T22:51:57.404Z"
+    }
+  },
+  "tabOrder": {
+    "local": [
+      "pending:4eb82e1a-cc97-4472-9fae-288004365a6e"
+    ],
+    "wt-1785232027685-1": [
+      "ses_057e10c82ffeDAeKM1NXSKhqFB",
+      "ses_057d64480ffeYiYOFoKgFNN6PN",
+      "ses_057d64f3fffe57ZdWN2Atrb6uU"
+    ]
+  },
+  "worktreeOrder": [
+    "wt-1785159678484-1",
+    "wt-1785159728507-2",
+    "wt-1785160415825-3",
+    "wt-1785160544457-4",
+    "wt-1785160684452-5",
+    "wt-1785160755633-6",
+    "wt-1785160844627-7",
+    "wt-1785160858185-8",
+    "wt-1785160954476-9",
+    "wt-1785161153902-10",
+    "wt-1785161607226-11",
+    "wt-1785165871560-1",
+    "wt-1785165919349-2",
+    "wt-1785166095984-1",
+    "wt-1785166185397-2",
+    "wt-1785166264968-3",
+    "wt-1785166376649-4",
+    "wt-1785166414098-5",
+    "wt-1785168481378-1",
+    "wt-1785168658905-2",
+    "wt-1785168724171-3",
+    "wt-1785169817903-1",
+    "wt-1785169879781-2",
+    "wt-1785176086464-1",
+    "wt-1785178654876-1",
+    "wt-1785181110213-1",
+    "wt-1785197738580-1",
+    "wt-1785218008137-1",
+    "wt-1785232027685-1",
+    "wt-1785272370583-1",
+    "wt-1785276568270-1",
+    "wt-1785278195315-2",
+    "wt-1785278615433-1",
+    "wt-1785278739260-2",
+    "wt-1785279008976-3",
+    "wt-1785279113997-4"
+  ],
+  "sessionsCollapsed": true
+}
