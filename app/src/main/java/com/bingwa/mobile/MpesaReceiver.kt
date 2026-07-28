@@ -212,7 +212,7 @@ class MpesaReceiver : BroadcastReceiver() {
                 handleIncomingMessages(appContext, appPrefs, automationEnabled, fallback)
             } finally {
                 pendingResult.finish()
-                (scope.coroutineContext[Job] ?: scope.coroutineContext).cancel()
+                scope.coroutineContext[Job]?.cancel()
             }
         }
     }
