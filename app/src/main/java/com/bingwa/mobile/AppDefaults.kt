@@ -14,4 +14,7 @@ internal const val DEFAULT_TPL_PENDING =
 internal const val DEFAULT_TPL_LIMIT_NOTICE =
     "Hi {name}, we could not send {offer} to {phone} today because this line has already bought Bingwa Sokoni data today, and Bingwa Sokoni data can only be purchased once per day on the same line. Reply 1 to send the bundle to a different number today, or reply 2 to have us send it to the same number tomorrow morning."
 
+internal const val DEFAULT_TPL_SCHEDULED =
+    "Hi {name}, your {offer} bundle has been sent to {phone} as scheduled. We were unable to send it yesterday because this line had already reached its daily limit. Your bundle is now active."
+
 internal const val ACTION_TX_CREATED = "com.bingwa.mobile.TX_CREATED"

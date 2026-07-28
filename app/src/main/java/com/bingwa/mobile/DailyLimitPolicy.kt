@@ -502,6 +502,7 @@ fun sendCustomerOutcomeSms(context: Context, outcome: String, tx: Transaction?) 
         "success" -> prefs.getBoolean("notify_success", true)
         "pending" -> prefs.getBoolean("notify_pending", true)
         "limit_notice" -> prefs.getBoolean("notify_limit_notice", true)
+        "scheduled" -> prefs.getBoolean("notify_scheduled", true)
         else -> prefs.getBoolean("notify_failed", true)
     }
     if (!enabled) return

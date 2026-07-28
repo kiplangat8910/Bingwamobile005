@@ -170,6 +170,10 @@ class AutomationService : Service() {
             TransactionStatus.FAILED.value -> handleFailed(request, response)
         }
 
+        if (request.action == ACTION_RUN_SCHEDULED && status == TransactionStatus.SUCCESS.value) {
+            sendScheduledDispatchNotification(request)
+        }
+
         finishExecution(scheduleAirtimeRefresh = true)
     }
 
@@ -986,6 +990,25 @@ class AutomationService : Service() {
         }
     }
     // endregion
+
+    private fun sendScheduledDispatchNotification(request: UssdRequest) {
+        runCatching {
+            val tx = TransactionStore.load(this).firstOrNull { it.id == request.txId } ?: return@runCatching
+            val reason = runCatching {
+                val transcript = tx.ussdTranscript.orEmpty()
+                val limitLine = transcript.firstOrNull { it.contains("already received", ignoreCase = true) || it.contains("daily limit", ignoreCase = true) || it.contains("twice", ignoreCase = true) }
+                val bingwaLine = transcript.firstOrNull { it.contains("Bingwa Sokoni", ignoreCase = true) }
+                when {
+                    bingwaLine != null -> "It was not sent yesterday because $bingwaLine"
+                    limitLine != null -> "It was not sent yesterday because $limitLine"
+                    else -> "It was scheduled for today because the previous attempt could not be completed yesterday."
+                }
+            }.getOrElse { "It was scheduled for today because the previous attempt could not be completed yesterday." }
+            val updatedNote = "${tx.description ?: "your bundle"}. $reason"
+            transactionHelper.saveAndBroadcast(request.txId, TransactionStatus.SUCCESS.value, updatedNote, tx.ussdTranscript)
+            DailyLimitPolicy.sendCustomerOutcomeSms(this, "scheduled", tx)
+        }
+    }
 
     // region ForegroundServiceHelper – manages foreground state
     private inner class ForegroundServiceHelper(private val service: Service) {

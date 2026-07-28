@@ -1208,12 +1208,14 @@ fun buildSmsMessage(ctx: Context, outcome: String, fullName: String, offer: Stri
         "success" -> "sms_tpl_success"
         "pending" -> "sms_tpl_pending"
         "limit_notice" -> "sms_tpl_limit_notice"
+        "scheduled" -> "sms_tpl_scheduled"
         else -> "sms_tpl_failed"
     }
     val defaultTpl = when (outcome.lowercase()) {
         "success" -> DEFAULT_TPL_SUCCESS
         "pending" -> DEFAULT_TPL_PENDING
         "limit_notice" -> DEFAULT_TPL_LIMIT_NOTICE
+        "scheduled" -> DEFAULT_TPL_SCHEDULED
         else -> DEFAULT_TPL_FAILED
     }
     val template = prefs.getString(key, defaultTpl) ?: defaultTpl
@@ -9031,10 +9033,12 @@ fun SettingsScreen() {
     var simId by remember { mutableIntStateOf(currentUssdSimSelection(ctx)) }
     var notifySuccess by remember { mutableStateOf(prefs.safeGetBoolean("notify_success", true)) }
     var notifyFailed by remember { mutableStateOf(prefs.safeGetBoolean("notify_failed", true)) }
+    var notifyScheduled by remember { mutableStateOf(prefs.safeGetBoolean("notify_scheduled", true)) }
     var notifySimId by remember { mutableIntStateOf(prefs.safeGetInt("notify_sim_id", -1)) }
     var tplSuccess by remember { mutableStateOf(prefs.safeGetString("sms_tpl_success", DEFAULT_TPL_SUCCESS) ?: DEFAULT_TPL_SUCCESS) }
     var tplFailed by remember { mutableStateOf(prefs.safeGetString("sms_tpl_failed", DEFAULT_TPL_FAILED) ?: DEFAULT_TPL_FAILED) }
     var tplPending by remember { mutableStateOf(prefs.safeGetString("sms_tpl_pending", DEFAULT_TPL_PENDING) ?: DEFAULT_TPL_PENDING) }
+    var tplScheduled by remember { mutableStateOf(prefs.safeGetString("sms_tpl_scheduled", DEFAULT_TPL_SCHEDULED) ?: DEFAULT_TPL_SCHEDULED) }
     var vibToggle by remember { mutableStateOf(prefs.safeGetBoolean("vibration_on_toggle", true)) }
     var vibExecute by remember { mutableStateOf(prefs.safeGetBoolean("vibration_on_execute", true)) }
     var remoteEnabled by remember { mutableStateOf(prefs.safeGetBoolean("remote_enabled", false)) }
@@ -9400,6 +9404,20 @@ fun SettingsScreen() {
                         TemplateEditor("Failure Message Template", tplFailed, C.red, SMS_TAGS) { tplFailed = it; prefs.edit().putString("sms_tpl_failed", it).apply() }
                         Spacer(Modifier.height(6.dp))
                         TemplatePreview(tplFailed, C.red)
+                    }
+                }
+            }
+
+            SettingsGroup("Scheduled Dispatch Notification") {
+                ToggleRow(Icons.Rounded.Schedule, "Send on Scheduled Dispatch", "SMS customer when a scheduled bundle is finally sent", notifyScheduled) { notifyScheduled = it; prefs.edit().putBoolean("notify_scheduled", it).apply() }
+                AnimatedVisibility(visible = notifyScheduled) {
+                    Column {
+                        GroupDivider()
+                        SimPickerRow("Send via SIM", "SIM used to send this SMS", sims, notifySimId) { notifySimId = it; prefs.edit().putInt("notify_sim_id", it).apply() }
+                        GroupDivider()
+                        TemplateEditor("Scheduled Dispatch Template", tplScheduled, C.purple, SMS_TAGS) { tplScheduled = it; prefs.edit().putString("sms_tpl_scheduled", it).apply() }
+                        Spacer(Modifier.height(6.dp))
+                        TemplatePreview(tplScheduled, C.purple)
                     }
                 }
             }

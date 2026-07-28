@@ -1526,10 +1526,12 @@ private fun CustomerNotificationSettings(onBack: () -> Unit) {
     val prefs = ctx.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
     var notifySuccess by remember { mutableStateOf(prefs.safeGetBoolean("notify_success", true)) }
     var notifyFailed by remember { mutableStateOf(prefs.safeGetBoolean("notify_failed", true)) }
+    var notifyScheduled by remember { mutableStateOf(prefs.safeGetBoolean("notify_scheduled", true)) }
     var tplSuccess by remember { mutableStateOf(prefs.safeGetString("sms_tpl_success", DEFAULT_TPL_SUCCESS) ?: DEFAULT_TPL_SUCCESS) }
     var tplFailed by remember { mutableStateOf(prefs.safeGetString("sms_tpl_failed", DEFAULT_TPL_FAILED) ?: DEFAULT_TPL_FAILED) }
     var tplPending by remember { mutableStateOf(prefs.safeGetString("sms_tpl_pending", DEFAULT_TPL_PENDING) ?: DEFAULT_TPL_PENDING) }
     var tplLimitNotice by remember { mutableStateOf(prefs.safeGetString("sms_tpl_limit_notice", DEFAULT_TPL_LIMIT_NOTICE) ?: DEFAULT_TPL_LIMIT_NOTICE) }
+    var tplScheduled by remember { mutableStateOf(prefs.safeGetString("sms_tpl_scheduled", DEFAULT_TPL_SCHEDULED) ?: DEFAULT_TPL_SCHEDULED) }
     var notifyPending by remember { mutableStateOf(prefs.safeGetBoolean("notify_pending", true)) }
     var notifyLimitNotice by remember { mutableStateOf(prefs.safeGetBoolean("notify_limit_notice", true)) }
 
@@ -1604,6 +1606,24 @@ private fun CustomerNotificationSettings(onBack: () -> Unit) {
                         }
                         Spacer(Modifier.height(6.dp))
                         TemplatePreview(tplFailed, C.red)
+                    }
+                }
+            }
+
+            SettingsGroup("Scheduled Dispatch") {
+                ToggleRow(Icons.Rounded.Schedule, "Send on Scheduled Dispatch", "SMS customer when a scheduled bundle is finally sent", notifyScheduled) {
+                    notifyScheduled = it
+                    prefs.edit().putBoolean("notify_scheduled", it).apply()
+                }
+                AnimatedVisibility(visible = notifyScheduled) {
+                    Column {
+                        GroupDivider()
+                        TemplateEditor("Scheduled Dispatch Template", tplScheduled, C.purple, SMS_TAGS) { v ->
+                            tplScheduled = v
+                            prefs.edit().putString("sms_tpl_scheduled", v).apply()
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        TemplatePreview(tplScheduled, C.purple)
                     }
                 }
             }
