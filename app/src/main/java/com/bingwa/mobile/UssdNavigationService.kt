@@ -425,31 +425,33 @@ class UssdNavigationService : AccessibilityService() {
     private fun buildEventFingerprint(event: AccessibilityEvent): String {
         val pkg = event.packageName?.toString().orEmpty()
         val cls = event.className?.toString().orEmpty()
-        val text = extractDialogText(event)
+        val text = event.text?.joinToString(" ") { it.toString() }.orEmpty()
+        val desc = event.contentDescription?.toString().orEmpty()
         val contentType = runCatching { event.contentChangeTypes }.getOrDefault(0)
-        return "${event.eventType}|${event.windowId}|$contentType|$pkg|$cls|$text"
+        return "${event.eventType}|${event.windowId}|$contentType|$pkg|$cls|$text|$desc"
     }
 
     private fun extractDialogText(event: AccessibilityEvent): String {
         val parts = mutableListOf<String>()
-        runCatching { event.text?.forEach { cs -> cs?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { parts += it } } }
-        runCatching { event.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { parts += it } }
-        runCatching {
-            event.packageName?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { pkg ->
-                if (parts.none { it.contains(pkg, ignoreCase = true) }) parts += pkg
+        val text = event.text
+        if (text != null && text.isNotEmpty()) {
+            for (cs in text) {
+                val s = cs?.toString()?.trim() ?: continue
+                if (s.isNotBlank()) parts += s
             }
         }
-        runCatching {
-            event.className?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { cls ->
-                if (parts.none { it.contains(cls, ignoreCase = true) }) parts += cls
-            }
-        }
+        val desc = event.contentDescription?.toString()?.trim()
+        if (!desc.isNullOrBlank() && !parts.any { it.contains(desc, ignoreCase = true) }) parts += desc
+        val pkg = event.packageName?.toString()?.trim()
+        if (!pkg.isNullOrBlank() && !parts.any { it.contains(pkg, ignoreCase = true) }) parts += pkg
+        val cls = event.className?.toString()?.trim()
+        if (!cls.isNullOrBlank() && !parts.any { it.contains(cls, ignoreCase = true) }) parts += cls
         return normalizeCollapsedText(parts.distinct().joinToString(" "))
     }
 
     private fun normalizeCollapsedText(value: String?): String {
         return value.orEmpty()
-            .replace(Regex("\\s+"), " ")
+            .replace(WHITESPACE_REGEX, " ")
             .trim()
     }
 
@@ -459,8 +461,8 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun normalizeMenuText(value: String?): String {
         val normalized = normalizeActionLabel(value)
-            .replace(Regex("""^\d+\s*[\)\].:\-]?\s*"""), "")
-            .replace(Regex("""[^\p{L}\p{N}\s]"""), " ")
+            .replace(LEADING_DIGIT_REGEX, "")
+            .replace(NON_ALPHANUMERIC_REGEX, " ")
         return normalizeCollapsedText(normalized)
     }
 
@@ -679,7 +681,7 @@ class UssdNavigationService : AccessibilityService() {
         if (NON_USSD_DIALOG_HINTS.any { text.contains(it) }) return 0
 
         val hasAction = acc.hasSendButton || acc.hasDismissButton || acc.hasEditableField
-        val hasMenu = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(text)
+        val hasMenu = MENU_ITEM_REGEX.containsMatchIn(text)
         val hasUssdLang = USSD_HINTS.any { text.contains(it) } || errorKeywords.any { text.contains(it) }
         if (!hasAction && !hasMenu) return 0
         if (!hasUssdLang && !hasMenu && !advancedActive && !isForegroundUiActive()) return 0
@@ -704,13 +706,13 @@ class UssdNavigationService : AccessibilityService() {
     private fun parseMenuOptions(tokens: List<String>): LinkedHashMap<String, String>? {
         val lines = tokens.map { normalizeCollapsedText(it) }.filter { it.isNotBlank() }
         for (i in lines.indices) {
-            val match = Regex("""^(\d+)\s*[\)\].:\-]?\s*(.+)$""").find(lines[i])
+            val match = MENU_OPTION_REGEX.find(lines[i])
             if (match != null) {
                 val opts = linkedMapOf<String, String>()
                 var idx = i
                 while (idx < lines.size) {
                     val line = lines[idx]
-                    val m = Regex("""^(\d+)\s*[\)\].:\-]?\s*(.+)$""").find(line)
+                    val m = MENU_OPTION_REGEX.find(line)
                     if (m != null) {
                         val key = m.groupValues[1]
                         val label = normalizeCollapsedText(m.groupValues[2])
@@ -751,7 +753,7 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun looksLikeUssdDialogFast(lower: String, pkg: String): Boolean {
         val hasUssdLang = USSD_HINTS.any { lower.contains(it) } || errorKeywords.any { lower.contains(it) }
-        val menuLike = Regex("""\b\d+\s*[\)\].:\-]""").containsMatchIn(lower)
+        val menuLike = MENU_ITEM_REGEX.containsMatchIn(lower)
         if (pkg == "android" || pkg.isBlank()) return advancedActive || isForegroundUiActive() || (hasUssdLang || menuLike)
         return isPotentialUssdPackage(pkg) && (hasUssdLang || menuLike)
     }
@@ -1777,7 +1779,7 @@ class UssdNavigationService : AccessibilityService() {
         return if (digits.length < 9) "" else UssdHelper.normalizeRecipientForUssdInput(digits).replace(Regex("\\D+"), "")
     }
 
-    private fun normalizeInputValue(value: String?) = value.orEmpty().replace(Regex("\\s+"), "").trim()
+    private fun normalizeInputValue(value: String?) = value.orEmpty().replace(WHITESPACE_REGEX, "").trim()
     // endregion
 
     // region Button Finding (official view id and text search)
@@ -2095,7 +2097,7 @@ class UssdNavigationService : AccessibilityService() {
         val lines = tokens.map { normalizeCollapsedText(it) }.filter { it.isNotBlank() }
         val menu = parseMenuOptions(lines)
         if (menu != null) {
-            val idx = lines.indexOfFirst { Regex("""^\d+\s*[\)\].:\-]""").containsMatchIn(it) }
+            val idx = lines.indexOfFirst { MENU_ITEM_REGEX.containsMatchIn(it) }
             if (idx > 0) return lines.take(idx).joinToString(" / ")
         }
         return lines.take(2).joinToString(" / ")
@@ -2242,7 +2244,7 @@ class UssdNavigationService : AccessibilityService() {
         val lines = tokens.map { normalizeCollapsedText(it) }.filter { it.isNotBlank() }
         val menu = parseMenuOptions(lines)
         return if (menu != null) {
-            lines.takeWhile { !Regex("""^\d+\s*[\)\].:\-]""").containsMatchIn(it) }.let { title ->
+            lines.takeWhile { !MENU_ITEM_REGEX.containsMatchIn(it) }.let { title ->
                 (title + menu.entries.map { "${it.key}. ${normalizeCollapsedText(it.value)}" })
             }.joinToString("\n")
         } else fallback
@@ -2251,7 +2253,7 @@ class UssdNavigationService : AccessibilityService() {
     private fun formatLearningRecordedDialogText(snapshot: UssdTreeSnapshot, menu: LinkedHashMap<String, String>?): String {
         val lines = snapshot.textTokens.map { normalizeCollapsedText(it) }.filter { it.isNotBlank() }
         return if (menu != null && menu.isNotEmpty()) {
-            val firstOptionIdx = lines.indexOfFirst { Regex("""^\d+\s*[\)\].:\-]""").containsMatchIn(it) }
+            val firstOptionIdx = lines.indexOfFirst { MENU_ITEM_REGEX.containsMatchIn(it) }
             val title = if (firstOptionIdx > 0) lines.take(firstOptionIdx) else emptyList()
             (title + menu.entries.map { "${it.key}. ${normalizeCollapsedText(it.value)}" }).joinToString("\n")
         } else {
@@ -2510,7 +2512,7 @@ class UssdNavigationService : AccessibilityService() {
         if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return false
         if (looksLikeSimChooserDialog(lower, windowPkg)) return false
         val hasUssdLang = USSD_HINTS.any { lower.contains(it) } || errorKeywords.any { lower.contains(it) }
-        val menuLike = Regex("""\d+\s*[\)\].:\-]""").containsMatchIn(lower)
+        val menuLike = MENU_ITEM_REGEX.containsMatchIn(lower)
         val isTransient = TRANSIENT_RESPONSE_HINTS.any { lower.contains(it) }
         val hasDialogLayout = hasDialogLayout(root)
         return (hasUssdLang || menuLike || isTransient) && (hasDialogLayout || windowPkg == "android")
@@ -2558,7 +2560,7 @@ class UssdNavigationService : AccessibilityService() {
         if (preferredSlotNumber > 0) {
             if (simChooserSlotHints(preferredSlotNumber).any { combined.contains(it) }) score += 900
             if (SIM_CHOOSER_OPTION_HINTS.any { combined.contains(it) } &&
-                Regex("""(^|\D)$preferredSlotNumber($|\D)""").containsMatchIn(combined)
+                (SIM_SLOT_REGEX(preferredSlotNumber)).containsMatchIn(combined)
             ) score += 420
         }
         return score
@@ -2827,7 +2829,7 @@ class UssdNavigationService : AccessibilityService() {
         if (lines.isEmpty()) return snapshot.dialogText
         val menu = parseMenuOptions(lines)
         val recorded = if (menu != null) {
-            val titleLines = lines.takeWhile { !Regex("""^\d+\s*[\)\].:\-]""").containsMatchIn(it) }
+            val titleLines = lines.takeWhile { !MENU_ITEM_REGEX.containsMatchIn(it) }
             (titleLines + menu.entries.map { "${it.key}. ${normalizeCollapsedText(it.value)}" }).distinct()
         } else {
             lines.distinct()
@@ -2974,7 +2976,7 @@ class UssdNavigationService : AccessibilityService() {
                 lower.contains("tel:") || lower.contains("call") || lower.contains("dial") ||
                 lower.contains("recipient") || lower.contains("subscriber") ||
                 lower.contains("msisdn") || lower.contains("beneficiary") ||
-                (Regex("""\b\d{9,15}\b""").containsMatchIn(lower) && lower.contains("phone"))
+                (PHONE_NUMBER_REGEX.containsMatchIn(lower) && lower.contains("phone"))
 
     private fun markStepAction(dialogText: String, root: AccessibilityNodeInfo?, snapshot: UssdTreeSnapshot?) {
         val sig = snapshot?.inputStateSignature ?: root?.let { captureInputStateSignature(it) }.orEmpty()
@@ -3054,7 +3056,7 @@ class UssdNavigationService : AccessibilityService() {
 
         balanceCallback?.let { cb ->
             if (lower.contains("balance") || lower.contains("airtime") || lower.contains("ksh") || lower.contains("kes") ||
-                dialogText.matches(Regex(".*\\d[\\d,]*\\.?\\d*.*", RegexOption.DOT_MATCHES_ALL))) {
+                dialogText.matches(BALANCE_AMOUNT_REGEX)) {
                 airtimeBalance = dialogText
                 val display = BalanceChecker.parseBalanceDisplay(dialogText)
                 BalanceChecker.currentBalance = BalanceChecker.parseBalanceInt(dialogText)
@@ -3444,6 +3446,15 @@ class UssdNavigationService : AccessibilityService() {
     private val CHANNEL_ID = "bingwa_ussd"
     private val NOTIFICATION_ID = 2001
     private val SHOW_RUNNING_OVERLAY = false
+
+    private val WHITESPACE_REGEX = Regex("\\s+")
+    private val LEADING_DIGIT_REGEX = Regex("""^\d+\s*[\)\].:\-]?\s*""")
+    private val NON_ALPHANUMERIC_REGEX = Regex("""[^\p{L}\p{N}\s]""")
+    private val MENU_ITEM_REGEX = Regex("""\b\d+\s*[\)\].:\-]""")
+    private val MENU_OPTION_REGEX = Regex("""^(\d+)\s*[\)\].:\-]?\s*(.+)$""")
+    private val PHONE_NUMBER_REGEX = Regex("""\b\d{9,15}\b""")
+    private val SIM_SLOT_REGEX = { slot: Int -> Regex("""(^|\D)${slot}($|\D)""") }
+    private val BALANCE_AMOUNT_REGEX = Regex(".*\\d[\\d,]*\\.?\\d*.*", RegexOption.DOT_MATCHES_ALL)
     // endregion
 
     // region UssdHelper stub (should exist in your project)

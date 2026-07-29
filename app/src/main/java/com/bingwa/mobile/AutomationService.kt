@@ -704,9 +704,9 @@ class AutomationService : Service() {
     }
     // endregion
 
-    // region ResponseAnalyzer – determines status and retry conditions
     private inner class ResponseAnalyzer(private val context: Context) {
         private val patternManager = UssdResponsePatternManager(context)
+        private val whitespaceRegex = Regex("\\s+")
 
         fun determineStatus(response: String): String {
             if (response.isBlank()) return TransactionStatus.FAILED.value
@@ -767,7 +767,7 @@ class AutomationService : Service() {
         private fun looksLikeValidResponse(normalized: String): Boolean {
             if (normalized.length < 5) return false
             val hasContent = normalized.any { it.isLetterOrDigit() }
-            val hasMultipleWords = normalized.split("\\s+".toRegex()).size > 2
+            val hasMultipleWords = normalized.split(whitespaceRegex).size > 2
             return hasContent && hasMultipleWords
         }
 
@@ -996,6 +996,8 @@ class AutomationService : Service() {
 
     // region NotificationHelper – builds notifications
     private inner class NotificationHelper(private val context: Context) {
+        private val whitespaceRegex = Regex("\\s+")
+
         fun notifyFallback(request: UssdRequest, response: String) {
             val title = "Fallback Dispatched"
             val message = "${request.offerName.ifBlank { "Original offer" }} stopped. ${request.phoneNumber} will be sent via fallback."
@@ -1031,7 +1033,7 @@ class AutomationService : Service() {
                 " Captured ${result.learningCaptures.size} USSD popup(s), the selected option, and the recorded text for each step."
             } else ""
             val finalPopup = result.learningCaptures.lastOrNull()?.popupText
-                ?.replace(Regex("\\s+"), " ")
+                ?.replace(whitespaceRegex, " ")
                 ?.trim()
                 ?.take(120)
                 ?.takeIf { it.isNotBlank() }
