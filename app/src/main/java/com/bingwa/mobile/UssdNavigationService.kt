@@ -2422,7 +2422,9 @@ class UssdNavigationService : AccessibilityService() {
                 preferredDialSubId.takeIf { it >= 0 }
             )
             startActivity(intent)
-            if (shouldKeepAppUiVisible()) com.bingwa.mobile.UssdHelper.relaunchAppUi(this)
+            val ussdRoot = getUssdRoot()
+            if (shouldKeepAppUiVisible() && ussdRoot == null) com.bingwa.mobile.UssdHelper.relaunchAppUi(this)
+            ussdRoot?.recycle()
         }
     }
 
@@ -3073,6 +3075,11 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun requestAppUiBehindPopup(force: Boolean = false) {
         if (!shouldKeepAppUiVisible()) return
+        val ussdRoot = getUssdRoot()
+        if (ussdRoot != null) {
+            ussdRoot.recycle()
+            return
+        }
         val now = SystemClock.elapsedRealtime()
         if (!force && now - lastUiReturnElapsed < 900L) return
         lastUiReturnElapsed = now
@@ -3108,6 +3115,12 @@ class UssdNavigationService : AccessibilityService() {
     private fun updateOverlay() {
         if (!SHOW_RUNNING_OVERLAY) { hideOverlay(); return }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return
+        val ussdRoot = getUssdRoot()
+        if (ussdRoot != null) {
+            ussdRoot.recycle()
+            hideOverlay()
+            return
+        }
         val wm = windowManager ?: return
         if (overlayView == null) {
             val view = buildOverlayView()
@@ -3137,15 +3150,15 @@ class UssdNavigationService : AccessibilityService() {
     private fun buildOverlayView(): View {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            val pad = dp(14); val padV = dp(10)
+            val pad = dp(10); val padV = dp(6)
             setPadding(pad, padV, pad, padV)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(16).toFloat()
-                setColor(Color.parseColor("#E61A1A1A"))
-                setStroke(dp(1), Color.parseColor("#3329B6F6"))
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.parseColor("#661A1A1A"))
+                setStroke(dp(1), Color.parseColor("#2929B6F6"))
             }
-            elevation = dp(8).toFloat()
+            elevation = dp(4).toFloat()
         }
         val status = TextView(this).apply {
             setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD; setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
