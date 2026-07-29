@@ -237,8 +237,8 @@ object SilentUssdOptimized {
     }
 
     private object Constants {
-        private val MENU_ITEM_REGEX = Regex("""\d+\s*[\)\].:\-]""")
-        private val MEANINGFUL_LINE_REGEX = Regex("""\d""")
+        val MENU_ITEM_REGEX = Regex("""\d+\s*[\)\].:\-]""")
+        val MEANINGFUL_LINE_REGEX = Regex("""\d""")
         val USSD_KEYWORDS = listOf(
             "success", "failed", "error", "balance", "ksh", "kes",
             "thank you", "wait", "enter", "confirm", "please", "option",
