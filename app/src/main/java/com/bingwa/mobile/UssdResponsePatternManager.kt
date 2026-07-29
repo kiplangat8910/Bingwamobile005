@@ -260,10 +260,10 @@ class UssdResponsePatternManager(private val context: Context) {
         if (normalized.isBlank()) return "Failed"
         return when {
             matchesFailedRetryPattern(normalized) -> "Failed"
+            matchesFailedPattern(normalized) -> "Failed"
+            matchesMaintenancePattern(normalized) -> "UnderMaintenance"
             matchesAlreadyRecommendedPattern(normalized) -> "Pending"
             matchesSuccessPattern(normalized) -> "Success"
-            matchesMaintenancePattern(normalized) -> "UnderMaintenance"
-            matchesFailedPattern(normalized) -> "Failed"
             looksLikeValidResponse(normalized) -> "Success"
             else -> "Failed"
         }

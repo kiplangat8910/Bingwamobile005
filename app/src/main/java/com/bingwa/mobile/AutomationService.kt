@@ -711,17 +711,14 @@ class AutomationService : Service() {
         fun determineStatus(response: String): String {
             if (response.isBlank()) return TransactionStatus.FAILED.value
             val normalized = response.lowercase().trim()
-            // Check for success first (most specific patterns)
-            if (patternManager.matchesSuccessPattern(response)) return TransactionStatus.SUCCESS.value
-            // Check for maintenance
-            if (patternManager.matchesMaintenancePattern(response)) return TransactionStatus.PENDING.value
-            // Check for already recommended
-            if (patternManager.matchesAlreadyRecommendedPattern(response)) return TransactionStatus.PENDING.value
-            // Check for failed retry patterns
+            // Check failures first so they beat ambiguous success wording
             if (patternManager.matchesFailedRetryPattern(response)) return TransactionStatus.FAILED.value
-            // Check for generic failure indicators
             if (patternManager.matchesFailedPattern(response)) return TransactionStatus.FAILED.value
-            // Check for retriable patterns
+            if (patternManager.matchesMaintenancePattern(response)) return TransactionStatus.PENDING.value
+            if (patternManager.matchesAlreadyRecommendedPattern(response)) return TransactionStatus.PENDING.value
+            // Check success only after failures
+            if (patternManager.matchesSuccessPattern(response)) return TransactionStatus.SUCCESS.value
+            // Retriable patterns
             if (patternManager.matchesRetriableFinalPattern(response)) return TransactionStatus.RETRYING.value
             // Heuristic: if response has meaningful content, treat as success
             if (looksLikeSuccessResponse(normalized)) return TransactionStatus.SUCCESS.value
