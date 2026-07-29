@@ -196,6 +196,13 @@ class UssdNavigationService : AccessibilityService() {
     private var hasSeenForegroundPopup = false
 
     // Signature tracking
+    private val MAX_POPUP_TRANSCRIPT_ENTRIES = 80
+    private val MAX_POPUP_TRANSCRIPT_CHARS = 1200
+    private val MAX_LEARNING_CAPTURES = 40
+    private val MAX_DETECTED_CHANGE_NOTES = 20
+    private val MAX_LEARNED_SIGNATURE_STEPS = 60
+    private val MAX_ADJUSTED_STEP_INPUTS = 60
+
     private val adjustedStepInputs = linkedMapOf<Int, String>()
     private val learnedSignatureSteps = mutableListOf<UssdSignatureStep>()
     private val learningCaptures = mutableListOf<UssdLearningCapture>()
@@ -2090,7 +2097,10 @@ class UssdNavigationService : AccessibilityService() {
         val (entered, selectedLabel) = resolveStepInput(captureIndex, rawStep, menu)
         val capture = UssdLearningCapture(captureIndex, entered, selectedLabel, recordedText)
         val existing = learningCaptures.indexOfFirst { it.stepIndex == capture.stepIndex && normalizeMenuText(it.popupText) == normalizeMenuText(capture.popupText) }
-        if (existing >= 0) learningCaptures[existing] = capture else learningCaptures += capture
+        if (existing >= 0) learningCaptures[existing] = capture else {
+            if (learningCaptures.size >= MAX_LEARNING_CAPTURES) learningCaptures.removeAt(0)
+            learningCaptures += capture
+        }
     }
 
     private fun extractMenuTitle(tokens: List<String>): String {
@@ -2121,6 +2131,7 @@ class UssdNavigationService : AccessibilityService() {
         if (match == null) {
             val msg = buildChangeMessage(learned.step, null, null)
             signatureChangeDetected = true
+            if (detectedChangeNotes.size >= MAX_DETECTED_CHANGE_NOTES) detectedChangeNotes.removeAt(0)
             detectedChangeNotes += msg
             failForSignatureChange(msg)
             return rawStep to ""
@@ -2128,6 +2139,7 @@ class UssdNavigationService : AccessibilityService() {
         if (match.first != rawStep) {
             val msg = buildChangeMessage(learned.step, match.first, match.second)
             signatureChangeDetected = true
+            if (detectedChangeNotes.size >= MAX_DETECTED_CHANGE_NOTES) detectedChangeNotes.removeAt(0)
             detectedChangeNotes += msg
             if (signatureAction != "ADJUST" || !isAutoAdjustSafe(match, menu, learned)) {
                 failForSignatureChange(msg)
@@ -3441,6 +3453,10 @@ class UssdNavigationService : AccessibilityService() {
     private val MAX_RETRY_WINDOW_MS = 75000L
     private val MAX_POPUP_TRANSCRIPT_ENTRIES = 80
     private val MAX_POPUP_TRANSCRIPT_CHARS = 1200
+    private val MAX_LEARNING_CAPTURES = 40
+    private val MAX_DETECTED_CHANGE_NOTES = 20
+    private val MAX_LEARNED_SIGNATURE_STEPS = 60
+    private val MAX_ADJUSTED_STEP_INPUTS = 60
     private val MIN_SIM_CHOOSER_SCORE = 260
 
     private val CHANNEL_ID = "bingwa_ussd"

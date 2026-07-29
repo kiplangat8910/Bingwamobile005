@@ -18,6 +18,7 @@ object SilentUssdOptimized {
     private const val TIMEOUT_MS = 15_000L
     private const val MAX_RETRIES = 2
     private const val RETRY_DELAY_MS = 500L
+    private const val MAX_METHOD_CACHE_SIZE = 20
 
     @Volatile private var successCb: ((String) -> Unit)? = null
     @Volatile private var failureCb: ((String) -> Unit)? = null
@@ -28,8 +29,8 @@ object SilentUssdOptimized {
     private val methodCache = mutableMapOf<String, Method>()
     private val requestCounter = AtomicLong(0L)
     @Volatile private var activeRequestId: Long = 0L
-    private var retryCount = 0
-    private var lastError: String? = null
+    @Volatile private var retryCount = 0
+    @Volatile private var lastError: String? = null
 
     fun execute(
         context: Context,
@@ -162,6 +163,10 @@ object SilentUssdOptimized {
                         Handler::class.java
                     ).apply { isAccessible = true }
                 }
+                if (methodCache.size > MAX_METHOD_CACHE_SIZE) {
+                    val iterator = methodCache.iterator()
+                    repeat(5) { if (iterator.hasNext()) iterator.next().let { if (it.key != cacheKey) iterator.remove() } }
+                }
 
                 method.invoke(
                     if (className == "android.telephony.TelephonyManager") tm else null,
@@ -203,15 +208,8 @@ object SilentUssdOptimized {
         if (rawResponse.isBlank()) return ""
         val trimmed = rawResponse.trim()
 
-        val isMenuPopup = trimmed.contains(Regex("""\d+\s*[\)\].:\-]"""))
-        val hasUssdKeywords = listOf(
-            "success", "failed", "error", "balance", "ksh", "kes",
-            "thank you", "wait", "enter", "confirm", "please", "option",
-            "try again", "maintained", "process", "received", "activated",
-            "bundle", "data", "airtime", "loan", "refund", "withdraw",
-            "transfer", "send", "buy", "purchase", "subscription",
-            "completed", "successful", "unsuccessful", "insufficient"
-        ).any { keyword -> trimmed.lowercase().contains(keyword) }
+        val isMenuPopup = MENU_ITEM_REGEX.containsMatchIn(trimmed)
+        val hasUssdKeywords = USSD_KEYWORDS.any { trimmed.lowercase().contains(it) }
 
         val lines = trimmed.split("\n").map { it.trim() }.filter { it.isNotBlank() }
         if (lines.isEmpty()) return trimmed
@@ -226,8 +224,8 @@ object SilentUssdOptimized {
         // Prioritize lines with actionable content (numbers, amounts, confirmations)
         val meaningfulLines = lines.filter { line ->
             line.length >= 5 &&
-            (line.contains(Regex("""\d""")) ||
-            listOf("success", "fail", "error", "confirm", "enter", "select", "choose", "amount", "balance", "ksh", "kes", "paid", "received", "sent", "to", "from", "account", "ref", "transaction", "id", "code").any { line.lowercase().contains(it) })
+            (line.contains(MEANINGFUL_LINE_REGEX) ||
+            ACTIONABLE_KEYWORDS.any { line.lowercase().contains(it) })
         }
 
         return if (meaningfulLines.isNotEmpty()) {
@@ -236,6 +234,24 @@ object SilentUssdOptimized {
             // Fallback: first 3 meaningful lines
             lines.take(3).joinToString("\n")
         }
+    }
+
+    private companion object {
+        private val MENU_ITEM_REGEX = Regex("""\d+\s*[\)\].:\-]""")
+        private val MEANINGFUL_LINE_REGEX = Regex("""\d""")
+        private val USSD_KEYWORDS = listOf(
+            "success", "failed", "error", "balance", "ksh", "kes",
+            "thank you", "wait", "enter", "confirm", "please", "option",
+            "try again", "maintained", "process", "received", "activated",
+            "bundle", "data", "airtime", "loan", "refund", "withdraw",
+            "transfer", "send", "buy", "purchase", "subscription",
+            "completed", "successful", "unsuccessful", "insufficient"
+        )
+        private val ACTIONABLE_KEYWORDS = listOf(
+            "success", "fail", "error", "confirm", "enter", "select", "choose",
+            "amount", "balance", "ksh", "kes", "paid", "received", "sent",
+            "to", "from", "account", "ref", "transaction", "id", "code"
+        )
     }
 
     private fun hasReflectionMethod(tm: TelephonyManager): Boolean {
