@@ -3454,12 +3454,6 @@ class UssdNavigationService : AccessibilityService() {
     private val STARTUP_UI_KEEP_VISIBLE_MS = 8000L
     private val STEP_TRANSITION_GUARD_MS = 180L
     private val MAX_RETRY_WINDOW_MS = 75000L
-    private val MAX_POPUP_TRANSCRIPT_ENTRIES = 80
-    private val MAX_POPUP_TRANSCRIPT_CHARS = 1200
-    private val MAX_LEARNING_CAPTURES = 40
-    private val MAX_DETECTED_CHANGE_NOTES = 20
-    private val MAX_LEARNED_SIGNATURE_STEPS = 60
-    private val MAX_ADJUSTED_STEP_INPUTS = 60
     private val MIN_SIM_CHOOSER_SCORE = 260
 
     private val CHANNEL_ID = "bingwa_ussd"

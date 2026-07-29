@@ -209,7 +209,7 @@ object SilentUssdOptimized {
         val trimmed = rawResponse.trim()
 
         val isMenuPopup = MENU_ITEM_REGEX.containsMatchIn(trimmed)
-        val hasUssdKeywords = USSD_KEYWORDS.any { trimmed.lowercase().contains(it) }
+        val hasUssdKeywords = Constants.USSD_KEYWORDS.any { trimmed.lowercase().contains(it) }
 
         val lines = trimmed.split("\n").map { it.trim() }.filter { it.isNotBlank() }
         if (lines.isEmpty()) return trimmed
@@ -225,7 +225,7 @@ object SilentUssdOptimized {
         val meaningfulLines = lines.filter { line ->
             line.length >= 5 &&
             (line.contains(MEANINGFUL_LINE_REGEX) ||
-            ACTIONABLE_KEYWORDS.any { line.lowercase().contains(it) })
+            Constants.ACTIONABLE_KEYWORDS.any { line.lowercase().contains(it) })
         }
 
         return if (meaningfulLines.isNotEmpty()) {
@@ -236,10 +236,10 @@ object SilentUssdOptimized {
         }
     }
 
-    private companion object {
+    private object Constants {
         private val MENU_ITEM_REGEX = Regex("""\d+\s*[\)\].:\-]""")
         private val MEANINGFUL_LINE_REGEX = Regex("""\d""")
-        private val USSD_KEYWORDS = listOf(
+        val USSD_KEYWORDS = listOf(
             "success", "failed", "error", "balance", "ksh", "kes",
             "thank you", "wait", "enter", "confirm", "please", "option",
             "try again", "maintained", "process", "received", "activated",
@@ -247,7 +247,7 @@ object SilentUssdOptimized {
             "transfer", "send", "buy", "purchase", "subscription",
             "completed", "successful", "unsuccessful", "insufficient"
         )
-        private val ACTIONABLE_KEYWORDS = listOf(
+        val ACTIONABLE_KEYWORDS = listOf(
             "success", "fail", "error", "confirm", "enter", "select", "choose",
             "amount", "balance", "ksh", "kes", "paid", "received", "sent",
             "to", "from", "account", "ref", "transaction", "id", "code"
