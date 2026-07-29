@@ -865,9 +865,12 @@ class UssdNavigationService : AccessibilityService() {
                     val aggressiveCandidates = mutableListOf<AccessibilityNodeInfo>()
                     collectAggressiveTextEntryCandidates(root, aggressiveCandidates)
                     val aggressiveField = aggressiveCandidates.firstOrNull()
-                    if (aggressiveField != null) {
-                        tryWriteValueToField(aggressiveField, valueToEnter, root)
-                        aggressiveField.recycle()
+                    val wrote = aggressiveField != null && tryWriteValueToField(aggressiveField, valueToEnter, root)
+                    aggressiveField?.recycle()
+                    if (!wrote) {
+                        isProcessing = false
+                        dismissErrorAndRestart()
+                        return
                     }
                     isProcessing = false
                     scheduleProcessStep(false)
