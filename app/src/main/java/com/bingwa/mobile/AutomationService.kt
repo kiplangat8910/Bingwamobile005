@@ -528,9 +528,10 @@ class AutomationService : Service() {
         }
 
         fun startAdvanced(request: UssdRequest, onComplete: (AdvancedDispatchResult) -> Unit) {
-            // Prepare the navigation service
-            val steps = extractSteps(request.code)
-            val dialCode = extractDialCode(request.code)
+            val rawCode = request.code
+            val phoneNumber = request.phoneNumber
+            val steps = extractSteps(rawCode, phoneNumber)
+            val dialCode = extractDialCode(rawCode)
             if (steps.isEmpty() || dialCode.isBlank()) {
                 onComplete(AdvancedDispatchResult(
                     finalResponse = "Invalid USSD code",
@@ -635,12 +636,15 @@ class AutomationService : Service() {
             }
         }
 
-        private fun extractSteps(code: String): List<String> {
+        private fun extractSteps(code: String, phoneNumber: String? = null): List<String> {
             val clean = code.trim().replace("%23", "#").trimEnd('#')
             val parts = clean.split("*").filter { it.isNotEmpty() }
             if (parts.isEmpty()) return emptyList()
+            val normalizedPhone = phoneNumber?.replace(Regex("[^0-9]"), "")
             return (1 until parts.size).map {
-                if (parts[it].equals("pn", ignoreCase = true)) "INPUT_PHONE" else parts[it]
+                if (parts[it].equals("pn", ignoreCase = true)) "INPUT_PHONE"
+                else if (!normalizedPhone.isNullOrBlank() && parts[it] == normalizedPhone) "INPUT_PHONE"
+                else parts[it]
             }
         }
 
