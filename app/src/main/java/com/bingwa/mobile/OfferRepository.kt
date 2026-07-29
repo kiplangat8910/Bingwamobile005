@@ -328,7 +328,14 @@ object OfferRepository {
                 category = category,
                 targetDevice = offer.targetDevice.ifBlank { "PRIMARY" },
                 simSelection = normalizeOfferSimSelection(offer.simSelection),
-                signatureDetectionEnabled = offer.signatureDetectionEnabled
+                signatureDetectionEnabled = offer.signatureDetectionEnabled,
+                signatureAction = offer.signatureAction,
+                learnedSignature = offer.learnedSignature,
+                signatureLearnedAt = offer.signatureLearnedAt,
+                signatureLearningCaptures = offer.signatureLearningCaptures,
+                pendingLearnedSignature = offer.pendingLearnedSignature,
+                pendingSignatureLearnedAt = offer.pendingSignatureLearnedAt,
+                pendingSignatureLearningCaptures = offer.pendingSignatureLearningCaptures
             )
 
             if (!seenIds.add(normalized.id)) {

@@ -164,6 +164,9 @@ class AutomationService : Service() {
         // Save and broadcast
         transactionHelper.saveAndBroadcast(request.txId, status, response, transcript)
 
+        // Send completion notification
+        sendCompletionNotification(request, status, response)
+
         // Handle special statuses
         when (status) {
             TransactionStatus.PENDING.value -> handlePending(request, response)
@@ -175,6 +178,41 @@ class AutomationService : Service() {
         }
 
         finishExecution(scheduleAirtimeRefresh = true)
+    }
+
+    private fun sendCompletionNotification(request: UssdRequest, status: String, response: String) {
+        val offerLabel = request.offerName.ifBlank { "offer #${request.offerId}" }
+        val phone = request.phoneNumber.ifBlank { "unknown" }
+        when (status) {
+            TransactionStatus.SUCCESS.value -> {
+                OfferNotifications.notify(
+                    this,
+                    "Bundle Dispatched Successfully",
+                    "$offerLabel sent to $phone. ${response.take(160)}"
+                )
+            }
+            TransactionStatus.FAILED.value -> {
+                OfferNotifications.notify(
+                    this,
+                    "Bundle Dispatch Failed",
+                    "$offerLabel failed for $phone. ${response.take(160)}"
+                )
+            }
+            TransactionStatus.PENDING.value -> {
+                OfferNotifications.notify(
+                    this,
+                    "Bundle Pending",
+                    "$offerLabel for $phone is pending. ${response.take(160)}"
+                )
+            }
+            TransactionStatus.RETRYING.value -> {
+                OfferNotifications.notify(
+                    this,
+                    "Retrying Dispatch",
+                    "$offerLabel for $phone - retrying... ${response.take(160)}"
+                )
+            }
+        }
     }
 
     private fun handleCallback(request: UssdRequest, response: String): Boolean {
