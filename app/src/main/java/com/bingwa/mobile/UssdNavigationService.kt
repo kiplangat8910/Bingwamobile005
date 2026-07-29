@@ -1438,8 +1438,44 @@ class UssdNavigationService : AccessibilityService() {
                 if (attempt >= 2) SystemClock.sleep(WRITE_VERIFICATION_SETTLE_MS)
             }
             if (verifyExpectedInput(verificationRoot, expected, field)) return true
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && attempt == WRITE_VERIFICATION_PASSES - 2) {
+                dispatchGestureInput(field, expected)
+            }
         }
         return false
+    }
+
+    private fun dispatchGestureInput(field: AccessibilityNodeInfo, value: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        val bounds = Rect().also { runCatching { field.getBoundsInScreen(it) } }
+        if (bounds.width() <= 0 || bounds.height() <= 0) return false
+        val centerX = bounds.centerX()
+        val centerY = bounds.centerY()
+        val clickStart = SystemClock.uptimeMillis()
+        val clickEnd = clickStart + TAP_GESTURE_DURATION_MS
+        val clickPath = Path().apply { moveTo(centerX.toFloat(), centerY.toFloat()) }
+        val clickStroke = GestureDescription.StrokeDescription(clickPath, clickStart, clickEnd - clickStart, false)
+        val clickDesc = GestureDescription.Builder().addStroke(clickStroke).build()
+        var clicked = false
+        runCatching { dispatchGesture(clickDesc, null, null) }.onSuccess { clicked = true }
+        if (!clicked) return false
+        SystemClock.sleep(POST_GESTURE_WAIT_MS + 50L)
+        val chars = value.toCharArray()
+        if (chars.isEmpty()) return true
+        var gestureOk = true
+        chars.forEachIndexed { idx, ch ->
+            val keyStart = SystemClock.uptimeMillis() + idx * 45L
+            val keyEnd = keyStart + 18L
+            val keyPath = Path().also { p ->
+                val offsetX = ((idx % 5) - 2) * 22
+                val offsetY = (idx / 5) * 22
+                p.moveTo((centerX + offsetX).toFloat(), (centerY + offsetY).toFloat())
+            }
+            val stroke = GestureDescription.StrokeDescription(keyPath, keyStart, keyEnd - keyStart, false)
+            val desc = GestureDescription.Builder().addStroke(stroke).build()
+            runCatching { dispatchGesture(desc, null, null) }.onFailure { gestureOk = false }
+        }
+        return gestureOk
     }
 
     private fun obtainInputTargets(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
@@ -1967,6 +2003,19 @@ class UssdNavigationService : AccessibilityService() {
             .build()
         return runCatching { dispatchGesture(gesture, null, null) }.getOrDefault(false)
     }
+
+    private fun performLongPressGesture(node: AccessibilityNodeInfo): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        val bounds = Rect().also { runCatching { node.getBoundsInScreen(it) } }
+        if (bounds.width() <= 0 || bounds.height() <= 0) return false
+        val x = bounds.exactCenterX()
+        val y = bounds.exactCenterY()
+        if (x <= 0f || y <= 0f) return false
+        val path = Path().apply { moveTo(x, y); lineTo(x + 1f, y + 1f) }
+        val stroke = GestureDescription.StrokeDescription(path, 0, 120, false)
+        val gesture = GestureDescription.Builder().addStroke(stroke).build()
+        return runCatching { dispatchGesture(gesture, null, null) }.getOrDefault(false)
+    }
     // endregion
 
     // region Send / Verify helpers
@@ -1975,6 +2024,10 @@ class UssdNavigationService : AccessibilityService() {
         if (!verified) return false
         val btn = findBestSendButton(root) ?: findPositiveDialogButton(root) ?: findBottomRightActionButton(root)
         if (btn != null && performClick(btn)) return true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val aggressiveBtn = findAggressiveSendActionButton(root)
+            if (aggressiveBtn != null && performClick(aggressiveBtn)) return true
+        }
         return triggerInputSubmit(root, expected, field)
     }
 
@@ -1982,6 +2035,10 @@ class UssdNavigationService : AccessibilityService() {
         if (!hasRecentVerifiedInput(expected)) return false
         val btn = findBestSendButton(root) ?: findPositiveDialogButton(root) ?: findBottomRightActionButton(root)
         if (btn != null && performClick(btn)) return true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val aggressiveBtn = findAggressiveSendActionButton(root)
+            if (aggressiveBtn != null && performClick(aggressiveBtn)) return true
+        }
         return triggerInputSubmit(root, expected, field)
     }
 
@@ -2092,6 +2149,8 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun captureLearningDialogIfNeeded(snapshot: UssdTreeSnapshot?, root: AccessibilityNodeInfo, pkg: String) {
         if (snapshot == null) return
+        val lower = snapshot.dialogText.lowercase()
+        if (!looksLikeUssdDialogFast(lower, pkg)) return
         val menu = parseMenuFromSnapshot(snapshot)
         val recordedText = formatLearningRecordedDialogText(snapshot, menu)
         if (recordedText.isBlank()) return
@@ -3391,69 +3450,69 @@ class UssdNavigationService : AccessibilityService() {
     )
 
     // Timeouts (ms)
-    private val STEP_DELAY_MS = 30L
-    private val EVENT_HOT_POLL_MS = 18L
+    private val STEP_DELAY_MS = 20L
+    private val EVENT_HOT_POLL_MS = 14L
     private val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 35L
-    private val DUPLICATE_EVENT_WINDOW_MS = 50L
-    private val FAST_VERIFY_POLL_MS = 22L
-    private val HOT_SEND_RETRY_DELAY_MS = 16L
-    private val SEND_RETRY_DELAY_MS = 28L
-    private val POST_WRITE_VERIFY_POLL_MS = 10L
-    private val POST_WRITE_SEND_RETRY_MS = 16L
-    private val STEP_TIMEOUT_MS = 5500L
-    private val STARTUP_STEP_TIMEOUT_MS = 9000L
-    private val FINAL_RESPONSE_TIMEOUT_MS = 8000L
-    private val PENDING_STEP_TIMEOUT_MS = 7000L
-    private val PENDING_ADVANCE_TIMEOUT_MS = 7000L
-    private val ROOT_REACQUIRE_TIMEOUT_MS = 6000L
-    private val PENDING_STEP_ADVANCE_TIMEOUT_MS = 8000L
-    private val NETWORK_DELAY_STEP_TIMEOUT_MS = 18000L
-    private val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 22000L
-    private val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 18000L
-    private val NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS = 18000L
-    private val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 15000L
-    private val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 18000L
-    private val NETWORK_DELAY_ACTION_GRACE_MS = 20000L
-    private val PENDING_STEP_ADVANCE_KICK_MS = 70L
-    private val VERIFY_POLL_MS = 32L
-    private val RAPID_POST_POPUP_POLL_MS = 12L
-    private val RAPID_POST_POPUP_VERIFY_MS = 10L
-    private val RAPID_POST_POPUP_SEND_RETRY_MS = 12L
-    private val MAX_VERIFY_ATTEMPTS = 6
-    private val MAX_SEND_ATTEMPTS = 4
-    private val FORCEFUL_WRITE_PASSES = 4
-    private val WRITE_VERIFICATION_PASSES = 3
-    private val WRITE_VERIFICATION_SETTLE_MS = 12L
+    private val DUPLICATE_EVENT_WINDOW_MS = 45L
+    private val FAST_VERIFY_POLL_MS = 18L
+    private val HOT_SEND_RETRY_DELAY_MS = 12L
+    private val SEND_RETRY_DELAY_MS = 22L
+    private val POST_WRITE_VERIFY_POLL_MS = 8L
+    private val POST_WRITE_SEND_RETRY_MS = 12L
+    private val STEP_TIMEOUT_MS = 5000L
+    private val STARTUP_STEP_TIMEOUT_MS = 8500L
+    private val FINAL_RESPONSE_TIMEOUT_MS = 7500L
+    private val PENDING_STEP_TIMEOUT_MS = 6500L
+    private val PENDING_ADVANCE_TIMEOUT_MS = 6500L
+    private val ROOT_REACQUIRE_TIMEOUT_MS = 5500L
+    private val PENDING_STEP_ADVANCE_TIMEOUT_MS = 7500L
+    private val NETWORK_DELAY_STEP_TIMEOUT_MS = 16000L
+    private val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 20000L
+    private val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 16000L
+    private val NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS = 16000L
+    private val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 13000L
+    private val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 16000L
+    private val NETWORK_DELAY_ACTION_GRACE_MS = 18000L
+    private val PENDING_STEP_ADVANCE_KICK_MS = 55L
+    private val VERIFY_POLL_MS = 26L
+    private val RAPID_POST_POPUP_POLL_MS = 10L
+    private val RAPID_POST_POPUP_VERIFY_MS = 8L
+    private val RAPID_POST_POPUP_SEND_RETRY_MS = 10L
+    private val MAX_VERIFY_ATTEMPTS = 5
+    private val MAX_SEND_ATTEMPTS = 3
+    private val FORCEFUL_WRITE_PASSES = 3
+    private val WRITE_VERIFICATION_PASSES = 2
+    private val WRITE_VERIFICATION_SETTLE_MS = 10L
     private val DIRECT_WRITE_VERIFY_PASSES = 2
     private val SET_TEXT_BURST_ATTEMPTS = 2
     private val PASTE_BURST_ATTEMPTS = 2
-    private val NO_FIELD_PATIENCE = 3
+    private val NO_FIELD_PATIENCE = 2
     private val INPUT_TARGET_DEPTH = 6
     private val INPUT_DESCENT_DEPTH = 3
     private val INPUT_NEARBY_SCOPE_DEPTH = 2
-    private val RECENT_INPUT_GRACE_MS = 3000L
-    private val RECENT_VERIFIED_INPUT_GRACE_MS = 5000L
-    private val RECENT_UI_EVENT_GRACE_MS = 1200L
-    private val RECENT_USSD_CONTEXT_WINDOW_MS = 1000L
-    private val GESTURE_SETTLE_MS = 14L
-    private val POST_GESTURE_WAIT_MS = 10L
-    private val FAST_POPUP_STABILITY_DELAY_MS = 6L
-    private val POPUP_STABILITY_DELAY_MS = 28L
-    private val STARTUP_FAST_POPUP_STABILITY_DELAY_MS = 14L
-    private val STARTUP_POPUP_STABILITY_DELAY_MS = 50L
-    private val WEAK_NETWORK_FAST_POPUP_STABILITY_DELAY_MS = 30L
-    private val WEAK_NETWORK_POPUP_STABILITY_DELAY_MS = 80L
-    private val SIM_CHOOSER_SETTLE_MS = 80L
-    private val INTERMEDIATE_POPUP_SETTLE_MS = 140L
-    private val TAP_GESTURE_DURATION_MS = 22L
-    private val REDIAL_COOLDOWN_MS = 900L
-    private val PENDING_ADVANCE_KICK_MS = 22L
-    private val ROOT_REACQUIRE_RETRY_DELAY_MS = 32L
-    private val DIALOG_DISMISS_SETTLE_MS = 30L
-    private val UI_KEEP_VISIBLE_INTERVAL_MS = 400L
-    private val STARTUP_UI_KEEP_VISIBLE_MS = 8000L
-    private val STEP_TRANSITION_GUARD_MS = 180L
-    private val MAX_RETRY_WINDOW_MS = 75000L
+    private val RECENT_INPUT_GRACE_MS = 2500L
+    private val RECENT_VERIFIED_INPUT_GRACE_MS = 4000L
+    private val RECENT_UI_EVENT_GRACE_MS = 1000L
+    private val RECENT_USSD_CONTEXT_WINDOW_MS = 800L
+    private val GESTURE_SETTLE_MS = 12L
+    private val POST_GESTURE_WAIT_MS = 8L
+    private val FAST_POPUP_STABILITY_DELAY_MS = 5L
+    private val POPUP_STABILITY_DELAY_MS = 22L
+    private val STARTUP_FAST_POPUP_STABILITY_DELAY_MS = 10L
+    private val STARTUP_POPUP_STABILITY_DELAY_MS = 40L
+    private val WEAK_NETWORK_FAST_POPUP_STABILITY_DELAY_MS = 24L
+    private val WEAK_NETWORK_POPUP_STABILITY_DELAY_MS = 60L
+    private val SIM_CHOOSER_SETTLE_MS = 60L
+    private val INTERMEDIATE_POPUP_SETTLE_MS = 110L
+    private val TAP_GESTURE_DURATION_MS = 18L
+    private val REDIAL_COOLDOWN_MS = 700L
+    private val PENDING_ADVANCE_KICK_MS = 18L
+    private val ROOT_REACQUIRE_RETRY_DELAY_MS = 26L
+    private val DIALOG_DISMISS_SETTLE_MS = 24L
+    private val UI_KEEP_VISIBLE_INTERVAL_MS = 350L
+    private val STARTUP_UI_KEEP_VISIBLE_MS = 7000L
+    private val STEP_TRANSITION_GUARD_MS = 150L
+    private val MAX_RETRY_WINDOW_MS = 60000L
     private val MIN_SIM_CHOOSER_SCORE = 260
 
     private val CHANNEL_ID = "bingwa_ussd"
