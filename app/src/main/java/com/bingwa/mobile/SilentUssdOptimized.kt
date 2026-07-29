@@ -208,7 +208,7 @@ object SilentUssdOptimized {
         if (rawResponse.isBlank()) return ""
         val trimmed = rawResponse.trim()
 
-        val isMenuPopup = MENU_ITEM_REGEX.containsMatchIn(trimmed)
+        val isMenuPopup = Constants.MENU_ITEM_REGEX.containsMatchIn(trimmed)
         val hasUssdKeywords = Constants.USSD_KEYWORDS.any { trimmed.lowercase().contains(it) }
 
         val lines = trimmed.split("\n").map { it.trim() }.filter { it.isNotBlank() }
@@ -224,7 +224,7 @@ object SilentUssdOptimized {
         // Prioritize lines with actionable content (numbers, amounts, confirmations)
         val meaningfulLines = lines.filter { line ->
             line.length >= 5 &&
-            (line.contains(MEANINGFUL_LINE_REGEX) ||
+            (line.contains(Constants.MEANINGFUL_LINE_REGEX) ||
             Constants.ACTIONABLE_KEYWORDS.any { line.lowercase().contains(it) })
         }
 
