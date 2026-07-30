@@ -2606,6 +2606,7 @@ private fun insertIntoTextFieldValue(value: TextFieldValue, insertion: String): 
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun UssdCodeDialogField(
     value: TextFieldValue,
@@ -2613,41 +2614,45 @@ private fun UssdCodeDialogField(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("USSD", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-        Surface(
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
-            color = Color(0xFF12151B),
-            border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = value.text.ifBlank { " " },
-                    color = C.amber,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Medium,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 0.03.sp,
-                    modifier = Modifier.weight(1f)
-                )
+            label = { Text("USSD Code (e.g. *123#)", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
+            placeholder = { Text("pn for phone number placeholder", color = C.t3) },
+            colors = dialogFieldColors(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            singleLine = true,
+            textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontFamily = FontFamily.Monospace),
+            leadingIcon = {
+                val text = value.text.ifBlank { " " }
                 val caretAlpha by rememberInfiniteTransition(label = "ussd_caret").animateFloat(
                     initialValue = 1f,
                     targetValue = 0f,
                     animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Reverse)
                 )
-                Box(
-                    modifier = Modifier
-                        .width(2.dp)
-                        .height(16.dp)
-                        .background(C.amber.copy(alpha = caretAlpha))
-                )
+                Row(
+                    modifier = Modifier.padding(end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = text,
+                        color = C.amber,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.03.sp
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(2.dp)
+                            .height(16.dp)
+                            .background(C.amber.copy(alpha = caretAlpha))
+                    )
+                }
             }
-        }
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             AssistChip(
                 onClick = { onValueChange(insertIntoTextFieldValue(value, "pn")) },
