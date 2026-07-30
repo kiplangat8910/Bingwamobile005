@@ -47,6 +47,7 @@ class UssdNavigationService : AccessibilityService() {
         @Volatile var advancedInProgress = false
         @Volatile var isUsdExecutionLocked = false
         @Volatile var currentStep = 0
+        @Volatile var lastProcessedStep = -1
         @Volatile var retryCount = 0
         @Volatile var retryWindowStartedAt = 0L
         @Volatile var lastRedialElapsed = 0L
@@ -793,6 +794,11 @@ class UssdNavigationService : AccessibilityService() {
     private fun processStep() {
         if (!advancedActive) { isProcessing = false; return }
         if (pendingStepAdvanceFromKey.isNotBlank()) { isProcessing = false; return }
+        if (lastProcessedStep == currentStep) {
+            isProcessing = false
+            scheduleProcessStep(false, RAPID_POST_POPUP_POLL_MS)
+            return
+        }
 
         val requireStrict = shouldRequireStrictPopupScope()
         val context = obtainRecentUssdContext(requireStrict) ?: run {
@@ -1224,6 +1230,7 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun advanceStep() {
+        lastProcessedStep = currentStep
         currentStep++
         isProcessing = false
         lastDialogText = ""
@@ -2421,6 +2428,7 @@ class UssdNavigationService : AccessibilityService() {
         }
         retryCount++
         currentStep = 0
+        lastProcessedStep = -1
         isProcessing = false
         lastDialogText = ""
         lastScreenSignatureKey = ""
@@ -2434,6 +2442,9 @@ class UssdNavigationService : AccessibilityService() {
         pendingProcessToken = 0L
         clearInputWriteMarkers()
         clearRecentUssdContext()
+        clearPendingStepAdvance()
+        clearPendingAdvanceKick()
+        clearStepTimeout()
         requestAppUiBehindPopup(force = true)
         updateOverlay()
         redialAdvancedIfNeeded()
