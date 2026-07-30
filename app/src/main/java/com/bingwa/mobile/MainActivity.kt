@@ -2613,59 +2613,36 @@ private fun UssdCodeDialogField(
     onValueChange: (TextFieldValue) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("USSD", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Text("USSD", color = C.t2, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.1.sp, textTransform = TextTransform.Uppercase)
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            label = { Text("USSD Code (e.g. *123#)", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
-            placeholder = { Text("pn for phone number placeholder", color = C.t3) },
+            shape = RoundedCornerShape(12.dp),
             colors = dialogFieldColors(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            textStyle = LocalTextStyle.current.copy(
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = FontFamily.Monospace
+            ),
+            placeholder = { Text("e.g. *188*3*pn*1#", color = C.t3, fontFamily = FontFamily.Monospace, fontSize = 17.sp) },
             singleLine = true,
-            textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontFamily = FontFamily.Monospace),
-            leadingIcon = {
-                val text = value.text.ifBlank { " " }
-                val caretAlpha by rememberInfiniteTransition(label = "ussd_caret").animateFloat(
-                    initialValue = 1f,
-                    targetValue = 0f,
-                    animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Reverse)
-                )
-                Row(
-                    modifier = Modifier.padding(end = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = text,
-                        color = C.amber,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Medium,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 0.03.sp
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(2.dp)
-                            .height(16.dp)
-                            .background(C.amber.copy(alpha = caretAlpha))
-                    )
-                }
-            }
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            maxLines = 1
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             AssistChip(
                 onClick = { onValueChange(insertIntoTextFieldValue(value, "pn")) },
-                label = { Text("Insert pn") },
+                label = { Text("Insert pn", fontFamily = FontFamily.Monospace, fontSize = 12.sp, fontWeight = FontWeight.Bold) },
                 colors = AssistChipDefaults.assistChipColors(
-                    containerColor = C.amber.copy(alpha = 0.12f),
+                    containerColor = C.amberDim,
                     labelColor = C.amber
                 ),
                 border = BorderStroke(1.dp, C.amber.copy(alpha = 0.45f))
             )
             AssistChip(
                 onClick = { onValueChange(insertIntoTextFieldValue(value, "*")) },
-                label = { Text("Insert *") },
+                label = { Text("Insert *", fontFamily = FontFamily.Monospace, fontSize = 12.sp, fontWeight = FontWeight.Bold) },
                 colors = AssistChipDefaults.assistChipColors(
                     containerColor = C.cardHi,
                     labelColor = C.t1
@@ -2674,7 +2651,7 @@ private fun UssdCodeDialogField(
             )
             AssistChip(
                 onClick = { onValueChange(insertIntoTextFieldValue(value, "#")) },
-                label = { Text("Insert #") },
+                label = { Text("Insert #", fontFamily = FontFamily.Monospace, fontSize = 12.sp, fontWeight = FontWeight.Bold) },
                 colors = AssistChipDefaults.assistChipColors(
                     containerColor = C.cardHi,
                     labelColor = C.t1
@@ -2686,8 +2663,7 @@ private fun UssdCodeDialogField(
             "Use \"pn\" as a placeholder for customer number, then tap a chip to insert at cursor position.",
             color = C.t3,
             fontSize = 11.sp,
-            lineHeight = 15.sp,
-            modifier = Modifier.padding(start = 4.dp)
+            lineHeight = 15.sp
         )
     }
 }
@@ -2703,26 +2679,47 @@ fun DialogDropdown(
     onSelect: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = onExpandedChange
-        ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = {},
+        Text(
+            label,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.1.sp,
+            color = C.t3,
+            textTransform = TextTransform.Uppercase
+        )
+        Box {
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(),
-                shape = RoundedCornerShape(18.dp),
-                readOnly = true,
-                label = { Text(label, color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
-                trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                },
-                colors = dialogFieldColors(),
-                singleLine = true,
-                textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
-            )
+                    .height(46.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = C.cardHi.copy(alpha = 0.92f),
+                border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
+                onClick = { onExpandedChange(true) }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        value,
+                        color = C.t1,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.SansSerif
+                    )
+                    Icon(
+                        Icons.Outlined.ArrowDropDown,
+                        null,
+                        tint = C.t3,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
             ExposedDropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { onExpandedChange(false) },
@@ -3471,21 +3468,32 @@ fun HomeScreenVolcanic(
     val activeExecutionTx = automatedTxns.firstOrNull { it.isLiveExecution() }
     val latestStatusTx = automatedTxns.firstOrNull()
     val sentCount = automatedTxns.size
-    val pendingCount = automatedTxns.count {
-        it.statusEnum == TransactionStatus.PROCESSING ||
-            it.statusEnum == TransactionStatus.PENDING ||
-            it.statusEnum == TransactionStatus.RETRYING
+    var pendingCount = 0
+    var failedCount = 0
+    var completedCount = 0
+    var scheduledCount = 0
+    automatedTxns.forEach { tx ->
+        when (tx.statusEnum) {
+            TransactionStatus.PROCESSING,
+            TransactionStatus.PENDING,
+            TransactionStatus.RETRYING -> {
+                pendingCount++
+                scheduledCount++
+            }
+            TransactionStatus.FAILED,
+            TransactionStatus.CANCELLED -> failedCount++
+            TransactionStatus.SUCCESS -> completedCount++
+            else -> {
+                if (tx.status.equals("UnderMaintenance", ignoreCase = true) ||
+                    tx.statusEnum == TransactionStatus.RETRYING ||
+                    DailyLimitPolicy.isDailyLimitHold(tx)
+                ) {
+                    scheduledCount++
+                }
+            }
+        }
     }
-    val failedCount = automatedTxns.count {
-        it.statusEnum == TransactionStatus.FAILED || it.statusEnum == TransactionStatus.CANCELLED
-    }
-    val completedCount = automatedTxns.count { it.statusEnum == TransactionStatus.SUCCESS }
     val completionRate = if (sentCount > 0) (completedCount * 100 / sentCount) else 0
-    val scheduledCount = automatedTxns.count { tx ->
-        tx.status.equals("UnderMaintenance", ignoreCase = true) ||
-            tx.statusEnum == TransactionStatus.RETRYING ||
-            DailyLimitPolicy.isDailyLimitHold(tx)
-    }
     var selectedTxId by rememberSaveable { mutableIntStateOf(-1) }
     val selectedTx = automatedTxns.firstOrNull { it.id == selectedTxId }
     val chromeAnim = rememberInfiniteTransition(label = "home_chrome")
@@ -10404,6 +10412,51 @@ private fun CompactDialogToggleCard(
 }
 
 @Composable
+private fun FieldLabel(label: String) {
+    Text(
+        label,
+        fontFamily = FontFamily.Monospace,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 0.1.sp,
+        color = C.t3,
+        textTransform = TextTransform.Uppercase
+    )
+}
+
+@Composable
+private fun ExecutionPathProtectionToggle(
+    signatureEnabled: Boolean,
+    onProtectionChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                "Protection",
+                color = C.t1,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                "Verify signature before dispatch",
+                color = C.t3,
+                fontSize = 11.sp,
+                lineHeight = 15.sp
+            )
+        }
+        CompactDialogSwitch(
+            checked = signatureEnabled,
+            onCheckedChange = onProtectionChange,
+            checkedTrackColor = C.cyan
+        )
+    }
+}
+
+@Composable
 private fun OfferDialogSection(
     title: String,
     subtitle: String? = null,
@@ -10418,31 +10471,28 @@ private fun OfferDialogSection(
     ) {
         Column(
             Modifier
-                .background(
-                    Brush.verticalGradient(
-                        listOf(C.cardHi.copy(alpha = 0.98f), C.card.copy(alpha = 0.90f))
-                    )
-                )
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-                Box(
-                    Modifier
-                        .padding(top = 3.dp)
-                        .width(4.dp)
-                        .height(28.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(barColor)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    title,
+                    color = C.t1,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    fontFamily = FontFamily.SansSerif
                 )
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                    if (!subtitle.isNullOrBlank()) {
-                        Text(subtitle, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
-                    }
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        subtitle,
+                        color = C.t2,
+                        fontSize = 12.sp,
+                        lineHeight = 1.5.sp,
+                        fontFamily = FontFamily.SansSerif
+                    )
                 }
             }
-            Divider(color = C.w08)
             content()
         }
     }
@@ -10559,7 +10609,7 @@ fun OfferDialog(
     onApprovePending: (OfferItem) -> Unit,
     onRelearnSignature: (OfferItem) -> Unit
 ) {
-    val configuration = LocalConfiguration.current
+    val ctx = LocalContext.current
     var name by remember(existing?.id, existing?.name) { mutableStateOf(existing?.name ?: "") }
     var codeField by rememberSaveable(existing?.id, existing?.ussdCode, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(existing?.ussdCode ?: ""))
@@ -10602,7 +10652,6 @@ fun OfferDialog(
     val canSave = remember(name, price, code) {
         name.isNotBlank() && code.isNotBlank() && (price.toIntOrNull() ?: 0) > 0
     }
-    val compactActions = configuration.screenWidthDp < 420
 
     fun buildOffer(): OfferItem? {
         val p = price.toIntOrNull() ?: 0
@@ -10661,23 +10710,26 @@ fun OfferDialog(
             Scaffold(
                 containerColor = C.bg,
                 topBar = {
-                    Surface(
-                        color = C.surface.copy(alpha = 0.96f),
-                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(C.bg)
+                            .border(
+                                bottom = BorderStroke(1.dp, C.w08)
+                            )
+                            .statusBarsPadding()
+                            .padding(horizontal = 20.dp, vertical = 16.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .statusBarsPadding()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     val ledAlpha by rememberInfiniteTransition(label = "offer_led").animateFloat(
                                         initialValue = 1f,
                                         targetValue = 0.35f,
@@ -10685,47 +10737,42 @@ fun OfferDialog(
                                     )
                                     Box(
                                         modifier = Modifier
-                                            .size(8.dp)
+                                            .size(5.dp)
                                             .background(C.amber, CircleShape)
                                             .then(Modifier.alpha(ledAlpha))
                                     )
                                     Text(
                                         "Bundle Settings",
-                                        color = C.amber,
-                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
-                                        letterSpacing = 1.1.sp
+                                        letterSpacing = 0.12.sp,
+                                        color = C.t3,
+                                        textTransform = TextTransform.Uppercase
                                     )
                                 }
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = C.w04,
-                                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
-                                ) {
-                                    IconButton(onClick = onDismiss) {
-                                        Icon(Icons.Outlined.Close, null, tint = C.t2)
-                                    }
-                                }
+                                Text(
+                                    if (existing != null) "Edit Bundle" else "New Bundle",
+                                    color = C.t1,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 22.sp,
+                                    fontFamily = FontFamily.SansSerif,
+                                    lineHeight = 28.sp
+                                )
+                                Text(
+                                    existing?.let { it.name.ifBlank { it.category } } ?: "New offer",
+                                    color = C.t2,
+                                    fontSize = 12.sp,
+                                    lineHeight = 18.sp
+                                )
                             }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = C.cardHi.copy(alpha = 0.92f),
+                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
                             ) {
-                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(
-                                        if (existing != null) "Edit Bundle" else "New Bundle",
-                                        color = C.t1,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 24.sp,
-                                        lineHeight = 28.sp
-                                    )
-                                    Text(
-                                        existing?.let { it.name.ifBlank { it.category } } ?: "New offer",
-                                        color = C.t2,
-                                        fontSize = 12.sp,
-                                        lineHeight = 18.sp
-                                    )
+                                IconButton(onClick = onDismiss) {
+                                    Icon(Icons.Outlined.Close, null, tint = C.t2, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
@@ -10733,94 +10780,52 @@ fun OfferDialog(
                 },
                 bottomBar = {
                     Surface(
-                        color = C.surface.copy(alpha = 0.97f),
+                        color = C.bg,
                         border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
                     ) {
-                        if (compactActions && showSaveAndLearn) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .navigationBarsPadding()
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                horizontalAlignment = Alignment.End,
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(horizontal = 20.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = onDismiss,
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                                modifier = Modifier.height(44.dp)
                             ) {
-                                TextButton(
-                                    onClick = onDismiss,
-                                    shape = RoundedCornerShape(16.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                Text("Cancel", color = C.t3, fontWeight = FontWeight.Medium, fontSize = 13.5.sp)
+                            }
+                            if (showSaveAndLearn) {
+                                OutlinedButton(
+                                    onClick = { buildOffer()?.let(onSaveAndLearn) },
+                                    enabled = canSave,
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.5f)),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = C.cyan),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                                    modifier = Modifier.weight(1f).height(44.dp)
                                 ) {
-                                    Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    OutlinedButton(
-                                        onClick = { buildOffer()?.let(onSaveAndLearn) },
-                                        enabled = canSave,
-                                        shape = RoundedCornerShape(16.dp),
-                                        border = BorderStroke(1.dp, C.green.copy(alpha = 0.5f)),
-                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
-                                    ) {
-                                        Icon(Icons.Outlined.AutoFixHigh, null, tint = C.green, modifier = Modifier.size(15.dp))
-                                        Spacer(Modifier.width(7.dp))
-                                        Text("Save & Learn", color = C.green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    }
-                                    Button(
-                                        onClick = { buildOffer()?.let(onSave) },
-                                        enabled = canSave,
-                                        shape = RoundedCornerShape(18.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB454)),
-                                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
-                                    ) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Rounded.Check, contentDescription = null, tint = Color(0xFF1A1305), modifier = Modifier.size(17.dp))
-                                            Text("Save", color = Color(0xFF1A1305), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Outlined.AutoFixHigh, null, tint = C.cyan, modifier = Modifier.size(14.dp))
+                                        Text("Save & Learn", color = C.cyan, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
                                     }
                                 }
                             }
-                        } else {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .navigationBarsPadding()
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Button(
+                                onClick = { buildOffer()?.let(onSave) },
+                                enabled = canSave,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = C.amber),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                                modifier = Modifier.weight(1f).height(44.dp)
                             ) {
-                                TextButton(
-                                    onClick = onDismiss,
-                                    shape = RoundedCornerShape(16.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                                ) {
-                                    Text("Cancel", color = C.t2, fontWeight = FontWeight.Medium)
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    if (showSaveAndLearn) {
-                                        OutlinedButton(
-                                            onClick = { buildOffer()?.let(onSaveAndLearn) },
-                                            enabled = canSave,
-                                            shape = RoundedCornerShape(16.dp),
-                                            border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.5f)),
-                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = C.cyan),
-                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp)
-                                        ) {
-                                            Icon(Icons.Outlined.AutoFixHigh, null, tint = C.cyan, modifier = Modifier.size(15.dp))
-                                            Spacer(Modifier.width(7.dp))
-                                            Text("Save & Learn", color = C.cyan, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        }
-                                    }
-                                    Button(
-                                        onClick = { buildOffer()?.let(onSave) },
-                                        enabled = canSave,
-                                        shape = RoundedCornerShape(18.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB454)),
-                                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 11.dp)
-                                    ) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Rounded.Check, contentDescription = null, tint = Color(0xFF1A1305), modifier = Modifier.size(17.dp))
-                                            Text("Save", color = Color(0xFF1A1305), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        }
-                                    }
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Rounded.Check, contentDescription = null, tint = Color(0xFF1A1305), modifier = Modifier.size(13.dp))
+                                    Text("Save", color = Color(0xFF1A1305), fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
                                 }
                             }
                         }
@@ -10860,35 +10865,36 @@ fun OfferDialog(
                             title = "Bundle Identity",
                             subtitle = "Set the category, plan name, and selling price customers should see."
                         ) {
+                            FieldLabel("Category")
                             DialogDropdown("Category", cat, offerCategoryOptions(), catExp, { catExp = it }) {
                                 updateCategory(it)
                                 catExp = false
                             }
+                            FieldLabel("Plan Name")
                             OutlinedTextField(
                                 value = name,
                                 onValueChange = { name = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(18.dp),
-                                label = { Text("Plan name", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
+                                shape = RoundedCornerShape(12.dp),
                                 placeholder = { Text("e.g. 250mbs, 24 hours", color = C.t3) },
                                 colors = dialogFieldColors(),
                                 singleLine = true,
                                 textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
                             )
-                            Text("Example: 1GB 1hr, 250MB till midnight", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
+                            Text("Example: 1GB 1hr, 250MB till midnight", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp)
+                            FieldLabel("Selling Price (KES)")
                             OutlinedTextField(
                                 value = price,
                                 onValueChange = { price = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(18.dp),
-                                label = { Text("Selling Price (KES)", color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Medium) },
+                                shape = RoundedCornerShape(12.dp),
                                 placeholder = { Text("e.g. 20", color = C.t3) },
                                 colors = dialogFieldColors(),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
                                 textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium)
                             )
-                            Text("Your price to customer", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 4.dp))
+                            Text("Your price to customer", color = C.t3, fontSize = 11.sp, lineHeight = 15.sp)
                         }
                     }
                     item {
@@ -10901,6 +10907,7 @@ fun OfferDialog(
                                 value = codeField,
                                 onValueChange = { codeField = it }
                             )
+                            FieldLabel("USSD Type")
                             DialogDropdown("USSD Type", mode, listOf(OFFER_EXECUTION_MODE_SIMPLE, OFFER_EXECUTION_MODE_ADVANCED), modeExp, { modeExp = it }) {
                                 mode = it
                                 modeTouched = it != defaultExecutionModeForCategory(cat)
@@ -10913,8 +10920,7 @@ fun OfferDialog(
                                     "Default mode follows category: Data uses SIMPLE, while Calls and SMS use ADVANCED.",
                                 color = C.t3,
                                 fontSize = 11.sp,
-                                lineHeight = 15.sp,
-                                modifier = Modifier.padding(start = 4.dp)
+                                lineHeight = 15.sp
                             )
                         }
                     }
@@ -10924,6 +10930,7 @@ fun OfferDialog(
                             subtitle = "Choose which SIM and device should dial this offer.",
                             barColor = C.cyan
                         ) {
+                            FieldLabel("SIM To Use")
                             DialogDropdown(
                                 "SIM To Use",
                                 offerSimSelectionLabel(simSelection),
@@ -10938,29 +10945,29 @@ fun OfferDialog(
                                 }
                                 simExp = false
                             }
+                            FieldLabel("Execute On")
                             DialogDropdown("Execute On", device, listOf("PRIMARY", "RELAY"), devExp, { devExp = it }) {
                                 device = it
                                 devExp = false
                             }
+                            Divider(
+                                modifier = Modifier.padding(vertical = 16.dp),
+                                color = C.w08
+                            )
+                            ExecutionPathProtectionToggle(
+                                signatureEnabled = signatureEnabled,
+                                onProtectionChange = { signatureEnabled = it }
+                            )
                         }
                     }
                     item {
                         OfferDialogSection(
-                            title = "Protection",
+                            title = "Protection Settings",
                             subtitle = "Learn the live USSD flow and stop or adjust if the network menu changes.",
                             barColor = C.cyan
                         ) {
-                            OfferDialogToggleRow(
-                                title = "Protection",
-                                description = if (signatureEnabled) {
-                                    "Protection is on. The app will use guided verification before executing so signature checks can run on most phones."
-                                } else {
-                                    "Turn this on to learn live menu labels and stop or adjust if menus change."
-                                },
-                                checked = signatureEnabled,
-                                onCheckedChange = { signatureEnabled = it }
-                            )
                             if (signatureEnabled) {
+                                FieldLabel("When codes change")
                                 DialogDropdown(
                                     "When codes change",
                                     if (signatureAction == "ADJUST") "ADJUST" else "STOP",
@@ -10978,16 +10985,14 @@ fun OfferDialog(
                                         "STOP is the recommended production setting. It prevents the app from choosing the wrong bundle when the menu looks different.",
                                     color = C.t2,
                                     fontSize = 11.sp,
-                                    lineHeight = 16.sp,
-                                    modifier = Modifier.padding(start = 4.dp)
+                                    lineHeight = 16.sp
                                 )
                                 if (mode != OFFER_EXECUTION_MODE_ADVANCED) {
                                     Text(
                                         "This offer is saved as $mode, but Bingwa will switch to the guided USSD path automatically whenever protection or learning is enabled.",
                                         color = C.t3,
                                         fontSize = 11.sp,
-                                        lineHeight = 16.sp,
-                                        modifier = Modifier.padding(start = 4.dp)
+                                        lineHeight = 16.sp
                                     )
                                 }
                             } else if (!hasLearnedSignature && !hasPendingSignature) {
