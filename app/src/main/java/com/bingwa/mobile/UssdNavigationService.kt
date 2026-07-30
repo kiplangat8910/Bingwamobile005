@@ -2444,7 +2444,7 @@ class UssdNavigationService : AccessibilityService() {
         clearRecentUssdContext()
         clearPendingStepAdvance()
         clearPendingAdvanceKick()
-        clearStepTimeout()
+        cancelStepTimeout()
         requestAppUiBehindPopup(force = true)
         updateOverlay()
         redialAdvancedIfNeeded()
