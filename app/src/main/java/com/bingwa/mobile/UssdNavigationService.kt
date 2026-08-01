@@ -58,6 +58,7 @@ class UssdNavigationService : AccessibilityService() {
         @Volatile var loadedSignatureSteps: List<UssdSignatureStep> = emptyList()
 
         @Volatile var onDispatchComplete: ((AdvancedDispatchResult) -> Unit)? = null
+        @Volatile var lowEndDevice = false
 
         private var activeInstance: UssdNavigationService? = null
         private var pendingArm = false
@@ -122,6 +123,24 @@ class UssdNavigationService : AccessibilityService() {
                 balanceCallback != null || tokenPurchaseCallback != null
         }
 
+        fun detectLowEndDevice(context: Context) {
+            lowEndDevice = try {
+                val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+                val memoryInfo = ActivityManager.MemoryInfo()
+                activityManager?.getMemoryInfo(memoryInfo)
+                val totalMem = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                    memoryInfo.totalMem
+                } else {
+                    (Runtime.getRuntime().maxMemory() / 1024 / 1024).toLong()
+                }
+                val lowMemory = totalMem < 3L * 1024 * 1024 * 1024
+                val lowCores = Runtime.getRuntime().availableProcessors() <= 4
+                lowMemory || lowCores
+            } catch (e: Exception) {
+                false
+            }
+        }
+
         fun resetSignatureTracking() { /* handled internally */ }
         fun refreshRunningOverlay() { activeInstance?.updateOverlay() }
     }
@@ -183,6 +202,12 @@ class UssdNavigationService : AccessibilityService() {
     private var recentUssdCapturedElapsed = 0L
     private var waitingForRootSinceElapsed = 0L
     private var lastTranscriptEntryKey = ""
+
+    private fun recycleRecentUssdRoot() {
+        recentUssdRoot?.recycle()
+        recentUssdRoot = null
+        recentUssdCapturedElapsed = 0L
+    }
 
     // Overlay & foreground state
     private var overlayView: View? = null
@@ -492,11 +517,25 @@ class UssdNavigationService : AccessibilityService() {
 
     // region Root & Window Acquisition (official APIs)
     private fun getUssdRoot(): AccessibilityNodeInfo? {
+        val now = SystemClock.elapsedRealtime()
+        val cachedRoot = recentUssdRoot
+        if (cachedRoot != null && now - recentUssdCapturedElapsed < 120) {
+            try {
+                val pkg = cachedRoot.packageName?.toString() ?: ""
+                if (isPotentialUssdPackage(pkg) || shouldAllowSystemUi(cachedRoot, pkg) || pkg == "android") {
+                    return AccessibilityNodeInfo.obtain(cachedRoot)
+                }
+            } catch (_: Exception) {}
+        }
+
         // 1) Try active window
         val active = rootInActiveWindow
         if (active != null) {
             val pkg = active.packageName?.toString() ?: ""
             if (isPotentialUssdPackage(pkg) || shouldAllowSystemUi(active, pkg) || pkg == "android") {
+                recycleRecentUssdRoot()
+                recentUssdRoot = AccessibilityNodeInfo.obtain(active)
+                recentUssdCapturedElapsed = now
                 return active
             }
             active.recycle()
@@ -511,6 +550,9 @@ class UssdNavigationService : AccessibilityService() {
                 val root = try { win.root } catch (_: Exception) { null } ?: continue
                 val pkg = root.packageName?.toString() ?: ""
                 if (isPotentialUssdPackage(pkg) || shouldAllowSystemUi(root, pkg) || pkg == "android") {
+                    recycleRecentUssdRoot()
+                    recentUssdRoot = AccessibilityNodeInfo.obtain(root)
+                    recentUssdCapturedElapsed = now
                     return root
                 }
                 root.recycle()
@@ -1616,25 +1658,27 @@ class UssdNavigationService : AccessibilityService() {
                 (focusable && (hasInputViewHint(viewId, hint) || hasInputLabelHint(label, desc)))
     }
 
-    private fun collectTextEntryCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>) {
+    private fun collectTextEntryCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>, depth: Int = 0) {
+        if (depth > VIEW_TRAVERSAL_MAX_DEPTH) return
         try {
             if (isTextEntryNode(node) || isLooseInputCandidate(node) || isHiddenInputProxyCandidate(node)) {
                 into += AccessibilityNodeInfo.obtain(node)
             }
             for (i in 0 until node.childCount) {
                 val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-                collectTextEntryCandidates(child, into)
+                collectTextEntryCandidates(child, into, depth + 1)
                 child.recycle()
             }
         } catch (_: Exception) {}
     }
 
-    private fun collectAggressiveTextEntryCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>) {
+    private fun collectAggressiveTextEntryCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>, depth: Int = 0) {
+        if (depth > VIEW_TRAVERSAL_MAX_DEPTH) return
         try {
             if (isAggressiveTextEntryCandidate(node)) into += AccessibilityNodeInfo.obtain(node)
             for (i in 0 until node.childCount) {
                 val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-                collectAggressiveTextEntryCandidates(child, into)
+                collectAggressiveTextEntryCandidates(child, into, depth + 1)
                 child.recycle()
             }
         } catch (_: Exception) {}
@@ -1746,13 +1790,14 @@ class UssdNavigationService : AccessibilityService() {
             ?.takeIf { normalizeActionLabel(it).isNotBlank() && INPUT_FIELD_HINTS.none { normalizeActionLabel(it).contains(it) } }
     }
 
-    private fun extractTextTokens(node: AccessibilityNodeInfo, into: MutableList<String>) {
+    private fun extractTextTokens(node: AccessibilityNodeInfo, into: MutableList<String>, depth: Int = 0) {
+        if (depth > VIEW_TRAVERSAL_MAX_DEPTH) return
         try {
             node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { into += it }
             node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { into += it }
             for (i in 0 until node.childCount) {
                 val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-                extractTextTokens(child, into)
+                extractTextTokens(child, into, depth + 1)
                 child.recycle()
             }
         } catch (_: Exception) {}
@@ -1882,12 +1927,13 @@ class UssdNavigationService : AccessibilityService() {
         }.maxByOrNull { scoreActionCandidate(it) + 120 }?.let { AccessibilityNodeInfo.obtain(it) }
     }
 
-    private fun collectActionCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>) {
+    private fun collectActionCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>, depth: Int = 0) {
+        if (depth > VIEW_TRAVERSAL_MAX_DEPTH) return
         try {
             if (isActionCandidate(node)) into += AccessibilityNodeInfo.obtain(node)
             for (i in 0 until node.childCount) {
                 val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-                collectActionCandidates(child, into)
+                collectActionCandidates(child, into, depth + 1)
                 child.recycle()
             }
         } catch (_: Exception) {}
@@ -1900,12 +1946,13 @@ class UssdNavigationService : AccessibilityService() {
             ?.let { AccessibilityNodeInfo.obtain(it) }
     }
 
-    private fun collectAggressiveActionCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>) {
+    private fun collectAggressiveActionCandidates(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>, depth: Int = 0) {
+        if (depth > VIEW_TRAVERSAL_MAX_DEPTH) return
         try {
             if (isAggressiveActionCandidate(node)) into += AccessibilityNodeInfo.obtain(node)
             for (i in 0 until node.childCount) {
                 val child = try { node.getChild(i) } catch (_: Exception) { null } ?: continue
-                collectAggressiveActionCandidates(child, into)
+                collectAggressiveActionCandidates(child, into, depth + 1)
                 child.recycle()
             }
         } catch (_: Exception) {}
@@ -3489,16 +3536,17 @@ class UssdNavigationService : AccessibilityService() {
     private val RAPID_POST_POPUP_POLL_MS = 10L
     private val RAPID_POST_POPUP_VERIFY_MS = 8L
     private val RAPID_POST_POPUP_SEND_RETRY_MS = 10L
-    private val MAX_VERIFY_ATTEMPTS = 5
-    private val MAX_SEND_ATTEMPTS = 3
-    private val FORCEFUL_WRITE_PASSES = 3
-    private val WRITE_VERIFICATION_PASSES = 2
+    private val MAX_VERIFY_ATTEMPTS = 3
+    private val MAX_SEND_ATTEMPTS = 2
+    private val FORCEFUL_WRITE_PASSES = 2
+    private val WRITE_VERIFICATION_PASSES = 1
     private val WRITE_VERIFICATION_SETTLE_MS = 10L
     private val DIRECT_WRITE_VERIFY_PASSES = 2
     private val SET_TEXT_BURST_ATTEMPTS = 2
     private val PASTE_BURST_ATTEMPTS = 2
     private val NO_FIELD_PATIENCE = 2
     private val INPUT_TARGET_DEPTH = 6
+    private val VIEW_TRAVERSAL_MAX_DEPTH = 24
     private val INPUT_DESCENT_DEPTH = 3
     private val INPUT_NEARBY_SCOPE_DEPTH = 2
     private val RECENT_INPUT_GRACE_MS = 2500L
@@ -3548,15 +3596,12 @@ class UssdNavigationService : AccessibilityService() {
                 ctx.startActivity(Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }, delayMs) else ctx.startActivity(Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
-        fun normalizeRecipientForUssdInput(number: String): String = number.replace(Regex("[^0-9+]"), "")
+        fun normalizeRecipientForUssdInput(number: String): String = number.replace(Regex("[^0-9]"), "")
     }
 
     object BalanceChecker {
         var currentBalance = 0.0
         fun parseBalanceDisplay(text: String): String { /* parse */ return text }
         fun parseBalanceInt(text: String): Double { /* parse */ return 0.0 }
-        fun persistLastKnownBalance(ctx: Context, display: String) { /* store */ }
-        var balanceCallback: ((String) -> Unit)? = null
-    }
     // endregion
 }

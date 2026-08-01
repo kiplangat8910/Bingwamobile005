@@ -274,11 +274,19 @@ object RelayManager {
             addAll(buildSubnetCandidates(lastGoodIp))
             addAll(getCurrentWifiSubnetCandidates(context))
             addAll(HOTSPOT_IP_FALLBACKS)
-        }.distinct()
+        }.filter { isValidHotspotIp(it) }.distinct()
+    }
+
+    private fun isValidHotspotIp(ip: String): Boolean {
+        val parts = ip.split('.')
+        if (parts.size != 4) return false
+        return parts.all { part ->
+            part.toIntOrNull()?.let { it in 0..255 } == true
+        }
     }
 
     private fun pingHotspotRelay(context: Context, cfg: Config): Boolean {
-        val candidates = hotspotCandidates(context, cfg)
+        val candidates = hotspotCandidates(context, cfg).filter { isValidHotspotIp(it) }
         if (candidates.isEmpty()) return false
         for (ip in candidates) {
             val ok = sendHotspotCommand(context, cfg, ip, "PING")?.startsWith("OK") == true

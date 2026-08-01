@@ -35,7 +35,8 @@ object UssdHelper {
     }
 
     fun normalizeUssdCode(raw: String, phoneNumber: String? = null): String {
-        val v = raw.trim()
+        val sanitized = raw.trim().replace(Regex("[^*#0-9pnPN]"), "")
+        val v = sanitized
             .let {
                 if (phoneNumber != null) {
                     it.replace("pn", normalizeRecipientForUssdInput(phoneNumber), ignoreCase = true)

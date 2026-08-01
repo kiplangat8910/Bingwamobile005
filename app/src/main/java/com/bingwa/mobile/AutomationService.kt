@@ -640,7 +640,7 @@ class AutomationService : Service() {
             val clean = code.trim().replace("%23", "#").trimEnd('#')
             val parts = clean.split("*").filter { it.isNotEmpty() }
             if (parts.isEmpty()) return emptyList()
-            val normalizedPhone = phoneNumber?.let { UssdHelper.normalizeRecipientForUssdInput(it) }
+            val normalizedPhone = phoneNumber?.let { SmsCommandHandler.normalizePhone(it) }
             return (1 until parts.size).map {
                 if (parts[it].equals("pn", ignoreCase = true)) "INPUT_PHONE"
                 else if (!normalizedPhone.isNullOrBlank() && parts[it] == normalizedPhone) "INPUT_PHONE"
