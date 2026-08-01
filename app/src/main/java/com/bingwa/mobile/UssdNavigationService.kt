@@ -179,6 +179,9 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingStepAdvanceTimeoutRunnable: Runnable? = null
     private var pendingStepAdvanceKickRunnable: Runnable? = null
 
+    private var currentStepRetryCount = 0
+    private const val MAX_STEP_RETRIES = 3
+
     // Window state
     private var lastWindowId = -1
     private var lastWindowPkg = ""
@@ -1181,6 +1184,7 @@ class UssdNavigationService : AccessibilityService() {
 
     // region Step Advance (after a successful action)
     private fun startPendingStepAdvance(root: AccessibilityNodeInfo, dialogText: String) {
+        currentStepRetryCount = 0
         clearPendingStepAdvance()
         pendingStepAdvanceSinceElapsed = SystemClock.elapsedRealtime()
         val snapshot = capturePreferredPopupSnapshot(root, shouldRequireStrictPopupScope())
@@ -1274,6 +1278,7 @@ class UssdNavigationService : AccessibilityService() {
     private fun advanceStep() {
         lastProcessedStep = currentStep
         currentStep++
+        currentStepRetryCount = 0
         isProcessing = false
         lastDialogText = ""
         lastScreenSignatureKey = ""
@@ -2455,6 +2460,16 @@ class UssdNavigationService : AccessibilityService() {
     private fun dismissErrorAndRestart() {
         clearPendingStepAdvance()
         val dismissed = closeCurrentUssdUi()
+        if (currentStepRetryCount < MAX_STEP_RETRIES && currentStep < advancedSteps.size) {
+            currentStepRetryCount++
+            handler.postDelayed({
+                isProcessing = false
+                clearPendingAdvance()
+                scheduleProcessStep(true)
+            }, if (dismissed) DIALOG_DISMISS_SETTLE_MS else 0L)
+            return
+        }
+        currentStepRetryCount = 0
         handler.postDelayed({ restartFromBeginning() }, if (dismissed) DIALOG_DISMISS_SETTLE_MS else 0L)
     }
 
@@ -2515,6 +2530,7 @@ class UssdNavigationService : AccessibilityService() {
     private fun finishAdvancedDispatch(finalText: String) {
         lastFinalResponse = finalText.ifBlank { lastFinalResponse }
         currentStep = advancedSteps.size
+        currentStepRetryCount = 0
         isProcessing = false
         clearPendingAdvance()
         clearPendingStepAdvance()
@@ -3615,52 +3631,53 @@ class UssdNavigationService : AccessibilityService() {
         fun parseBalanceDisplay(text: String): String {
             val lower = text.lowercase()
             if (!lower.contains("balance") && !lower.contains("bal") && !lower.contains("airtime")) return text
-            if (lower.contains("ussd") || lower.contains("expire date") || lower.contains("tariff:")) {
-                val safe = text.replace(Regex("(?i)\\b(?:dial|ussd|expire date|tariff)[^\\d]*\\d+[^\\d]*"), "")
-                val clean = safe.replace(Regex("[*#]"), " ")
-                val match = BALANCE_BEFORE_KSHS.find(clean) ?: BALANCE_AFTER_KSHS.find(clean) ?: return text
-                val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return text
-                val trimmed = raw.trim()
-                if (trimmed.isEmpty()) return text
-                val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
-                val numeric = formatted.toDoubleOrNull() ?: return text
-                if (numeric < 0 || formatted.count { it == '.' } > 1 || numeric > 50000) return text
-                currentBalance = numeric
-                return "Ksh. $formatted"
-            }
-            val match = BALANCE_BEFORE_KSHS.find(text) ?: BALANCE_AFTER_KSHS.find(text) ?: return text
+            val stripped = stripNoise(lower)
+            val match = BALANCE_BEFORE_KSHS.find(stripped) ?: BALANCE_AFTER_KSHS.find(stripped) ?: return text
             val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return text
             val trimmed = raw.trim()
             if (trimmed.isEmpty()) return text
             val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
             val numeric = formatted.toDoubleOrNull() ?: return text
             if (numeric < 0 || formatted.count { it == '.' } > 1 || numeric > 50000) return text
+            if (isUnrelatedNumber(numeric, stripped)) return text
             currentBalance = numeric
             return "Ksh. $formatted"
         }
         fun parseBalanceInt(text: String): Double {
             val lower = text.lowercase()
             if (!lower.contains("balance") && !lower.contains("bal") && !lower.contains("airtime")) return 0.0
-            if (lower.contains("ussd") || lower.contains("expire date") || lower.contains("tariff:")) {
-                val safe = text.replace(Regex("(?i)\\b(?:dial|ussd|expire date|tariff)[^\\d]*\\d+[^\\d]*"), "")
-                val clean = safe.replace(Regex("[*#]"), " ")
-                val match = BALANCE_BEFORE_KSHS.find(clean) ?: BALANCE_AFTER_KSHS.find(clean) ?: return 0.0
-                val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return 0.0
-                val trimmed = raw.trim()
-                if (trimmed.isEmpty()) return 0.0
-                val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
-                val numeric = formatted.toDoubleOrNull() ?: return 0.0
-                if (numeric < 0 || formatted.count { it == '.' } > 1 || numeric > 50000) return 0.0
-                return numeric
-            }
-            val match = BALANCE_BEFORE_KSHS.find(text) ?: BALANCE_AFTER_KSHS.find(text) ?: return 0.0
+            val stripped = stripNoise(lower)
+            val match = BALANCE_BEFORE_KSHS.find(stripped) ?: BALANCE_AFTER_KSHS.find(stripped) ?: return 0.0
             val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return 0.0
             val trimmed = raw.trim()
             if (trimmed.isEmpty()) return 0.0
             val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
             val numeric = formatted.toDoubleOrNull() ?: return 0.0
             if (numeric < 0 || formatted.count { it == '.' } > 1 || numeric > 50000) return 0.0
+            if (isUnrelatedNumber(numeric, stripped)) return 0.0
             return numeric
+        }
+        private fun stripNoise(text: String): String {
+            return text.replace(Regex("(?i)\\b(?:dial|ussd|expire\\s+date|tariff|valid|through|from|buy|kopa|offer|awaits)[^*\\n]*?\\*?\\d+[^\\n]*"), " ")
+                .replace(Regex("[*#]"), " ")
+                .replace(Regex("\\s+"), " ")
+        }
+        private fun isUnrelatedNumber(value: Double, context: String): Boolean {
+            val s = context.lowercase()
+            val yearMatch = Regex("\\b(19|20)\\d{2}\\b").find(s)
+            if (yearMatch != null) {
+                val yearIndex = s.indexOf(yearMatch.value)
+                val valueIndex = s.indexOf(value.toString())
+                if (valueIndex >= 0 && kotlin.math.abs(valueIndex - yearIndex) < 20) return true
+            }
+            if (value == 310.0 || value == 202.0 || value == 2026.0) {
+                val idx = s.indexOf(value.toString())
+                if (idx >= 0) {
+                    val around = s.substring(kotlin.math.max(0, idx - 40), kotlin.math.min(s.length, idx + 40))
+                    if (around.contains("*") || around.contains("#") || around.contains("date") || around.contains("dial")) return true
+                }
+            }
+            return false
         }
         fun persistLastKnownBalance(context: Context, display: String) {
             val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)

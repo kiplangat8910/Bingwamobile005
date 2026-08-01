@@ -10626,29 +10626,203 @@ private fun OfferEditorOverviewCard(
     hasPendingSignature: Boolean
 ) {
     OfferDialogSection(
-        title = if (existing != null) "Offer Snapshot" else "New Offer Snapshot",
-        subtitle = "Use this card to confirm the main setup before changing the detailed fields below."
+        title = if (existing != null) "Offer Configuration" else "New Offer Configuration",
+        subtitle = "Review the key settings before editing the detailed fields below.",
+        barColor = C.amber
     ) {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            MiniTag(if (existing != null) "EDITING" else "NEW", C.cyan)
-            MiniTag(category.uppercase(), C.orange)
-            MiniTag(mode.uppercase(), C.purple)
-            MiniTag(device.uppercase(), C.blue)
-            MiniTag(offerSimSelectionLabel(simSelection).uppercase(), C.purple)
-            if (signatureEnabled) MiniTag("PROTECTION ON", C.green)
-            if (hasLearnedSignature) MiniTag("LEARNED", C.green)
-            if (hasPendingSignature) MiniTag("REVIEW NEEDED", C.orange)
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = C.amber.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, C.amber.copy(alpha = 0.35f)),
+                modifier = Modifier.size(56.dp)
+            ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        if (existing != null) Icons.Outlined.Edit else Icons.Outlined.Add,
+                        null,
+                        tint = C.amber,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    if (existing != null) "Editing ${existing.name.ifBlank { existing.category }}" else "Creating New Offer",
+                    color = C.t1,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    lineHeight = 22.sp
+                )
+                Text(
+                    if (existing != null) "Modify USSD, SIM, device, and protection settings" else "Set up USSD, SIM, device, and protection",
+                    color = C.t3,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+            }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OfferInfoTile("Category", category, C.orange, Icons.Rounded.MonetizationOn, Modifier.weight(1f))
-            OfferInfoTile("Execution", mode, C.purple, Icons.Outlined.Code, Modifier.weight(1f))
+
+        Divider(color = C.border.copy(alpha = 0.7f), thickness = 0.5.dp)
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    color = C.cardHi.copy(alpha = 0.75f),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.7f))
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("CATEGORY", color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
+                        Text(category.ifBlank { "—" }, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    }
+                }
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    color = C.cardHi.copy(alpha = 0.75f),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.7f))
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("EXECUTION", color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
+                        Text(mode.ifBlank { "—" }, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    color = C.cardHi.copy(alpha = 0.75f),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.7f))
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("DEVICE", color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
+                        Text(device.ifBlank { "—" }, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    }
+                }
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    color = C.cardHi.copy(alpha = 0.75f),
+                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.7f))
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("SIM", color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
+                        Text(offerSimSelectionLabel(simSelection).ifBlank { "—" }, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    }
+                }
+            }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OfferInfoTile("Device", device, C.blue, Icons.Outlined.PhoneAndroid, Modifier.weight(1f))
-            OfferInfoTile("SIM", offerSimSelectionLabel(simSelection), C.cyan, Icons.Outlined.Call, Modifier.weight(1f))
+
+        Divider(color = C.border.copy(alpha = 0.7f), thickness = 0.5.dp)
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (signatureEnabled) C.green.copy(alpha = 0.12f) else C.w04,
+                border = BorderStroke(1.dp, if (signatureEnabled) C.green.copy(alpha = 0.4f) else C.border.copy(alpha = 0.7f)),
+                modifier = Modifier.weight(1f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        if (signatureEnabled) Icons.Rounded.Shield else Icons.Rounded.Security,
+                        null,
+                        tint = if (signatureEnabled) C.green else C.t3,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            if (signatureEnabled) "Protection On" else "Protection Off",
+                            color = if (signatureEnabled) C.green else C.t3,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            if (signatureEnabled) "Signature verification active" else "No signature verification",
+                            color = C.t3,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (hasLearnedSignature) C.green.copy(alpha = 0.12f) else C.w04,
+                border = BorderStroke(1.dp, if (hasLearnedSignature) C.green.copy(alpha = 0.4f) else C.border.copy(alpha = 0.7f)),
+                modifier = Modifier.weight(1f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Rounded.VerifiedUser,
+                        null,
+                        tint = if (hasLearnedSignature) C.green else C.t3,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            if (hasLearnedSignature) "Learned" else "Not Learned",
+                            color = if (hasLearnedSignature) C.green else C.t3,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            if (hasLearnedSignature) "Signature captured" else "No signature data",
+                            color = C.t3,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (hasPendingSignature) C.amber.copy(alpha = 0.12f) else C.w04,
+                border = BorderStroke(1.dp, if (hasPendingSignature) C.amber.copy(alpha = 0.4f) else C.border.copy(alpha = 0.7f)),
+                modifier = Modifier.weight(1f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Outlined.AutoFixHigh,
+                        null,
+                        tint = if (hasPendingSignature) C.amber else C.t3,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            if (hasPendingSignature) "Review Needed" else "No Pending",
+                            color = if (hasPendingSignature) C.amber else C.t3,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            if (hasPendingSignature) "Awaiting approval" else "All clear",
+                            color = C.t3,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
         }
     }
 }
