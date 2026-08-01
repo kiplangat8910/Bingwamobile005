@@ -3603,5 +3603,10 @@ class UssdNavigationService : AccessibilityService() {
         var currentBalance = 0.0
         fun parseBalanceDisplay(text: String): String { /* parse */ return text }
         fun parseBalanceInt(text: String): Double { /* parse */ return 0.0 }
+        fun persistLastKnownBalance(context: Context, display: String) {
+            val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+            prefs.edit().putString("last_known_balance", display.trim()).apply()
+        }
+    }
     // endregion
 }
