@@ -10750,9 +10750,7 @@ fun OfferDialog(
                                         existing?.let { it.name.ifBlank { it.category } } ?: "New offer",
                                         color = C.t2,
                                         fontSize = 12.sp,
-                                        lineHeight = 18.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                        lineHeight = 18.sp
                                     )
                                 }
                                 Surface(
@@ -10797,8 +10795,8 @@ fun OfferDialog(
                                     shape = RoundedCornerShape(12.dp),
                                     border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.5f)),
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = C.cyan),
-                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                                    modifier = Modifier.weight(1f).height(40.dp)
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                                    modifier = Modifier.wrapContentWidth().height(40.dp)
                                 ) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Outlined.AutoFixHigh, null, tint = C.cyan, modifier = Modifier.size(13.dp))
@@ -10811,7 +10809,7 @@ fun OfferDialog(
                                 enabled = canSave,
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = C.amber),
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
                                 modifier = Modifier.weight(1f).height(40.dp)
                             ) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
