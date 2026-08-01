@@ -3654,7 +3654,8 @@ class UssdNavigationService : AccessibilityService() {
                 }
             }
             // 2) Try Airtel-style: cut message before "Dial" to avoid USSD codes coming after
-            val beforeDial = msg.substringBefore(Regex("(?i)\\bDial\\b"), msg)
+            val dialIdx = msgLower.indexOf("dial")
+            val beforeDial = if (dialIdx >= 0) msg.substring(0, dialIdx) else msg
             val airtelRegex = Regex("(?i)\\bKSH\\.?\\s*([0-9]+(?:\\.[0-9]+)?)\\b")
             airtelRegex.find(beforeDial)?.let { m ->
                 val v = m.groupValues[1].toDoubleOrNull()
