@@ -3609,8 +3609,26 @@ class UssdNavigationService : AccessibilityService() {
 
     object BalanceChecker {
         var currentBalance = 0.0
-        fun parseBalanceDisplay(text: String): String { /* parse */ return text }
-        fun parseBalanceInt(text: String): Double { /* parse */ return 0.0 }
+        private val BALANCE_AFTER_KSHS = Regex("(?i)ksh\\.?\\s*([\\d,]+(?:\\.[\\d]+)?)")
+        private val BALANCE_BEFORE_KSHS = Regex("(?i)\\b(?:airtime\\s+)?bal\\b[^\\d]{0,10}([\\d,]+(?:\\.[\\d]+)?)\\s*ksh")
+        fun parseBalanceDisplay(text: String): String {
+            val match = BALANCE_BEFORE_KSHS.find(text) ?: BALANCE_AFTER_KSHS.find(text) ?: return text
+            val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return text
+            val trimmed = raw.trim()
+            if (trimmed.isEmpty()) return text
+            val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
+            val numeric = formatted.toDoubleOrNull() ?: return text
+            currentBalance = numeric
+            return "Ksh. $formatted"
+        }
+        fun parseBalanceInt(text: String): Double {
+            val match = BALANCE_BEFORE_KSHS.find(text) ?: BALANCE_AFTER_KSHS.find(text) ?: return 0.0
+            val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return 0.0
+            val trimmed = raw.trim()
+            if (trimmed.isEmpty()) return 0.0
+            val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
+            return formatted.toDoubleOrNull() ?: 0.0
+        }
         fun persistLastKnownBalance(context: Context, display: String) {
             val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
             prefs.edit().putString("last_known_balance", display.trim()).apply()
