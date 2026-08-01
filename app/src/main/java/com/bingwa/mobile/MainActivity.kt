@@ -2629,7 +2629,7 @@ private fun UssdCodeDialogField(
     onValueChange: (TextFieldValue) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("USSD", color = C.t2, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.1.sp, textTransform = TextTransform.Uppercase)
+        Text("USSD", color = C.t2, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.1.sp)
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
@@ -2701,41 +2701,28 @@ fun DialogDropdown(
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.1.sp,
-            color = C.t3,
-            textTransform = TextTransform.Uppercase
+            color = C.t3
         )
-        Box {
-            Surface(
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = onExpandedChange,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = {},
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(46.dp),
+                    .menuAnchor(),
                 shape = RoundedCornerShape(12.dp),
-                color = C.cardHi.copy(alpha = 0.92f),
-                border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f)),
-                onClick = { onExpandedChange(true) }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        value,
-                        color = C.t1,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.SansSerif
-                    )
-                    Icon(
-                        Icons.Outlined.ArrowDropDown,
-                        null,
-                        tint = C.t3,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
+                readOnly = true,
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                },
+                colors = dialogFieldColors(),
+                singleLine = true,
+                textStyle = LocalTextStyle.current.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            )
             ExposedDropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { onExpandedChange(false) },
@@ -10750,8 +10737,7 @@ fun OfferDialog(
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         letterSpacing = 0.12.sp,
-                                        color = C.t3,
-                                        textTransform = TextTransform.Uppercase
+                                        color = C.t3
                                     )
                                 }
                                 Text(
