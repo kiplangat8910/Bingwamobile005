@@ -3187,15 +3187,17 @@ class UssdNavigationService : AccessibilityService() {
         }
 
         balanceCallback?.let { cb ->
-            if (lower.contains("balance") || lower.contains("airtime") || lower.contains("ksh") || lower.contains("kes") ||
-                dialogText.matches(BALANCE_AMOUNT_REGEX)) {
+            if (lower.contains("balance") || lower.contains("airtime") || lower.contains("ksh") || lower.contains("kes")) {
                 airtimeBalance = dialogText
                 val display = BalanceChecker.parseBalanceDisplay(dialogText)
-                BalanceChecker.currentBalance = BalanceChecker.parseBalanceInt(dialogText)
-                BalanceChecker.persistLastKnownBalance(applicationContext, display)
-                cb(display)
-                closeCurrentUssdUi()
-                clearCallbacks()
+                val balance = BalanceChecker.parseBalanceInt(dialogText)
+                if (display.startsWith("Ksh.", ignoreCase = true)) {
+                    BalanceChecker.currentBalance = balance
+                    BalanceChecker.persistLastKnownBalance(applicationContext, display)
+                    cb(display)
+                    closeCurrentUssdUi()
+                    clearCallbacks()
+                }
             }
         }
     }
@@ -3593,7 +3595,6 @@ class UssdNavigationService : AccessibilityService() {
     private val MENU_OPTION_REGEX = Regex("""^(\d+)\s*[\)\].:\-]?\s*(.+)$""")
     private val PHONE_NUMBER_REGEX = Regex("""\b\d{9,15}\b""")
     private val SIM_SLOT_REGEX = { slot: Int -> Regex("""(^|\D)${slot}($|\D)""") }
-    private val BALANCE_AMOUNT_REGEX = Regex(".*\\d[\\d,]*\\.?\\d*.*", RegexOption.DOT_MATCHES_ALL)
     // endregion
 
     // region UssdHelper stub (should exist in your project)
@@ -3609,25 +3610,32 @@ class UssdNavigationService : AccessibilityService() {
 
     object BalanceChecker {
         var currentBalance = 0.0
-        private val BALANCE_AFTER_KSHS = Regex("(?i)ksh\\.?\\s*([\\d,]+(?:\\.[\\d]+)?)")
-        private val BALANCE_BEFORE_KSHS = Regex("(?i)\\b(?:airtime\\s+)?bal\\b[^\\d]{0,10}([\\d,]+(?:\\.[\\d]+)?)\\s*ksh")
+        private val BALANCE_AFTER_KSHS = Regex("(?i)\\bksh\\.?\\s*([\\d,]+(?:\\.[\\d]+)?)")
+        private val BALANCE_BEFORE_KSHS = Regex("(?i)\\b(?:airtime\\s+)?bal\\b[^\\d]{0,10}([\\d,]+(?:\\.[\\d]+)?)\\s*ksh\\b")
         fun parseBalanceDisplay(text: String): String {
+            val lower = text.lowercase()
+            if (!lower.contains("balance") && !lower.contains("bal") && !lower.contains("airtime")) return text
             val match = BALANCE_BEFORE_KSHS.find(text) ?: BALANCE_AFTER_KSHS.find(text) ?: return text
             val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return text
             val trimmed = raw.trim()
             if (trimmed.isEmpty()) return text
             val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
             val numeric = formatted.toDoubleOrNull() ?: return text
+            if (numeric < 0 || formatted.count { it == '.' } > 1) return text
             currentBalance = numeric
             return "Ksh. $formatted"
         }
         fun parseBalanceInt(text: String): Double {
+            val lower = text.lowercase()
+            if (!lower.contains("balance") && !lower.contains("bal") && !lower.contains("airtime")) return 0.0
             val match = BALANCE_BEFORE_KSHS.find(text) ?: BALANCE_AFTER_KSHS.find(text) ?: return 0.0
             val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return 0.0
             val trimmed = raw.trim()
             if (trimmed.isEmpty()) return 0.0
             val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
-            return formatted.toDoubleOrNull() ?: 0.0
+            val numeric = formatted.toDoubleOrNull() ?: return 0.0
+            if (numeric < 0 || formatted.count { it == '.' } > 1) return 0.0
+            return numeric
         }
         fun persistLastKnownBalance(context: Context, display: String) {
             val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
