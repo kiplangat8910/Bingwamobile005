@@ -3610,31 +3610,56 @@ class UssdNavigationService : AccessibilityService() {
 
     object BalanceChecker {
         var currentBalance = 0.0
-        private val BALANCE_AFTER_KSHS = Regex("(?i)\\bksh\\.?\\s*([\\d,]+(?:\\.[\\d]+)?)")
-        private val BALANCE_BEFORE_KSHS = Regex("(?i)\\b(?:airtime\\s+)?bal\\b[^\\d]{0,10}([\\d,]+(?:\\.[\\d]+)?)\\s*ksh\\b")
+        private val BALANCE_AFTER_KSHS = Regex("(?i)\\bksh\\.?\\s*(?<![\\d.,])([\\d,]+(?:\\.[\\d]+)?)(?![\\d.,])")
+        private val BALANCE_BEFORE_KSHS = Regex("(?i)\\b(?:airtime\\s+)?bal\\b[^\\d]{0,10}([\\d,]+(?:\\.[\\d]+)?)(?![\\d.,])\\s*ksh\\b")
         fun parseBalanceDisplay(text: String): String {
             val lower = text.lowercase()
             if (!lower.contains("balance") && !lower.contains("bal") && !lower.contains("airtime")) return text
+            if (lower.contains("ussd") || lower.contains("expire date") || lower.contains("tariff:")) {
+                val safe = text.replace(Regex("(?i)\\b(?:dial|ussd|expire date|tariff)[^\\d]*\\d+[^\\d]*"), "")
+                val clean = safe.replace(Regex("[*#]"), " ")
+                val match = BALANCE_BEFORE_KSHS.find(clean) ?: BALANCE_AFTER_KSHS.find(clean) ?: return text
+                val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return text
+                val trimmed = raw.trim()
+                if (trimmed.isEmpty()) return text
+                val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
+                val numeric = formatted.toDoubleOrNull() ?: return text
+                if (numeric < 0 || formatted.count { it == '.' } > 1 || numeric > 50000) return text
+                currentBalance = numeric
+                return "Ksh. $formatted"
+            }
             val match = BALANCE_BEFORE_KSHS.find(text) ?: BALANCE_AFTER_KSHS.find(text) ?: return text
             val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return text
             val trimmed = raw.trim()
             if (trimmed.isEmpty()) return text
             val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
             val numeric = formatted.toDoubleOrNull() ?: return text
-            if (numeric < 0 || formatted.count { it == '.' } > 1) return text
+            if (numeric < 0 || formatted.count { it == '.' } > 1 || numeric > 50000) return text
             currentBalance = numeric
             return "Ksh. $formatted"
         }
         fun parseBalanceInt(text: String): Double {
             val lower = text.lowercase()
             if (!lower.contains("balance") && !lower.contains("bal") && !lower.contains("airtime")) return 0.0
+            if (lower.contains("ussd") || lower.contains("expire date") || lower.contains("tariff:")) {
+                val safe = text.replace(Regex("(?i)\\b(?:dial|ussd|expire date|tariff)[^\\d]*\\d+[^\\d]*"), "")
+                val clean = safe.replace(Regex("[*#]"), " ")
+                val match = BALANCE_BEFORE_KSHS.find(clean) ?: BALANCE_AFTER_KSHS.find(clean) ?: return 0.0
+                val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return 0.0
+                val trimmed = raw.trim()
+                if (trimmed.isEmpty()) return 0.0
+                val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
+                val numeric = formatted.toDoubleOrNull() ?: return 0.0
+                if (numeric < 0 || formatted.count { it == '.' } > 1 || numeric > 50000) return 0.0
+                return numeric
+            }
             val match = BALANCE_BEFORE_KSHS.find(text) ?: BALANCE_AFTER_KSHS.find(text) ?: return 0.0
             val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return 0.0
             val trimmed = raw.trim()
             if (trimmed.isEmpty()) return 0.0
             val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
             val numeric = formatted.toDoubleOrNull() ?: return 0.0
-            if (numeric < 0 || formatted.count { it == '.' } > 1) return 0.0
+            if (numeric < 0 || formatted.count { it == '.' } > 1 || numeric > 50000) return 0.0
             return numeric
         }
         fun persistLastKnownBalance(context: Context, display: String) {

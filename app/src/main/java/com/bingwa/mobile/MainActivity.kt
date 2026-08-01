@@ -9783,10 +9783,116 @@ fun OfferCard(number: Int, o: OfferItem, onEdit: () -> Unit, onToggle: () -> Uni
                             Icon(Icons.Filled.MoreVert, null, tint = C.t2, modifier = Modifier.size(17.dp))
                         }
                     }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.background(C.cardHi, RoundedCornerShape(12.dp)).border(1.dp, C.border, RoundedCornerShape(12.dp))) {
-                        DropdownMenuItem(text = { Text("Edit", color = C.t1) }, leadingIcon = { Icon(Icons.Outlined.Edit, null, tint = C.t1) }, onClick = { menu = false; onEdit() })
-                        DropdownMenuItem(text = { Text(if (o.enabled) "Disable" else "Enable", color = if (o.enabled) C.red else C.green) }, leadingIcon = { Icon(if (o.enabled) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, null, tint = if (o.enabled) C.red else C.green) }, onClick = { menu = false; onToggle() })
-                        DropdownMenuItem(text = { Text("Delete", color = C.red) }, leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = C.red) }, onClick = { menu = false; onDelete() })
+                    DropdownMenu(
+                        expanded = menu,
+                        onDismissRequest = { menu = false },
+                        modifier = Modifier
+                            .background(C.cardHi, RoundedCornerShape(16.dp))
+                            .border(1.dp, C.border.copy(alpha = 0.9f), RoundedCornerShape(16.dp))
+                    ) {
+                        Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = "Offer Actions",
+                                    color = C.t2,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    letterSpacing = 1.sp
+                                )
+                            }
+                            Divider(color = C.border.copy(alpha = 0.6f), thickness = 0.5.dp)
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                color = C.surface.copy(alpha = 0.7f),
+                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { menu = false; onEdit() }
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Icon(Icons.Outlined.Edit, null, tint = C.cyan, modifier = Modifier.size(18.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("Edit Offer", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                        Text("Change USSD, mode, device, or SIM", color = C.t3, fontSize = 11.sp)
+                                    }
+                                    Icon(Icons.Filled.ChevronRight, null, tint = C.t3, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                color = C.surface.copy(alpha = 0.7f),
+                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { menu = false; onToggle() }
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Icon(
+                                        if (o.enabled) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                        null,
+                                        tint = if (o.enabled) C.amber else C.green,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            if (o.enabled) "Disable Offer" else "Enable Offer",
+                                            color = C.t1,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 14.sp
+                                        )
+                                        Text(
+                                            if (o.enabled) "Temporarily stop this offer" else "Resume this offer",
+                                            color = C.t3,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                    Icon(Icons.Filled.ChevronRight, null, tint = C.t3, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                            Divider(color = C.border.copy(alpha = 0.6f), thickness = 0.5.dp)
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                color = C.red.copy(alpha = 0.08f),
+                                border = BorderStroke(1.dp, C.red.copy(alpha = 0.25f))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { menu = false; onDelete() }
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Icon(Icons.Outlined.Delete, null, tint = C.red, modifier = Modifier.size(18.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("Delete Offer", color = C.red, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                        Text("Remove this offer permanently", color = C.red.copy(alpha = 0.7f), fontSize = 11.sp)
+                                    }
+                                    Icon(Icons.Filled.ChevronRight, null, tint = C.red.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
                     }
                 }
             }
