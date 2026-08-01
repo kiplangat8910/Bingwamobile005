@@ -238,6 +238,10 @@ class MpesaReceiver : BroadcastReceiver() {
             val relayCfg = RelayManager.load(context)
             if (relayCfg.enabled && relayCfg.role == "RELAY") return@forEach
             if (handleCustomerReplySms(context, sender, body)) return@forEach
+            if (isCarrierAirtimeNotification(body)) {
+                handleCarrierAirtimeNotification(context, body)
+                return@forEach
+            }
             if (!isMpesaSms(sender, body)) return@forEach
             Log.d(TAG, "M-PESA SMS sender='$sender' body='$body'")
             if (isAirtimeTopup(sender, body)) {
@@ -400,6 +404,16 @@ class MpesaReceiver : BroadcastReceiver() {
         return false
     }
 
+    private fun handleCarrierAirtimeNotification(context: Context, body: String) {
+        val display = BalanceChecker.parseBalanceDisplay(body)
+        if (display.isNotBlank()) {
+            BalanceChecker.persistLastKnownBalance(context, display)
+            BalanceChecker.currentBalanceStr = display
+            BalanceChecker.currentBalance = BalanceChecker.parseBalanceInt(body).coerceAtLeast(0)
+            MpesaReceiver.checkAndSendAlerts(context)
+        }
+    }
+
     private fun isPaymentConfirmation(body: String): Boolean {
         val lower = body.lowercase()
         val looksReceived = lower.contains("you have received") ||
@@ -414,6 +428,14 @@ class MpesaReceiver : BroadcastReceiver() {
         return looksReceived &&
             !looksSent &&
             (lower.contains("ksh") || lower.contains("kes") || lower.contains("kshs"))
+    }
+
+    private fun isCarrierAirtimeNotification(body: String): Boolean {
+        val lower = body.lowercase()
+        return lower.contains("airtime bal") ||
+            lower.contains("tariff:") ||
+            lower.contains("your balance is") ||
+            (lower.contains("expire date") && lower.contains("ksh"))
     }
 
     private fun handleDataSelling(context: Context, body: String) {

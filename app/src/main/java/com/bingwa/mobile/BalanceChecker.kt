@@ -412,6 +412,22 @@ class BalanceChecker : Service() {
 
         private fun extractBalanceCandidate(raw: String): BalanceCandidate? {
             val normalized = normalizeBalanceText(raw)
+
+            val safaricomBalRe = Regex("""airtime\s*bal[:\s]+(?:ksh[s]?|kes)?\s*([\d,]+(?:\.\d{1,2})?)\s*(ksh[s]?|kes)?|airtime\s*bal[:\s]+(ksh[s]?|kes)\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE)
+            safaricomBalRe.find(normalized)?.let { m ->
+                val amountStr = m.groupValues[1].ifBlank { m.groupValues[3] }.replace(",", "")
+                val currency = m.groupValues[2].ifBlank { m.groupValues[4] }.uppercase().ifBlank { "KSh" }
+                val amount = amountStr.toDoubleOrNull() ?: return@let
+                return BalanceCandidate(amount, currency, 10000)
+            }
+
+            val yourBalRe = Regex("""your\s+balance\s+is\s+(?:ksh[s]?\.?|kes\.?)\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE)
+            yourBalRe.find(normalized)?.let { m ->
+                val amountStr = m.groupValues[1].replace(",", "")
+                val amount = amountStr.toDoubleOrNull() ?: return@let
+                return BalanceCandidate(amount, "KSh", 10000)
+            }
+
             val candidates = mutableListOf<BalanceCandidate>()
 
             // Patterns ordered by priority
@@ -497,7 +513,7 @@ class BalanceChecker : Service() {
                 .replace(Regex("""\s+"""), " ")
                 .trim()
 
-        private fun formatAmount(amount: Double, currency: String = "KSh"): String {
+        internal fun formatAmount(amount: Double, currency: String = "KSh"): String {
             val formatted = NumberFormat.getNumberInstance(Locale.getDefault()).apply {
                 minimumFractionDigits = if (amount == kotlin.math.floor(amount)) 0 else 2
                 maximumFractionDigits = 2
