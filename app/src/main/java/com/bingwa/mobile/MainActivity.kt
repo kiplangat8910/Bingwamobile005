@@ -1809,10 +1809,26 @@ private fun TokensHeroCard(
 }
 
 @Composable
-fun FieldLabel(text: String) = Text(
-    text, color = C.t2, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-    letterSpacing = 0.3.sp, modifier = Modifier.padding(bottom = 8.dp)
-)
+fun FieldLabel(
+    text: String,
+    uppercase: Boolean = false,
+    mono: Boolean = false,
+    color: Color = C.t3,
+    fontSize: TextUnit = 10.sp
+) {
+    val style = TextStyle(
+        color = color,
+        fontSize = fontSize,
+        fontWeight = FontWeight.Bold,
+        fontFamily = if (mono) FontFamily.Monospace else FontFamily.SansSerif,
+        letterSpacing = 0.1.sp
+    )
+    Text(
+        text = if (uppercase) text.uppercase() else text,
+        style = style,
+        modifier = Modifier.padding(bottom = 8.dp)
+    )
+}
 
 @Composable
 private fun ManualSectionCard(
@@ -10409,19 +10425,6 @@ private fun CompactDialogToggleCard(
             )
         }
     }
-}
-
-@Composable
-private fun FieldLabel(label: String) {
-    Text(
-        label,
-        fontFamily = FontFamily.Monospace,
-        fontSize = 10.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 0.1.sp,
-        color = C.t3,
-        textTransform = TextTransform.Uppercase
-    )
 }
 
 @Composable

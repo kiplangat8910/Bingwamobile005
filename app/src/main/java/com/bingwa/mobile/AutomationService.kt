@@ -345,7 +345,7 @@ class AutomationService : Service() {
         private const val RETRIABLE_RETRY_PREFS_NAME = "retriable_ussd_response_retry"
         private const val ACTIVE_RETRY_WINDOW_MS = 90_000L
         private const val ACTIVE_RETRY_INTERVAL_MS = 7_000L
-        private const val FIRST_BACKOFF_MS = 5 * 60_000L
+        private const val FIRST_BACKOFF_MS = 10 * 60_000L
         private const val REPEATED_BACKOFF_MS = 10 * 60_000L
 
         fun cancelRetriableResponseRetry(context: Context, txId: Int) {
@@ -640,7 +640,7 @@ class AutomationService : Service() {
             val clean = code.trim().replace("%23", "#").trimEnd('#')
             val parts = clean.split("*").filter { it.isNotEmpty() }
             if (parts.isEmpty()) return emptyList()
-            val normalizedPhone = phoneNumber?.replace(Regex("[^0-9]"), "")
+            val normalizedPhone = phoneNumber?.let { UssdHelper.normalizeRecipientForUssdInput(it) }
             return (1 until parts.size).map {
                 if (parts[it].equals("pn", ignoreCase = true)) "INPUT_PHONE"
                 else if (!normalizedPhone.isNullOrBlank() && parts[it] == normalizedPhone) "INPUT_PHONE"
@@ -929,7 +929,7 @@ class AutomationService : Service() {
                 val remaining = ((ACTIVE_RETRY_WINDOW_MS - elapsedInWindow).coerceAtLeast(0L) + 999L) / 1000L
                 "Automatic retry still active. Next retry in ${formatDelay(delayMs)}. Remaining window: ${remaining}s."
             } else {
-                val backoff = if (state.completedWindows == 1) "5 minutes" else "10 minutes"
+                val backoff = "10 minutes"
                 "Retry window exhausted. Waiting $backoff before starting another 1‑minute retry window."
             }
             return "$response\n\n$timing"
