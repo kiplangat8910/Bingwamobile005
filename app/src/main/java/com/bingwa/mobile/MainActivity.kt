@@ -10700,71 +10700,71 @@ fun OfferDialog(
             Scaffold(
                 containerColor = C.bg,
                 topBar = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(C.bg)
-                            .border(
-                                bottom = BorderStroke(1.dp, C.w08)
-                            )
-                            .statusBarsPadding()
-                            .padding(horizontal = 20.dp, vertical = 16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(C.bg)
+                                .statusBarsPadding()
+                                .padding(horizontal = 20.dp, vertical = 16.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    val ledAlpha by rememberInfiniteTransition(label = "offer_led").animateFloat(
-                                        initialValue = 1f,
-                                        targetValue = 0.35f,
-                                        animationSpec = infiniteRepeatable(tween(2200, easing = LinearEasing), RepeatMode.Reverse)
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .size(5.dp)
-                                            .background(C.amber, CircleShape)
-                                            .then(Modifier.alpha(ledAlpha))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        val ledAlpha by rememberInfiniteTransition(label = "offer_led").animateFloat(
+                                            initialValue = 1f,
+                                            targetValue = 0.35f,
+                                            animationSpec = infiniteRepeatable(tween(2200, easing = LinearEasing), RepeatMode.Reverse)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(5.dp)
+                                                .background(C.amber, CircleShape)
+                                                .then(Modifier.alpha(ledAlpha))
+                                        )
+                                        Text(
+                                            "Bundle Settings",
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 0.12.sp,
+                                            color = C.t3
+                                        )
+                                    }
+                                    Text(
+                                        if (existing != null) "Edit Bundle" else "New Bundle",
+                                        color = C.t1,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 22.sp,
+                                        fontFamily = FontFamily.SansSerif,
+                                        lineHeight = 28.sp
                                     )
                                     Text(
-                                        "Bundle Settings",
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.12.sp,
-                                        color = C.t3
+                                        existing?.let { it.name.ifBlank { it.category } } ?: "New offer",
+                                        color = C.t2,
+                                        fontSize = 12.sp,
+                                        lineHeight = 18.sp
                                     )
                                 }
-                                Text(
-                                    if (existing != null) "Edit Bundle" else "New Bundle",
-                                    color = C.t1,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 22.sp,
-                                    fontFamily = FontFamily.SansSerif,
-                                    lineHeight = 28.sp
-                                )
-                                Text(
-                                    existing?.let { it.name.ifBlank { it.category } } ?: "New offer",
-                                    color = C.t2,
-                                    fontSize = 12.sp,
-                                    lineHeight = 18.sp
-                                )
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = C.cardHi.copy(alpha = 0.92f),
-                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
-                            ) {
-                                IconButton(onClick = onDismiss) {
-                                    Icon(Icons.Outlined.Close, null, tint = C.t2, modifier = Modifier.size(18.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = C.cardHi.copy(alpha = 0.92f),
+                                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
+                                ) {
+                                    IconButton(onClick = onDismiss) {
+                                        Icon(Icons.Outlined.Close, null, tint = C.t2, modifier = Modifier.size(18.dp))
+                                    }
                                 }
                             }
                         }
+                        Divider(color = C.w08)
                     }
                 },
                 bottomBar = {
