@@ -24,7 +24,7 @@ internal sealed class Screen(
 ) {
     data object Home : Screen("home", "Home", Icons.Outlined.Home, Icons.Filled.Home)
     data object Manual : Screen("manual", "Manual", Icons.Outlined.Terminal, Icons.Filled.Terminal)
-    data object Tokens : Screen("tokens", "Tokens", Icons.Rounded.Layers, Icons.Filled.Layers)
+    data object Tokens : Screen("tokens", "Tokens", Icons.Rounded.Layers, Icons.Rounded.Layers)
     data object Contacts : Screen("contacts", "Contacts", Icons.Outlined.Contacts, Icons.Filled.Contacts)
     data object Blacklist : Screen("blacklist", "Blacklist", Icons.Outlined.Block, Icons.Filled.Block)
     data object Settings : Screen("settings", "Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
