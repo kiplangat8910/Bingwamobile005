@@ -2224,7 +2224,7 @@ fun PillBadge(text: String, color: Color) {
 @Composable
 fun MiniTag(text: String, color: Color) {
     Surface(shape = RoundedCornerShape(50), color = color.copy(alpha = 0.10f)) {
-        Text(text, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp), color = color, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+        Text(text, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp), color = color, fontSize = 8.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -9935,35 +9935,35 @@ private fun OfferInfoTile(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         color = accent.copy(alpha = 0.08f),
         border = BorderStroke(1.dp, accent.copy(alpha = 0.20f))
     ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .heightIn(min = 92.dp)
-                .padding(horizontal = 12.dp, vertical = 12.dp),
+                .heightIn(min = 68.dp)
+                .padding(horizontal = 10.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .size(22.dp)
+                        .clip(RoundedCornerShape(7.dp))
                         .background(accent.copy(alpha = 0.13f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, null, tint = accent, modifier = Modifier.size(15.dp))
+                    Icon(icon, null, tint = accent, modifier = Modifier.size(13.dp))
                 }
-                Text(label.uppercase(), color = C.t3, fontSize = 10.sp, letterSpacing = 1.sp)
+                Text(label.uppercase(), color = C.t3, fontSize = 9.sp, letterSpacing = 0.8.sp)
             }
             Text(
                 value,
                 color = C.t1,
-                fontSize = 15.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                lineHeight = 20.sp,
+                lineHeight = 17.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -9993,7 +9993,7 @@ private fun OfferCodeBlock(label: String, value: String) {
                             .background(C.cyan.copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Outlined.Dialpad, null, tint = C.cyan, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Outlined.Terminal, null, tint = C.cyan, modifier = Modifier.size(16.dp))
                     }
                     Text(label.uppercase(), color = C.t3, fontSize = 10.sp, letterSpacing = 1.sp)
                 }
@@ -10311,7 +10311,7 @@ private fun CompactDialogSwitch(
     uncheckedThumbColor: Color = C.red
 ) {
     val thumbOffset by animateDpAsState(
-        targetValue = if (checked) 20.dp else 3.dp,
+        targetValue = if (checked) 16.dp else 2.dp,
         animationSpec = tween(180),
         label = "compact_dialog_switch"
     )
@@ -10329,8 +10329,8 @@ private fun CompactDialogSwitch(
     )
     Box(
         modifier = Modifier
-            .width(44.dp)
-            .height(26.dp)
+            .width(40.dp)
+            .height(24.dp)
             .clip(RoundedCornerShape(999.dp))
             .background(trackColor)
             .border(1.dp, borderColor, RoundedCornerShape(999.dp))
@@ -10339,7 +10339,7 @@ private fun CompactDialogSwitch(
         Box(
             modifier = Modifier
                 .offset(x = thumbOffset, y = 3.dp)
-                .size(20.dp)
+                .size(18.dp)
                 .clip(CircleShape)
                 .background(thumbColor)
         )
@@ -10367,25 +10367,25 @@ private fun CompactDialogToggleCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .size(26.dp)
+                    .clip(RoundedCornerShape(8.dp))
                     .background(accent.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
+                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(14.dp))
             }
             Column(
                 modifier = Modifier
                     .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                 badgeText?.let {
                     Surface(
                         shape = RoundedCornerShape(999.dp),
@@ -10394,15 +10394,15 @@ private fun CompactDialogToggleCard(
                         Text(
                             text = it.uppercase(Locale.getDefault()),
                             color = accent,
-                            fontSize = 9.sp,
+                            fontSize = 8.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.7.sp,
+                            letterSpacing = 0.5.sp,
                             maxLines = 1,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                         )
                     }
                 }
-                Text(description, color = C.t2, fontSize = 11.sp, lineHeight = 16.sp)
+                Text(description, color = C.t2, fontSize = 10.sp, lineHeight = 14.sp)
             }
             CompactDialogSwitch(
                 checked = checked,
@@ -10524,8 +10524,8 @@ private fun OfferEditorOverviewCard(
         subtitle = "Use this card to confirm the main setup before changing the detailed fields below."
     ) {
         FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             MiniTag(if (existing != null) "EDITING" else "NEW", C.cyan)
             MiniTag(category.uppercase(), C.orange)
@@ -10536,11 +10536,11 @@ private fun OfferEditorOverviewCard(
             if (hasLearnedSignature) MiniTag("LEARNED", C.green)
             if (hasPendingSignature) MiniTag("REVIEW NEEDED", C.orange)
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OfferInfoTile("Category", category, C.orange, Icons.Outlined.Badge, Modifier.weight(1f))
-            OfferInfoTile("Execution", mode, C.purple, Icons.Outlined.Tune, Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OfferInfoTile("Category", category, C.orange, Icons.Rounded.MonetizationOn, Modifier.weight(1f))
+            OfferInfoTile("Execution", mode, C.purple, Icons.Outlined.Code, Modifier.weight(1f))
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OfferInfoTile("Device", device, C.blue, Icons.Outlined.PhoneAndroid, Modifier.weight(1f))
             OfferInfoTile("SIM", offerSimSelectionLabel(simSelection), C.cyan, Icons.Outlined.Call, Modifier.weight(1f))
         }
@@ -10713,9 +10713,9 @@ fun OfferDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.Top
                             ) {
-                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Row(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         val ledAlpha by rememberInfiniteTransition(label = "offer_led").animateFloat(
@@ -10725,17 +10725,17 @@ fun OfferDialog(
                                         )
                                         Box(
                                             modifier = Modifier
-                                                .size(5.dp)
+                                                .size(7.dp)
                                                 .background(C.amber, CircleShape)
                                                 .then(Modifier.alpha(ledAlpha))
                                         )
                                         Text(
                                             "Bundle Settings",
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 0.12.sp,
-                                            color = C.t3
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            letterSpacing = 0.5.sp,
+                                            color = C.t2
                                         )
                                     }
                                     Text(
@@ -10750,7 +10750,9 @@ fun OfferDialog(
                                         existing?.let { it.name.ifBlank { it.category } } ?: "New offer",
                                         color = C.t2,
                                         fontSize = 12.sp,
-                                        lineHeight = 18.sp
+                                        lineHeight = 18.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                                 Surface(
@@ -10776,17 +10778,17 @@ fun OfferDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .navigationBarsPadding()
-                                .padding(horizontal = 20.dp, vertical = 14.dp),
+                                .padding(horizontal = 20.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             TextButton(
                                 onClick = onDismiss,
                                 shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                                modifier = Modifier.height(44.dp)
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                                modifier = Modifier.height(40.dp)
                             ) {
-                                Text("Cancel", color = C.t3, fontWeight = FontWeight.Medium, fontSize = 13.5.sp)
+                                Text("Cancel", color = C.t3, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                             }
                             if (showSaveAndLearn) {
                                 OutlinedButton(
@@ -10795,12 +10797,12 @@ fun OfferDialog(
                                     shape = RoundedCornerShape(12.dp),
                                     border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.5f)),
                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = C.cyan),
-                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                                    modifier = Modifier.weight(1f).height(44.dp)
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                                    modifier = Modifier.weight(1f).height(40.dp)
                                 ) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Outlined.AutoFixHigh, null, tint = C.cyan, modifier = Modifier.size(14.dp))
-                                        Text("Save & Learn", color = C.cyan, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+                                        Icon(Icons.Outlined.AutoFixHigh, null, tint = C.cyan, modifier = Modifier.size(13.dp))
+                                        Text("Save & Learn", color = C.cyan, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                     }
                                 }
                             }
@@ -10809,12 +10811,12 @@ fun OfferDialog(
                                 enabled = canSave,
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = C.amber),
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                                modifier = Modifier.weight(1f).height(44.dp)
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                                modifier = Modifier.weight(1f).height(40.dp)
                             ) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Rounded.Check, contentDescription = null, tint = Color(0xFF1A1305), modifier = Modifier.size(13.dp))
-                                    Text("Save", color = Color(0xFF1A1305), fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+                                    Text("Save", color = Color(0xFF1A1305), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 }
                             }
                         }

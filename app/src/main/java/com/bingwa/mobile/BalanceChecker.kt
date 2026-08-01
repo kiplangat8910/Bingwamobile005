@@ -36,7 +36,19 @@ class BalanceChecker : Service() {
         private const val TAG = "BalanceChecker"
         private const val DEFAULT_BALANCE_USSD = "*144#"
         private const val AIRTEL_BALANCE_USSD = "*131#"
-        private const val CHECK_INTERVAL = 4 * 60_000L
+        private val ROTATING_CHECK_INTERVALS_MS = longArrayOf(
+            10 * 60_000L,
+            11 * 60_000L,
+            13 * 60_000L,
+            12 * 60_000L,
+            14 * 60_000L
+        )
+        @Volatile private var rotatingIntervalIndex = 0
+
+        private fun nextRotatingInterval(): Long {
+            val idx = rotatingIntervalIndex % ROTATING_CHECK_INTERVALS_MS.size
+            return ROTATING_CHECK_INTERVALS_MS[idx]
+        }
         private const val BALANCE_TIMEOUT_MS = 25_000L
         private const val EVENT_REFRESH_DELAY_MS = 4_000L
         private const val FOREGROUND_REFRESH_COOLDOWN_MS = 3_000L
@@ -601,14 +613,16 @@ class BalanceChecker : Service() {
                 stopSelf()
                 return
             }
+            val interval = nextRotatingInterval()
+            rotatingIntervalIndex++
             // Check balance only if we have a stale cache or long time since last check
             val lastCheck = getLastCheckTimestamp()
-            if (System.currentTimeMillis() - lastCheck > CHECK_INTERVAL) {
+            if (System.currentTimeMillis() - lastCheck > interval) {
                 requestBalanceCheck(applicationContext)
             }
             // Also check battery alerts
             MpesaReceiver.checkAndSendAlerts(applicationContext)
-            handler.postDelayed(this, CHECK_INTERVAL)
+            handler.postDelayed(this, interval)
         }
     }
 
