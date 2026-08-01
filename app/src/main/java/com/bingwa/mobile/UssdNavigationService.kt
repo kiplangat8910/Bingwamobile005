@@ -3626,58 +3626,49 @@ class UssdNavigationService : AccessibilityService() {
 
     object BalanceChecker {
         var currentBalance = 0.0
-        private val BALANCE_AFTER_KSHS = Regex("(?i)\\bksh\\.?\\s*(?<![\\d.,])([\\d,]+(?:\\.[\\d]+)?)(?![\\d.,])")
-        private val BALANCE_BEFORE_KSHS = Regex("(?i)\\b(?:airtime\\s+)?bal\\b[^\\d]{0,10}([\\d,]+(?:\\.[\\d]+)?)(?![\\d.,])\\s*ksh\\b")
         fun parseBalanceDisplay(text: String): String {
-            val lower = text.lowercase()
-            if (!lower.contains("balance") && !lower.contains("bal") && !lower.contains("airtime")) return text
-            val stripped = stripNoise(lower)
-            val match = BALANCE_BEFORE_KSHS.find(stripped) ?: BALANCE_AFTER_KSHS.find(stripped) ?: return text
-            val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return text
-            val trimmed = raw.trim()
-            if (trimmed.isEmpty()) return text
-            val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
-            val numeric = formatted.toDoubleOrNull() ?: return text
-            if (numeric < 0 || formatted.count { it == '.' } > 1 || numeric > 50000) return text
-            if (isUnrelatedNumber(numeric, stripped)) return text
-            currentBalance = numeric
-            return "Ksh. $formatted"
+            val value = parseBalanceInt(text)
+            return if (value > 0.0) "Ksh. $value" else text
         }
         fun parseBalanceInt(text: String): Double {
-            val lower = text.lowercase()
-            if (!lower.contains("balance") && !lower.contains("bal") && !lower.contains("airtime")) return 0.0
-            val stripped = stripNoise(lower)
-            val match = BALANCE_BEFORE_KSHS.find(stripped) ?: BALANCE_AFTER_KSHS.find(stripped) ?: return 0.0
-            val raw = match.groupValues.getOrNull(1)?.replace(",", "") ?: return 0.0
-            val trimmed = raw.trim()
-            if (trimmed.isEmpty()) return 0.0
-            val formatted = if (trimmed.contains('.') && trimmed.endsWith('.')) trimmed.dropLast(1) else trimmed
-            val numeric = formatted.toDoubleOrNull() ?: return 0.0
-            if (numeric < 0 || formatted.count { it == '.' } > 1 || numeric > 50000) return 0.0
-            if (isUnrelatedNumber(numeric, stripped)) return 0.0
-            return numeric
-        }
-        private fun stripNoise(text: String): String {
-            return text.replace(Regex("(?i)\\b(?:dial|ussd|expire\\s+date|tariff|valid|through|from|buy|kopa|offer|awaits)[^*\\n]*?\\*?\\d+[^\\n]*"), " ")
-                .replace(Regex("[*#]"), " ")
-                .replace(Regex("\\s+"), " ")
-        }
-        private fun isUnrelatedNumber(value: Double, context: String): Boolean {
-            val s = context.lowercase()
-            val yearMatch = Regex("\\b(19|20)\\d{2}\\b").find(s)
-            if (yearMatch != null) {
-                val yearIndex = s.indexOf(yearMatch.value)
-                val valueIndex = s.indexOf(value.toString())
-                if (valueIndex >= 0 && kotlin.math.abs(valueIndex - yearIndex) < 20) return true
-            }
-            if (value == 310.0 || value == 202.0 || value == 2026.0) {
-                val idx = s.indexOf(value.toString())
-                if (idx >= 0) {
-                    val around = s.substring(kotlin.math.max(0, idx - 40), kotlin.math.min(s.length, idx + 40))
-                    if (around.contains("*") || around.contains("#") || around.contains("date") || around.contains("dial")) return true
+            val msg = text
+            val msgLower = msg.lowercase()
+            // 1) Try Safaricom-style: look for "Bal" followed by a number and KSH
+            val balIndex = msgLower.indexOf("bal")
+            if (balIndex >= 0) {
+                val scanEnd = (balIndex + 100).coerceAtMost(msg.length)
+                val scanWindow = msg.substring(balIndex, scanEnd)
+                val safRegex = Regex("(?i)\\bbal[:\\s]*([0-9]+(?:\\.[0-9]+)?)\\s*KSH\\b")
+                safRegex.find(scanWindow)?.let { m ->
+                    val v = m.groupValues[1].toDoubleOrNull()
+                    if (v != null && v > 0) { currentBalance = v; return v }
+                }
+                val kshIndex = msgLower.indexOf("ksh", balIndex)
+                if (kshIndex > balIndex) {
+                    val between = msg.substring(balIndex, kshIndex + 3)
+                    val fallbackRegex = Regex("([0-9]+(?:\\.[0-9]+)?)")
+                    fallbackRegex.find(between)?.let { m ->
+                        val v = m.value.toDoubleOrNull()
+                        if (v != null && v > 0) { currentBalance = v; return v }
+                    }
                 }
             }
-            return false
+            // 2) Try Airtel-style: cut message before "Dial" to avoid USSD codes coming after
+            val beforeDial = msg.substringBefore(Regex("(?i)\\bDial\\b"), msg)
+            val airtelRegex = Regex("(?i)\\bKSH\\.?\\s*([0-9]+(?:\\.[0-9]+)?)\\b")
+            airtelRegex.find(beforeDial)?.let { m ->
+                val v = m.groupValues[1].toDoubleOrNull()
+                if (v != null && v > 0) { currentBalance = v; return v }
+            }
+            // 3) General fallback: if any "Ksh" followed by a decimal appears, take it (only in first 120 chars)
+            val generalWindow = msg.substring(0, msg.length.coerceAtMost(120))
+            val generalRegex = Regex("(?i)\\bKSH\\.?\\s*([0-9]+(?:\\.[0-9]+)?)\\b")
+            generalRegex.find(generalWindow)?.let { m ->
+                val v = m.groupValues[1].toDoubleOrNull()
+                if (v != null && v > 0) currentBalance = v
+                return v ?: 0.0
+            }
+            return 0.0
         }
         fun persistLastKnownBalance(context: Context, display: String) {
             val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
