@@ -53,8 +53,8 @@ internal fun resolveUssdSimTargets(context: Context, selectionOverride: Int? = n
     val resolved = when {
         explicitSubscription != null -> listOf(explicitSubscription)
         rawSelection == USSD_SIM_SELECTION_BOTH -> listOfNotNull(slot1, slot2)
-        normalizedSelection == USSD_SIM_SELECTION_SLOT_2 -> listOfNotNull(slot2 ?: slot1)
-        normalizedSelection == USSD_SIM_SELECTION_SLOT_1 -> listOfNotNull(slot1 ?: slot2)
+        normalizedSelection == USSD_SIM_SELECTION_SLOT_2 -> slot2?.let { listOf(it) } ?: emptyList()
+        normalizedSelection == USSD_SIM_SELECTION_SLOT_1 -> slot1?.let { listOf(it) } ?: emptyList()
         else -> listOfNotNull(slot1 ?: slot2)
     }
 
