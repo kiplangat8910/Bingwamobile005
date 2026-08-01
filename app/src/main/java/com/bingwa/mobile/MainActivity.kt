@@ -9787,111 +9787,55 @@ fun OfferCard(number: Int, o: OfferItem, onEdit: () -> Unit, onToggle: () -> Uni
                         expanded = menu,
                         onDismissRequest = { menu = false },
                         modifier = Modifier
-                            .background(C.cardHi, RoundedCornerShape(16.dp))
-                            .border(1.dp, C.border.copy(alpha = 0.9f), RoundedCornerShape(16.dp))
+                            .background(C.cardHi, RoundedCornerShape(20.dp))
+                            .border(1.dp, C.border.copy(alpha = 0.8f), RoundedCornerShape(20.dp)),
+                        containerColor = C.cardHi,
+                        shape = RoundedCornerShape(20.dp),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 12.dp
                     ) {
-                        Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                        Column(modifier = Modifier.padding(vertical = 8.dp)) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                                    .padding(horizontal = 18.dp, vertical = 10.dp)
                             ) {
                                 Text(
                                     text = "Offer Actions",
-                                    color = C.t2,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    letterSpacing = 1.sp
+                                    color = C.cyan,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp,
+                                    letterSpacing = 1.2.sp
                                 )
                             }
-                            Divider(color = C.border.copy(alpha = 0.6f), thickness = 0.5.dp)
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                color = C.surface.copy(alpha = 0.7f),
-                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { menu = false; onEdit() }
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Icon(Icons.Outlined.Edit, null, tint = C.cyan, modifier = Modifier.size(18.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text("Edit Offer", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                        Text("Change USSD, mode, device, or SIM", color = C.t3, fontSize = 11.sp)
-                                    }
-                                    Icon(Icons.Filled.ChevronRight, null, tint = C.t3, modifier = Modifier.size(16.dp))
-                                }
-                            }
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                color = C.surface.copy(alpha = 0.7f),
-                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { menu = false; onToggle() }
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Icon(
-                                        if (o.enabled) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                        null,
-                                        tint = if (o.enabled) C.amber else C.green,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            if (o.enabled) "Disable Offer" else "Enable Offer",
-                                            color = C.t1,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 14.sp
-                                        )
-                                        Text(
-                                            if (o.enabled) "Temporarily stop this offer" else "Resume this offer",
-                                            color = C.t3,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                    Icon(Icons.Filled.ChevronRight, null, tint = C.t3, modifier = Modifier.size(16.dp))
-                                }
-                            }
-                            Divider(color = C.border.copy(alpha = 0.6f), thickness = 0.5.dp)
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                color = C.red.copy(alpha = 0.08f),
-                                border = BorderStroke(1.dp, C.red.copy(alpha = 0.25f))
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { menu = false; onDelete() }
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Icon(Icons.Outlined.Delete, null, tint = C.red, modifier = Modifier.size(18.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text("Delete Offer", color = C.red, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                        Text("Remove this offer permanently", color = C.red.copy(alpha = 0.7f), fontSize = 11.sp)
-                                    }
-                                    Icon(Icons.Filled.ChevronRight, null, tint = C.red.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
-                                }
-                            }
+                            Divider(color = C.border.copy(alpha = 0.5f), thickness = 0.5.dp)
+                            MenuActionItem(
+                                icon = Icons.Outlined.Edit,
+                                iconTint = C.cyan,
+                                iconBg = C.cyan.copy(alpha = 0.15f),
+                                title = "Edit Offer",
+                                subtitle = "USSD, mode, device, SIM",
+                                onClick = { menu = false; onEdit() }
+                            )
+                            Divider(color = C.border.copy(alpha = 0.35f), thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                            MenuActionItem(
+                                icon = if (o.enabled) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                iconTint = if (o.enabled) C.amber else C.green,
+                                iconBg = if (o.enabled) C.amber.copy(alpha = 0.15f) else C.green.copy(alpha = 0.15f),
+                                title = if (o.enabled) "Disable Offer" else "Enable Offer",
+                                subtitle = if (o.enabled) "Temporarily stop this offer" else "Resume this offer",
+                                onClick = { menu = false; onToggle() }
+                            )
+                            Divider(color = C.border.copy(alpha = 0.35f), thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                            MenuActionItem(
+                                icon = Icons.Outlined.Delete,
+                                iconTint = C.red,
+                                iconBg = C.red.copy(alpha = 0.12f),
+                                title = "Delete Offer",
+                                subtitle = "Remove permanently",
+                                titleColor = C.red,
+                                onClick = { menu = false; onDelete() }
+                            )
                         }
                     }
                 }
@@ -11322,6 +11266,49 @@ fun OfferDialog(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MenuActionItem(
+    icon: ImageVector,
+    iconTint: Color,
+    iconBg: Color,
+    title: String,
+    subtitle: String,
+    titleColor: Color = C.t1,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        color = Color.Transparent,
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(36.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = iconBg,
+                border = BorderStroke(1.dp, iconTint.copy(alpha = 0.25f))
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, color = titleColor, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text(text = subtitle, color = C.t3, fontSize = 11.sp)
+            }
+            Icon(Icons.Filled.ChevronRight, null, tint = C.t3.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
         }
     }
 }
