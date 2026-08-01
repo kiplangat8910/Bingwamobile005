@@ -180,7 +180,7 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingStepAdvanceKickRunnable: Runnable? = null
 
     private var currentStepRetryCount = 0
-    private const val MAX_STEP_RETRIES = 3
+    private val MAX_STEP_RETRIES = 3
 
     // Window state
     private var lastWindowId = -1
