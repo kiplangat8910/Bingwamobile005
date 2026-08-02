@@ -276,7 +276,7 @@ class AutomationService : Service() {
                 return
             }
         }
-        // Default: just alert
+        refundTokenIfNeeded(request)
         MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
     }
     // endregion
@@ -733,10 +733,13 @@ class AutomationService : Service() {
 
         fun isSuccess(response: String): Boolean {
             if (response.isBlank()) return false
+            val lower = response.lowercase()
+            if (patternManager.matchesFailedPattern(response)) return false
+            if (lower.contains("insufficient") || lower.contains("failed") || lower.contains("cancelled") || lower.contains("error")) return false
             return patternManager.matchesSuccessPattern(response) ||
-                    response.contains("you have transferred", ignoreCase = true) ||
+                    (lower.contains("you have transferred") && !lower.contains("failed")) ||
                     response.contains("transferred successfully", ignoreCase = true) ||
-                    looksLikeSuccessResponse(response.lowercase().trim())
+                    looksLikeSuccessResponse(lower)
         }
 
         fun shouldRetry(status: String, response: String): Boolean {
@@ -962,10 +965,24 @@ class AutomationService : Service() {
         }
 
         fun finishWithError(request: UssdRequest, message: String) {
+            refundTokenIfNeeded(request)
             if (request.txId >= 0) {
                 saveAndBroadcast(request.txId, TransactionStatus.FAILED.value, message)
             }
             finishExecution(scheduleAirtimeRefresh = true)
+        }
+
+        fun refundTokenIfNeeded(request: UssdRequest) {
+            if (request.txId < 0) return
+            val tx = loadTransactionById(context, request.txId) ?: return
+            if (tx.source != TX_SOURCE_AUTOMATED) return
+            if (UnlimitedManager(context).isActive()) return
+            val tokenMgr = TokenManager(context)
+            val balance = tokenMgr.getBalance()
+            if (balance >= 1) {
+                tokenMgr.addTokens(1)
+                Log.d(TAG, "Refunded 1 token for failed txId=${request.txId}")
+            }
         }
 
         fun createFallbackTransaction(request: UssdRequest, offer: OfferItem, reason: String): Int {

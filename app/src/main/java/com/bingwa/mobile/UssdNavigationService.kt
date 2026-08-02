@@ -3192,11 +3192,11 @@ class UssdNavigationService : AccessibilityService() {
     private fun handleCallbackDialogs(lower: String, dialogText: String) {
         tokenPurchaseCallback?.let { cb ->
             when {
-                lower.contains("you have transferred") || (lower.contains("transfer") && lower.contains("successful")) -> {
-                    cb(true); closeCurrentUssdUi(); clearCallbacks()
-                }
                 lower.contains("insufficient") || lower.contains("failed") || lower.contains("cancelled") -> {
                     cb(false); closeCurrentUssdUi(); clearCallbacks()
+                }
+                lower.contains("you have transferred") || (lower.contains("transfer") && lower.contains("successful")) -> {
+                    cb(true); closeCurrentUssdUi(); clearCallbacks()
                 }
                 else -> Unit
             }
