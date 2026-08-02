@@ -180,7 +180,7 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingStepAdvanceKickRunnable: Runnable? = null
 
     private var currentStepRetryCount = 0
-    private val MAX_STEP_RETRIES = 5
+    private val MAX_STEP_RETRIES = 10
 
     // Window state
     private var lastWindowId = -1
@@ -1265,6 +1265,11 @@ class UssdNavigationService : AccessibilityService() {
             if (dialogText.isBlank()) { schedulePendingStepAdvanceKick(); isProcessing = false; return }
             val currentKey = buildStepAdvanceSignatureKey(root, dialogText, snapshot)
             if (currentKey == fromKey) {
+                schedulePendingStepAdvanceKick(); isProcessing = false; return
+            }
+            val expected = pendingExpectedValue ?: ""
+            val verified = expected.isBlank() || verifyExpectedInput(root, expected)
+            if (!verified) {
                 schedulePendingStepAdvanceKick(); isProcessing = false; return
             }
             clearPendingStepAdvance()
@@ -3562,32 +3567,32 @@ class UssdNavigationService : AccessibilityService() {
     private val SEND_RETRY_DELAY_MS = 22L
     private val POST_WRITE_VERIFY_POLL_MS = 8L
     private val POST_WRITE_SEND_RETRY_MS = 12L
-    private val STEP_TIMEOUT_MS = 5000L
-    private val STARTUP_STEP_TIMEOUT_MS = 8500L
-    private val FINAL_RESPONSE_TIMEOUT_MS = 7500L
-    private val PENDING_STEP_TIMEOUT_MS = 6500L
-    private val PENDING_ADVANCE_TIMEOUT_MS = 6500L
-    private val ROOT_REACQUIRE_TIMEOUT_MS = 5500L
-    private val PENDING_STEP_ADVANCE_TIMEOUT_MS = 7500L
-    private val NETWORK_DELAY_STEP_TIMEOUT_MS = 16000L
-    private val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 20000L
-    private val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 16000L
-    private val NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS = 16000L
-    private val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 13000L
-    private val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 16000L
-    private val NETWORK_DELAY_ACTION_GRACE_MS = 18000L
+    private val STEP_TIMEOUT_MS = 10000L
+    private val STARTUP_STEP_TIMEOUT_MS = 14000L
+    private val FINAL_RESPONSE_TIMEOUT_MS = 10000L
+    private val PENDING_STEP_TIMEOUT_MS = 12000L
+    private val PENDING_ADVANCE_TIMEOUT_MS = 12000L
+    private val ROOT_REACQUIRE_TIMEOUT_MS = 8000L
+    private val PENDING_STEP_ADVANCE_TIMEOUT_MS = 15000L
+    private val NETWORK_DELAY_STEP_TIMEOUT_MS = 22000L
+    private val NETWORK_DELAY_FINAL_RESPONSE_TIMEOUT_MS = 28000L
+    private val NETWORK_DELAY_PENDING_STEP_TIMEOUT_MS = 22000L
+    private val NETWORK_DELAY_PENDING_ADVANCE_TIMEOUT_MS = 22000L
+    private val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 18000L
+    private val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 22000L
+    private val NETWORK_DELAY_ACTION_GRACE_MS = 28000L
     private val PENDING_STEP_ADVANCE_KICK_MS = 55L
     private val VERIFY_POLL_MS = 26L
     private val RAPID_POST_POPUP_POLL_MS = 10L
     private val RAPID_POST_POPUP_VERIFY_MS = 8L
     private val RAPID_POST_POPUP_SEND_RETRY_MS = 10L
-    private val MAX_VERIFY_ATTEMPTS = 3
-    private val MAX_SEND_ATTEMPTS = 2
-    private val FORCEFUL_WRITE_PASSES = 4
-    private val WRITE_VERIFICATION_PASSES = 4
-    private val WRITE_VERIFICATION_SETTLE_MS = 25L
-    private val DIRECT_WRITE_VERIFY_PASSES = 3
-    private val SET_TEXT_BURST_ATTEMPTS = 4
+    private val MAX_VERIFY_ATTEMPTS = 6
+    private val MAX_SEND_ATTEMPTS = 3
+    private val FORCEFUL_WRITE_PASSES = 5
+    private val WRITE_VERIFICATION_PASSES = 5
+    private val WRITE_VERIFICATION_SETTLE_MS = 30L
+    private val DIRECT_WRITE_VERIFY_PASSES = 4
+    private val SET_TEXT_BURST_ATTEMPTS = 5
     private val PASTE_BURST_ATTEMPTS = 3
     private val NO_FIELD_PATIENCE = 3
     private val INPUT_TARGET_DEPTH = 8
@@ -3617,7 +3622,7 @@ class UssdNavigationService : AccessibilityService() {
     private val UI_KEEP_VISIBLE_INTERVAL_MS = 350L
     private val STARTUP_UI_KEEP_VISIBLE_MS = 7000L
     private val STEP_TRANSITION_GUARD_MS = 150L
-    private val MAX_RETRY_WINDOW_MS = 60000L
+    private val MAX_RETRY_WINDOW_MS = 180000L
     private val MIN_SIM_CHOOSER_SCORE = 260
 
     private val CHANNEL_ID = "bingwa_ussd"
