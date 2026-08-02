@@ -276,7 +276,7 @@ class AutomationService : Service() {
                 return
             }
         }
-        refundTokenIfNeeded(request)
+        transactionHelper.refundTokenIfNeeded(request)
         MpesaReceiver.checkAndSendAlerts(this, "Failed", response.take(100))
     }
     // endregion

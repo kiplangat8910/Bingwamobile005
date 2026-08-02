@@ -1588,7 +1588,7 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun primeInputTarget(node: AccessibilityNodeInfo, aggressive: Boolean = false): Boolean {
         var changed = false
-        repeat(3) {
+        for (i in 0 until 3) {
             if (refocusInputTarget(node)) changed = true
             if (activateInputTarget(node)) changed = true
             if (aggressive && supportsAction(node, AccessibilityNodeInfo.ACTION_LONG_CLICK) &&
