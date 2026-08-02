@@ -180,7 +180,7 @@ class UssdNavigationService : AccessibilityService() {
     private var pendingStepAdvanceKickRunnable: Runnable? = null
 
     private var currentStepRetryCount = 0
-    private val MAX_STEP_RETRIES = 3
+    private val MAX_STEP_RETRIES = 5
 
     // Window state
     private var lastWindowId = -1
@@ -1378,6 +1378,7 @@ class UssdNavigationService : AccessibilityService() {
         repeat(SET_TEXT_BURST_ATTEMPTS) { attempt ->
             if (attempt > 0) {
                 if (aggressive) primeInputTarget(node, true) else refreshInputTarget(node)
+                SystemClock.sleep(60L)
             }
             if (setTextOnNode(node, value)) {
                 val likely = isLikelyDirectWriteVerified(node, value)
@@ -1399,6 +1400,7 @@ class UssdNavigationService : AccessibilityService() {
             repeat(PASTE_BURST_ATTEMPTS) { attempt ->
                 if (attempt > 0) {
                     if (aggressive) primeInputTarget(node, true) else refreshInputTarget(node)
+                    SystemClock.sleep(60L)
                 }
                 if (runCatching { node.performAction(AccessibilityNodeInfo.ACTION_PASTE) }.getOrDefault(false)) {
                     val likely = isLikelyDirectWriteVerified(node, value)
@@ -1489,7 +1491,7 @@ class UssdNavigationService : AccessibilityService() {
             if (attempt > 0) {
                 refreshInputTarget(field)
                 verificationRoot?.refresh()
-                if (attempt >= 2) SystemClock.sleep(WRITE_VERIFICATION_SETTLE_MS)
+                SystemClock.sleep(WRITE_VERIFICATION_SETTLE_MS)
             }
             if (verifyExpectedInput(verificationRoot, expected, field)) return true
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && attempt == WRITE_VERIFICATION_PASSES - 2) {
@@ -1586,11 +1588,15 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun primeInputTarget(node: AccessibilityNodeInfo, aggressive: Boolean = false): Boolean {
         var changed = false
-        if (refocusInputTarget(node)) changed = true
-        if (activateInputTarget(node)) changed = true
-        if (aggressive && supportsAction(node, AccessibilityNodeInfo.ACTION_LONG_CLICK) &&
-            runCatching { node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK) }.getOrDefault(false)
-        ) changed = true
+        repeat(3) {
+            if (refocusInputTarget(node)) changed = true
+            if (activateInputTarget(node)) changed = true
+            if (aggressive && supportsAction(node, AccessibilityNodeInfo.ACTION_LONG_CLICK) &&
+                runCatching { node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK) }.getOrDefault(false)
+            ) changed = true
+            if (changed) break
+            SystemClock.sleep(40L)
+        }
         refreshInputTarget(node)
         return changed
     }
@@ -1611,10 +1617,8 @@ class UssdNavigationService : AccessibilityService() {
         val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
         val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) normalizeActionLabel(runCatching { node.hintText?.toString() }.getOrNull()) else ""
         val editable = runCatching { node.isEditable }.getOrDefault(false)
-        val enabled = runCatching { node.isEnabled }.getOrDefault(true)
-        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) runCatching { node.isVisibleToUser }.getOrDefault(true) else true
-        return enabled && visible && (editable || supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
-                EDITABLE_CLASS_HINTS.any { cls.contains(it, ignoreCase = true) } || hasInputViewHint(viewId, hint))
+        return editable || supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
+                EDITABLE_CLASS_HINTS.any { cls.contains(it, ignoreCase = true) } || hasInputViewHint(viewId, hint)
     }
 
     private fun refreshInputTarget(node: AccessibilityNodeInfo) = runCatching { node.refresh() }
@@ -1625,13 +1629,10 @@ class UssdNavigationService : AccessibilityService() {
     private fun isTextEntryNode(node: AccessibilityNodeInfo): Boolean {
         val cls = node.className?.toString().orEmpty()
         val editable = runCatching { node.isEditable }.getOrDefault(false)
-        val enabled = runCatching { node.isEnabled }.getOrDefault(true)
-        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) runCatching { node.isVisibleToUser }.getOrDefault(true) else true
         val viewId = normalizeActionLabel(runCatching { node.viewIdResourceName }.getOrNull())
         val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) normalizeActionLabel(runCatching { node.hintText?.toString() }.getOrNull()) else ""
         val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && (!enabled || !visible)) return false
         if (cls.contains("Button", ignoreCase = true) || cls.contains("ImageButton", ignoreCase = true)) return false
         if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS || label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS) return false
         return editable ||
@@ -1648,16 +1649,11 @@ class UssdNavigationService : AccessibilityService() {
         val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) normalizeActionLabel(runCatching { node.hintText?.toString() }.getOrNull()) else ""
         val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val enabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) runCatching { node.isEnabled }.getOrDefault(true) else true
-        val editable = runCatching { node.isEditable }.getOrDefault(false)
         val focusable = runCatching { node.isFocusable || node.isFocused || node.isClickable || node.isLongClickable }.getOrDefault(false)
-        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) runCatching { node.isVisibleToUser }.getOrDefault(true) else true
         val hasSetText = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)
         val hasPaste = supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && (!enabled || editable)) return false
         if (cls.contains("Button", ignoreCase = true) || cls.contains("ImageButton", ignoreCase = true)) return false
         if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS || label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS) return false
-        if (!visible && !hasSetText && !hasPaste) return false
         return (hasSetText || hasPaste) &&
                 (EDITABLE_CLASS_HINTS.any { cls.contains(it, ignoreCase = true) } || hasInputViewHint(viewId, hint) || hasInputLabelHint(label, desc) || focusable) ||
                 (focusable && (hasInputViewHint(viewId, hint) || hasInputLabelHint(label, desc)))
@@ -1695,8 +1691,6 @@ class UssdNavigationService : AccessibilityService() {
         val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) normalizeActionLabel(runCatching { node.hintText?.toString() }.getOrNull()) else ""
         val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val enabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) runCatching { node.isEnabled }.getOrDefault(true) else true
-        val visible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) runCatching { node.isVisibleToUser }.getOrDefault(true) else true
         val focusable = runCatching { node.isFocusable || node.isFocused }.getOrDefault(false)
         val clickable = runCatching { node.isClickable || node.isLongClickable }.getOrDefault(false)
         val editable = runCatching { node.isEditable }.getOrDefault(false)
@@ -1706,8 +1700,8 @@ class UssdNavigationService : AccessibilityService() {
         if (label.isNotBlank() && label.length > 24) return false
         val hasWritable = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) || supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
         val hasViewHint = hasInputViewHint(viewId, hint)
-        return enabled && visible && ((hasWritable && (EDITABLE_CLASS_HINTS.any { cls.contains(it, ignoreCase = true) } || hasViewHint || focusable)) ||
-                (hasViewHint && (focusable || clickable)))
+        return (hasWritable && (EDITABLE_CLASS_HINTS.any { cls.contains(it, ignoreCase = true) } || hasViewHint || focusable)) ||
+                (hasViewHint && (focusable || clickable))
     }
 
     private fun isAggressiveTextEntryCandidate(node: AccessibilityNodeInfo): Boolean {
@@ -1716,17 +1710,17 @@ class UssdNavigationService : AccessibilityService() {
         val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) normalizeActionLabel(runCatching { node.hintText?.toString() }.getOrNull()) else ""
         val label = normalizeActionLabel(node.text?.toString())
         val desc = normalizeActionLabel(node.contentDescription?.toString())
-        val enabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) runCatching { node.isEnabled }.getOrDefault(true) else true
         val editable = runCatching { node.isEditable }.getOrDefault(false)
         val writable = supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT) || supportsAction(node, AccessibilityNodeInfo.ACTION_PASTE)
         val focusable = runCatching { node.isFocusable || node.isFocused || node.isClickable || node.isLongClickable }.getOrDefault(false)
         if (cls.contains("Button", ignoreCase = true) || cls.contains("ImageButton", ignoreCase = true)) return false
         if (label in SEND_BUTTON_LABELS || desc in SEND_BUTTON_LABELS || label in DISMISS_BUTTON_LABELS || desc in DISMISS_BUTTON_LABELS) return false
-        return enabled && (editable ||
+        return editable ||
                 isHiddenInputProxyCandidate(node) ||
                 isLooseInputCandidate(node) ||
                 (writable && (EDITABLE_CLASS_HINTS.any { cls.contains(it, ignoreCase = true) } || hasInputViewHint(viewId, hint) || focusable)) ||
-                (focusable && (hasInputViewHint(viewId, hint) || hasInputLabelHint(label, desc))))
+                (focusable && (hasInputViewHint(viewId, hint) || hasInputLabelHint(label, desc))) ||
+                EDITABLE_CLASS_HINTS.any { cls.contains(it, ignoreCase = true) }
     }
 
     private fun hasInputViewHint(viewId: String, hint: String): Boolean =
@@ -2058,9 +2052,25 @@ class UssdNavigationService : AccessibilityService() {
         if (cx <= 0f || cy <= 0f) return false
         val dx = (bounds.width() / 4f).coerceAtLeast(2f)
         val dy = (bounds.height() / 4f).coerceAtLeast(2f)
-        val path = Path().apply { moveTo(cx - dx, cy - dy); lineTo(cx + dx, cy + dy) }
-        val stroke = GestureDescription.StrokeDescription(path, 0, TAP_GESTURE_DURATION_MS, false)
-        return runCatching { dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), null, null) }.getOrDefault(false)
+        repeat(3) { attempt ->
+            val offsetX = when (attempt) {
+                0 -> 0f
+                1 -> dx * 0.5f
+                else -> -dx * 0.5f
+            }
+            val offsetY = when (attempt) {
+                0 -> 0f
+                1 -> dy * 0.5f
+                else -> -dy * 0.5f
+            }
+            val path = Path().apply { moveTo(cx + offsetX - dx, cy + offsetY - dy); lineTo(cx + offsetX + dx, cy + offsetY + dy) }
+            val stroke = GestureDescription.StrokeDescription(path, 0, TAP_GESTURE_DURATION_MS, false)
+            if (runCatching { dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), null, null) }.getOrDefault(false)) {
+                return true
+            }
+            SystemClock.sleep(30L)
+        }
+        return false
     }
 
     private fun performLongPressGesture(node: AccessibilityNodeInfo): Boolean {
@@ -2462,11 +2472,18 @@ class UssdNavigationService : AccessibilityService() {
         val dismissed = closeCurrentUssdUi()
         if (currentStepRetryCount < MAX_STEP_RETRIES && currentStep < advancedSteps.size) {
             currentStepRetryCount++
+            val retryDelay = when (currentStepRetryCount) {
+                1 -> 500L
+                2 -> 1000L
+                3 -> 1500L
+                4 -> 2000L
+                else -> 2500L
+            }
             handler.postDelayed({
                 isProcessing = false
                 clearPendingAdvance()
                 scheduleProcessStep(true)
-            }, if (dismissed) DIALOG_DISMISS_SETTLE_MS else 0L)
+            }, if (dismissed) maxOf(DIALOG_DISMISS_SETTLE_MS, retryDelay) else retryDelay)
             return
         }
         currentStepRetryCount = 0
@@ -3523,7 +3540,10 @@ class UssdNavigationService : AccessibilityService() {
         "com.vivo.widget.EditText", "com.oneplus.widget.EditText",
         "com.realme.widget.EditText", "com.oplus.widget.EditText",
         "com.android.widget.EditText", "android.widget.TextView",
-        "com.android.internal.widget.EditText", "com.transsion.widget.EditText"
+        "com.android.internal.widget.EditText", "com.transsion.widget.EditText",
+        "com.infinix.widget.EditText", "com.tecno.widget.EditText",
+        "com.itel.widget.EditText", "com.samsung.android.widget.EditText",
+        "com.samsung.android.widget.SamsungInputMethod", "android.widget.EditText"
     )
     private val errorKeywords = listOf(
         "connection problem", "invalid mmi", "mmi code", "network error", "invalid", "failed",
@@ -3563,17 +3583,17 @@ class UssdNavigationService : AccessibilityService() {
     private val RAPID_POST_POPUP_SEND_RETRY_MS = 10L
     private val MAX_VERIFY_ATTEMPTS = 3
     private val MAX_SEND_ATTEMPTS = 2
-    private val FORCEFUL_WRITE_PASSES = 2
-    private val WRITE_VERIFICATION_PASSES = 2
-    private val WRITE_VERIFICATION_SETTLE_MS = 15L
-    private val DIRECT_WRITE_VERIFY_PASSES = 2
-    private val SET_TEXT_BURST_ATTEMPTS = 2
-    private val PASTE_BURST_ATTEMPTS = 2
-    private val NO_FIELD_PATIENCE = 2
-    private val INPUT_TARGET_DEPTH = 6
-    private val VIEW_TRAVERSAL_MAX_DEPTH = 24
-    private val INPUT_DESCENT_DEPTH = 3
-    private val INPUT_NEARBY_SCOPE_DEPTH = 2
+    private val FORCEFUL_WRITE_PASSES = 4
+    private val WRITE_VERIFICATION_PASSES = 4
+    private val WRITE_VERIFICATION_SETTLE_MS = 25L
+    private val DIRECT_WRITE_VERIFY_PASSES = 3
+    private val SET_TEXT_BURST_ATTEMPTS = 4
+    private val PASTE_BURST_ATTEMPTS = 3
+    private val NO_FIELD_PATIENCE = 3
+    private val INPUT_TARGET_DEPTH = 8
+    private val VIEW_TRAVERSAL_MAX_DEPTH = 32
+    private val INPUT_DESCENT_DEPTH = 4
+    private val INPUT_NEARBY_SCOPE_DEPTH = 3
     private val RECENT_INPUT_GRACE_MS = 2500L
     private val RECENT_VERIFIED_INPUT_GRACE_MS = 4000L
     private val RECENT_UI_EVENT_GRACE_MS = 1000L
@@ -3581,12 +3601,12 @@ class UssdNavigationService : AccessibilityService() {
     private val GESTURE_SETTLE_MS = 12L
     private val POST_GESTURE_WAIT_MS = 20L
     private val POST_WRITE_VERIFY_DELAY_MS = 18L
-    private val FAST_POPUP_STABILITY_DELAY_MS = 5L
-    private val POPUP_STABILITY_DELAY_MS = 22L
-    private val STARTUP_FAST_POPUP_STABILITY_DELAY_MS = 10L
-    private val STARTUP_POPUP_STABILITY_DELAY_MS = 40L
-    private val WEAK_NETWORK_FAST_POPUP_STABILITY_DELAY_MS = 24L
-    private val WEAK_NETWORK_POPUP_STABILITY_DELAY_MS = 60L
+    private val FAST_POPUP_STABILITY_DELAY_MS = 12L
+    private val POPUP_STABILITY_DELAY_MS = 40L
+    private val STARTUP_FAST_POPUP_STABILITY_DELAY_MS = 20L
+    private val STARTUP_POPUP_STABILITY_DELAY_MS = 70L
+    private val WEAK_NETWORK_FAST_POPUP_STABILITY_DELAY_MS = 35L
+    private val WEAK_NETWORK_POPUP_STABILITY_DELAY_MS = 90L
     private val SIM_CHOOSER_SETTLE_MS = 60L
     private val INTERMEDIATE_POPUP_SETTLE_MS = 110L
     private val TAP_GESTURE_DURATION_MS = 50L
