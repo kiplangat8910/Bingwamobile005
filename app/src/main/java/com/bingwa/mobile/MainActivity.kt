@@ -11193,7 +11193,7 @@ fun OfferDialog(
                                     ) {
                                         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                             Text("CATEGORY", color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
-                                            Text(category.ifBlank { "—" }, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                            Text(cat.ifBlank { "—" }, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                                         }
                                     }
                                     Surface(
