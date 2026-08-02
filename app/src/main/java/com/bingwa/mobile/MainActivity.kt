@@ -11399,22 +11399,25 @@ fun OfferDialog(
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 FieldLabel("USSD")
+                                OutlinedTextField(
+                                    value = codeField,
+                                    onValueChange = { codeField = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(7.dp),
+                                    colors = dialogFieldColors(),
+                                    textStyle = LocalTextStyle.current.copy(
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    placeholder = { Text("Enter USSD code", color = C.t3, fontFamily = FontFamily.Monospace) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(7.dp),
-                                        color = C.bg,
-                                        border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.7f))
-                                    ) {
-                                        Text(
-                                            code.ifBlank { "Enter USSD code" },
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                            color = if (code.isNotBlank()) C.cyan else C.t3,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontFamily = FontFamily.Monospace
-                                        )
-                                    }
                                     Surface(
                                         modifier = Modifier
                                             .height(36.dp)
