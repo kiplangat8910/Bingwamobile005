@@ -3244,7 +3244,7 @@ class UssdNavigationService : AccessibilityService() {
                 airtimeBalance = dialogText
                 val display = BalanceChecker.parseBalanceDisplay(dialogText)
                 val balance = BalanceChecker.parseBalanceInt(dialogText)
-                if (display.startsWith("Ksh.", ignoreCase = true)) {
+                if (display.isNotBlank() && display.startsWith("KSh", ignoreCase = true)) {
                     BalanceChecker.currentBalance = balance
                     BalanceChecker.persistLastKnownBalance(applicationContext, display)
                     cb(display)
@@ -3651,70 +3651,5 @@ class UssdNavigationService : AccessibilityService() {
     private val MENU_OPTION_REGEX = Regex("""^(\d+)\s*[\)\].:\-]?\s*(.+)$""")
     private val PHONE_NUMBER_REGEX = Regex("""\b\d{9,15}\b""")
     private val SIM_SLOT_REGEX = { slot: Int -> Regex("""(^|\D)${slot}($|\D)""") }
-    // endregion
-
-    // region UssdHelper stub (should exist in your project)
-    object UssdHelper {
-        fun buildCallIntent(ctx: Context, dialCode: String): Intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$dialCode"))
-        fun relaunchAppUi(ctx: Context, delayMs: Long = 0L) {
-            if (delayMs > 0) Handler(Looper.getMainLooper()).postDelayed({
-                ctx.startActivity(Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }, delayMs) else ctx.startActivity(Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-        fun normalizeRecipientForUssdInput(number: String): String = number.replace(Regex("[^0-9]"), "")
-    }
-
-    object BalanceChecker {
-        var currentBalance = 0.0
-        fun parseBalanceDisplay(text: String): String {
-            val value = parseBalanceInt(text)
-            return if (value > 0.0) "Ksh. $value" else text
-        }
-        fun parseBalanceInt(text: String): Double {
-            val msg = text
-            val msgLower = msg.lowercase()
-            // 1) Try Safaricom-style: look for "Bal" followed by a number and KSH
-            val balIndex = msgLower.indexOf("bal")
-            if (balIndex >= 0) {
-                val scanEnd = (balIndex + 100).coerceAtMost(msg.length)
-                val scanWindow = msg.substring(balIndex, scanEnd)
-                val safRegex = Regex("(?i)\\bbal[:\\s]*([0-9]+(?:\\.[0-9]+)?)\\s*KSH\\b")
-                safRegex.find(scanWindow)?.let { m ->
-                    val v = m.groupValues[1].toDoubleOrNull()
-                    if (v != null && v > 0) { currentBalance = v; return v }
-                }
-                val kshIndex = msgLower.indexOf("ksh", balIndex)
-                if (kshIndex > balIndex) {
-                    val between = msg.substring(balIndex, kshIndex + 3)
-                    val fallbackRegex = Regex("([0-9]+(?:\\.[0-9]+)?)")
-                    fallbackRegex.find(between)?.let { m ->
-                        val v = m.value.toDoubleOrNull()
-                        if (v != null && v > 0) { currentBalance = v; return v }
-                    }
-                }
-            }
-            // 2) Try Airtel-style: cut message before "Dial" to avoid USSD codes coming after
-            val dialIdx = msgLower.indexOf("dial")
-            val beforeDial = if (dialIdx >= 0) msg.substring(0, dialIdx) else msg
-            val airtelRegex = Regex("(?i)\\bKSH\\.?\\s*([0-9]+(?:\\.[0-9]+)?)\\b")
-            airtelRegex.find(beforeDial)?.let { m ->
-                val v = m.groupValues[1].toDoubleOrNull()
-                if (v != null && v > 0) { currentBalance = v; return v }
-            }
-            // 3) General fallback: if any "Ksh" followed by a decimal appears, take it (only in first 120 chars)
-            val generalWindow = msg.substring(0, msg.length.coerceAtMost(120))
-            val generalRegex = Regex("(?i)\\bKSH\\.?\\s*([0-9]+(?:\\.[0-9]+)?)\\b")
-            generalRegex.find(generalWindow)?.let { m ->
-                val v = m.groupValues[1].toDoubleOrNull()
-                if (v != null && v > 0) currentBalance = v
-                return v ?: 0.0
-            }
-            return 0.0
-        }
-        fun persistLastKnownBalance(context: Context, display: String) {
-            val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-            prefs.edit().putString("last_known_balance", display.trim()).apply()
-        }
-    }
     // endregion
 }
