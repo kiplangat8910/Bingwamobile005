@@ -11053,7 +11053,7 @@ fun OfferDialog(
                         end = 0.dp,
                         bottom = pad.calculateBottomPadding() + 20.dp
                     ),
-                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item {
                         Surface(
