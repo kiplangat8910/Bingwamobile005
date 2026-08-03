@@ -63,28 +63,12 @@ class UssdNavigationService : AccessibilityService() {
         private var activeInstance: UssdNavigationService? = null
         private var pendingArm = false
 
-fun beginAdvancedSessionMonitoring() {
-         activeInstance?.let { it.handler.post { it.handleAdvancedSessionArmed() } }
-             ?: run { pendingArm = true }
-         }
-     }
-
-    private fun handleAdvancedSessionArmed() {
-        if (!advancedActive) return
-        advancedPhoneNumber = "1234567890"
-        uiReturnSuppressed = false
-        isProcessing = false
-        lastRelevantEventElapsed = SystemClock.elapsedRealtime()
-        if (retryWindowStartedAt <= 0L) {
-            retryWindowStartedAt = SystemClock.elapsedRealtime()
+        fun beginAdvancedSessionMonitoring() {
+            activeInstance?.let { it.handler.post { it.handleAdvancedSessionArmed() } }
+                ?: run { pendingArm = true }
         }
-        requestAppUiBehindPopup(force = true)
-        startKeepingAppUiVisible()
-        updateOverlay()
-        startStepTimeout()
-    }
 
-    fun configureUiReturn(keepVisible: Boolean) {
+        fun configureUiReturn(keepVisible: Boolean) {
             activeInstance?.let { service ->
                 service.handler.post {
                     service.keepAppUiVisibleEnabled = keepVisible
@@ -159,6 +143,21 @@ fun beginAdvancedSessionMonitoring() {
 
         fun resetSignatureTracking() { /* handled internally */ }
         fun refreshRunningOverlay() { activeInstance?.updateOverlay() }
+    }
+
+    private fun handleAdvancedSessionArmed() {
+        if (!advancedActive) return
+        advancedPhoneNumber = "1234567890"
+        uiReturnSuppressed = false
+        isProcessing = false
+        lastRelevantEventElapsed = SystemClock.elapsedRealtime()
+        if (retryWindowStartedAt <= 0L) {
+            retryWindowStartedAt = SystemClock.elapsedRealtime()
+        }
+        requestAppUiBehindPopup(force = true)
+        startKeepingAppUiVisible()
+        updateOverlay()
+        startStepTimeout()
     }
 
     // region Internal Helpers (all functionality is inside this service – no external dependencies)
