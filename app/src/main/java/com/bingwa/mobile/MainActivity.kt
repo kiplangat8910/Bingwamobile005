@@ -193,7 +193,7 @@ private fun SafeStartupRoot() {
     val ctx = LocalContext.current
     val view = LocalView.current
     val startupResult = runCatching {
-        val scheme = buildAppColorScheme(accent, true)
+        val scheme = buildAppColorScheme(ThemeAccent.BYBIT, true)
 
         LaunchedEffect(scheme) { applyVolcanicPaletteFromScheme(scheme, true) }
         SideEffect {
