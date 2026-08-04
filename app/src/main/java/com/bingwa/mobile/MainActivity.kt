@@ -10540,7 +10540,7 @@ private fun StatusBanner(enabled: Boolean, price: String) {
                 border = BorderStroke(1.dp, C.amber.copy(alpha = 0.25f))
             ) {
                 Text(
-                    "KES ${"$"}{price.ifBlank { "0" }}",
+                    "KES ${price.ifBlank { "0" }}",
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                     color = C.amber,
                     fontSize = 13.sp,
@@ -10608,8 +10608,6 @@ private fun ProtectionRow(
 
 @Composable
 private fun offerExecutionModeOptions(): List<String> = listOf(OFFER_EXECUTION_MODE_SIMPLE, OFFER_EXECUTION_MODE_ADVANCED)
-
-}
 
 @Composable
 private fun OfferDialogSection(
