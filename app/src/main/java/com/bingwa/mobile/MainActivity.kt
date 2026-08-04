@@ -193,22 +193,15 @@ private fun SafeStartupRoot() {
     val ctx = LocalContext.current
     val view = LocalView.current
     val startupResult = runCatching {
-        val mode = AppTheme.mode
-        val accent = AppTheme.accent
-        val dark = when (mode) {
-            ThemeMode.SYSTEM -> isSystemInDarkTheme()
-            ThemeMode.DARK -> true
-            ThemeMode.LIGHT -> false
-        }
-        val scheme = buildAppColorScheme(accent, dark)
+        val scheme = buildAppColorScheme(accent, true)
 
-        LaunchedEffect(scheme, dark) { applyVolcanicPaletteFromScheme(scheme, dark) }
+        LaunchedEffect(scheme) { applyVolcanicPaletteFromScheme(scheme, true) }
         SideEffect {
             runCatching {
                 view.context.findActivity()?.let { activity ->
                     WindowInsetsControllerCompat(activity.window, view).apply {
-                        isAppearanceLightStatusBars = !dark
-                        isAppearanceLightNavigationBars = !dark
+                        isAppearanceLightStatusBars = false
+                        isAppearanceLightNavigationBars = false
                     }
                 }
             }.onFailure { error ->
@@ -10494,6 +10487,7 @@ private fun ExecutionPathProtectionToggle(
             checkedTrackColor = C.cyan
         )
     }
+}
 
 @Composable
 private fun StatusBanner(enabled: Boolean, price: String) {

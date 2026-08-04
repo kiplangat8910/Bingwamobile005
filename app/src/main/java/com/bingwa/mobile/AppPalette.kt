@@ -43,7 +43,7 @@ internal object C {
     var w04 by mutableStateOf(Color.White.copy(alpha = 0.04f))
 }
 
-internal enum class ThemeMode { SYSTEM, DARK, LIGHT }
+internal enum class ThemeMode { DARK }
 
 internal enum class ThemeAccent(val label: String) {
     BYBIT("Bybit Yellow")
@@ -77,63 +77,41 @@ private fun onColorFor(color: Color): Color =
 
 internal fun buildAppColorScheme(accent: ThemeAccent, dark: Boolean): ColorScheme {
     val palette = accentPaletteSpec(accent)
-    val background = if (dark) Color(0xFF0C1017) else Color(0xFFF6F7FB)
-    val surface = if (dark) Color(0xFF19161D) else Color(0xFFFFFFFF)
-    val surfaceVariantBase = if (dark) Color(0xFF312B30) else Color(0xFFF1F4F8)
-    val surfaceVariant = lerp(surfaceVariantBase, palette.primary, if (dark) 0.10f else 0.06f)
-    val outline = lerp(if (dark) Color(0xFF5B4F54) else Color(0xFFD6DBE4), palette.primary, if (dark) 0.16f else 0.10f)
-    val outlineVariant = lerp(if (dark) Color(0xFF75696E) else Color(0xFFE4E7EC), palette.secondary, if (dark) 0.12f else 0.10f)
+    val background = Color(0xFF0C1017)
+    val surface = Color(0xFF19161D)
+    val surfaceVariantBase = Color(0xFF312B30)
+    val surfaceVariant = lerp(surfaceVariantBase, palette.primary, 0.10f)
+    val outline = lerp(Color(0xFF5B4F54), palette.primary, 0.16f)
+    val outlineVariant = lerp(Color(0xFF75696E), palette.secondary, 0.12f)
 
-    return if (dark) {
-        darkColorScheme(
-            primary = palette.primary,
-            onPrimary = onColorFor(palette.primary),
-            secondary = palette.secondary,
-            onSecondary = onColorFor(palette.secondary),
-            tertiary = palette.tertiary,
-            onTertiary = onColorFor(palette.tertiary),
-            primaryContainer = palette.primaryContainer,
-            onPrimaryContainer = onColorFor(palette.primaryContainer),
-            background = background,
-            surface = surface,
-            surfaceVariant = surfaceVariant,
-            onBackground = Color(0xFFF8FAFC),
-            onSurface = Color(0xFFF8FAFC),
-            outline = outline,
-            outlineVariant = outlineVariant,
-            error = Color(0xFFF6465D)
-        )
-    } else {
-        lightColorScheme(
-            primary = palette.primary,
-            onPrimary = onColorFor(palette.primary),
-            secondary = palette.secondary,
-            onSecondary = onColorFor(palette.secondary),
-            tertiary = palette.tertiary,
-            onTertiary = onColorFor(palette.tertiary),
-            primaryContainer = palette.primaryContainer,
-            onPrimaryContainer = onColorFor(palette.primaryContainer),
-            background = background,
-            surface = surface,
-            surfaceVariant = surfaceVariant,
-            onBackground = Color(0xFF10131A),
-            onSurface = Color(0xFF10131A),
-            outline = outline,
-            outlineVariant = outlineVariant,
-            error = Color(0xFFF6465D)
-        )
-    }
+    return darkColorScheme(
+        primary = palette.primary,
+        onPrimary = onColorFor(palette.primary),
+        secondary = palette.secondary,
+        onSecondary = onColorFor(palette.secondary),
+        tertiary = palette.tertiary,
+        onTertiary = onColorFor(palette.tertiary),
+        primaryContainer = palette.primaryContainer,
+        onPrimaryContainer = onColorFor(palette.primaryContainer),
+        background = background,
+        surface = surface,
+        surfaceVariant = surfaceVariant,
+        onBackground = Color(0xFFF8FAFC),
+        onSurface = Color(0xFFF8FAFC),
+        outline = outline,
+        outlineVariant = outlineVariant,
+        error = Color(0xFFF6465D)
+    )
 }
 
 internal object AppTheme {
-    var mode by mutableStateOf(ThemeMode.SYSTEM)
+    var mode by mutableStateOf(ThemeMode.DARK)
     var useDynamicColors by mutableStateOf(false)
     var accent by mutableStateOf(ThemeAccent.BYBIT)
 
     fun load(context: Context) {
         val prefs = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
-        mode = runCatching { ThemeMode.valueOf((prefs.safeGetString("theme_mode", ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name).uppercase()) }
-            .getOrDefault(ThemeMode.SYSTEM)
+        mode = ThemeMode.DARK
         useDynamicColors = false
         accent = ThemeAccent.BYBIT
     }
@@ -142,14 +120,14 @@ internal object AppTheme {
 internal fun applyVolcanicPaletteFromScheme(s: ColorScheme, dark: Boolean) {
     C.bg = s.background
     C.surface = s.surface
-    C.card = if (dark) lerp(s.surface, s.surfaceVariant, 0.82f) else lerp(s.surface, s.surfaceVariant, 0.72f)
-    C.cardHi = if (dark) lerp(C.card, s.primary, 0.08f) else lerp(C.card, s.primary, 0.04f)
+    C.card = lerp(s.surface, s.surfaceVariant, 0.82f)
+    C.cardHi = lerp(C.card, s.primary, 0.08f)
     C.border = s.outline
     C.borderHi = s.outlineVariant
     C.cyan = s.primary
     C.cyanDim = s.primary.copy(alpha = 0.12f)
-    C.cyanGlow = s.primary.copy(alpha = if (dark) 0.24f else 0.16f)
-    C.purple = if (dark) Color(0xFFB6BDC9) else Color(0xFF667085)
+    C.cyanGlow = s.primary.copy(alpha = 0.24f)
+    C.purple = Color(0xFFB6BDC9)
     C.purpleDim = C.purple.copy(alpha = 0.13f)
     C.orange = s.primary
     C.orangeDim = s.primary.copy(alpha = 0.12f)
@@ -160,12 +138,12 @@ internal fun applyVolcanicPaletteFromScheme(s: ColorScheme, dark: Boolean) {
     C.redDim = C.red.copy(alpha = 0.10f)
     C.amber = s.primary
     C.amberDim = C.amber.copy(alpha = 0.10f)
-    C.blue = if (dark) Color(0xFFFFD38A) else Color(0xFFB97300)
+    C.blue = Color(0xFFFFD38A)
     C.blueDim = C.blue.copy(alpha = 0.10f)
-    val base = if (dark) Color.White else Color.Black
+    val base = Color.White
     C.t1 = base
-    C.t2 = base.copy(alpha = if (dark) 0.78f else 0.70f)
-    C.t3 = base.copy(alpha = if (dark) 0.56f else 0.50f)
+    C.t2 = base.copy(alpha = 0.78f)
+    C.t3 = base.copy(alpha = 0.56f)
     C.w12 = base.copy(alpha = 0.12f)
     C.w08 = base.copy(alpha = 0.08f)
     C.w04 = base.copy(alpha = 0.04f)
