@@ -10494,6 +10494,121 @@ private fun ExecutionPathProtectionToggle(
             checkedTrackColor = C.cyan
         )
     }
+
+@Composable
+private fun StatusBanner(enabled: Boolean, price: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = if (enabled) C.green.copy(alpha = 0.08f) else C.red.copy(alpha = 0.06f),
+        border = BorderStroke(1.dp, if (enabled) C.green.copy(alpha = 0.25f) else C.red.copy(alpha = 0.2f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (enabled) C.green.copy(alpha = 0.12f) else C.red.copy(alpha = 0.1f)
+                ) {
+                    Icon(
+                        if (enabled) Icons.Rounded.CheckCircle else Icons.Rounded.PauseCircle,
+                        contentDescription = null,
+                        tint = if (enabled) C.green else C.red,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        if (enabled) "Live" else "Paused",
+                        color = C.t1,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        if (enabled) "Visible in console" else "Hidden from matching",
+                        color = C.t3,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = C.amberDim,
+                border = BorderStroke(1.dp, C.amber.copy(alpha = 0.25f))
+            ) {
+                Text(
+                    "KES ${"$"}{price.ifBlank { "0" }}",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    color = C.amber,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsCard(
+    title: String,
+    icon: ImageVector,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = C.cardHi.copy(alpha = 0.92f),
+        border = BorderStroke(1.dp, C.border.copy(alpha = 0.75f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = C.amberDim,
+                    border = BorderStroke(1.dp, C.amber.copy(alpha = 0.25f))
+                ) {
+                    Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                        Icon(icon, contentDescription = null, tint = C.amber, modifier = Modifier.size(12.dp))
+                    }
+                }
+                Text(title, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun ProtectionRow(
+    signatureEnabled: Boolean,
+    onProtectionChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Protection", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            Text("Verify signature before dispatch", color = C.t3, fontSize = 10.5.sp, lineHeight = 14.sp)
+        }
+        CompactDialogSwitch(
+            checked = signatureEnabled,
+            onCheckedChange = onProtectionChange,
+            checkedTrackColor = C.cyan
+        )
+    }
+}
+
+@Composable
+private fun offerExecutionModeOptions(): List<String> = listOf(OFFER_EXECUTION_MODE_SIMPLE, OFFER_EXECUTION_MODE_ADVANCED)
+
 }
 
 @Composable
@@ -10928,7 +11043,11 @@ fun OfferDialog(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(C.bg)
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(C.amber.copy(alpha = 0.08f), Color.Transparent)
+                                    )
+                                )
                                 .statusBarsPadding()
                                 .padding(horizontal = 20.dp, vertical = 16.dp)
                         ) {
@@ -10939,42 +11058,47 @@ fun OfferDialog(
                             ) {
                                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Row(
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        val ledAlpha by rememberInfiniteTransition(label = "offer_led").animateFloat(
-                                            initialValue = 1f,
-                                            targetValue = 0.35f,
-                                            animationSpec = infiniteRepeatable(tween(2200, easing = LinearEasing), RepeatMode.Reverse)
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .size(7.dp)
-                                                .background(C.amber, CircleShape)
-                                                .then(Modifier.alpha(ledAlpha))
-                                        )
-                                        Text(
-                                            "Bundle Settings",
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            letterSpacing = 0.5.sp,
-                                            color = C.t2
-                                        )
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = C.amberDim,
+                                            border = BorderStroke(1.dp, C.amber.copy(alpha = 0.3f))
+                                        ) {
+                                            Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    Icons.Outlined.Tag,
+                                                    contentDescription = null,
+                                                    tint = C.amber,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                            Text(
+                                                "Bundle Settings",
+                                                color = C.t3,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                letterSpacing = 0.3.sp
+                                            )
+                                            Text(
+                                                if (existing != null) "Edit Bundle" else "New Bundle",
+                                                color = C.t1,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 20.sp,
+                                                fontFamily = FontFamily.SansSerif,
+                                                lineHeight = 26.sp
+                                            )
+                                        }
                                     }
                                     Text(
-                                        if (existing != null) "Edit Bundle" else "New Bundle",
-                                        color = C.t1,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 22.sp,
-                                        fontFamily = FontFamily.SansSerif,
-                                        lineHeight = 28.sp
-                                    )
-                                    Text(
-                                        existing?.let { it.name.ifBlank { it.category } } ?: "New offer",
+                                        existing?.let { it.name.ifBlank { it.category } } ?: "Configure a new offer",
                                         color = C.t2,
                                         fontSize = 12.sp,
-                                        lineHeight = 18.sp
+                                        lineHeight = 18.sp,
+                                        modifier = Modifier.padding(start = 42.dp)
                                     )
                                 }
                                 Surface(
@@ -10988,7 +11112,7 @@ fun OfferDialog(
                                 }
                             }
                         }
-                        Divider(color = C.w08)
+                        Divider(color = C.border.copy(alpha = 0.5f))
                     }
                 },
                 bottomBar = {
@@ -11048,607 +11172,235 @@ fun OfferDialog(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 0.dp,
-                        top = pad.calculateTopPadding(),
-                        end = 0.dp,
+                        start = 16.dp,
+                        top = pad.calculateTopPadding() + 12.dp,
+                        end = 16.dp,
                         bottom = pad.calculateBottomPadding() + 20.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = C.cardHi.copy(alpha = 0.6f),
-                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .background(C.green, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("1", color = C.bg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Column {
-                                        Text("Bundle Status", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                        Text(
-                                            if (enabled) "Visible in console, available for matching" else "Hidden from matching until you turn it back on",
-                                            color = C.t3,
-                                            fontSize = 11.sp
-                                        )
+                        StatusBanner(enabled = enabled, price = price)
+                    }
+
+                    item {
+                        SettingsCard("Offer Details", Icons.Outlined.Tag) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    FieldLabel("Category")
+                                    DialogDropdown("Category", cat, offerCategoryOptions(), catExp, { catExp = it }) {
+                                        updateCategory(it)
+                                        catExp = false
                                     }
                                 }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(38.dp)
-                                            .height(21.dp)
-                                            .background(if (enabled) C.green else C.border.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                                            .clickable { enabled = !enabled },
-                                        contentAlignment = Alignment.CenterEnd
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .padding(2.5.dp)
-                                                .size(16.dp)
-                                                .background(C.bg, CircleShape)
-                                        )
-                                    }
-                                    Surface(
-                                        shape = RoundedCornerShape(20.dp),
-                                        color = if (enabled) C.greenDim else C.w04,
-                                        border = BorderStroke(1.dp, if (enabled) C.green.copy(alpha = 0.4f) else C.border.copy(alpha = 0.5f))
-                                    ) {
-                                        Text(
-                                            if (enabled) "LIVE" else "PAUSED",
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                            color = if (enabled) C.green else C.t3,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 0.04.em
-                                        )
-                                    }
+                                Column(modifier = Modifier.weight(1.2f)) {
+                                    FieldLabel("Plan Name")
+                                    OutlinedTextField(
+                                        value = name,
+                                        onValueChange = { name = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(7.dp),
+                                        placeholder = { Text("e.g. 20 SMS Daily", color = C.t3) },
+                                        colors = dialogFieldColors(),
+                                        singleLine = true,
+                                        textStyle = LocalTextStyle.current.copy(fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+                                    )
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    FieldLabel("Selling Price (KES)")
+                                    OutlinedTextField(
+                                        value = price,
+                                        onValueChange = { price = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(7.dp),
+                                        placeholder = { Text("e.g. 5", color = C.t3) },
+                                        colors = dialogFieldColors(),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        singleLine = true,
+                                        textStyle = LocalTextStyle.current.copy(fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+                                    )
+                                }
+                                Column(modifier = Modifier.weight(1.5f), verticalArrangement = Arrangement.Bottom) {
+                                    Text(
+                                        "Your price to customer",
+                                        color = C.t3,
+                                        fontSize = 10.sp,
+                                        modifier = Modifier.padding(bottom = 10.dp)
+                                    )
                                 }
                             }
                         }
                     }
 
                     item {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = C.cardHi.copy(alpha = 0.6f),
-                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .background(C.cyan, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("2", color = C.bg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Column {
-                                        Text("Offer Configuration", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                        Text("Review key settings before editing", color = C.t3, fontSize = 11.sp)
+                        SettingsCard("USSD Configuration", Icons.Outlined.Terminal) {
+                            FieldLabel("USSD")
+                            OutlinedTextField(
+                                value = codeField,
+                                onValueChange = { codeField = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(7.dp),
+                                colors = dialogFieldColors(),
+                                textStyle = LocalTextStyle.current.copy(
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontFamily = FontFamily.Monospace
+                                ),
+                                placeholder = { Text("Enter USSD code", color = C.t3, fontFamily = FontFamily.Monospace) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    modifier = Modifier
+                                        .height(36.dp)
+                                        .clickable { codeField = TextFieldValue(codeField.text + "pn") },
+                                    shape = RoundedCornerShape(7.dp),
+                                    color = C.cyanDim,
+                                    border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.5f))
+                                ) {
+                                    Box(modifier = Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+                                        Text("Insert pn", color = C.cyan, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
                                 Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .height(36.dp)
+                                        .clickable { codeField = TextFieldValue(codeField.text + "*") },
+                                    shape = RoundedCornerShape(7.dp),
                                     color = C.w04,
                                     border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Surface(
-                                            modifier = Modifier.size(28.dp),
-                                            shape = RoundedCornerShape(7.dp),
-                                            color = C.cyanDim,
-                                            border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.4f))
-                                        ) {
-                                            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                                Icon(Icons.Outlined.Edit, null, tint = C.cyan, modifier = Modifier.size(16.dp))
-                                            }
-                                        }
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                if (existing != null) "Editing ${existing.name.ifBlank { existing.category }}" else "Creating New Offer",
-                                                color = C.t1,
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize = 12.5.sp
-                                            )
-                                            Text(
-                                                if (existing != null) "Modify USSD, SIM, device, and protection settings" else "Set up USSD, SIM, device, and protection",
-                                                color = C.t3,
-                                                fontSize = 10.5.sp
-                                            )
-                                        }
+                                    Box(modifier = Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+                                        Text("Insert *", color = C.t3, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Surface(
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = C.bg,
-                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
-                                    ) {
-                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text("CATEGORY", color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
-                                            Text(cat.ifBlank { "—" }, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                        }
-                                    }
-                                    Surface(
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = C.bg,
-                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
-                                    ) {
-                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text("EXECUTION", color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
-                                            Text(mode.ifBlank { "—" }, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                        }
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Surface(
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = C.bg,
-                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
-                                    ) {
-                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text("DEVICE", color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
-                                            Text(device.ifBlank { "—" }, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                        }
-                                    }
-                                    Surface(
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = C.bg,
-                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
-                                    ) {
-                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text("SIM", color = C.t3, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
-                                            Text(offerSimSelectionLabel(simSelection).ifBlank { "—" }, color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Surface(
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(9.dp),
-                                        color = if (signatureEnabled) C.greenDim else C.w04,
-                                        border = BorderStroke(1.dp, if (signatureEnabled) C.green.copy(alpha = 0.35f) else C.border.copy(alpha = 0.5f))
-                                    ) {
-                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                            Text(
-                                                if (signatureEnabled) "Protection On" else "Protection Off",
-                                                color = if (signatureEnabled) C.green else C.t3,
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize = 11.sp
-                                            )
-                                            Text(
-                                                if (signatureEnabled) "Signature verification active" else "No signature verification",
-                                                color = C.t3,
-                                                fontSize = 9.5.sp
-                                            )
-                                        }
-                                    }
-                                    Surface(
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(9.dp),
-                                        color = if (hasLearnedSignature) C.greenDim else C.w04,
-                                        border = BorderStroke(1.dp, if (hasLearnedSignature) C.green.copy(alpha = 0.35f) else C.border.copy(alpha = 0.5f))
-                                    ) {
-                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                            Text(
-                                                if (hasLearnedSignature) "Learned" else "Not Learned",
-                                                color = if (hasLearnedSignature) C.green else C.t3,
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize = 11.sp
-                                            )
-                                            Text(
-                                                if (hasLearnedSignature) "Signature captured" else "No signature data",
-                                                color = C.t3,
-                                                fontSize = 9.5.sp
-                                            )
-                                        }
-                                    }
-                                    Surface(
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(9.dp),
-                                        color = if (hasPendingSignature) C.amberDim else C.w04,
-                                        border = BorderStroke(1.dp, if (hasPendingSignature) C.amber.copy(alpha = 0.35f) else C.border.copy(alpha = 0.5f))
-                                    ) {
-                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                            Text(
-                                                if (hasPendingSignature) "Review Needed" else "No Pending",
-                                                color = if (hasPendingSignature) C.amber else C.t3,
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize = 11.sp
-                                            )
-                                            Text(
-                                                if (hasPendingSignature) "Awaiting approval" else "All clear",
-                                                color = C.t3,
-                                                fontSize = 9.5.sp
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    item {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = C.cardHi.copy(alpha = 0.6f),
-                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .background(C.purple, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("3", color = C.bg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Column {
-                                        Text("Bundle Identity", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                        Text("Set category, plan name, and selling price", color = C.t3, fontSize = 11.sp)
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        FieldLabel("Category")
-                                        DialogDropdown("Category", cat, offerCategoryOptions(), catExp, { catExp = it }) {
-                                            updateCategory(it)
-                                            catExp = false
-                                        }
-                                    }
-                                    Column(modifier = Modifier.weight(1.2f)) {
-                                        FieldLabel("Plan Name")
-                                        OutlinedTextField(
-                                            value = name,
-                                            onValueChange = { name = it },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(7.dp),
-                                            placeholder = { Text("e.g. 20 SMS Daily", color = C.t3) },
-                                            colors = dialogFieldColors(),
-                                            singleLine = true,
-                                            textStyle = LocalTextStyle.current.copy(fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        FieldLabel("Selling Price (KES)")
-                                        OutlinedTextField(
-                                            value = price,
-                                            onValueChange = { price = it },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(7.dp),
-                                            placeholder = { Text("e.g. 5", color = C.t3) },
-                                            colors = dialogFieldColors(),
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                            singleLine = true,
-                                            textStyle = LocalTextStyle.current.copy(fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
-                                        )
-                                    }
-                                    Column(modifier = Modifier.weight(1.5f)) {
-                                        Text("Your price to customer", color = C.t3, fontSize = 10.sp)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    item {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = C.cardHi.copy(alpha = 0.6f),
-                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .background(C.cyan, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("4", color = C.bg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Column {
-                                        Text("USSD Setup", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                        Text("Set dial code and execution type", color = C.t3, fontSize = 11.sp)
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                FieldLabel("USSD")
-                                OutlinedTextField(
-                                    value = codeField,
-                                    onValueChange = { codeField = it },
-                                    modifier = Modifier.fillMaxWidth(),
+                                Surface(
+                                    modifier = Modifier
+                                        .height(36.dp)
+                                        .clickable { codeField = TextFieldValue(codeField.text + "#") },
                                     shape = RoundedCornerShape(7.dp),
-                                    colors = dialogFieldColors(),
-                                    textStyle = LocalTextStyle.current.copy(
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontFamily = FontFamily.Monospace
-                                    ),
-                                    placeholder = { Text("Enter USSD code", color = C.t3, fontFamily = FontFamily.Monospace) },
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
-                                )
+                                    color = C.w04,
+                                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
+                                ) {
+                                    Box(modifier = Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+                                        Text("Insert #", color = C.t3, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                                Column(modifier = Modifier.width(140.dp)) {
+                                    FieldLabel("USSD Type")
+                                    DialogDropdown(
+                                        "USSD Type",
+                                        mode,
+                                        offerExecutionModeOptions(),
+                                        modeExp,
+                                        { modeExp = it }
+                                    ) {
+                                        mode = it
+                                        modeTouched = it != defaultExecutionModeForCategory(cat)
+                                        modeExp = false
+                                    }
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Spacer(modifier = Modifier.height(20.dp))
+                                    Text(
+                                        if (signatureEnabled)
+                                            "Protection-enabled offers automatically use the guided USSD flow so signature verification can run on more phones."
+                                        else
+                                            "Default mode follows category: Data uses SIMPLE, while Calls and SMS use ADVANCED.",
+                                        color = C.t3,
+                                        fontSize = 10.5.sp,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
 
+                    item {
+                        SettingsCard("Execution Path", Icons.Outlined.Route) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    FieldLabel("SIM To Use")
+                                    DialogDropdown(
+                                        "SIM To Use",
+                                        offerSimSelectionLabel(simSelection),
+                                        listOf("General SIM", "Slot 1", "Slot 2"),
+                                        simExp,
+                                        { simExp = it }
+                                    ) {
+                                        simSelection = when (it) {
+                                            "Slot 1" -> USSD_SIM_SELECTION_SLOT_1
+                                            "Slot 2" -> USSD_SIM_SELECTION_SLOT_2
+                                            else -> OFFER_SIM_USE_GENERAL
+                                        }
+                                        simExp = false
+                                    }
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    FieldLabel("Execute On")
+                                    DialogDropdown("Execute On", device, listOf("PRIMARY", "RELAY"), devExp, { devExp = it }) {
+                                        device = it
+                                        devExp = false
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Divider(color = C.border.copy(alpha = 0.4f), thickness = 0.5.dp)
+                            Spacer(modifier = Modifier.height(14.dp))
+                            ProtectionRow(
+                                signatureEnabled = signatureEnabled,
+                                onProtectionChange = { signatureEnabled = it }
+                            )
+                        }
+                    }
+
+                    item {
+                        SettingsCard("Protection Settings", Icons.Outlined.Security) {
+                            if (signatureEnabled) {
+                                FieldLabel("When codes change")
+                                DialogDropdown(
+                                    "When codes change",
+                                    if (signatureAction == "ADJUST") "ADJUST" else "STOP",
+                                    listOf("STOP", "ADJUST"),
+                                    signatureExp,
+                                    { signatureExp = it }
+                                ) {
+                                    signatureAction = it
+                                    signatureExp = false
+                                }
                                 Spacer(modifier = Modifier.height(8.dp))
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        modifier = Modifier
-                                            .height(36.dp)
-                                            .clickable { codeField = TextFieldValue(codeField.text + "pn") },
-                                        shape = RoundedCornerShape(7.dp),
-                                        color = C.cyanDim,
-                                        border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.5f))
-                                    ) {
-                                        Box(modifier = Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-                                            Text("Insert pn", color = C.cyan, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                        }
-                                    }
-                                    Surface(
-                                        modifier = Modifier
-                                            .height(36.dp)
-                                            .clickable { codeField = TextFieldValue(codeField.text + "*") },
-                                        shape = RoundedCornerShape(7.dp),
-                                        color = C.w04,
-                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
-                                    ) {
-                                        Box(modifier = Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-                                            Text("Insert *", color = C.t3, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                        }
-                                    }
-                                    Surface(
-                                        modifier = Modifier
-                                            .height(36.dp)
-                                            .clickable { codeField = TextFieldValue(codeField.text + "#") },
-                                        shape = RoundedCornerShape(7.dp),
-                                        color = C.w04,
-                                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
-                                    ) {
-                                        Box(modifier = Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-                                            Text("Insert #", color = C.t3, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                        }
-                                    }
+                                Text(
+                                    if (signatureAction == "ADJUST")
+                                        "ADJUST only auto-fixes exact same-label moves. If the network changes wording, the app stops instead of guessing."
+                                    else
+                                        "STOP is the recommended production setting. It prevents the app from choosing the wrong bundle when the menu looks different.",
+                                    color = C.t2,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp
+                                )
+                                if (mode != OFFER_EXECUTION_MODE_ADVANCED) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        "This offer is saved as $mode, but Bingwa will switch to the guided USSD path automatically whenever protection or learning is enabled.",
+                                        color = C.t3,
+                                        fontSize = 11.sp,
+                                        lineHeight = 16.sp
+                                    )
                                 }
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-                                    Column(modifier = Modifier.width(140.dp)) {
-                                        FieldLabel("USSD Type")
-                                        DialogDropdown("USSD Type", mode, listOf(OFFER_EXECUTION_MODE_SIMPLE, OFFER_EXECUTION_MODE_ADVANCED), modeExp, { modeExp = it }) {
-                                            mode = it
-                                            modeTouched = it != defaultExecutionModeForCategory(cat)
-                                            modeExp = false
-                                        }
-                                    }
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Spacer(modifier = Modifier.height(20.dp))
-                                        Text(
-                                            if (signatureEnabled)
-                                                "Protection-enabled offers automatically use the guided USSD flow so signature verification can run on more phones."
-                                            else
-                                                "Default mode follows category: Data uses SIMPLE, while Calls and SMS use ADVANCED.",
-                                            color = C.t3,
-                                            fontSize = 10.5.sp,
-                                            lineHeight = 15.sp
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    item {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = C.cardHi.copy(alpha = 0.6f),
-                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .background(C.amber, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("5", color = C.bg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Column {
-                                        Text("Execution Path", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                        Text("Choose which SIM and device dial this offer", color = C.t3, fontSize = 11.sp)
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        FieldLabel("SIM To Use")
-                                        DialogDropdown(
-                                            "SIM To Use",
-                                            offerSimSelectionLabel(simSelection),
-                                            listOf("General SIM", "Slot 1", "Slot 2"),
-                                            simExp,
-                                            { simExp = it }
-                                        ) {
-                                            simSelection = when (it) {
-                                                "Slot 1" -> USSD_SIM_SELECTION_SLOT_1
-                                                "Slot 2" -> USSD_SIM_SELECTION_SLOT_2
-                                                else -> OFFER_SIM_USE_GENERAL
-                                            }
-                                            simExp = false
-                                        }
-                                    }
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        FieldLabel("Execute On")
-                                        DialogDropdown("Execute On", device, listOf("PRIMARY", "RELAY"), devExp, { devExp = it }) {
-                                            device = it
-                                            devExp = false
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(14.dp))
-                                Divider(color = C.border.copy(alpha = 0.4f), thickness = 0.5.dp)
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text("Protection", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp)
-                                        Text("Verify signature before dispatch", color = C.t3, fontSize = 11.sp)
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .width(38.dp)
-                                            .height(21.dp)
-                                            .background(if (signatureEnabled) C.amber else C.border.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                                            .clickable { signatureEnabled = !signatureEnabled },
-                                        contentAlignment = Alignment.CenterEnd
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .padding(2.5.dp)
-                                                .size(16.dp)
-                                                .background(C.bg, CircleShape)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    item {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = C.cardHi.copy(alpha = 0.6f),
-                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(22.dp)
-                                                .background(C.amber, CircleShape),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("6", color = C.bg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                        Column {
-                                            Text("Protection Settings", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                            Text("Configure signature verification and learning rules", color = C.t3, fontSize = 11.sp)
-                                        }
-                                    }
-                                    Icon(Icons.Filled.ChevronRight, null, tint = C.t3.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
-                                }
-                            }
-                        }
-                    }
-
-                    if (signatureEnabled || hasLearnedSignature || hasPendingSignature) {
-                        item {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = C.cardHi.copy(alpha = 0.6f),
-                                border = BorderStroke(1.dp, C.border.copy(alpha = 0.5f))
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    if (signatureEnabled) {
-                                        FieldLabel("When codes change")
-                                        DialogDropdown(
-                                            "When codes change",
-                                            if (signatureAction == "ADJUST") "ADJUST" else "STOP",
-                                            listOf("STOP", "ADJUST"),
-                                            signatureExp,
-                                            { signatureExp = it }
-                                        ) {
-                                            signatureAction = it
-                                            signatureExp = false
-                                        }
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            if (signatureAction == "ADJUST")
-                                                "ADJUST only auto-fixes exact same-label moves. If the network changes wording, the app stops instead of guessing."
-                                            else
-                                                "STOP is the recommended production setting. It prevents the app from choosing the wrong bundle when the menu looks different.",
-                                            color = C.t2,
-                                            fontSize = 11.sp,
-                                            lineHeight = 16.sp
-                                        )
-                                        if (mode != OFFER_EXECUTION_MODE_ADVANCED) {
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text(
-                                                "This offer is saved as $mode, but Bingwa will switch to the guided USSD path automatically whenever protection or learning is enabled.",
-                                                color = C.t3,
-                                                fontSize = 11.sp,
-                                                lineHeight = 16.sp
-                                            )
-                                        }
-                                    } else if (!hasLearnedSignature && !hasPendingSignature) {
-                                        Text(
-                                            "No signature learned yet. Turn protection on, save the offer, then use Save & Learn to scan the live USSD menus.",
-                                            color = C.t2,
-                                            fontSize = 12.sp,
-                                            lineHeight = 18.sp
-                                        )
-                                    }
-                                }
+                            } else if (!hasLearnedSignature && !hasPendingSignature) {
+                                Text(
+                                    "No signature learned yet. Turn protection on, save the offer, then use Save & Learn to scan the live USSD menus.",
+                                    color = C.t2,
+                                    fontSize = 12.sp,
+                                    lineHeight = 18.sp
+                                )
                             }
                         }
                     }
@@ -11656,7 +11408,7 @@ fun OfferDialog(
                     if (showProtectionRecords) {
                         if (hasPendingSignature) {
                             item {
-                                Spacer(modifier = Modifier.height(12.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
                                 SignatureLearningRecordSection(
                                     title = "Pending Review",
                                     subtitle = "A new learning run is waiting for approval. Review each step, the selected option, and the recorded USSD text before replacing the saved record.",
@@ -11688,7 +11440,7 @@ fun OfferDialog(
                             }
                         }
                         item {
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             SignatureLearningRecordSection(
                                 title = "USSD Learning Record",
                                 subtitle = "This record shows the learned menu steps, selected options, and the popup text captured during learning.",
@@ -11706,6 +11458,7 @@ fun OfferDialog(
         }
     }
 }
+
 
 @Composable
 private fun MenuActionItem(
