@@ -2550,20 +2550,6 @@ class UssdNavigationService : AccessibilityService() {
         startStepTimeout()
     }
 
-    private fun handleAdvancedSessionArmed() {
-        if (!advancedActive) return
-        uiReturnSuppressed = false
-        isProcessing = false
-        lastRelevantEventElapsed = SystemClock.elapsedRealtime()
-        if (retryWindowStartedAt <= 0L) {
-            retryWindowStartedAt = SystemClock.elapsedRealtime()
-        }
-        requestAppUiBehindPopup(force = true)
-        startKeepingAppUiVisible()
-        updateOverlay()
-        startStepTimeout()
-    }
-
     private fun finishAdvancedDispatch(finalText: String) {
         lastFinalResponse = finalText.ifBlank { lastFinalResponse }
         currentStep = advancedSteps.size
