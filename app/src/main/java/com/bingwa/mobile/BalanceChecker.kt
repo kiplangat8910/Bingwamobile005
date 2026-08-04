@@ -44,9 +44,14 @@ class BalanceChecker : Service() {
             14 * 60_000L
         )
         @Volatile private var rotatingIntervalIndex = 0
+        private val rotatingIntervalLock = Any()
 
         private fun nextRotatingInterval(): Long {
-            val idx = rotatingIntervalIndex % ROTATING_CHECK_INTERVALS_MS.size
+            val idx = synchronized(rotatingIntervalLock) {
+                val i = rotatingIntervalIndex % ROTATING_CHECK_INTERVALS_MS.size
+                rotatingIntervalIndex++
+                i
+            }
             return ROTATING_CHECK_INTERVALS_MS[idx]
         }
         private const val BALANCE_TIMEOUT_MS = 25_000L
@@ -70,6 +75,7 @@ class BalanceChecker : Service() {
         @Volatile private var lastKnownAmount: Double = -1.0
         @Volatile private var lastCheckTimestamp: Long = 0L
         @Volatile private var checking = false
+        private val checkingLock = Any()
         @Volatile private var lastCheckStartedAt = 0L
         @Volatile private var lastSuccessfulCheckAt = 0L
         @Volatile private var appContextRef: Context? = null
@@ -123,14 +129,16 @@ class BalanceChecker : Service() {
             }
 
             // If we're already checking, queue if special
-            if (checking) {
-                if (specialHandling) {
-                    queueBalanceCheck(appContext, selectionOverride, persistResult)
-                    Log.d(TAG, "Balance check already in flight, queued for later")
-                    return true
+            synchronized(checkingLock) {
+                if (checking) {
+                    if (specialHandling) {
+                        queueBalanceCheck(appContext, selectionOverride, persistResult)
+                        Log.d(TAG, "Balance check already in flight, queued for later")
+                        return@synchronized true
+                    }
+                    Log.d(TAG, "Balance check already in flight – skipping duplicate")
+                    return@synchronized false
                 }
-                Log.d(TAG, "Balance check already in flight – skipping duplicate")
-                return false
             }
 
             // Check if another USSD session is busy
@@ -347,6 +355,7 @@ class BalanceChecker : Service() {
             retryCount++
             val delay = RETRY_BACKOFF_MS * retryCount
             Log.d(TAG, "Scheduling retry #$retryCount in ${delay}ms")
+            retryRunnable?.let { timeoutHandler.removeCallbacks(it) }
             val runnable = Runnable {
                 retryRunnable = null
                 startBalanceCheck(context, selectionOverride, persistResult)

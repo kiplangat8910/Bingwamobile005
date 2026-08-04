@@ -268,6 +268,6 @@ object UssdHelper {
         val subId = subIdOverride ?: resolvePreferredUssdSubId(context) ?: return null
         val baseTm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return null
         if (subId != -1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) return baseTm.createForSubscriptionId(subId)
-        return null
+        return baseTm
     }
 }

@@ -147,7 +147,10 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun handleAdvancedSessionArmed() {
         if (!advancedActive) return
-        advancedPhoneNumber = "1234567890"
+        if (advancedPhoneNumber.isBlank()) {
+            Log.w(TAG, "handleAdvancedSessionArmed: phone number is blank, cannot arm session")
+            return
+        }
         uiReturnSuppressed = false
         isProcessing = false
         lastRelevantEventElapsed = SystemClock.elapsedRealtime()
@@ -303,9 +306,9 @@ class UssdNavigationService : AccessibilityService() {
         super.onDestroy()
         stopForegroundCompat()
         bgThread.quitSafely()
-        if (activeInstance === this) activeInstance = null
         cleanupAdvanced()
         clearCallbacks()
+        if (activeInstance === this) activeInstance = null
         hideOverlay()
     }
     // endregion
@@ -932,6 +935,7 @@ class UssdNavigationService : AccessibilityService() {
                     collectAggressiveTextEntryCandidates(root, aggressiveCandidates)
                     val aggressiveField = aggressiveCandidates.firstOrNull()
                     val wrote = aggressiveField != null && tryWriteValueToField(aggressiveField, valueToEnter, root)
+                    aggressiveCandidates.forEachIndexed { idx, node -> if (idx != 0) node.recycle() }
                     aggressiveField?.recycle()
                     if (!wrote) {
                         isProcessing = false
@@ -2511,6 +2515,7 @@ class UssdNavigationService : AccessibilityService() {
     }
 
     private fun restartFromBeginning() {
+        if (!advancedActive && !advancedInProgress) return
         val now = SystemClock.elapsedRealtime()
         if (retryWindowStartedAt <= 0) retryWindowStartedAt = now
         if (now - retryWindowStartedAt >= MAX_RETRY_WINDOW_MS) {
@@ -3561,7 +3566,7 @@ class UssdNavigationService : AccessibilityService() {
     // Timeouts (ms)
     private val STEP_DELAY_MS = 20L
     private val EVENT_HOT_POLL_MS = 14L
-    private val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 35L
+    private val ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS = 300L
     private val DUPLICATE_EVENT_WINDOW_MS = 45L
     private val FAST_VERIFY_POLL_MS = 18L
     private val HOT_SEND_RETRY_DELAY_MS = 12L
@@ -3603,7 +3608,7 @@ class UssdNavigationService : AccessibilityService() {
     private val RECENT_INPUT_GRACE_MS = 2500L
     private val RECENT_VERIFIED_INPUT_GRACE_MS = 4000L
     private val RECENT_UI_EVENT_GRACE_MS = 1000L
-    private val RECENT_USSD_CONTEXT_WINDOW_MS = 800L
+    private val RECENT_USSD_CONTEXT_WINDOW_MS = 3_000L
     private val GESTURE_SETTLE_MS = 12L
     private val POST_GESTURE_WAIT_MS = 20L
     private val POST_WRITE_VERIFY_DELAY_MS = 18L
