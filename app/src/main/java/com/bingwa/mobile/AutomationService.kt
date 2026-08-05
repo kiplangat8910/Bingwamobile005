@@ -9,12 +9,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.bingwa.mobile.ForegroundServiceCompat
 import com.bingwa.mobile.ForegroundServiceTypes
 import java.util.Calendar
 
