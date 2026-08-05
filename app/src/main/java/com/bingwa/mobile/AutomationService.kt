@@ -9,12 +9,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.bingwa.mobile.ForegroundServiceCompat
+import com.bingwa.mobile.ForegroundServiceTypes
 import java.util.Calendar
 
 // ============================================================
@@ -38,13 +39,25 @@ class AutomationService : Service() {
         super.onCreate()
         foregroundHelper.createNotificationChannel()
         foregroundReady = foregroundHelper.startForeground()
-        if (!foregroundReady) stopSelf()
+        if (!foregroundReady) {
+            Log.w(TAG, "startForeground failed; service will continue and retry on next request")
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!foregroundReady) {
-            stopSelf()
-            return START_NOT_STICKY
+            foregroundReady = foregroundHelper.startForeground()
+            if (!foregroundReady) {
+                Log.w(TAG, "Service cannot promote to foreground; re-enqueueing request for later")
+                val request = UssdRequest.fromIntent(intent)
+                if (request != null) {
+                    UssdQueue.enqueue(
+                        Runnable { executeRequest(request) },
+                        priority = request.executionPriority
+                    )
+                }
+                return START_REDELIVER_INTENT
+            }
         }
 
         val request = UssdRequest.fromIntent(intent) ?: run {
@@ -891,7 +904,7 @@ class AutomationService : Service() {
             val intent = buildAutomationIntent(context, request, ACTION_RETRY_RETRIABLE_RESPONSE)
             val pi = PendingIntent.getService(
                 context,
-                request.txId,
+                alarmRequestCode(request.txId, ACTION_RETRY_RETRIABLE_RESPONSE),
                 intent,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
@@ -912,13 +925,19 @@ class AutomationService : Service() {
                 }
                 val pi = PendingIntent.getService(
                     context,
-                    txId,
+                    alarmRequestCode(txId, ACTION_RETRY_RETRIABLE_RESPONSE),
                     intent,
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                 )
                 (context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager)?.cancel(pi)
                 pi.cancel()
             }
+        }
+
+        private fun alarmRequestCode(txId: Int, action: String?): Int {
+            val base = if (txId >= 0) txId else 0
+            val actionHash = (action?.hashCode() ?: 0) and 0x7FFF
+            return (base and 0x7FFF) shl 16 or actionHash
         }
 
         private fun buildRetryMessage(
@@ -1121,7 +1140,7 @@ class AutomationService : Service() {
 
             return try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    service.startForeground(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                    service.startForeground(notificationId, notification, ForegroundServiceTypes.combinedPhoneCall)
                 } else {
                     service.startForeground(notificationId, notification)
                 }

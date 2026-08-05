@@ -9666,207 +9666,144 @@ fun OffersScreen(onBack: () -> Unit) {
 }
 
 @Composable
-fun OfferCard(number: Int, o: OfferItem, onEdit: () -> Unit, onToggle: () -> Unit, onDelete: () -> Unit) {
-    var menu by remember { mutableStateOf(false) }
-    val hasPendingSignature = o.pendingLearnedSignature.isNotEmpty() || o.pendingSignatureLearningCaptures.isNotEmpty()
-    val protectionLabel = when {
-        o.signatureDetectionEnabled && o.signatureAction == "ADJUST" -> "Guard + Adjust"
-        o.signatureDetectionEnabled -> "Guard + Stop"
-        else -> "Off"
-    }
-    Box(
-        Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        C.cardHi.copy(alpha = 0.98f),
-                        C.card,
-                        C.surface.copy(alpha = 0.96f)
-                    )
-                )
-            )
-            .border(1.dp, if (o.enabled) C.borderHi.copy(alpha = 0.9f) else C.border.copy(0.45f), RoundedCornerShape(24.dp))
-    ) {
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            if (o.enabled) C.cyan.copy(alpha = 0.12f) else C.w04,
-                            Color.Transparent
-                        ),
-                        center = Offset(120f, 0f),
-                        radius = 420f
-                    )
-                )
-        )
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                Box(
-                    Modifier
-                        .size(54.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    if (o.enabled) C.cyan.copy(alpha = 0.20f) else C.w08,
-                                    if (o.enabled) C.cyanDim else C.w04
-                                )
-                            )
-                        )
-                        .border(1.dp, if (o.enabled) C.cyan.copy(0.24f) else C.border, RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Filled.Wifi,
-                        null,
-                        tint = if (o.enabled) C.cyan else C.t3,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = C.surface.copy(alpha = 0.92f),
-                            border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
-                        ) {
-                            Text(
-                                number.toString(),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                color = C.cyan,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                        Text(
-                            o.name,
-                            color = if (o.enabled) C.t1 else C.t2,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            lineHeight = 22.sp,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        MiniTag(if (o.enabled) "ACTIVE" else "DISABLED", if (o.enabled) C.green else C.red)
-                        MiniTag(o.category.uppercase(), C.orange)
-                        MiniTag(o.targetDevice.uppercase(), C.blue)
-                        MiniTag(offerSimSelectionLabel(o.simSelection).uppercase(), C.purple)
-                    }
-                }
-                Box {
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = C.w04,
-                        border = BorderStroke(1.dp, C.border.copy(alpha = 0.85f))
-                    ) {
-                        IconButton({ menu = true }, Modifier.size(36.dp)) {
-                            Icon(Icons.Filled.MoreVert, null, tint = C.t2, modifier = Modifier.size(17.dp))
-                        }
-                    }
-                    DropdownMenu(
-                        expanded = menu,
-                        onDismissRequest = { menu = false },
-                        modifier = Modifier
-                            .background(C.cardHi, RoundedCornerShape(20.dp))
-                            .border(1.dp, C.border.copy(alpha = 0.8f), RoundedCornerShape(20.dp)),
-                        containerColor = C.cardHi,
-                        shape = RoundedCornerShape(20.dp),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 12.dp
-                    ) {
-                        Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 18.dp, vertical = 10.dp)
-                            ) {
-                                Text(
-                                    text = "Offer Actions",
-                                    color = C.cyan,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.sp,
-                                    letterSpacing = 1.2.sp
-                                )
-                            }
-                            Divider(color = C.border.copy(alpha = 0.5f), thickness = 0.5.dp)
-                            MenuActionItem(
-                                icon = Icons.Outlined.Edit,
-                                iconTint = C.cyan,
-                                iconBg = C.cyan.copy(alpha = 0.15f),
-                                title = "Edit Offer",
-                                subtitle = "USSD, mode, device, SIM",
-                                onClick = { menu = false; onEdit() }
-                            )
-                            Divider(color = C.border.copy(alpha = 0.35f), thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 16.dp))
-                            MenuActionItem(
-                                icon = if (o.enabled) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                iconTint = if (o.enabled) C.amber else C.green,
-                                iconBg = if (o.enabled) C.amber.copy(alpha = 0.15f) else C.green.copy(alpha = 0.15f),
-                                title = if (o.enabled) "Disable Offer" else "Enable Offer",
-                                subtitle = if (o.enabled) "Temporarily stop this offer" else "Resume this offer",
-                                onClick = { menu = false; onToggle() }
-                            )
-                            Divider(color = C.border.copy(alpha = 0.35f), thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 16.dp))
-                            MenuActionItem(
-                                icon = Icons.Outlined.Delete,
-                                iconTint = C.red,
-                                iconBg = C.red.copy(alpha = 0.12f),
-                                title = "Delete Offer",
-                                subtitle = "Remove permanently",
-                                titleColor = C.red,
-                                onClick = { menu = false; onDelete() }
-                            )
-                        }
-                    }
-                }
-            }
-
-            Divider(color = C.border.copy(alpha = 0.7f))
-
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OfferInfoTile("Price", "KES ${o.price}", C.cyan, Icons.Outlined.Badge, Modifier.weight(1f))
-                    OfferInfoTile("Mode", o.executionMode, C.purple, Icons.Outlined.Tune, Modifier.weight(1f))
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OfferInfoTile("Device", o.targetDevice, C.blue, Icons.Outlined.PhoneAndroid, Modifier.weight(1f))
-                    OfferInfoTile(
-                        "Protection",
-                        protectionLabel,
-                        if (o.signatureDetectionEnabled) C.green else C.t3,
-                        if (o.signatureDetectionEnabled) Icons.Outlined.Shield else Icons.Outlined.Security,
-                        Modifier.weight(1f)
-                    )
-                }
-            }
-
-            OfferCodeBlock("USSD Code", o.ussdCode)
-
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                if (o.signatureDetectionEnabled) MiniTag("GUARD ON", C.green)
-                if (o.learnedSignature.isNotEmpty()) MiniTag("STEPS ${o.learnedSignature.size}", C.green)
-                if (o.signatureLearningCaptures.isNotEmpty()) MiniTag("POPUPS ${o.signatureLearningCaptures.size}", C.amber)
-                if (hasPendingSignature) MiniTag("PENDING REVIEW", C.orange)
-            }
-        }
-    }
-}
+ fun OfferCard(number: Int, o: OfferItem, onEdit: () -> Unit, onToggle: () -> Unit, onDelete: () -> Unit) {
+     var menu by remember { mutableStateOf(false) }
+     val hasPendingSignature = o.pendingLearnedSignature.isNotEmpty() || o.pendingSignatureLearningCaptures.isNotEmpty()
+     val protectionLabel = when {
+         o.signatureDetectionEnabled && o.signatureAction == "ADJUST" -> "Guard + Adjust"
+         o.signatureDetectionEnabled -> "Guard + Stop"
+         else -> "Off"
+     }
+     Surface(
+         modifier = Modifier.fillMaxWidth(),
+         shape = RoundedCornerShape(22.dp),
+         color = C.cardHi.copy(alpha = 0.98f),
+         border = BorderStroke(1.dp, if (o.enabled) C.borderHi.copy(alpha = 0.85f) else C.border.copy(alpha = 0.45f))
+     ) {
+         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                 Surface(
+                     shape = RoundedCornerShape(14.dp),
+                     color = if (o.enabled) C.cyan.copy(alpha = 0.14f) else C.w08,
+                     border = BorderStroke(1.dp, if (o.enabled) C.cyan.copy(alpha = 0.28f) else C.border)
+                 ) {
+                     Box(Modifier.size(46.dp), contentAlignment = Alignment.Center) {
+                         Icon(
+                             Icons.Filled.Wifi,
+                             null,
+                             tint = if (o.enabled) C.cyan else C.t3,
+                             modifier = Modifier.size(20.dp)
+                         )
+                     }
+                 }
+                 Spacer(Modifier.width(12.dp))
+                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                         Surface(
+                             shape = RoundedCornerShape(999.dp),
+                             color = C.surface.copy(alpha = 0.92f),
+                             border = BorderStroke(1.dp, C.border.copy(alpha = 0.8f))
+                         ) {
+                             Text(
+                                 number.toString(),
+                                 modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                 color = C.cyan,
+                                 fontSize = 10.sp,
+                                 fontWeight = FontWeight.Bold,
+                                 fontFamily = FontFamily.Monospace
+                             )
+                         }
+                         Text(
+                             o.name,
+                             color = if (o.enabled) C.t1 else C.t2,
+                             fontWeight = FontWeight.Bold,
+                             fontSize = 16.sp,
+                             lineHeight = 21.sp,
+                             maxLines = 1,
+                             overflow = TextOverflow.Ellipsis
+                         )
+                     }
+                     FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                         MiniTag(if (o.enabled) "ACTIVE" else "DISABLED", if (o.enabled) C.green else C.red)
+                         MiniTag(o.category.uppercase(), C.orange)
+                         MiniTag(o.targetDevice.uppercase(), C.blue)
+                         MiniTag(offerSimSelectionLabel(o.simSelection).uppercase(), C.purple)
+                     }
+                 }
+                 Surface(
+                     shape = RoundedCornerShape(12.dp),
+                     color = C.w04,
+                     border = BorderStroke(1.dp, C.border.copy(alpha = 0.8f))
+                 ) {
+                     IconButton({ menu = true }, Modifier.size(34.dp)) {
+                         Icon(Icons.Filled.MoreVert, null, tint = C.t2, modifier = Modifier.size(16.dp))
+                     }
+                 }
+                 DropdownMenu(
+                     expanded = menu,
+                     onDismissRequest = { menu = false },
+                     modifier = Modifier
+                         .background(C.cardHi, RoundedCornerShape(18.dp))
+                         .border(1.dp, C.border.copy(alpha = 0.75f), RoundedCornerShape(18.dp)),
+                     containerColor = C.cardHi,
+                     shape = RoundedCornerShape(18.dp),
+                     tonalElevation = 0.dp,
+                     shadowElevation = 10.dp
+                 ) {
+                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                             Text(text = "Offer Actions", color = C.cyan, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, letterSpacing = 1.sp)
+                         }
+                         Divider(color = C.border.copy(alpha = 0.45f), thickness = 0.5.dp)
+                         MenuActionItem(
+                             icon = Icons.Outlined.Edit,
+                             iconTint = C.cyan,
+                             iconBg = C.cyan.copy(alpha = 0.14f),
+                             title = "Edit Offer",
+                             subtitle = "USSD, mode, device, SIM",
+                             onClick = { menu = false; onEdit() }
+                         )
+                         Divider(color = C.border.copy(alpha = 0.3f), thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 14.dp))
+                         MenuActionItem(
+                             icon = if (o.enabled) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                             iconTint = if (o.enabled) C.amber else C.green,
+                             iconBg = if (o.enabled) C.amber.copy(alpha = 0.14f) else C.green.copy(alpha = 0.14f),
+                             title = if (o.enabled) "Disable Offer" else "Enable Offer",
+                             subtitle = if (o.enabled) "Temporarily stop" else "Resume this offer",
+                             onClick = { menu = false; onToggle() }
+                         )
+                         Divider(color = C.border.copy(alpha = 0.3f), thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 14.dp))
+                         MenuActionItem(
+                             icon = Icons.Outlined.Delete,
+                             iconTint = C.red,
+                             iconBg = C.red.copy(alpha = 0.10f),
+                             title = "Delete Offer",
+                             subtitle = "Remove permanently",
+                             titleColor = C.red,
+                             onClick = { menu = false; onDelete() }
+                         )
+                     }
+                 }
+             }
+             Divider(color = C.border.copy(alpha = 0.65f), thickness = 0.5.dp)
+             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                 OfferInfoTile("Price", "KES ${o.price}", C.cyan, Icons.Outlined.Badge, Modifier.weight(1f))
+                 OfferInfoTile("Mode", o.executionMode, C.purple, Icons.Outlined.Tune, Modifier.weight(1f))
+             }
+             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                 OfferInfoTile("Device", o.targetDevice, C.blue, Icons.Outlined.PhoneAndroid, Modifier.weight(1f))
+                 OfferInfoTile("Protection", protectionLabel, if (o.signatureDetectionEnabled) C.green else C.t3, if (o.signatureDetectionEnabled) Icons.Outlined.Shield else Icons.Outlined.Security, Modifier.weight(1f))
+             }
+             OfferCodeBlock("USSD Code", o.ussdCode)
+             FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                 if (o.signatureDetectionEnabled) MiniTag("GUARD ON", C.green)
+                 if (o.learnedSignature.isNotEmpty()) MiniTag("STEPS ${o.learnedSignature.size}", C.green)
+                 if (o.signatureLearningCaptures.isNotEmpty()) MiniTag("POPUPS ${o.signatureLearningCaptures.size}", C.amber)
+                 if (hasPendingSignature) MiniTag("PENDING REVIEW", C.orange)
+             }
+         }
+     }
+ }
 
 @Composable
 private fun SignatureApprovalDialog(
@@ -11191,7 +11128,7 @@ fun OfferDialog(
                                         value = name,
                                         onValueChange = { name = it },
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(7.dp),
+                                        shape = RoundedCornerShape(10.dp),
                                         placeholder = { Text("e.g. 20 SMS Daily", color = C.t3) },
                                         colors = dialogFieldColors(),
                                         singleLine = true,
@@ -11199,14 +11136,15 @@ fun OfferDialog(
                                     )
                                 }
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     FieldLabel("Selling Price (KES)")
                                     OutlinedTextField(
                                         value = price,
                                         onValueChange = { price = it },
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(7.dp),
+                                        shape = RoundedCornerShape(10.dp),
                                         placeholder = { Text("e.g. 5", color = C.t3) },
                                         colors = dialogFieldColors(),
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -11214,13 +11152,23 @@ fun OfferDialog(
                                         textStyle = LocalTextStyle.current.copy(fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
                                     )
                                 }
-                                Column(modifier = Modifier.weight(1.5f), verticalArrangement = Arrangement.Bottom) {
-                                    Text(
-                                        "Your price to customer",
-                                        color = C.t3,
-                                        fontSize = 10.sp,
-                                        modifier = Modifier.padding(bottom = 10.dp)
-                                    )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    FieldLabel("Status", uppercase = true, fontSize = 9.sp)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = if (enabled) C.green.copy(alpha = 0.10f) else C.red.copy(alpha = 0.08f),
+                                        border = BorderStroke(1.dp, if (enabled) C.green.copy(alpha = 0.25f) else C.red.copy(alpha = 0.18f))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(Modifier.size(7.dp).background(if (enabled) C.green else C.red, CircleShape))
+                                            Text(if (enabled) "Live" else "Paused", color = if (enabled) C.green else C.red, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -11228,12 +11176,12 @@ fun OfferDialog(
 
                     item {
                         SettingsCard("USSD Configuration", Icons.Outlined.Terminal) {
-                            FieldLabel("USSD")
+                            FieldLabel("USSD Code")
                             OutlinedTextField(
                                 value = codeField,
                                 onValueChange = { codeField = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(7.dp),
+                                shape = RoundedCornerShape(10.dp),
                                 colors = dialogFieldColors(),
                                 textStyle = LocalTextStyle.current.copy(
                                     fontSize = 13.sp,
@@ -11244,15 +11192,15 @@ fun OfferDialog(
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Surface(
                                     modifier = Modifier
-                                        .height(36.dp)
+                                        .height(34.dp)
                                         .clickable { codeField = TextFieldValue(codeField.text + "pn") },
-                                    shape = RoundedCornerShape(7.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     color = C.cyanDim,
-                                    border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.5f))
+                                    border = BorderStroke(1.dp, C.cyan.copy(alpha = 0.45f))
                                 ) {
                                     Box(modifier = Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
                                         Text("Insert pn", color = C.cyan, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
@@ -11260,11 +11208,11 @@ fun OfferDialog(
                                 }
                                 Surface(
                                     modifier = Modifier
-                                        .height(36.dp)
+                                        .height(34.dp)
                                         .clickable { codeField = TextFieldValue(codeField.text + "*") },
-                                    shape = RoundedCornerShape(7.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     color = C.w04,
-                                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
+                                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.55f))
                                 ) {
                                     Box(modifier = Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
                                         Text("Insert *", color = C.t3, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
@@ -11272,20 +11220,20 @@ fun OfferDialog(
                                 }
                                 Surface(
                                     modifier = Modifier
-                                        .height(36.dp)
+                                        .height(34.dp)
                                         .clickable { codeField = TextFieldValue(codeField.text + "#") },
-                                    shape = RoundedCornerShape(7.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     color = C.w04,
-                                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.6f))
+                                    border = BorderStroke(1.dp, C.border.copy(alpha = 0.55f))
                                 ) {
                                     Box(modifier = Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
                                         Text("Insert #", color = C.t3, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-                                Column(modifier = Modifier.width(140.dp)) {
+                                Column(modifier = Modifier.width(150.dp)) {
                                     FieldLabel("USSD Type")
                                     DialogDropdown(
                                         "USSD Type",
@@ -11300,12 +11248,13 @@ fun OfferDialog(
                                     }
                                 }
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Spacer(modifier = Modifier.height(20.dp))
+                                    FieldLabel("Mode Guide", uppercase = true, fontSize = 9.sp)
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         if (signatureEnabled)
-                                            "Protection-enabled offers automatically use the guided USSD flow so signature verification can run on more phones."
+                                            "Protection auto-enables guided USSD flow for stronger verification across devices."
                                         else
-                                            "Default mode follows category: Data uses SIMPLE, while Calls and SMS use ADVANCED.",
+                                            "Data bundles use SIMPLE. Calls and SMS use ADVANCED by default.",
                                         color = C.t3,
                                         fontSize = 10.5.sp,
                                         lineHeight = 15.sp
@@ -11343,19 +11292,35 @@ fun OfferDialog(
                                     }
                                 }
                             }
-                            Spacer(modifier = Modifier.height(14.dp))
-                            Divider(color = C.border.copy(alpha = 0.4f), thickness = 0.5.dp)
-                            Spacer(modifier = Modifier.height(14.dp))
-                            ProtectionRow(
-                                signatureEnabled = signatureEnabled,
-                                onProtectionChange = { signatureEnabled = it }
-                            )
                         }
                     }
 
                     item {
-                        SettingsCard("Protection Settings", Icons.Outlined.Security) {
+                        SettingsCard("Protection", Icons.Outlined.Security) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("Verify signature before dispatch", color = C.t1, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                    Text(
+                                        if (signatureEnabled) "Menu verification is active" else "No signature verification",
+                                        color = C.t3,
+                                        fontSize = 10.5.sp,
+                                        lineHeight = 14.sp
+                                    )
+                                }
+                                CompactDialogSwitch(
+                                    checked = signatureEnabled,
+                                    onCheckedChange = { signatureEnabled = it },
+                                    checkedTrackColor = C.cyan
+                                )
+                            }
                             if (signatureEnabled) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Divider(color = C.border.copy(alpha = 0.4f), thickness = 0.5.dp)
+                                Spacer(modifier = Modifier.height(12.dp))
                                 FieldLabel("When codes change")
                                 DialogDropdown(
                                     "When codes change",
@@ -11387,6 +11352,7 @@ fun OfferDialog(
                                     )
                                 }
                             } else if (!hasLearnedSignature && !hasPendingSignature) {
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     "No signature learned yet. Turn protection on, save the offer, then use Save & Learn to scan the live USSD menus.",
                                     color = C.t2,

@@ -66,11 +66,11 @@ object SilentUssdOptimized {
         armTimeout(requestId, code)
         armWatchdog(requestId)
 
+        var publicApiStarted = false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (tryPublicApi(telephonyManager, code, requestId)) return true
+            publicApiStarted = tryPublicApi(telephonyManager, code, requestId)
         }
-
-        if (tryReflectionApi(telephonyManager, code, requestId)) return true
+        if (!publicApiStarted && tryReflectionApi(telephonyManager, code, requestId)) return true
 
         if (retryCount < MAX_RETRIES) {
             retryCount++

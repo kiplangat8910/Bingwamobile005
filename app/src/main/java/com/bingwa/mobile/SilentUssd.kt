@@ -13,7 +13,7 @@ import java.lang.reflect.Proxy
 
 object SilentUssd {
     private const val TAG             = "SilentUssd"
-    private const val TIMEOUT_MS      = 12_000L
+    private const val TIMEOUT_MS      = 25_000L
     @Volatile private var inProgress  = false
 
     private var successCb : ((String) -> Unit)? = null
@@ -56,13 +56,12 @@ object SilentUssd {
         }
         armTimeout(code)
 
-        // Try public API first (Android 8+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (tryPublicApi(telephonyManager, code)) return true
+            if (tryReflectionApi(telephonyManager, code)) return true
+        } else {
+            if (tryReflectionApi(telephonyManager, code)) return true
         }
-
-        // Fall back to reflection for older devices
-        if (tryReflectionApi(telephonyManager, code)) return true
 
         synchronized(this) { clearLocked() }
         cancelTimeout()

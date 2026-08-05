@@ -292,7 +292,9 @@ class UssdNavigationService : AccessibilityService() {
                     AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                     AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                     AccessibilityServiceInfo.DEFAULT
-            notificationTimeout = ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                notificationTimeout = ACCESSIBILITY_NOTIFICATION_TIMEOUT_MS
+            }
         }
         if (pendingArm) {
             pendingArm = false
@@ -1529,7 +1531,7 @@ class UssdNavigationService : AccessibilityService() {
         val clickStroke = GestureDescription.StrokeDescription(clickPath, clickStart, clickEnd - clickStart, false)
         val clickDesc = GestureDescription.Builder().addStroke(clickStroke).build()
         var clicked = false
-        runCatching { dispatchGesture(clickDesc, null, null) }.onSuccess { clicked = true }
+        runCatching { dispatchGesture(clickDesc, null, null) }.onSuccess { clicked = true }.onFailure { Log.w(TAG, "dispatchGesture tap failed", it) }
         if (!clicked) return false
         SystemClock.sleep(POST_GESTURE_WAIT_MS + 50L)
         val chars = value.toCharArray()
@@ -1545,7 +1547,7 @@ class UssdNavigationService : AccessibilityService() {
             }
             val stroke = GestureDescription.StrokeDescription(keyPath, keyStart, keyEnd - keyStart, false)
             val desc = GestureDescription.Builder().addStroke(stroke).build()
-            runCatching { dispatchGesture(desc, null, null) }.onFailure { gestureOk = false }
+            runCatching { dispatchGesture(desc, null, null) }.onFailure { gestureOk = false; Log.w(TAG, "dispatchGesture char input failed at idx=$idx", it) }
         }
         return gestureOk
     }
@@ -1639,8 +1641,14 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun refreshInputTarget(node: AccessibilityNodeInfo) = runCatching { node.refresh() }
 
-    private fun supportsAction(node: AccessibilityNodeInfo, actionId: Int): Boolean =
-        runCatching { node.actionList?.any { it.id == actionId } == true }.getOrDefault(false)
+    private fun supportsAction(node: AccessibilityNodeInfo, actionId: Int): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            runCatching { node.actionList?.any { it.id == actionId } == true }.getOrDefault(false)
+        } else {
+            @Suppress("DEPRECATION")
+            runCatching { node.actions.any { it == actionId } }.getOrDefault(false)
+        }
+    }
 
     private fun isTextEntryNode(node: AccessibilityNodeInfo): Boolean {
         val cls = node.className?.toString().orEmpty()
@@ -2148,9 +2156,11 @@ class UssdNavigationService : AccessibilityService() {
                     val imeEnter = AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id
                     if (supportsAction(target, imeEnter) && runCatching { target.performAction(imeEnter) }.getOrDefault(false)) return true
                 }
-                val actionMatch = runCatching {
-                    target.actionList?.firstOrNull { normalizeActionLabel(it.label?.toString()) in SEND_BUTTON_LABELS }?.id
-                }.getOrNull()
+                val actionMatch = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    runCatching { target.actionList?.firstOrNull { normalizeActionLabel(it.label?.toString()) in SEND_BUTTON_LABELS }?.id }.getOrNull()
+                } else {
+                    null
+                }
                 if (actionMatch != null && runCatching { target.performAction(actionMatch) }.getOrDefault(false)) return true
             }
         } finally {
