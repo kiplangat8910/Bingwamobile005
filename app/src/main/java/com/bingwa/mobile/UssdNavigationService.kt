@@ -1147,11 +1147,8 @@ class UssdNavigationService : AccessibilityService() {
         if (dialogText.isBlank()) return false
         val currentKey = buildTransitionSignatureKey(root, dialogText, snapshot)
         if (currentKey == fromKey) return false
-        if (verifyExpectedInput(root, expected)) {
-            pendingAdvanceFromKey = currentKey
-            return true
-        }
-        return false
+        pendingAdvanceFromKey = currentKey
+        return true
     }
 
     private fun clearPendingAdvance() {
@@ -1205,6 +1202,7 @@ class UssdNavigationService : AccessibilityService() {
     private fun startPendingStepAdvance(root: AccessibilityNodeInfo, dialogText: String) {
         currentStepRetryCount = 0
         clearPendingStepAdvance()
+        clearPendingAdvance()
         pendingStepAdvanceSinceElapsed = SystemClock.elapsedRealtime()
         val snapshot = capturePreferredPopupSnapshot(root, shouldRequireStrictPopupScope())
         pendingStepAdvanceFromKey = buildStepAdvanceSignatureKey(root, dialogText, snapshot)
@@ -1229,12 +1227,6 @@ class UssdNavigationService : AccessibilityService() {
         }
         val currentKey = buildStepAdvanceSignatureKey(root, dialogText, snapshot)
         if (currentKey == fromKey) {
-            schedulePendingStepAdvanceKick()
-            return true
-        }
-        val expected = pendingExpectedValue ?: ""
-        val verified = expected.isBlank() || verifyExpectedInput(root, expected)
-        if (!verified) {
             schedulePendingStepAdvanceKick()
             return true
         }
