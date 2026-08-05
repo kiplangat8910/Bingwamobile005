@@ -1646,7 +1646,19 @@ class UssdNavigationService : AccessibilityService() {
             runCatching { node.actionList?.any { it.id == actionId } == true }.getOrDefault(false)
         } else {
             @Suppress("DEPRECATION")
-            runCatching { node.actions.contains(actionId) }.getOrDefault(false)
+            runCatching {
+                val actions = node.actions
+                var found = false
+                var index = 0
+                while (index < actions.size) {
+                    if (actions[index] == actionId) {
+                        found = true
+                        break
+                    }
+                    index++
+                }
+                found
+            }.getOrDefault(false)
         }
     }
 
