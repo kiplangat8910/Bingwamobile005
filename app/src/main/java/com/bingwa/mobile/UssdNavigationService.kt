@@ -1886,9 +1886,19 @@ class UssdNavigationService : AccessibilityService() {
         val e = normalizeInputValue(expected)
         if (a.isBlank() || e.isBlank()) return false
         if (a == e || (a.length > e.length && a.startsWith(e))) return true
+        if (isLikelyMaskedInput(a, e)) return true
+        if (isLikelyMaskedInput(e, a)) return true
         val aPhone = normalizePhoneComparable(actual)
         val ePhone = normalizePhoneComparable(expected)
         return aPhone.isNotBlank() && ePhone.isNotBlank() && (aPhone == ePhone || (aPhone.length > ePhone.length && aPhone.startsWith(ePhone)))
+    }
+
+    private fun isLikelyMaskedInput(actual: String, expected: String): Boolean {
+        val maskChars = setOf('*', '•', '●', '·')
+        if (actual.isBlank() || expected.isBlank()) return false
+        if (actual.length != expected.length) return false
+        if (actual.all { it in maskChars }) return true
+        return false
     }
 
     private fun normalizePhoneComparable(value: String?): String {
