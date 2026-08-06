@@ -1642,24 +1642,8 @@ class UssdNavigationService : AccessibilityService() {
     private fun refreshInputTarget(node: AccessibilityNodeInfo) = runCatching { node.refresh() }
 
     private fun supportsAction(node: AccessibilityNodeInfo, actionId: Int): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            runCatching { node.actionList?.any { it.id == actionId } == true }.getOrDefault(false)
-        } else {
-            @Suppress("DEPRECATION")
-            runCatching {
-                val actions = node.actions
-                var found = false
-                var index = 0
-                while (index < actions.size) {
-                    if (actions[index] == actionId) {
-                        found = true
-                        break
-                    }
-                    index++
-                }
-                found
-            }.getOrDefault(false)
-        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        return runCatching { node.actionList?.any { it.id == actionId } == true }.getOrDefault(false)
     }
 
     private fun isTextEntryNode(node: AccessibilityNodeInfo): Boolean {
