@@ -1642,8 +1642,9 @@ class UssdNavigationService : AccessibilityService() {
     private fun refreshInputTarget(node: AccessibilityNodeInfo) = runCatching { node.refresh() }
 
     private fun supportsAction(node: AccessibilityNodeInfo, actionId: Int): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
-        return runCatching { node.actionList?.any { it.id == actionId } == true }.getOrDefault(false)
+        return runCatching {
+            node.actionList?.any { it.id == actionId } == true || (node.actions and actionId) != 0
+        }.getOrDefault(false)
     }
 
     private fun isTextEntryNode(node: AccessibilityNodeInfo): Boolean {
@@ -2484,7 +2485,7 @@ class UssdNavigationService : AccessibilityService() {
         return hasRecentUssdUiEvent() || shouldUseExtendedTimeout()
     }
 
-    private fun shouldUseExtendedTimeout(): Boolean = isWaitingOnTransientResponse() || hasRecentStepAction()
+    private fun shouldUseExtendedTimeout(): Boolean = isWaitingOnTransientResponse() || hasRecentStepAction() || waitingForRootSinceElapsed > 0L
     private fun hasRecentStepAction() = lastStepActionKey.isNotBlank() && SystemClock.elapsedRealtime() - lastStepActionElapsed <= NETWORK_DELAY_ACTION_GRACE_MS
     private fun isWaitingOnTransientResponse() = normalizeMenuText(lastFinalResponse).isNotBlank() && isTransientResponse(normalizeMenuText(lastFinalResponse))
     private fun isTransientResponse(text: String) = TRANSIENT_RESPONSE_HINTS.any { text.contains(it) }
@@ -3040,7 +3041,11 @@ class UssdNavigationService : AccessibilityService() {
     private fun popupStabilityRemainingMs(): Long {
         if (lastObservedDialogStateChangedElapsed <= 0L) return 0L
         val fastReady = isRecentPopupReadyForFastProcessing()
-        val networkDelay = if (shouldUseExtendedTimeout()) 1.6f else 1.0f
+        val networkDelay = when {
+            shouldUseExtendedTimeout() -> 2.0f
+            !hasSeenAdvancedPopup -> 1.4f
+            else -> 1.0f
+        }
         val requiredStableMs = when {
             !hasSeenAdvancedPopup && fastReady -> (STARTUP_FAST_POPUP_STABILITY_DELAY_MS * networkDelay).toLong()
             !hasSeenAdvancedPopup -> (STARTUP_POPUP_STABILITY_DELAY_MS * networkDelay).toLong()
@@ -3059,11 +3064,15 @@ class UssdNavigationService : AccessibilityService() {
         if (snapshot.hasEditableField && snapshot.hasSendButton) return true
         if (snapshot.hasSendButton && dialogSuggestsTypedReplyPrompt(snapshot.dialogText.lowercase())) return true
         val menu = parseMenuFromSnapshot(snapshot)
-        return menu != null && menu.size >= 2
+        if (menu != null && menu.size >= 2) return true
+        return snapshot.hasEditableField || snapshot.hasSendButton
     }
 
     private fun shouldWaitForRootRecovery(): Boolean {
-        return advancedActive && (hasSeenAdvancedPopup || pendingPhase != PendingPhase.NONE || pendingStepAdvanceFromKey.isNotBlank() || hasRecentUssdUiEvent())
+        return advancedActive && (
+            hasSeenAdvancedPopup || pendingPhase != PendingPhase.NONE || pendingStepAdvanceFromKey.isNotBlank() ||
+                hasRecentUssdUiEvent() || currentStep == 0
+        )
     }
 
     private fun waitForRootRecovery() {
@@ -3631,7 +3640,7 @@ class UssdNavigationService : AccessibilityService() {
     private val TAP_GESTURE_DURATION_MS = 50L
     private val REDIAL_COOLDOWN_MS = 700L
     private val PENDING_ADVANCE_KICK_MS = 18L
-    private val ROOT_REACQUIRE_RETRY_DELAY_MS = 26L
+    private val ROOT_REACQUIRE_RETRY_DELAY_MS = 80L
     private val DIALOG_DISMISS_SETTLE_MS = 24L
     private val UI_KEEP_VISIBLE_INTERVAL_MS = 350L
     private val STARTUP_UI_KEEP_VISIBLE_MS = 7000L
