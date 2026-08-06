@@ -2169,8 +2169,10 @@ class UssdNavigationService : AccessibilityService() {
                     null
                 }
                 if (actionMatch != null && runCatching { target.performAction(actionMatch) }.getOrDefault(false)) return true
-                if (supportsAction(target, AccessibilityNodeInfo.ACTION_DONE) && runCatching { target.performAction(AccessibilityNodeInfo.ACTION_DONE) }.getOrDefault(false)) return true
-                if (supportsAction(target, AccessibilityNodeInfo.ACTION_NEXT) && runCatching { target.performAction(AccessibilityNodeInfo.ACTION_NEXT) }.getOrDefault(false)) return true
+                val actionDone = 1 // AccessibilityNodeInfo.ACTION_DONE
+                if (supportsAction(target, actionDone) && runCatching { target.performAction(actionDone) }.getOrDefault(false)) return true
+                val actionNext = 2 // AccessibilityNodeInfo.ACTION_NEXT
+                if (supportsAction(target, actionNext) && runCatching { target.performAction(actionNext) }.getOrDefault(false)) return true
             }
         } finally {
             targets.forEach { it.recycle() }
