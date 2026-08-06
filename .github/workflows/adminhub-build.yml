@@ -1,0 +1,53 @@
+name: Build AdminHub Release APK
+
+on:
+  push:
+    branches:
+      - feature/bingwa-admin-hub
+    tags:
+      - 'adminhub-v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SHOULD_PUBLISH_RELEASE: ${{ github.ref_type == 'tag' }}
+      APP_VERSION: ${{ github.event.release.tag_name || github.ref_name }}
+      RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission to gradlew
+        run: chmod +x gradlew
+
+      - name: Build AdminHub release APK
+        run: ./gradlew --stacktrace :adminhub:assembleRelease
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: adminhub-release-apk
+          path: adminhub/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: env.SHOULD_PUBLISH_RELEASE == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Bingwa Admin Hub ${{ env.APP_VERSION }}
+          files: adminhub/build/outputs/apk/release/*.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

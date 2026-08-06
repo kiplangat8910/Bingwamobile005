@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "BingwaMobile005"
 include(":app")
+include(":adminhub")
