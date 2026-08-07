@@ -104,13 +104,14 @@ fun ScheduleScreen(scheduleRepository: ScheduleRepository, userRepository: UserR
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(tasks) { task ->
+                    val context = androidx.compose.ui.platform.LocalContext.current
                     ScheduledTaskCard(
                         task = task,
                         onDelete = {
                             scope.launch {
                                 scheduleRepository.deleteTask(task.id)
                                 Scheduler.cancelTask(
-                                    context = androidx.compose.ui.platform.LocalContext.current,
+                                    context = context,
                                     taskId = task.id
                                 )
                             }
@@ -122,6 +123,7 @@ fun ScheduleScreen(scheduleRepository: ScheduleRepository, userRepository: UserR
     }
 
     if (showAddDialog) {
+        val context = androidx.compose.ui.platform.LocalContext.current
         AddScheduleDialog(
             users = users,
             onDismiss = { showAddDialog = false },
@@ -138,7 +140,7 @@ fun ScheduleScreen(scheduleRepository: ScheduleRepository, userRepository: UserR
                     )
                     scheduleRepository.addTask(task)
                     Scheduler.scheduleTask(
-                        context = androidx.compose.ui.platform.LocalContext.current,
+                        context = context,
                         taskId = task.id,
                         triggerAt = scheduledAt,
                         repeatInterval = Scheduler.getRepeatInterval(repeat.name)

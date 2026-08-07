@@ -5,6 +5,11 @@ import com.bingwa.adminhub.data.local.dao.ScheduleDao
 import com.bingwa.adminhub.data.local.dao.TemplateDao
 import com.bingwa.adminhub.data.local.dao.TokenDao
 import com.bingwa.adminhub.data.local.dao.UserDao
+import com.bingwa.adminhub.data.local.entity.PurchaseEntity
+import com.bingwa.adminhub.data.local.entity.ScheduleEntity
+import com.bingwa.adminhub.data.local.entity.TemplateEntity
+import com.bingwa.adminhub.data.local.entity.TokenEntity
+import com.bingwa.adminhub.data.local.entity.UserEntity
 import com.bingwa.adminhub.data.models.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -15,11 +20,11 @@ class UserRepository(private val dao: UserDao) {
     }
 
     suspend fun addUser(user: AdminUser) {
-        dao.insert(UserEntity.fromModel(user))
+        dao.insert(user.toEntity())
     }
 
     suspend fun updateUser(user: AdminUser) {
-        dao.update(UserEntity.fromModel(user))
+        dao.update(user.toEntity())
     }
 
     suspend fun deleteUser(userId: String) {
@@ -43,7 +48,7 @@ class PurchaseRepository(private val dao: PurchaseDao) {
     }
 
     suspend fun addPurchase(purchase: PurchaseSms) {
-        dao.insert(PurchaseEntity.fromModel(purchase))
+        dao.insert(purchase.toEntity())
     }
 
     suspend fun getRecentPurchases(limit: Int = 50): List<PurchaseSms> {
@@ -63,11 +68,11 @@ class TokenRepository(private val dao: TokenDao) {
     }
 
     suspend fun addTransaction(transaction: TokenTransaction) {
-        dao.insert(TokenEntity.fromModel(transaction))
+        dao.insert(transaction.toEntity())
     }
 
     suspend fun updateTransaction(transaction: TokenTransaction) {
-        dao.update(TokenEntity.fromModel(transaction))
+        dao.update(transaction.toEntity())
     }
 
     fun getTransactionsForUser(userId: String): Flow<List<TokenTransaction>> {
@@ -83,11 +88,11 @@ class ScheduleRepository(private val dao: ScheduleDao) {
     }
 
     suspend fun addTask(task: ScheduledTask) {
-        dao.insert(ScheduleEntity.fromModel(task))
+        dao.insert(task.toEntity())
     }
 
     suspend fun updateTask(task: ScheduledTask) {
-        dao.update(ScheduleEntity.fromModel(task))
+        dao.update(task.toEntity())
     }
 
     suspend fun deleteTask(taskId: String) {
@@ -107,11 +112,11 @@ class SmsTemplateRepository(private val dao: TemplateDao) {
     }
 
     suspend fun addTemplate(template: SmsTemplate) {
-        dao.insert(TemplateEntity.fromModel(template))
+        dao.insert(template.toEntity())
     }
 
     suspend fun updateTemplate(template: SmsTemplate) {
-        dao.update(TemplateEntity.fromModel(template))
+        dao.update(template.toEntity())
     }
 
     suspend fun deleteTemplate(templateId: String) {
