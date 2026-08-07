@@ -44,12 +44,11 @@ jobs:
 
       - name: Publish GitHub Release
         if: env.SHOULD_PUBLISH_RELEASE == 'true'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: Bingwa Admin Hub ${{ env.APP_VERSION }}
-          files: adminhub/build/outputs/apk/release/*.apk
-          draft: false
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          overwrite_files: true
+          files: adminhub/build/outputs/apk/release/*.apk
