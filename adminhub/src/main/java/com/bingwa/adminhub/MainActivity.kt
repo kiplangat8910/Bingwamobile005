@@ -152,7 +152,7 @@ fun AdminHubApp() {
                     purchaseRepository = purchaseRepository,
                     userRepository = userRepository
                 )
-                Screen.USERS -> UsersScreen(userRepository = userRepository)
+                Screen.USERS -> UsersScreen(userRepository = userRepository, purchaseRepository = purchaseRepository)
                 Screen.TOKEN_ACTIONS -> TokenActionsScreen(
                     tokenRepository = tokenRepository,
                     userRepository = userRepository

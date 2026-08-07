@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -38,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,9 +58,11 @@ import com.bingwa.adminhub.ui.theme.AdminTextSecondary
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SmsCenterScreen(templateRepository: SmsTemplateRepository) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val templates by templateRepository.templates.collectAsState(initial = emptyList())
     var selectedTemplate by remember { mutableStateOf<SmsTemplate?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showBulkDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     Column(
@@ -78,10 +82,17 @@ fun SmsCenterScreen(templateRepository: SmsTemplateRepository) {
                 fontWeight = FontWeight.Bold,
                 color = AdminTextPrimary
             )
-            Button(onClick = { showCreateDialog = true }) {
-                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.size(4.dp))
-                Text("New Template")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { showBulkDialog = true }) {
+                    Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text("Bulk SMS")
+                }
+                Button(onClick = { showCreateDialog = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text("New")
+                }
             }
         }
 
@@ -151,6 +162,23 @@ fun SmsCenterScreen(templateRepository: SmsTemplateRepository) {
                 }
             },
             onDelete = null
+        )
+    }
+    if (showBulkDialog) {
+        BulkSmsDialog(
+            onDismiss = { showBulkDialog = false },
+            onSend = { message, delaySeconds ->
+                scope.launch {
+                    val users = (context.applicationContext as com.bingwa.adminhub.AdminHubApplication)
+                        .database.userDao().getAll().first()
+                    val simId = context.getSharedPreferences("adminhub_settings", android.content.Context.MODE_PRIVATE)
+                        .getInt("admin_sms_sim_id", -1)
+                    users.forEach { user ->
+                        com.bingwa.adminhub.service.SmsSender.sendSms(context, user.phone, message, simId)
+                        delay(delaySeconds * 1000L)
+                    }
+                }
+            }
         )
     }
 }
@@ -266,4 +294,60 @@ fun TemplateCard(template: SmsTemplate, onClick: () -> Unit) {
             )
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BulkSmsDialog(
+    onDismiss: () -> Unit,
+    onSend: (String, Int) -> Unit
+) {
+    var message by remember { mutableStateOf("") }
+    var delaySeconds by remember { mutableStateOf("30") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Bulk SMS to All Users") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = message,
+                    onValueChange = { message = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Announcement Message") },
+                    placeholder = { Text("Enter your announcement...") },
+                    minLines = 4
+                )
+                OutlinedTextField(
+                    value = delaySeconds,
+                    onValueChange = { delaySeconds = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Delay between messages (seconds)") },
+                    placeholder = { Text("30") },
+                    singleLine = true
+                )
+                Text(
+                    text = "SMS will be sent to all recorded users with a safe delay to avoid spam.",
+                    color = AdminTextSecondary,
+                    fontSize = 12.sp
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val delay = delaySeconds.toIntOrNull() ?: 30
+                if (message.isNotBlank() && delay > 0) {
+                    onSend(message, delay)
+                    onDismiss()
+                }
+            }) {
+                Text("Send to All")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

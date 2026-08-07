@@ -68,7 +68,8 @@ fun TokenActionsScreen(
     var amount by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var weeks by remember { mutableStateOf("") }
-    var message by remember { mutableStateOf("") }
+    var customMessage by remember { mutableStateOf("") }
+    var selectedTemplate by remember { mutableStateOf<SmsTemplate?>(null) }
     var showSuccess by remember { mutableStateOf(false) }
     var showError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -87,11 +88,11 @@ fun TokenActionsScreen(
             color = AdminTextPrimary
         )
 
-        Text("Select User", fontWeight = FontWeight.SemiBold, color = AdminTextSecondary, fontSize = 12.sp)
+        Text("Select Recipient", fontWeight = FontWeight.SemiBold, color = AdminTextSecondary, fontSize = 12.sp)
         if (users.isEmpty()) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "No users yet. Add users first to send token commands.",
+                    text = "No users recorded yet. Users are auto-added when they purchase tokens, or you can add them manually.",
                     modifier = Modifier.padding(16.dp),
                     color = AdminTextSecondary,
                     fontSize = 14.sp
@@ -110,11 +111,22 @@ fun TokenActionsScreen(
                             else MaterialTheme.colorScheme.surface
                         )
                     ) {
-                        Text(
-                            text = "${user.name} (${user.phone})",
+                        Row(
                             modifier = Modifier.padding(12.dp),
-                            color = AdminTextPrimary
-                        )
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = user.name, fontWeight = FontWeight.SemiBold, color = AdminTextPrimary, fontSize = 14.sp)
+                                Text(text = user.phone, color = AdminTextSecondary, fontSize = 12.sp)
+                            }
+                            Text(
+                                text = user.category,
+                                color = AdminAmber,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
@@ -186,6 +198,35 @@ fun TokenActionsScreen(
             else -> {}
         }
 
+        Text("SMS Template", fontWeight = FontWeight.SemiBold, color = AdminTextSecondary, fontSize = 12.sp)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { selectedTemplate = null },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (selectedTemplate == null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                    contentColor = if (selectedTemplate == null) MaterialTheme.colorScheme.onPrimary else AdminTextSecondary
+                ),
+                modifier = Modifier.weight(1f)
+            ) { Text("Custom Message") }
+            Button(
+                onClick = { /* TODO: open template picker */ },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (selectedTemplate != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                    contentColor = if (selectedTemplate != null) MaterialTheme.colorScheme.onPrimary else AdminTextSecondary
+                ),
+                modifier = Modifier.weight(1f)
+            ) { Text("Use Template") }
+        }
+
+        OutlinedTextField(
+            value = customMessage,
+            onValueChange = { customMessage = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("SMS Message") },
+            placeholder = { Text("Your tokens have been added. Code: ...") },
+            minLines = 2
+        )
+
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = {
@@ -214,8 +255,22 @@ fun TokenActionsScreen(
                         }
                     }
 
-                    val recipient = simSelector.getRecipientPhone()
+                    val recipient = selectedUser!!.phone
                     val subId = simSelector.getSelectedSimId()
+                    val messageBody = buildString {
+                        if (customMessage.isNotBlank()) {
+                            append(customMessage)
+                        } else {
+                            append(when (selectedAction!!) {
+                                TokenType.ACTIVATE -> "Your activation code is: $generatedCode"
+                                TokenType.CLEAR -> "Your tokens have been cleared."
+                                TokenType.GIFT -> "You have been gifted $amount tokens. Code: $generatedCode"
+                                TokenType.UNLIMITED -> "Unlimited usage activated for $weeks weeks. Code: $generatedCode"
+                                TokenType.REMOTE_ADD -> "$amount tokens added remotely. Code: $generatedCode"
+                            })
+                        }
+                        append("\n\nCode: ").append(generatedCode)
+                    }
 
                     scope.launch {
                         val sent = SmsSender.sendCode(context, generatedCode, recipient, subId)
@@ -225,7 +280,7 @@ fun TokenActionsScreen(
                             userId = selectedUser!!.id,
                             type = selectedAction!!,
                             code = generatedCode,
-                            message = "Sent to $recipient via SIM ${simSelector.getSelectedSimName()}",
+                            message = messageBody,
                             status = status
                         )
                         tokenRepository.addTransaction(transaction)
@@ -243,25 +298,27 @@ fun TokenActionsScreen(
 
             Button(
                 onClick = {
-                    if (selectedUser == null || selectedAction!! != TokenType.GIFT) {
-                        showError = "Select a user and Gift action for bulk send"
+                    if (selectedAction!! != TokenType.GIFT || users.isEmpty()) {
+                        showError = "Select Gift action and ensure users exist"
                         return@Button
                     }
-                    val recipient = simSelector.getRecipientPhone()
-                    val subId = simSelector.getSelectedSimId()
                     val tokens = amount.toIntOrNull() ?: 0
                     if (tokens <= 0) { showError = "Enter a valid token amount"; return@Button }
 
                     scope.launch {
                         users.forEach { user ->
                             val generatedCode = OwnerCodeGenerator.generateGiftCode(tokens)
-                            SmsSender.sendCode(context, generatedCode, recipient, subId)
+                            val messageBody = buildString {
+                                append("You have been gifted $tokens tokens.\n\nCode: ").append(generatedCode)
+                            }
+                            val subId = simSelector.getSelectedSimId()
+                            SmsSender.sendCode(context, generatedCode, user.phone, subId)
                             val transaction = TokenTransaction(
                                 id = "tx_${System.currentTimeMillis()}_${user.id}",
                                 userId = user.id,
                                 type = TokenType.GIFT,
                                 code = generatedCode,
-                                message = "Bulk gift to ${user.phone}",
+                                message = messageBody,
                                 status = TransactionStatus.SENT
                             )
                             tokenRepository.addTransaction(transaction)
@@ -271,7 +328,7 @@ fun TokenActionsScreen(
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = selectedUser != null && selectedAction == TokenType.GIFT && users.isNotEmpty()
+                enabled = selectedAction == TokenType.GIFT && users.isNotEmpty()
             ) {
                 Text("Gift All")
             }

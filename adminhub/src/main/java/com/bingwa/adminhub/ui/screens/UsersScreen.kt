@@ -46,17 +46,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bingwa.adminhub.data.models.AdminUser
+import com.bingwa.adminhub.data.models.PurchaseSms
+import com.bingwa.adminhub.data.repositories.PurchaseRepository
 import com.bingwa.adminhub.data.repositories.UserRepository
 import com.bingwa.adminhub.ui.theme.AdminAmber
 import com.bingwa.adminhub.ui.theme.AdminTextPrimary
 import com.bingwa.adminhub.ui.theme.AdminTextSecondary
 
 @Composable
-fun UsersScreen(userRepository: UserRepository) {
+fun UsersScreen(userRepository: UserRepository, purchaseRepository: PurchaseRepository) {
     val users by userRepository.users.collectAsState(initial = emptyList())
     var searchQuery by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
     var editingUser by remember { mutableStateOf<AdminUser?>(null) }
+    var selectedUser by remember { mutableStateOf<AdminUser?>(null) }
     val scope = rememberCoroutineScope()
 
     val filteredUsers = remember(searchQuery, users) {
@@ -110,7 +113,8 @@ fun UsersScreen(userRepository: UserRepository) {
                             scope.launch {
                                 userRepository.deleteUser(user.id)
                             }
-                        }
+                        },
+                        onClick = { selectedUser = user }
                     )
                 }
             }
@@ -147,6 +151,13 @@ fun UsersScreen(userRepository: UserRepository) {
                     editingUser = null
                 }
             }
+        )
+    }
+    if (selectedUser != null) {
+        UserHistoryDialog(
+            user = selectedUser!!,
+            purchaseRepository = purchaseRepository,
+            onDismiss = { selectedUser = null }
         )
     }
 }
@@ -187,9 +198,11 @@ fun UserDialog(user: AdminUser?, onDismiss: () -> Unit, onSave: (String, String,
 }
 
 @Composable
-fun UserCard(user: AdminUser, onEdit: () -> Unit, onDelete: () -> Unit) {
+fun UserCard(user: AdminUser, onEdit: () -> Unit, onDelete: () -> Unit, onClick: () -> Unit = {}) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
@@ -255,4 +268,57 @@ fun UserCard(user: AdminUser, onEdit: () -> Unit, onDelete: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+fun UserHistoryDialog(user: AdminUser, purchaseRepository: PurchaseRepository, onDismiss: () -> Unit) {
+    val purchases by purchaseRepository.purchases.collectAsState(initial = emptyList())
+    val userPurchases = remember(purchases, user.phone) {
+        purchases.filter { it.phone == user.phone }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${user.name} - Purchase History") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Phone: ${user.phone}", color = AdminTextSecondary, fontSize = 14.sp)
+                if (user.category.isNotBlank()) {
+                    Text("Category: ${user.category}", color = AdminTextSecondary, fontSize = 14.sp)
+                }
+                if (user.notes.isNotBlank()) {
+                    Text("Notes: ${user.notes}", color = AdminTextSecondary, fontSize = 14.sp)
+                }
+                Text(
+                    text = "Total Purchases: ${userPurchases.size}",
+                    fontWeight = FontWeight.SemiBold,
+                    color = AdminTextPrimary,
+                    fontSize = 14.sp
+                )
+                if (userPurchases.isEmpty()) {
+                    Text("No purchases recorded yet.", color = AdminTextSecondary, fontSize = 14.sp)
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(userPurchases) { purchase ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("${purchase.amount} KSH", fontWeight = FontWeight.Bold, color = AdminAmber, fontSize = 14.sp)
+                                    Text("Balance: ${purchase.balance} KSH", color = AdminTextSecondary, fontSize = 12.sp)
+                                    Text("Exp: ${purchase.expirationDate}", color = AdminTextSecondary, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }
