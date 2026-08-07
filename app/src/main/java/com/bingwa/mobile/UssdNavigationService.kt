@@ -3180,7 +3180,7 @@ class UssdNavigationService : AccessibilityService() {
         if (value.isBlank() || !value.all(Char::isDigit)) return false
         if (!snapshot.hasSendButton) return false
         if (snapshot.hasEditableField) return true
-        if (menu != null && menu.isNotEmpty()) return true
+        if (menu != null && menu.isNotEmpty()) return false
         return dialogSuggestsTypedReplyPrompt(lower)
     }
 
