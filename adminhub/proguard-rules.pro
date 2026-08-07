@@ -7,5 +7,10 @@
 -keep class androidx.compose.** { *; }
 -keep class kotlinx.coroutines.** { *; }
 
-# Keep AdminHub models
+# Keep AdminHub models and entities
 -keep class com.bingwa.adminhub.data.models.** { *; }
+-keep class com.bingwa.adminhub.data.local.entity.** { *; }
+-keep class com.bingwa.adminhub.data.local.dao.** { *; }
+
+# Keep Room database
+-keep class com.bingwa.adminhub.data.local.AdminHubDatabase { *; }

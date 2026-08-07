@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -116,11 +118,72 @@ fun UsersScreen(userRepository: UserRepository) {
     }
 
     if (showAddDialog) {
-        // Add User Dialog
+        UserDialog(
+            user = null,
+            onDismiss = { showAddDialog = false },
+            onSave = { name, phone, category, notes ->
+                scope.launch {
+                    val newUser = AdminUser(
+                        id = "user_${System.currentTimeMillis()}",
+                        phone = phone,
+                        name = name,
+                        category = category,
+                        notes = notes
+                    )
+                    userRepository.addUser(newUser)
+                    showAddDialog = false
+                }
+            }
+        )
     }
     if (editingUser != null) {
-        // Edit User Dialog
+        UserDialog(
+            user = editingUser,
+            onDismiss = { editingUser = null },
+            onSave = { name, phone, category, notes ->
+                scope.launch {
+                    val updated = editingUser!!.copy(name = name, phone = phone, category = category, notes = notes)
+                    userRepository.updateUser(updated)
+                    editingUser = null
+                }
+            }
+        )
     }
+}
+
+@Composable
+fun UserDialog(user: AdminUser?, onDismiss: () -> Unit, onSave: (String, String, String, String) -> Unit) {
+    var name by remember { mutableStateOf(user?.name ?: "") }
+    var phone by remember { mutableStateOf(user?.phone ?: "") }
+    var category by remember { mutableStateOf(user?.category ?: "") }
+    var notes by remember { mutableStateOf(user?.notes ?: "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (user == null) "Add User" else "Edit User") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(value = name, onValueChange = { name = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Name") }, singleLine = true)
+                OutlinedTextField(value = phone, onValueChange = { phone = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Phone") }, singleLine = true)
+                OutlinedTextField(value = category, onValueChange = { category = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Category") }, singleLine = true)
+                OutlinedTextField(value = notes, onValueChange = { notes = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes") }, minLines = 2)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (name.isNotBlank() && phone.isNotBlank()) {
+                    onSave(name, phone, category, notes)
+                }
+            }) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable

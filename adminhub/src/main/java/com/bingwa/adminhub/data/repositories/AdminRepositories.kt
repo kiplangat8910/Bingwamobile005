@@ -1,111 +1,126 @@
 package com.bingwa.adminhub.data.repositories
 
+import com.bingwa.adminhub.data.local.dao.PurchaseDao
+import com.bingwa.adminhub.data.local.dao.ScheduleDao
+import com.bingwa.adminhub.data.local.dao.TemplateDao
+import com.bingwa.adminhub.data.local.dao.TokenDao
+import com.bingwa.adminhub.data.local.dao.UserDao
 import com.bingwa.adminhub.data.models.*
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 
-class UserRepository {
-    private val _users = MutableStateFlow<List<AdminUser>>(emptyList())
-    val users: Flow<List<AdminUser>> = _users.asStateFlow()
+class UserRepository(private val dao: UserDao) {
+    val users: Flow<List<AdminUser>> = dao.getAll().map { entities ->
+        entities.map { it.toModel() }
+    }
 
     suspend fun addUser(user: AdminUser) {
-        _users.value = _users.value + user
+        dao.insert(UserEntity.fromModel(user))
     }
 
     suspend fun updateUser(user: AdminUser) {
-        _users.value = _users.value.map { if (it.id == user.id) user else it }
+        dao.update(UserEntity.fromModel(user))
     }
 
     suspend fun deleteUser(userId: String) {
-        _users.value = _users.value.filter { it.id != userId }
+        dao.getById(userId)?.let { dao.delete(it) }
     }
 
     suspend fun getUser(userId: String): AdminUser? {
-        return _users.value.find { it.id == userId }
+        return dao.getById(userId)?.toModel()
     }
 
-    suspend fun searchUsers(query: String): List<AdminUser> {
-        if (query.isBlank()) return _users.value
-        val lower = query.lowercase()
-        return _users.value.filter {
-            it.phone.contains(lower) || it.name.contains(lower) || it.category.contains(lower)
+    fun searchUsers(query: String): Flow<List<AdminUser>> {
+        return dao.search(query).map { entities ->
+            entities.map { it.toModel() }
         }
     }
 }
 
-class PurchaseRepository {
-    private val _purchases = MutableStateFlow<List<PurchaseSms>>(emptyList())
-    val purchases: Flow<List<PurchaseSms>> = _purchases.asStateFlow()
+class PurchaseRepository(private val dao: PurchaseDao) {
+    val purchases: Flow<List<PurchaseSms>> = dao.getAll().map { entities ->
+        entities.map { it.toModel() }
+    }
 
     suspend fun addPurchase(purchase: PurchaseSms) {
-        _purchases.value = listOf(purchase) + _purchases.value
+        dao.insert(PurchaseEntity.fromModel(purchase))
     }
 
     suspend fun getRecentPurchases(limit: Int = 50): List<PurchaseSms> {
-        return _purchases.value.take(limit)
+        return dao.getRecent(limit).map { it.toModel() }
     }
 
-    suspend fun getPurchasesForUser(phone: String): List<PurchaseSms> {
-        return _purchases.value.filter { it.phone == phone }
+    fun getPurchasesForUser(phone: String): Flow<List<PurchaseSms>> {
+        return dao.getByPhone(phone).map { entities ->
+            entities.map { it.toModel() }
+        }
     }
 }
 
-class TokenRepository {
-    private val _transactions = MutableStateFlow<List<TokenTransaction>>(emptyList())
-    val transactions: Flow<List<TokenTransaction>> = _transactions.asStateFlow()
+class TokenRepository(private val dao: TokenDao) {
+    val transactions: Flow<List<TokenTransaction>> = dao.getAll().map { entities ->
+        entities.map { it.toModel() }
+    }
 
     suspend fun addTransaction(transaction: TokenTransaction) {
-        _transactions.value = listOf(transaction) + _transactions.value
+        dao.insert(TokenEntity.fromModel(transaction))
     }
 
     suspend fun updateTransaction(transaction: TokenTransaction) {
-        _transactions.value = _transactions.value.map { if (it.id == transaction.id) transaction else it }
+        dao.update(TokenEntity.fromModel(transaction))
     }
 
-    suspend fun getTransactionsForUser(userId: String): List<TokenTransaction> {
-        return _transactions.value.filter { it.userId == userId }
+    fun getTransactionsForUser(userId: String): Flow<List<TokenTransaction>> {
+        return dao.getByUser(userId).map { entities ->
+            entities.map { it.toModel() }
+        }
     }
 }
 
-class ScheduleRepository {
-    private val _tasks = MutableStateFlow<List<ScheduledTask>>(emptyList())
-    val tasks: Flow<List<ScheduledTask>> = _tasks.asStateFlow()
+class ScheduleRepository(private val dao: ScheduleDao) {
+    val tasks: Flow<List<ScheduledTask>> = dao.getAll().map { entities ->
+        entities.map { it.toModel() }
+    }
 
     suspend fun addTask(task: ScheduledTask) {
-        _tasks.value = listOf(task) + _tasks.value
+        dao.insert(ScheduleEntity.fromModel(task))
     }
 
     suspend fun updateTask(task: ScheduledTask) {
-        _tasks.value = _tasks.value.map { if (it.id == task.id) task else it }
+        dao.update(ScheduleEntity.fromModel(task))
     }
 
     suspend fun deleteTask(taskId: String) {
-        _tasks.value = _tasks.value.filter { it.id != taskId }
+        dao.getById(taskId)?.let { dao.delete(it) }
     }
 
-    suspend fun getEnabledTasks(): List<ScheduledTask> {
-        return _tasks.value.filter { it.enabled }
+    fun getEnabledTasks(): Flow<List<ScheduledTask>> {
+        return dao.getEnabled().map { entities ->
+            entities.map { it.toModel() }
+        }
     }
 }
 
-class SmsTemplateRepository {
-    private val _templates = MutableStateFlow<List<SmsTemplate>>(emptyList())
-    val templates: Flow<List<SmsTemplate>> = _templates.asStateFlow()
+class SmsTemplateRepository(private val dao: TemplateDao) {
+    val templates: Flow<List<SmsTemplate>> = dao.getAll().map { entities ->
+        entities.map { it.toModel() }
+    }
 
     suspend fun addTemplate(template: SmsTemplate) {
-        _templates.value = listOf(template) + _templates.value
+        dao.insert(TemplateEntity.fromModel(template))
     }
 
     suspend fun updateTemplate(template: SmsTemplate) {
-        _templates.value = _templates.value.map { if (it.id == template.id) template else it }
+        dao.update(TemplateEntity.fromModel(template))
     }
 
     suspend fun deleteTemplate(templateId: String) {
-        _templates.value = _templates.value.filter { it.id != templateId }
+        dao.getById(templateId)?.let { dao.delete(it) }
     }
 
-    suspend fun getTemplatesByCategory(category: TemplateCategory): List<SmsTemplate> {
-        return _templates.value.filter { it.category == category }
+    fun getTemplatesByCategory(category: TemplateCategory): Flow<List<SmsTemplate>> {
+        return dao.getByCategory(category.name).map { entities ->
+            entities.map { it.toModel() }
+        }
     }
 }

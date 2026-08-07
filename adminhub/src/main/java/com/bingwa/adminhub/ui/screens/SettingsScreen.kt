@@ -23,6 +23,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,12 +41,19 @@ import androidx.compose.ui.unit.sp
 import com.bingwa.adminhub.ui.theme.AdminAmber
 import com.bingwa.adminhub.ui.theme.AdminTextPrimary
 import com.bingwa.adminhub.ui.theme.AdminTextSecondary
+import com.bingwa.adminhub.util.SimSelector
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val simSelector = remember { SimSelector(context) }
     var smsNotifications by remember { mutableStateOf(true) }
     var autoActivate by remember { mutableStateOf(false) }
     var networkTimeSync by remember { mutableStateOf(true) }
+    var selectedSimId by remember { mutableStateOf(simSelector.getSelectedSimId()) }
+    var recipientPhone by remember { mutableStateOf(simSelector.getRecipientPhone()) }
+    var simExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -95,6 +106,44 @@ fun SettingsScreen() {
                 Switch(
                     checked = networkTimeSync,
                     onCheckedChange = { networkTimeSync = it }
+                )
+            }
+        }
+
+        SettingsCard("SIM Selection", "Choose SIM card for sending SMS commands", Icons.Filled.Send) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ExposedDropdownMenuBox(expanded = simExpanded, onExpandedChange = { simExpanded = !simExpanded }) {
+                    OutlinedTextField(
+                        value = simSelector.getSelectedSimName(),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Send SMS via") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = simExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(expanded = simExpanded, onDismissRequest = { simExpanded = false }) {
+                        simSelector.getAvailableSims().forEach { sim ->
+                            DropdownMenuItem(
+                                text = { Text("${sim.displayName} - ${sim.number}") },
+                                onClick = {
+                                    simSelector.setSelectedSimId(sim.subscriptionId)
+                                    selectedSimId = sim.subscriptionId
+                                    simExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = recipientPhone,
+                    onValueChange = {
+                        recipientPhone = it
+                        simSelector.setRecipientPhone(it)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Recipient Phone") },
+                    placeholder = { Text("Phone number to send commands to") },
+                    singleLine = true
                 )
             }
         }

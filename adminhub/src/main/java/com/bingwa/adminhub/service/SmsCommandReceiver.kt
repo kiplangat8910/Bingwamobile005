@@ -3,10 +3,20 @@ package com.bingwa.adminhub.service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Telephony
 import android.util.Log
+import com.bingwa.adminhub.data.parser.SmsPurchaseParser
+import com.bingwa.adminhub.data.models.PurchaseSms
+import com.bingwa.adminhub.data.repositories.PurchaseRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class SmsCommandReceiver : BroadcastReceiver() {
+    private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onReceive(context: Context?, intent: Intent?) {
         if (context == null || intent == null) return
 
@@ -16,19 +26,21 @@ class SmsCommandReceiver : BroadcastReceiver() {
 
             Log.d(TAG, "SMS received: $fullMessage")
 
-            val purchase = com.bingwa.adminhub.data.parser.SmsPurchaseParser.parse(fullMessage)
+            val purchase = SmsPurchaseParser.parse(fullMessage)
             if (purchase != null) {
                 Log.i(TAG, "Purchase detected: ${purchase.phone} - ${purchase.amount} KSH")
-                val serviceIntent = Intent(context, SmsCommandService::class.java).apply {
-                    action = SmsCommandService.ACTION_SEND_SMS
-                    putExtra("purchase_phone", purchase.phone)
-                    putExtra("purchase_amount", purchase.amount)
-                }
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    context.startForegroundService(serviceIntent)
-                } else {
-                    @Suppress("DEPRECATION")
-                    context.startService(serviceIntent)
+                val application = context.applicationContext as com.bingwa.adminhub.AdminHubApplication
+                val purchaseRepository = PurchaseRepository(application.database.purchaseDao())
+
+                receiverScope.launch {
+                    purchaseRepository.addPurchase(purchase)
+                    val prefs = context.getSharedPreferences("adminhub_settings", Context.MODE_PRIVATE)
+                    val autoReplyEnabled = prefs.getBoolean("auto_reply_enabled", true)
+                    if (autoReplyEnabled) {
+                        val autoReply = SmsSender.buildAutoReply(purchase.phone, purchase.amount)
+                        val simId = prefs.getInt("admin_sms_sim_id", -1)
+                        SmsSender.sendSms(context, purchase.phone, autoReply, simId)
+                    }
                 }
             }
         }

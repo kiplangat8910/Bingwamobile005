@@ -64,7 +64,6 @@ import com.bingwa.adminhub.ui.screens.SmsCenterScreen
 import com.bingwa.adminhub.ui.screens.ScheduleScreen
 import com.bingwa.adminhub.ui.screens.SettingsScreen
 import com.bingwa.adminhub.ui.theme.AdminHubTheme
-import com.bingwa.adminhub.util.NetworkTimeSync
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,11 +79,12 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminHubApp() {
-    val userRepository = remember { UserRepository() }
-    val purchaseRepository = remember { PurchaseRepository() }
-    val tokenRepository = remember { TokenRepository() }
-    val scheduleRepository = remember { ScheduleRepository() }
-    val templateRepository = remember { SmsTemplateRepository() }
+    val application = androidx.compose.ui.platform.LocalContext.current.applicationContext as AdminHubApplication
+    val userRepository = remember { UserRepository(application.database.userDao()) }
+    val purchaseRepository = remember { PurchaseRepository(application.database.purchaseDao()) }
+    val tokenRepository = remember { TokenRepository(application.database.tokenDao()) }
+    val scheduleRepository = remember { ScheduleRepository(application.database.scheduleDao()) }
+    val templateRepository = remember { SmsTemplateRepository(application.database.templateDao()) }
 
     var currentScreen by remember { mutableStateOf(Screen.DASHBOARD) }
 
@@ -139,8 +139,8 @@ fun AdminHubApp() {
             }
         },
         floatingActionButton = {
-            if (currentScreen == Screen.DASHBOARD || currentScreen == Screen.USERS) {
-                FloatingActionButton(onClick = { /* TODO: Add new item */ }) {
+            if (currentScreen == Screen.USERS) {
+                FloatingActionButton(onClick = { currentScreen = Screen.USERS }) {
                     Icon(Icons.Filled.Add, contentDescription = "Add")
                 }
             }
@@ -158,7 +158,7 @@ fun AdminHubApp() {
                     userRepository = userRepository
                 )
                 Screen.SMS_CENTER -> SmsCenterScreen(templateRepository = templateRepository)
-                Screen.SCHEDULE -> ScheduleScreen(scheduleRepository = scheduleRepository)
+                Screen.SCHEDULE -> ScheduleScreen(scheduleRepository = scheduleRepository, userRepository = userRepository)
                 Screen.SETTINGS -> SettingsScreen()
             }
         }

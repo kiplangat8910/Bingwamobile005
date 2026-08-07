@@ -1,5 +1,11 @@
 package com.bingwa.adminhub.data.models
 
+import com.bingwa.adminhub.data.local.entity.PurchaseEntity
+import com.bingwa.adminhub.data.local.entity.ScheduleEntity
+import com.bingwa.adminhub.data.local.entity.TemplateEntity
+import com.bingwa.adminhub.data.local.entity.TokenEntity
+import com.bingwa.adminhub.data.local.entity.UserEntity
+
 data class PurchaseSms(
     val id: String,
     val phone: String,
@@ -85,3 +91,103 @@ enum class TemplateCategory {
     NOTIFICATION,
     CUSTOM
 }
+
+fun UserEntity.toModel() = AdminUser(
+    id = id,
+    phone = phone,
+    name = name,
+    category = category,
+    notes = notes,
+    createdAt = createdAt
+)
+
+fun AdminUser.toEntity() = UserEntity(
+    id = id,
+    phone = phone,
+    name = name,
+    category = category,
+    notes = notes,
+    createdAt = createdAt
+)
+
+fun PurchaseEntity.toModel() = PurchaseSms(
+    id = id,
+    phone = phone,
+    amount = amount,
+    balance = balance,
+    expirationDate = expirationDate,
+    rawMessage = rawMessage,
+    timestamp = timestamp
+)
+
+fun PurchaseSms.toEntity() = PurchaseEntity(
+    id = id,
+    phone = phone,
+    amount = amount,
+    balance = balance,
+    expirationDate = expirationDate,
+    rawMessage = rawMessage,
+    timestamp = timestamp
+)
+
+fun TokenEntity.toModel() = TokenTransaction(
+    id = id,
+    userId = userId,
+    type = TokenType.valueOf(type),
+    amount = amount,
+    code = code,
+    message = message,
+    status = TransactionStatus.valueOf(status),
+    createdAt = createdAt
+)
+
+fun TokenTransaction.toEntity() = TokenEntity(
+    id = id,
+    userId = userId,
+    type = type.name,
+    amount = amount,
+    code = code,
+    message = message,
+    status = status.name,
+    createdAt = createdAt
+)
+
+fun ScheduleEntity.toModel() = ScheduledTask(
+    id = id,
+    userId = userId,
+    action = ScheduledAction.valueOf(action),
+    scheduledAt = scheduledAt,
+    repeat = RepeatMode.valueOf(repeat),
+    code = code,
+    message = message,
+    enabled = enabled,
+    createdAt = createdAt
+)
+
+fun ScheduledTask.toEntity() = ScheduleEntity(
+    id = id,
+    userId = userId,
+    action = action.name,
+    scheduledAt = scheduledAt,
+    repeat = repeat.name,
+    code = code,
+    message = message,
+    enabled = enabled,
+    createdAt = createdAt
+)
+
+fun TemplateEntity.toModel() = SmsTemplate(
+    id = id,
+    name = name,
+    body = body,
+    category = TemplateCategory.valueOf(category),
+    createdAt = createdAt
+)
+
+fun SmsTemplate.toEntity() = TemplateEntity(
+    id = id,
+    name = name,
+    body = body,
+    category = category.name,
+    createdAt = createdAt
+)
