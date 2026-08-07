@@ -31,8 +31,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +61,7 @@ fun TokenActionsScreen(
     var code by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
     var showSuccess by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -144,8 +148,10 @@ fun TokenActionsScreen(
                         message = message,
                         status = com.bingwa.adminhub.data.models.TransactionStatus.SENT
                     )
-                    tokenRepository.addTransaction(transaction)
-                    showSuccess = true
+                    scope.launch {
+                        tokenRepository.addTransaction(transaction)
+                        showSuccess = true
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth(),
@@ -171,7 +177,7 @@ fun TokenActionsScreen(
 }
 
 @Composable
-fun ActionButton(label: String, type: TokenType, selected: Boolean, onClick: () -> Unit) {
+fun RowScope.ActionButton(label: String, type: TokenType, selected: Boolean, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(

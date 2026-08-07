@@ -33,11 +33,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bingwa.adminhub.data.models.AdminUser
@@ -52,6 +55,7 @@ fun UsersScreen(userRepository: UserRepository) {
     var searchQuery by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
     var editingUser by remember { mutableStateOf<AdminUser?>(null) }
+    val scope = rememberCoroutineScope()
 
     val filteredUsers = remember(searchQuery, users) {
         if (searchQuery.isBlank()) users
@@ -100,7 +104,11 @@ fun UsersScreen(userRepository: UserRepository) {
                     UserCard(
                         user = user,
                         onEdit = { editingUser = user },
-                        onDelete = { userRepository.deleteUser(user.id) }
+                        onDelete = {
+                            scope.launch {
+                                userRepository.deleteUser(user.id)
+                            }
+                        }
                     )
                 }
             }

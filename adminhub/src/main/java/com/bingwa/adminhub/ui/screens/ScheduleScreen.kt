@@ -32,13 +32,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.bingwa.adminhub.data.models.ScheduledAction
 import com.bingwa.adminhub.data.models.ScheduledTask
 import com.bingwa.adminhub.data.repositories.ScheduleRepository
 import com.bingwa.adminhub.ui.theme.AdminAmber
@@ -49,6 +51,7 @@ import com.bingwa.adminhub.ui.theme.AdminTextSecondary
 fun ScheduleScreen(scheduleRepository: ScheduleRepository) {
     val tasks by scheduleRepository.tasks.collectAsState(initial = emptyList())
     var showAddDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -90,7 +93,11 @@ fun ScheduleScreen(scheduleRepository: ScheduleRepository) {
                 items(tasks) { task ->
                     ScheduledTaskCard(
                         task = task,
-                        onDelete = { scheduleRepository.deleteTask(task.id) }
+                        onDelete = {
+                            scope.launch {
+                                scheduleRepository.deleteTask(task.id)
+                            }
+                        }
                     )
                 }
             }

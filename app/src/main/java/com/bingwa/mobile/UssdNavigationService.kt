@@ -984,8 +984,8 @@ class UssdNavigationService : AccessibilityService() {
                     val trusted = shouldTrustFreshWrite(wrote, valueToEnter, inputField, snapshot, lower)
                     val recentVerified = trusted || hasRecentVerifiedInput(valueToEnter)
 
-                    if (!isFinalLearningStep(currentStep) && wrote && recentVerified &&
-                        tryImmediateVerifiedSend(root, inputField, valueToEnter, recentVerified)) {
+                    if (!isFinalLearningStep(currentStep) && wrote &&
+                        tryImmediateVerifiedSend(root, inputField, valueToEnter, alreadyVerified = true)) {
                         markStepAction(dialogText, root, snapshot)
                         startPendingStepAdvance(root, dialogText)
                         return
@@ -993,7 +993,7 @@ class UssdNavigationService : AccessibilityService() {
 
                     if (!isFinalLearningStep(currentStep) && wrote &&
                         shouldAttemptAggressiveImmediateSubmit(snapshot, lower, step, valueToEnter, inputField) &&
-                        tryAggressiveImmediateSubmit(root, inputField, valueToEnter)) {
+                        tryAggressiveImmediateSubmit(root, inputField, valueToEnter, skipVerification = true)) {
                         markStepAction(dialogText, root, snapshot)
                         startPendingStepAdvance(root, dialogText)
                         return
@@ -2119,8 +2119,8 @@ class UssdNavigationService : AccessibilityService() {
     // endregion
 
     // region Send / Verify helpers
-    private fun tryImmediateVerifiedSend(root: AccessibilityNodeInfo, field: AccessibilityNodeInfo?, expected: String, alreadyVerified: Boolean = false): Boolean {
-        val verified = alreadyVerified || verifyExpectedInput(root, expected, field) || hasRecentVerifiedInput(expected)
+    private fun tryImmediateVerifiedSend(root: AccessibilityNodeInfo, field: AccessibilityNodeInfo?, expected: String, alreadyVerified: Boolean = false, skipVerification: Boolean = false): Boolean {
+        val verified = skipVerification || alreadyVerified || verifyExpectedInput(root, expected, field) || hasRecentVerifiedInput(expected)
         if (!verified) return false
         val btn = findBestSendButton(root) ?: findPositiveDialogButton(root) ?: findBottomRightActionButton(root)
         if (btn != null && performClick(btn)) return true
@@ -2131,8 +2131,8 @@ class UssdNavigationService : AccessibilityService() {
         return triggerInputSubmit(root, expected, field)
     }
 
-    private fun tryAggressiveImmediateSubmit(root: AccessibilityNodeInfo, field: AccessibilityNodeInfo?, expected: String): Boolean {
-        if (!hasRecentVerifiedInput(expected)) return false
+    private fun tryAggressiveImmediateSubmit(root: AccessibilityNodeInfo, field: AccessibilityNodeInfo?, expected: String, skipVerification: Boolean = false): Boolean {
+        if (!skipVerification && !hasRecentVerifiedInput(expected)) return false
         val btn = findBestSendButton(root) ?: findPositiveDialogButton(root) ?: findBottomRightActionButton(root)
         if (btn != null && performClick(btn)) return true
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
