@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Bingwa Admin Hub</string>
+    <string name="dashboard">Dashboard</string>
+    <string name="users">Users</string>
+    <string name="token_actions">Token Actions</string>
+    <string name="sms_center">SMS Center</string>
+    <string name="schedule">Schedule</string>
+    <string name="settings">Settings</string>
+    <string name="airtime_balance">Airtime Balance</string>
+    <string name="recent_purchases">Recent Purchases</string>
+    <string name="activate_tokens">Activate Tokens</string>
+    <string name="clear_tokens">Clear Tokens</string>
+    <string name="gift_tokens">Gift Tokens</string>
+    <string name="unlimited_usage">Unlimited Usage</string>
+    <string name="remote_commands">Remote Commands</string>
+    <string name="send_sms">Send SMS</string>
+    <string name="templates">SMS Templates</string>
+    <string name="scheduled_tasks">Scheduled Tasks</string>
+    <string name="save_user">Save User</string>
+    <string name="user_history">User History</string>
+    <string name="admin_code">Admin Activation Code</string>
+    <string name="network_time">Network Time</string>
+    <string name="confirm">Confirm</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="search">Search</string>
+    <string name="no_data">No data available</string>
+    <string name="loading">Loading…</string>
+    <string name="error_occurred">An error occurred</string>
+    <string name="success">Success</string>
+    <string name="admin_panel">Admin Panel</string>
+    <string name="token_management">Token Management</string>
+    <string name="user_management">User Management</string>
+    <string name="sms_management">SMS Management</string>
+    <string name="system">System</string>
+</resources>

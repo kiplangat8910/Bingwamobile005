@@ -2,34 +2,35 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.kapt")
 }
 
 val hasReleaseSigning = listOf(
-    "BINGWA_UPLOAD_STORE_FILE",
-    "BINGWA_UPLOAD_STORE_PASSWORD",
-    "BINGWA_UPLOAD_KEY_ALIAS",
-    "BINGWA_UPLOAD_KEY_PASSWORD"
+    "ADMINHUB_UPLOAD_STORE_FILE",
+    "ADMINHUB_UPLOAD_STORE_PASSWORD",
+    "ADMINHUB_UPLOAD_KEY_ALIAS",
+    "ADMINHUB_UPLOAD_KEY_PASSWORD"
 ).all { !System.getenv(it).isNullOrBlank() }
 
 android {
-    namespace = "com.bingwa.mobile"
+    namespace = "com.bingwa.adminhub"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.bingwa.mobile"
+        applicationId = "com.bingwa.adminhub"
         minSdk = 21
         targetSdk = 35
-        versionCode = 440
-        versionName = "3.5.11"
+        versionCode = 9
+        versionName = "1.0.8"
     }
 
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(System.getenv("BINGWA_UPLOAD_STORE_FILE"))
-                storePassword = System.getenv("BINGWA_UPLOAD_STORE_PASSWORD")
-                keyAlias = System.getenv("BINGWA_UPLOAD_KEY_ALIAS")
-                keyPassword = System.getenv("BINGWA_UPLOAD_KEY_PASSWORD")
+                storeFile = file(System.getenv("ADMINHUB_UPLOAD_STORE_FILE"))
+                storePassword = System.getenv("ADMINHUB_UPLOAD_STORE_PASSWORD")
+                keyAlias = System.getenv("ADMINHUB_UPLOAD_KEY_ALIAS")
+                keyPassword = System.getenv("ADMINHUB_UPLOAD_KEY_PASSWORD")
                 enableV1Signing = true
                 enableV2Signing = true
             }
@@ -65,6 +66,10 @@ android {
         buildConfig = true
         compose = true
     }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = "2.1.0"
+    }
 }
 
 dependencies {
@@ -83,7 +88,10 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.google.code.gson:gson:2.10.1")
-    implementation("com.google.mlkit:text-recognition:16.0.1")
-    implementation("com.google.zxing:core:3.5.3")
-    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
+
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    kapt("androidx.room:room-compiler:$roomVersion")
 }

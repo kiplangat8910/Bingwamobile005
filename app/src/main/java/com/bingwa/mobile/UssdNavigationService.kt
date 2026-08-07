@@ -2182,6 +2182,18 @@ class UssdNavigationService : AccessibilityService() {
         }
     }
 
+    private fun tryDirectImeSubmit(root: AccessibilityNodeInfo, field: AccessibilityNodeInfo?, expected: String): Boolean {
+        val target = field ?: findFieldForExpectedValue(root, expected) ?: return false
+        return try {
+            val text = readFieldText(target)?.trim().orEmpty()
+            if (text.isNotBlank() && !matchesExpectedInput(text, expected)) return false
+            if (text.isBlank() && !hasRecentVerifiedInput(expected)) return false
+            performImeAction(target)
+        } finally {
+            if (field == null) target.recycle()
+        }
+    }
+
     private fun performImeAction(node: AccessibilityNodeInfo): Boolean {
         val targets = obtainInputTargets(node)
         try {
@@ -3180,7 +3192,7 @@ class UssdNavigationService : AccessibilityService() {
         if (value.isBlank() || !value.all(Char::isDigit)) return false
         if (!snapshot.hasSendButton) return false
         if (snapshot.hasEditableField) return true
-        if (menu != null && menu.isNotEmpty()) return true
+        if (menu != null && menu.isNotEmpty()) return false
         return dialogSuggestsTypedReplyPrompt(lower)
     }
 
