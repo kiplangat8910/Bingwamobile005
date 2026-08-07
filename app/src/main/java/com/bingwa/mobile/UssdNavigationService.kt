@@ -985,7 +985,7 @@ class UssdNavigationService : AccessibilityService() {
                     val recentVerified = trusted || hasRecentVerifiedInput(valueToEnter)
 
                     if (!isFinalLearningStep(currentStep) && wrote &&
-                        tryImmediateVerifiedSend(root, inputField, valueToEnter, alreadyVerified = true)) {
+                        tryImmediateVerifiedSend(root, inputField, valueToEnter, skipVerification = true)) {
                         markStepAction(dialogText, root, snapshot)
                         startPendingStepAdvance(root, dialogText)
                         return
