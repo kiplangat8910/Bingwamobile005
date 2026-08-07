@@ -28,7 +28,8 @@ object UssdQueue {
     private const val PRIORITY_NORMAL = 0
 
     // Task timeout in milliseconds (if a task runs longer, it will be aborted)
-    private const val TASK_TIMEOUT_MS = 30_000L
+    // Reduced from 30s to 15s to avoid long stalls when USSD popups are slow
+    private const val TASK_TIMEOUT_MS = 15_000L
 
     // Retry policy (0 = no retry by default, can be overridden per task)
     private const val DEFAULT_MAX_RETRIES = 1
@@ -158,7 +159,7 @@ object UssdQueue {
         while (!stopWorker.get()) {
             try {
                 // Poll the queue with a timeout so we can check stop flag periodically
-                val task = taskQueue.poll(500, TimeUnit.MILLISECONDS) ?: continue
+                val task = taskQueue.poll(200, TimeUnit.MILLISECONDS) ?: continue
 
                 // Set as current task
                 synchronized(lock) {
@@ -239,10 +240,11 @@ object UssdQueue {
 
     private fun waitForSilentUssdLock() {
         val waitStart = System.currentTimeMillis()
-        val maxWait = 20_000L
+        // Reduced max wait: don't block too long waiting for other silent USSD executions
+        val maxWait = 8_000L
         while (SilentUssdOptimized.isExecutionInProgress() && System.currentTimeMillis() - waitStart < maxWait) {
             try {
-                Thread.sleep(250)
+                Thread.sleep(150)
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
                 return
