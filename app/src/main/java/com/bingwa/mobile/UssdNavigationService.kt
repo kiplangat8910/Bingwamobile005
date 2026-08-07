@@ -999,6 +999,18 @@ class UssdNavigationService : AccessibilityService() {
                         return
                     }
 
+                    if (!isFinalLearningStep(currentStep) && wrote) {
+                        val verified = verifyExpectedInput(root, valueToEnter, inputField) || hasRecentVerifiedInput(valueToEnter)
+                        if (verified) {
+                            val sent = tryDirectImeSubmit(root, inputField, valueToEnter)
+                            if (sent) {
+                                markStepAction(dialogText, root, snapshot)
+                                startPendingStepAdvance(root, dialogText)
+                                return
+                            }
+                        }
+                    }
+
                     if (isFinalLearningStep(currentStep)) {
                         val delay = if (wrote && hasSeenAdvancedPopup) RAPID_POST_POPUP_VERIFY_MS else if (wrote) FAST_VERIFY_POLL_MS else VERIFY_POLL_MS
                         handler.postDelayed({ verifyLearningFinalInputThenDismiss(valueToEnter, 0) }, delay)
@@ -1643,7 +1655,11 @@ class UssdNavigationService : AccessibilityService() {
 
     private fun supportsAction(node: AccessibilityNodeInfo, actionId: Int): Boolean {
         return runCatching {
-            node.actionList?.any { it.id == actionId } == true || (node.actions and actionId) != 0
+            val legacy = (node.actions and actionId) != 0
+            if (legacy) return@runCatching true
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                node.actionList?.any { it.id == actionId } == true
+            } else false
         }.getOrDefault(false)
     }
 
@@ -2140,6 +2156,18 @@ class UssdNavigationService : AccessibilityService() {
             if (aggressiveBtn != null && performClick(aggressiveBtn)) return true
         }
         return triggerInputSubmit(root, expected, field)
+    }
+
+    private fun tryDirectImeSubmit(root: AccessibilityNodeInfo, field: AccessibilityNodeInfo?, expected: String): Boolean {
+        val target = field ?: findFieldForExpectedValue(root, expected) ?: return false
+        return try {
+            val text = readFieldText(target)?.trim().orEmpty()
+            if (text.isNotBlank() && !matchesExpectedInput(text, expected)) return false
+            if (text.isBlank() && !hasRecentVerifiedInput(expected)) return false
+            performImeAction(target)
+        } finally {
+            if (field == null) target.recycle()
+        }
     }
 
     private fun triggerInputSubmit(root: AccessibilityNodeInfo, expected: String, field: AccessibilityNodeInfo?): Boolean {
