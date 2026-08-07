@@ -24,7 +24,12 @@ class SmsCommandReceiver : BroadcastReceiver() {
                     putExtra("purchase_phone", purchase.phone)
                     putExtra("purchase_amount", purchase.amount)
                 }
-                context.startService(serviceIntent)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent)
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.startService(serviceIntent)
+                }
             }
         }
     }

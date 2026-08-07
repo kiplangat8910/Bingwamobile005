@@ -13,7 +13,12 @@ class BootReceiver : BroadcastReceiver() {
             intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
             Log.d(TAG, "Boot completed, starting SmsCommandService")
             val serviceIntent = Intent(context, SmsCommandService::class.java)
-            context.startService(serviceIntent)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                @Suppress("DEPRECATION")
+                context.startService(serviceIntent)
+            }
         }
     }
 

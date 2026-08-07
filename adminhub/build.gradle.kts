@@ -65,6 +65,10 @@ android {
         buildConfig = true
         compose = true
     }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = "2.1.0"
+    }
 }
 
 dependencies {
@@ -83,4 +87,5 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.google.code.gson:gson:2.10.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
 }

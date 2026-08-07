@@ -118,6 +118,12 @@ fun AdminHubApp() {
                     label = { Text("SMS") }
                 )
                 NavigationBarItem(
+                    selected = currentScreen == Screen.SCHEDULE,
+                    onClick = { currentScreen = Screen.SCHEDULE },
+                    icon = { Icon(Icons.Filled.Schedule, contentDescription = "Schedule") },
+                    label = { Text("Schedule") }
+                )
+                NavigationBarItem(
                     selected = currentScreen == Screen.SETTINGS,
                     onClick = { currentScreen = Screen.SETTINGS },
                     icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },

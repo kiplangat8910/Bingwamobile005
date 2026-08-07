@@ -22,11 +22,13 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@android:drawable/ic_menu_info_details"
         android:label="Bingwa Admin Hub"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:roundIcon="@android:drawable/ic_menu_info_details"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AdminHub">
+        android:theme="@style/Theme.AdminHub"
+        android:usesCleartextTraffic="false"
+        android:name=".AdminHubApplication">
 
         <activity
             android:name=".MainActivity"
@@ -46,10 +48,9 @@
 
         <receiver
             android:name=".SmsCommandReceiver"
-            android:exported="true"
-            android:permission="android.permission.BROADCAST_SMS">
+            android:exported="true">
             <intent-filter>
-                <action android:name="android.provider.Telephony.SMS_DELIVER" />
+                <action android:name="android.provider.Telephony.Sms.Intents.SMS_RECEIVED_ACTION" />
             </intent-filter>
         </receiver>
 

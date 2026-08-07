@@ -8,7 +8,7 @@ import java.util.*
 
 object NetworkTimeSync {
     private const val TAG = "NetworkTimeSync"
-    private const val TIME_SERVER = "http://worldtimeapi.org/api/timezone/Africa/Nairobi"
+    private const val TIME_SERVER = "https://worldtimeapi.org/api/timezone/Africa/Nairobi"
 
     fun getNetworkTime(): Long {
         return try {
