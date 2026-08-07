@@ -11,6 +11,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       SHOULD_PUBLISH_RELEASE: ${{ github.ref_type == 'tag' }}
       APP_VERSION: ${{ github.event.release.tag_name || github.ref_name }}
