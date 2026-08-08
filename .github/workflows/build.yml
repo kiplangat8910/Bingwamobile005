@@ -62,7 +62,7 @@ jobs:
           BINGWA_UPLOAD_KEY_PASSWORD: ${{ secrets.BINGWA_UPLOAD_KEY_PASSWORD }}
         run: |
           if [ -n "$BINGWA_UPLOAD_KEYSTORE_BASE64" ] && [ -n "$BINGWA_UPLOAD_STORE_PASSWORD" ] && [ -n "$BINGWA_UPLOAD_KEY_ALIAS" ] && [ -n "$BINGWA_UPLOAD_KEY_PASSWORD" ]; then
-            echo "$BINGWA_UPLOAD_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/bingwa-upload.jks"
+            echo "$BINGWA_UPLOAD_KEYSTORE_BASE64" | openssl base64 -A -d > "$RUNNER_TEMP/bingwa-upload.jks"
             {
               echo "BINGWA_UPLOAD_STORE_FILE=$RUNNER_TEMP/bingwa-upload.jks"
               echo "BINGWA_UPLOAD_STORE_PASSWORD=$BINGWA_UPLOAD_STORE_PASSWORD"
