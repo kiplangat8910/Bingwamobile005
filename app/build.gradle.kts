@@ -11,6 +11,8 @@ val hasReleaseSigning = listOf(
     "BINGWA_UPLOAD_KEY_PASSWORD"
 ).all { !System.getenv(it).isNullOrBlank() }
 
+val releaseStoreType = System.getenv("BINGWA_UPLOAD_STORE_TYPE")
+
 android {
     namespace = "com.bingwa.mobile"
     compileSdk = 35
@@ -19,8 +21,8 @@ android {
         applicationId = "com.bingwa.mobile"
         minSdk = 21
         targetSdk = 35
-        versionCode = 446
-        versionName = "3.5.17"
+        versionCode = 447
+        versionName = "3.5.18"
     }
 
     signingConfigs {
@@ -28,6 +30,9 @@ android {
             create("release") {
                 storeFile = file(System.getenv("BINGWA_UPLOAD_STORE_FILE"))
                 storePassword = System.getenv("BINGWA_UPLOAD_STORE_PASSWORD")
+                if (!releaseStoreType.isNullOrBlank()) {
+                    storeType = releaseStoreType
+                }
                 keyAlias = System.getenv("BINGWA_UPLOAD_KEY_ALIAS")
                 keyPassword = System.getenv("BINGWA_UPLOAD_KEY_PASSWORD")
                 enableV1Signing = true

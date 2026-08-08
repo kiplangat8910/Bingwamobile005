@@ -23,7 +23,7 @@ jobs:
     permissions:
       contents: write
     env:
-      SHOULD_PUBLISH_RELEASE: ${{ startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.upload_to_release) }}
+      SHOULD_PUBLISH_RELEASE: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.upload_to_release) }}
     steps:
       - uses: actions/checkout@v4
       - name: Resolve release metadata
@@ -62,10 +62,28 @@ jobs:
           BINGWA_UPLOAD_KEY_PASSWORD: ${{ secrets.BINGWA_UPLOAD_KEY_PASSWORD }}
         run: |
           if [ -n "$BINGWA_UPLOAD_KEYSTORE_BASE64" ] && [ -n "$BINGWA_UPLOAD_STORE_PASSWORD" ] && [ -n "$BINGWA_UPLOAD_KEY_ALIAS" ] && [ -n "$BINGWA_UPLOAD_KEY_PASSWORD" ]; then
-            echo "$BINGWA_UPLOAD_KEYSTORE_BASE64" | openssl base64 -A -d > "$RUNNER_TEMP/bingwa-upload.p12"
-             {
-               echo "BINGWA_UPLOAD_STORE_FILE=$RUNNER_TEMP/bingwa-upload.p12"
+            KEYSTORE_PATH="$RUNNER_TEMP/bingwa-upload.keystore"
+            echo "$BINGWA_UPLOAD_KEYSTORE_BASE64" | openssl base64 -A -d > "$KEYSTORE_PATH"
+
+            STORE_TYPE=""
+            if keytool -list -keystore "$KEYSTORE_PATH" -storepass "$BINGWA_UPLOAD_STORE_PASSWORD" -storetype PKCS12 >/dev/null 2>&1; then
+              STORE_TYPE="PKCS12"
+            elif keytool -list -keystore "$KEYSTORE_PATH" -storepass "$BINGWA_UPLOAD_STORE_PASSWORD" -storetype JKS >/dev/null 2>&1; then
+              STORE_TYPE="JKS"
+            else
+              echo "Unable to open uploaded keystore with PKCS12 or JKS. Check the base64 secret and store password." >&2
+              exit 1
+            fi
+
+            if ! keytool -list -keystore "$KEYSTORE_PATH" -storepass "$BINGWA_UPLOAD_STORE_PASSWORD" -storetype "$STORE_TYPE" -alias "$BINGWA_UPLOAD_KEY_ALIAS" >/dev/null 2>&1; then
+              echo "Alias '$BINGWA_UPLOAD_KEY_ALIAS' was not found in the uploaded keystore." >&2
+              exit 1
+            fi
+
+            {
+              echo "BINGWA_UPLOAD_STORE_FILE=$KEYSTORE_PATH"
               echo "BINGWA_UPLOAD_STORE_PASSWORD=$BINGWA_UPLOAD_STORE_PASSWORD"
+              echo "BINGWA_UPLOAD_STORE_TYPE=$STORE_TYPE"
               echo "BINGWA_UPLOAD_KEY_ALIAS=$BINGWA_UPLOAD_KEY_ALIAS"
               echo "BINGWA_UPLOAD_KEY_PASSWORD=$BINGWA_UPLOAD_KEY_PASSWORD"
             } >> "$GITHUB_ENV"
@@ -76,6 +94,7 @@ jobs:
         env:
           BINGWA_UPLOAD_STORE_FILE: ${{ env.BINGWA_UPLOAD_STORE_FILE }}
           BINGWA_UPLOAD_STORE_PASSWORD: ${{ env.BINGWA_UPLOAD_STORE_PASSWORD }}
+          BINGWA_UPLOAD_STORE_TYPE: ${{ env.BINGWA_UPLOAD_STORE_TYPE }}
           BINGWA_UPLOAD_KEY_ALIAS: ${{ env.BINGWA_UPLOAD_KEY_ALIAS }}
           BINGWA_UPLOAD_KEY_PASSWORD: ${{ env.BINGWA_UPLOAD_KEY_PASSWORD }}
         run: ./gradlew --stacktrace :app:assembleRelease
