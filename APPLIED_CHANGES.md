@@ -14,6 +14,8 @@
 +
 +I pushed these changes to the main branch as requested and created a draft release tag (v1.0.1) without an APK attached.
 +
++Triggering GitHub Actions release build for v3.5.17.
++
 +Testing recommendations:
 +- Manually test multi-step USSD flows on representative devices (old and new Android versions).
 +- Tune timeouts in UssdNavigationService constants for slow OEM dialers if needed.
