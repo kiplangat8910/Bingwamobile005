@@ -19,8 +19,8 @@ android {
         applicationId = "com.bingwa.mobile"
         minSdk = 21
         targetSdk = 35
-        versionCode = 444
-        versionName = "3.5.15"
+        versionCode = 445
+        versionName = "3.5.16"
     }
 
     signingConfigs {
@@ -38,12 +38,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = if (hasReleaseSigning) {
                 signingConfigs.getByName("release")
             } else {
