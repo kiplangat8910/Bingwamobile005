@@ -305,169 +305,172 @@ class UssdNavigationService : AccessibilityService() {
         }
     }
 
-    override fun onInterrupt() { cleanupAdvanced(); clearCallbacks() }
+    override fun onInterrupt() {
+        try { cleanupAdvanced(); clearCallbacks() } catch (e: Throwable) { Log.e(TAG, "onInterrupt crashed", e) }
+    }
 
     override fun onDestroy() {
-        super.onDestroy()
-        stopForegroundCompat()
-        bgThread.quitSafely()
-        cleanupAdvanced()
-        clearCallbacks()
-        if (activeInstance === this) activeInstance = null
-        hideOverlay()
+        try {
+            super.onDestroy()
+            stopForegroundCompat()
+            bgThread.quitSafely()
+            cleanupAdvanced()
+            clearCallbacks()
+            if (activeInstance === this) activeInstance = null
+            hideOverlay()
+        } catch (e: Throwable) { Log.e(TAG, "onDestroy crashed", e) }
     }
     // endregion
 
     // region Accessibility Event Handling (core logic)
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
-        if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null && !isForegroundUiActive()) return
-
-        val type = event.eventType
-        if (type !in setOf(
-                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
-                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
-                AccessibilityEvent.TYPE_WINDOWS_CHANGED,
-                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED,
-                AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED,
-                AccessibilityEvent.TYPE_VIEW_FOCUSED,
-                AccessibilityEvent.TYPE_VIEW_CLICKED,
-                AccessibilityEvent.TYPE_VIEW_SCROLLED
-            )
-        ) return
-
-        if (shouldSkipDuplicateEvent(event)) return
-        val pkg = event.packageName?.toString() ?: ""
-        val previousWindowId = lastWindowId
-
-        // Launcher windows → suppress UI return
-        if (pkg in LAUNCHER_PACKAGES && (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || type == AccessibilityEvent.TYPE_WINDOWS_CHANGED)) {
-            if (advancedActive) { uiReturnSuppressed = true; updateOverlay() }
-            else if (isForegroundUiActive()) { disarmForegroundUi(); hasSeenForegroundPopup = false; updateOverlay() }
-            return
-        }
-
-        // Non‑USSD foreground apps → disarm
-        if (!isPotentialUssdPackage(pkg) && pkg != "android" && pkg != "com.android.systemui") {
-            if (advancedActive) { uiReturnSuppressed = true; updateOverlay() }
-            if (isForegroundUiActive() && !advancedActive) { disarmForegroundUi(); hasSeenForegroundPopup = false; updateOverlay() }
-            return
-        }
-
-        val windowId = event.windowId
-        val root = obtainRootFromEvent(event) ?: return
         try {
-            val windowPkg = root.packageName?.toString() ?: ""
+            if (!advancedActive && balanceCallback == null && tokenPurchaseCallback == null && !isForegroundUiActive()) return
 
-            val requireStrict = shouldRequireStrictPopupScope()
-            val snapshot = if (advancedActive || isForegroundUiActive() || balanceCallback != null || tokenPurchaseCallback != null) {
-                capturePreferredPopupSnapshot(root, requireStrict)
-            } else null
-            val dialogText = snapshot?.dialogText ?: normalizeCollapsedText(extractDialogText(event))
-            if (dialogText.isBlank()) return
+            val type = event.eventType
+            if (type !in setOf(
+                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
+                    AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+                    AccessibilityEvent.TYPE_WINDOWS_CHANGED,
+                    AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED,
+                    AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED,
+                    AccessibilityEvent.TYPE_VIEW_FOCUSED,
+                    AccessibilityEvent.TYPE_VIEW_CLICKED,
+                    AccessibilityEvent.TYPE_VIEW_SCROLLED
+                )
+            ) return
 
-            val lower = dialogText.lowercase()
-            if (handleIntermediatePopup(root, dialogText, lower, windowPkg)) {
+            if (shouldSkipDuplicateEvent(event)) return
+            val pkg = event.packageName?.toString() ?: ""
+            val previousWindowId = lastWindowId
+
+            if (pkg in LAUNCHER_PACKAGES && (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || type == AccessibilityEvent.TYPE_WINDOWS_CHANGED)) {
+                if (advancedActive) { uiReturnSuppressed = true; updateOverlay() }
+                else if (isForegroundUiActive()) { disarmForegroundUi(); hasSeenForegroundPopup = false; updateOverlay() }
+                return
+            }
+
+            if (!isPotentialUssdPackage(pkg) && pkg != "android" && pkg != "com.android.systemui") {
+                if (advancedActive) { uiReturnSuppressed = true; updateOverlay() }
+                if (isForegroundUiActive() && !advancedActive) { disarmForegroundUi(); hasSeenForegroundPopup = false; updateOverlay() }
+                return
+            }
+
+            val windowId = event.windowId
+            val root = obtainRootFromEvent(event) ?: return
+            try {
+                val windowPkg = root.packageName?.toString() ?: ""
+
+                val requireStrict = shouldRequireStrictPopupScope()
+                val snapshot = if (advancedActive || isForegroundUiActive() || balanceCallback != null || tokenPurchaseCallback != null) {
+                    capturePreferredPopupSnapshot(root, requireStrict)
+                } else null
+                val dialogText = snapshot?.dialogText ?: normalizeCollapsedText(extractDialogText(event))
+                if (dialogText.isBlank()) return
+
+                val lower = dialogText.lowercase()
+                if (handleIntermediatePopup(root, dialogText, lower, windowPkg)) {
+                    lastWindowId = windowId
+                    lastWindowPkg = windowPkg
+                    return
+                }
+                if (windowPkg in BLOCKED_PACKAGES && !shouldAllowSystemUi(root, windowPkg)) return
+                if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return
+
+                val looksLikeDialog = if (snapshot != null) {
+                    looksLikeUssdDialog(root, snapshot, lower, windowPkg)
+                } else {
+                    looksLikeUssdDialogFast(lower, windowPkg)
+                }
+                if (!looksLikeDialog) return
+
                 lastWindowId = windowId
                 lastWindowPkg = windowPkg
-                return
-            }
-            if (windowPkg in BLOCKED_PACKAGES && !shouldAllowSystemUi(root, windowPkg)) return
-            if (NON_USSD_DIALOG_HINTS.any { lower.contains(it) }) return
+                lastRelevantEventElapsed = SystemClock.elapsedRealtime()
+                rememberRecentUssdContext(root, snapshot, windowId, windowPkg, dialogText, requireStrict)
+                rememberObservedDialogState(windowId, windowPkg, dialogText, snapshot)
 
-            val looksLikeDialog = if (snapshot != null) {
-                looksLikeUssdDialog(root, snapshot, lower, windowPkg)
-            } else {
-                looksLikeUssdDialogFast(lower, windowPkg)
-            }
-            if (!looksLikeDialog) return
-
-            lastWindowId = windowId
-            lastWindowPkg = windowPkg
-            lastRelevantEventElapsed = SystemClock.elapsedRealtime()
-            rememberRecentUssdContext(root, snapshot, windowId, windowPkg, dialogText, requireStrict)
-            rememberObservedDialogState(windowId, windowPkg, dialogText, snapshot)
-
-            // ------- Advanced flow -------
-            if (advancedActive && advancedSteps.isNotEmpty()) {
-                if (!hasSeenAdvancedPopup) {
-                    hasSeenAdvancedPopup = true
-                    updateOverlay()
-                    requestAppUiBehindPopup(force = true)
-                    startKeepingAppUiVisible()
-                } else if (windowId != previousWindowId) {
-                    requestAppUiBehindPopup()
-                    startKeepingAppUiVisible()
-                }
-
-                cancelStepTimeout()
-                lastFinalResponse = dialogText
-
-                if (signatureLearningMode) {
-                    captureLearningDialogIfNeeded(snapshot, root, windowPkg)
-                }
-
-                if (shouldWaitForStepTransition(dialogText, windowId, root, snapshot)) return
-
-                if (errorKeywords.any { lower.contains(it) }) {
-                    if (signatureLearningMode && currentStep >= advancedSteps.size) {
-                        finishAdvancedDispatch(dialogText)
-                    } else {
-                        dismissErrorAndRestart()
+                if (advancedActive && advancedSteps.isNotEmpty()) {
+                    if (!hasSeenAdvancedPopup) {
+                        hasSeenAdvancedPopup = true
+                        updateOverlay()
+                        requestAppUiBehindPopup(force = true)
+                        startKeepingAppUiVisible()
+                    } else if (windowId != previousWindowId) {
+                        requestAppUiBehindPopup()
+                        startKeepingAppUiVisible()
                     }
-                    return
-                }
 
-                if (isTransientResponse(lower)) {
-                    if (currentStep >= advancedSteps.size) {
-                        if (signatureLearningMode) finishAdvancedDispatch(dialogText)
+                    cancelStepTimeout()
+                    lastFinalResponse = dialogText
+
+                    if (signatureLearningMode) {
+                        captureLearningDialogIfNeeded(snapshot, root, windowPkg)
+                    }
+
+                    if (shouldWaitForStepTransition(dialogText, windowId, root, snapshot)) return
+
+                    if (errorKeywords.any { lower.contains(it) }) {
+                        if (signatureLearningMode && currentStep >= advancedSteps.size) {
+                            finishAdvancedDispatch(dialogText)
+                        } else {
+                            dismissErrorAndRestart()
+                        }
                         return
                     }
-                    isProcessing = false
-                    scheduleProcessStep(false, RAPID_POST_POPUP_POLL_MS)
-                    return
-                }
 
-                if (pendingStepAdvanceFromKey.isNotBlank() && handlePendingStepAdvance(windowId, windowPkg, root, snapshot, dialogText)) {
-                    return
-                }
-
-                val dialogChanged = windowId != previousWindowId || dialogText != lastDialogText
-                lastDialogText = dialogText
-
-                if (!isProcessing) {
-                    if (pendingPhase != PendingPhase.NONE) {
-                        attemptPendingAdvance(root)
+                    if (isTransientResponse(lower)) {
+                        if (currentStep >= advancedSteps.size) {
+                            if (signatureLearningMode) finishAdvancedDispatch(dialogText)
+                            return
+                        }
+                        isProcessing = false
+                        scheduleProcessStep(false, RAPID_POST_POPUP_POLL_MS)
                         return
                     }
-                    val screenKey = buildScreenSignatureKey(currentStep, windowId, windowPkg, root, snapshot, dialogText)
-                    if (!dialogChanged && screenKey == lastScreenSignatureKey) return
-                    lastScreenSignatureKey = screenKey
-                    pendingProcessToken = SystemClock.elapsedRealtime()
-                    scheduleProcessStep(dialogChanged)
-                }
-                return
-            }
 
-            // Foreground UI mode
-            if (isForegroundUiActive()) {
-                refreshForegroundUi()
-                if (!hasSeenForegroundPopup) {
-                    hasSeenForegroundPopup = true
-                    updateOverlay()
-                    requestAppUiBehindPopup(force = true)
-                    startKeepingAppUiVisible()
-                } else if (windowId != previousWindowId) {
-                    requestAppUiBehindPopup()
-                    startKeepingAppUiVisible()
-                }
-                return
-            }
+                    if (pendingStepAdvanceFromKey.isNotBlank() && handlePendingStepAdvance(windowId, windowPkg, root, snapshot, dialogText)) {
+                        return
+                    }
 
-            // Balance / token callbacks
-            handleCallbackDialogs(lower, dialogText)
-        } finally {
-            root.recycle()
+                    val dialogChanged = windowId != previousWindowId || dialogText != lastDialogText
+                    lastDialogText = dialogText
+
+                    if (!isProcessing) {
+                        if (pendingPhase != PendingPhase.NONE) {
+                            attemptPendingAdvance(root)
+                            return
+                        }
+                        val screenKey = buildScreenSignatureKey(currentStep, windowId, windowPkg, root, snapshot, dialogText)
+                        if (!dialogChanged && screenKey == lastScreenSignatureKey) return
+                        lastScreenSignatureKey = screenKey
+                        pendingProcessToken = SystemClock.elapsedRealtime()
+                        scheduleProcessStep(dialogChanged)
+                    }
+                    return
+                }
+
+                if (isForegroundUiActive()) {
+                    refreshForegroundUi()
+                    if (!hasSeenForegroundPopup) {
+                        hasSeenForegroundPopup = true
+                        updateOverlay()
+                        requestAppUiBehindPopup(force = true)
+                        startKeepingAppUiVisible()
+                    } else if (windowId != previousWindowId) {
+                        requestAppUiBehindPopup()
+                        startKeepingAppUiVisible()
+                    }
+                    return
+                }
+
+                handleCallbackDialogs(lower, dialogText)
+            } finally {
+                root.recycle()
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "onAccessibilityEvent crashed", e)
         }
     }
 
@@ -853,7 +856,13 @@ class UssdNavigationService : AccessibilityService() {
             processStepRunnable = null
             if (pendingProcessToken != token || !advancedActive || isProcessing) return@Runnable
             isProcessing = true
-            processStep()
+            try {
+                processStep()
+            } catch (e: Throwable) {
+                Log.e(TAG, "processStep task crashed", e)
+                isProcessing = false
+                dismissErrorAndRestart()
+            }
         }
         processStepRunnable = task
         if (delay <= 0) handler.post(task) else handler.postDelayed(task, delay)
