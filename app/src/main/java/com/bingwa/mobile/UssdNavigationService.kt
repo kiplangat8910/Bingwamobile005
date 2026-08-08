@@ -1324,6 +1324,8 @@ class UssdNavigationService : AccessibilityService() {
         isProcessing = false
         lastDialogText = ""
         lastScreenSignatureKey = ""
+        lastObservedDialogStateKey = ""
+        lastObservedDialogStateChangedElapsed = 0L
         clearPendingAdvance()
         clearPendingStepAdvance()
         clearInputWriteMarkers()
@@ -3673,19 +3675,19 @@ class UssdNavigationService : AccessibilityService() {
     private val NETWORK_DELAY_ROOT_REACQUIRE_TIMEOUT_MS = 18000L
     private val NETWORK_DELAY_STEP_ADVANCE_TIMEOUT_MS = 22000L
     private val NETWORK_DELAY_ACTION_GRACE_MS = 28000L
-    private val PENDING_STEP_ADVANCE_KICK_MS = 55L
+    private val PENDING_STEP_ADVANCE_KICK_MS = 18L
     private val VERIFY_POLL_MS = 26L
     private val RAPID_POST_POPUP_POLL_MS = 10L
     private val RAPID_POST_POPUP_VERIFY_MS = 8L
     private val RAPID_POST_POPUP_SEND_RETRY_MS = 10L
-    private val MAX_VERIFY_ATTEMPTS = 6
-    private val MAX_SEND_ATTEMPTS = 3
-    private val FORCEFUL_WRITE_PASSES = 5
-    private val WRITE_VERIFICATION_PASSES = 5
-    private val WRITE_VERIFICATION_SETTLE_MS = 30L
-    private val DIRECT_WRITE_VERIFY_PASSES = 4
-    private val SET_TEXT_BURST_ATTEMPTS = 5
-    private val PASTE_BURST_ATTEMPTS = 3
+    private val MAX_VERIFY_ATTEMPTS = 2
+    private val MAX_SEND_ATTEMPTS = 2
+    private val FORCEFUL_WRITE_PASSES = 2
+    private val WRITE_VERIFICATION_PASSES = 2
+    private val WRITE_VERIFICATION_SETTLE_MS = 10L
+    private val DIRECT_WRITE_VERIFY_PASSES = 2
+    private val SET_TEXT_BURST_ATTEMPTS = 2
+    private val PASTE_BURST_ATTEMPTS = 1
     private val NO_FIELD_PATIENCE = 3
     private val INPUT_TARGET_DEPTH = 8
     private val VIEW_TRAVERSAL_MAX_DEPTH = 32
@@ -3720,7 +3722,7 @@ class UssdNavigationService : AccessibilityService() {
     private val CHAR_GESTURE_SPREAD_X = 22
     private val CHAR_GESTURE_SPREAD_Y = 22
     private val TAP_GESTURE_RETRY_SETTLE_MS = 30L
-    private val SETTLE_BETWEEN_WRITE_PASSES_MS = 60L
+    private val SETTLE_BETWEEN_WRITE_PASSES_MS = 15L
     private val RESTART_FROM_ROOT_DELAY_MS = 700L
     private val STEP_TRANSITION_GUARD_MS = 150L
     private val MAX_RETRY_WINDOW_MS = 180000L
