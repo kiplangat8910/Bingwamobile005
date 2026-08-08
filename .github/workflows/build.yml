@@ -73,22 +73,26 @@ jobs:
             elif keytool -list -keystore "$KEYSTORE_PATH" -storepass "$BINGWA_UPLOAD_STORE_PASSWORD" -storetype JKS >/dev/null 2>&1; then
               STORE_TYPE="JKS"
             else
-              echo "Unable to open uploaded keystore with PKCS12 or JKS. Check the base64 secret and store password." >&2
-              exit 1
+              echo "Unable to open uploaded keystore with PKCS12 or JKS; falling back to debug signing." >&2
+              STORE_TYPE=""
             fi
 
-            if ! keytool -list -keystore "$KEYSTORE_PATH" -storepass "$BINGWA_UPLOAD_STORE_PASSWORD" -storetype "$STORE_TYPE" -alias "$BINGWA_UPLOAD_KEY_ALIAS" >/dev/null 2>&1; then
-              echo "Alias '$BINGWA_UPLOAD_KEY_ALIAS' was not found in the uploaded keystore." >&2
-              exit 1
+            if [ -n "$STORE_TYPE" ] && ! keytool -list -keystore "$KEYSTORE_PATH" -storepass "$BINGWA_UPLOAD_STORE_PASSWORD" -storetype "$STORE_TYPE" -alias "$BINGWA_UPLOAD_KEY_ALIAS" >/dev/null 2>&1; then
+              echo "Alias '$BINGWA_UPLOAD_KEY_ALIAS' was not found in the uploaded keystore; falling back to debug signing." >&2
+              STORE_TYPE=""
             fi
 
-            {
-              echo "BINGWA_UPLOAD_STORE_FILE=$KEYSTORE_PATH"
-              echo "BINGWA_UPLOAD_STORE_PASSWORD=$BINGWA_UPLOAD_STORE_PASSWORD"
-              echo "BINGWA_UPLOAD_STORE_TYPE=$STORE_TYPE"
-              echo "BINGWA_UPLOAD_KEY_ALIAS=$BINGWA_UPLOAD_KEY_ALIAS"
-              echo "BINGWA_UPLOAD_KEY_PASSWORD=$BINGWA_UPLOAD_KEY_PASSWORD"
-            } >> "$GITHUB_ENV"
+            if [ -n "$STORE_TYPE" ]; then
+              {
+                echo "BINGWA_UPLOAD_STORE_FILE=$KEYSTORE_PATH"
+                echo "BINGWA_UPLOAD_STORE_PASSWORD=$BINGWA_UPLOAD_STORE_PASSWORD"
+                echo "BINGWA_UPLOAD_STORE_TYPE=$STORE_TYPE"
+                echo "BINGWA_UPLOAD_KEY_ALIAS=$BINGWA_UPLOAD_KEY_ALIAS"
+                echo "BINGWA_UPLOAD_KEY_PASSWORD=$BINGWA_UPLOAD_KEY_PASSWORD"
+              } >> "$GITHUB_ENV"
+            else
+              echo "Release signing secrets not configured or invalid; Gradle will use the debug signing fallback."
+            fi
           else
             echo "Release signing secrets not configured; Gradle will use the debug signing fallback."
           fi
